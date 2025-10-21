@@ -1,0 +1,58 @@
+// Format seconds to a readable time string
+export function formatTime(seconds: number): string {
+  if (seconds === 0) return "0m";
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+// Format percentage
+export function formatPercent(percent: number): string {
+  return `${percent.toFixed(1)}%`;
+}
+
+// Get difficulty color
+export function getDifficultyColor(difficulty: "mythic" | "heroic"): string {
+  return difficulty === "mythic" ? "text-orange-500" : "text-purple-500";
+}
+
+// Format event message
+export function formatEventMessage(event: { type: string; guildName: string; bossName: string; difficulty: string; data: { pullCount?: number; bestPercent?: number } }): string {
+  const { type, guildName, bossName, difficulty, data } = event;
+
+  if (type === "boss_kill") {
+    const pulls = data.pullCount || 0;
+    return `${guildName} defeated ${bossName} (${difficulty}) after ${pulls} pull${pulls !== 1 ? "s" : ""}!`;
+  }
+
+  if (type === "best_pull") {
+    const percent = data.bestPercent || 0;
+    return `${guildName} reached ${percent.toFixed(1)}% on ${bossName} (${difficulty})!`;
+  }
+
+  return `${guildName} - ${bossName}`;
+}
+
+// Get time ago string
+export function getTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+
+  return date.toLocaleDateString();
+}
+
+// Generate WarcraftLogs URL for a kill
+export function getKillLogUrl(reportCode: string, fightId: number): string {
+  return `https://www.warcraftlogs.com/reports/${reportCode}#fight=${fightId}`;
+}
