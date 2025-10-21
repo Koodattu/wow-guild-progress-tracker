@@ -13,6 +13,7 @@ export const GUILDS: TrackedGuild[] = [
 // Raid zones to track (IDs only - names and encounter info come from DB)
 export const TRACKED_RAIDS = [
   44, // Manaforge Omega
+  42, // Liberation of Undermine
 ];
 
 // Use the first/latest raid as the current one

@@ -73,6 +73,9 @@ class GuildService {
               continue;
             }
 
+            // Get expansion name from the zone data
+            const expansionName = zoneData.expansion?.name || "Unknown";
+
             // Convert encounters to bosses format
             const bosses = (zoneData.encounters || []).map((enc: any) => ({
               id: enc.id,
@@ -80,7 +83,7 @@ class GuildService {
               slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
             }));
 
-            console.log(`Syncing zone ${zone.id} with ${bosses.length} encounters`);
+            console.log(`Syncing zone ${zone.id} (${expansionName}) with ${bosses.length} encounters`);
 
             // Update or create raid in database
             await Raid.findOneAndUpdate(
@@ -89,7 +92,7 @@ class GuildService {
                 $set: {
                   name: zoneData.name,
                   slug: zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-                  expansion: "The War Within", // You might want to make this dynamic based on zone
+                  expansion: expansionName,
                   bosses,
                 },
                 $setOnInsert: {
@@ -99,7 +102,7 @@ class GuildService {
               { upsert: true, new: true }
             );
 
-            console.log(`Synced raid: ${zoneData.name} (${bosses.length} bosses)`);
+            console.log(`Synced raid: ${zoneData.name} (${expansionName}, ${bosses.length} bosses)`);
           } catch (error) {
             console.error(`Error syncing zone ${zone.id}:`, error);
           }

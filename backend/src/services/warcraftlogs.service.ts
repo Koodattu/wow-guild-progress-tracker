@@ -386,6 +386,10 @@ class WarcraftLogsService {
           zone(id: $zoneId) {
             id
             name
+            expansion {
+              id
+              name
+            }
             encounters {
               id
               name
