@@ -407,7 +407,7 @@ class GuildService {
             name: fight.name || `Boss ${encounterId}`,
             kills: 0,
             pulls: 0,
-            bestPercent: 0,
+            bestPercent: 100, // Start at 100 (worst), track lowest (best)
             totalTime: 0,
             firstKillTime: undefined,
             firstKillReportCode: undefined,
@@ -423,7 +423,8 @@ class GuildService {
           bossData.kills++;
           // Track first kill time and report/fight info
           if (!bossData.firstKillTime) {
-            const killTime = new Date(fight.startTime);
+            // Calculate actual kill time: report start + fight end time offset
+            const killTime = new Date(report.startTime + fight.endTime);
             bossData.firstKillTime = killTime;
             bossData.firstKillReportCode = report.code;
             bossData.firstKillFightId = fight.id;
@@ -433,9 +434,9 @@ class GuildService {
           }
         } else {
           // Track best pull percentage for non-kills
-          const progressPercent = 100 - percent;
-          if (progressPercent > bossData.bestPercent) {
-            bossData.bestPercent = progressPercent;
+          // Lower boss health % = better progress (0% = dead, 100% = full health)
+          if (percent < bossData.bestPercent) {
+            bossData.bestPercent = percent;
           }
         }
       }
@@ -565,8 +566,8 @@ class GuildService {
       });
     }
 
-    // Check for new best pull (improvement of at least 5%)
-    if (newBoss.bestPercent > oldBoss.bestPercent + 5 && newBoss.kills === 0) {
+    // Check for new best pull (improvement of at least 5% lower health)
+    if (oldBoss.bestPercent - newBoss.bestPercent >= 5 && newBoss.kills === 0) {
       await Event.create({
         type: "best_pull",
         guildId: guild._id,

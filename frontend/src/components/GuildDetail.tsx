@@ -37,25 +37,27 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
         </td>
         <td className="px-4 py-3 text-center text-sm">{isDefeated ? <span className="text-green-400">✓ {boss.kills}</span> : <span className="text-gray-500">-</span>}</td>
         <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.pullCount || 0}</td>
-        <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.bestPercent > 0 ? formatPercent(boss.bestPercent) : "-"}</td>
+        <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.bestPercent < 100 ? formatPercent(boss.bestPercent) : "-"}</td>
         <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.timeSpent > 0 ? formatTime(boss.timeSpent) : "-"}</td>
-        <td className="px-4 py-3 text-center text-sm text-gray-400">{boss.firstKillTime ? new Date(boss.firstKillTime).toLocaleDateString() : "-"}</td>
+        <td className="px-4 py-3 text-center text-sm text-gray-400">{boss.firstKillTime ? new Date(boss.firstKillTime).toLocaleDateString("fi-FI") : "-"}</td>
       </tr>
     );
   };
 
   const renderProgressSection = (progress: RaidProgress) => {
-    // Sort bosses by kill order (if available), otherwise by boss ID
+    // Sort bosses: unkilled first, then killed bosses in reverse order (latest first)
     const sortedBosses = [...progress.bosses].sort((a, b) => {
-      // If both have kill order, sort by that
-      if (a.killOrder && b.killOrder) {
-        return a.killOrder - b.killOrder;
+      // Unkilled bosses (no kill order) should come first
+      if (!a.killOrder && !b.killOrder) {
+        // Both unkilled, sort by boss ID in reverse
+        return b.bossId - a.bossId;
       }
-      // If only one has kill order, put that one first
-      if (a.killOrder) return -1;
-      if (b.killOrder) return 1;
-      // Otherwise sort by boss ID
-      return a.bossId - b.bossId;
+      // If only a is unkilled, it comes first
+      if (!a.killOrder) return -1;
+      // If only b is unkilled, it comes first
+      if (!b.killOrder) return -1;
+      // Both have kill order, sort by that in reverse (highest first)
+      return b.killOrder - a.killOrder;
     });
 
     return (

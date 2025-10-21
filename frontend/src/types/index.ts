@@ -2,7 +2,7 @@ export interface BossProgress {
   bossId: number;
   bossName: string;
   kills: number;
-  bestPercent: number;
+  bestPercent: number; // Best pull: lowest boss health % reached (0 = kill, 100 = no progress)
   pullCount: number;
   timeSpent: number;
   firstKillTime?: string;

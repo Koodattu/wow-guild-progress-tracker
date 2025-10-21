@@ -4,7 +4,7 @@ export interface IBossProgress {
   bossId: number;
   bossName: string;
   kills: number;
-  bestPercent: number;
+  bestPercent: number; // Best pull: lowest boss health % reached (0 = kill, 100 = no progress)
   bestPhase?: number; // Best phase reached (for multi-phase bosses)
   pullCount: number;
   timeSpent: number; // in seconds
@@ -44,7 +44,7 @@ const BossProgressSchema: Schema = new Schema(
     bossId: { type: Number, required: true },
     bossName: { type: String, required: true },
     kills: { type: Number, default: 0 },
-    bestPercent: { type: Number, default: 0 },
+    bestPercent: { type: Number, default: 100 }, // Default 100 = worst (full health), track lowest (best)
     bestPhase: { type: Number },
     pullCount: { type: Number, default: 0 },
     timeSpent: { type: Number, default: 0 },
