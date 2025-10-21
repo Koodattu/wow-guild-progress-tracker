@@ -55,3 +55,21 @@ export interface Event {
   timestamp: string;
   createdAt: string;
 }
+
+export interface Boss {
+  id: number;
+  name: string;
+  slug: string;
+  iconUrl?: string;
+}
+
+export interface Raid {
+  _id: string;
+  id: number;
+  name: string;
+  slug: string;
+  expansion: string;
+  bosses: Boss[];
+  createdAt: string;
+  updatedAt: string;
+}

@@ -6,11 +6,13 @@ import { formatTime, formatPercent } from "@/lib/utils";
 interface GuildTableProps {
   guilds: Guild[];
   onGuildClick: (guild: Guild) => void;
+  selectedRaidId: number | null;
 }
 
-export default function GuildTable({ guilds, onGuildClick }: GuildTableProps) {
+export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: GuildTableProps) {
   const getLatestProgress = (guild: Guild, difficulty: "mythic" | "heroic"): RaidProgress | null => {
-    return guild.progress.find((p) => p.difficulty === difficulty) || null;
+    if (!selectedRaidId) return null;
+    return guild.progress.find((p) => p.difficulty === difficulty && p.raidId === selectedRaidId) || null;
   };
 
   const getBestPullForProgress = (progress: RaidProgress | null): number => {

@@ -6,9 +6,10 @@ import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl } from "@/
 interface GuildDetailProps {
   guild: Guild;
   onClose: () => void;
+  selectedRaidId: number | null;
 }
 
-export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
+export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDetailProps) {
   const handleBossClick = (boss: BossProgress) => {
     if (boss.firstKillReportCode && boss.firstKillFightId) {
       const url = getKillLogUrl(boss.firstKillReportCode, boss.firstKillFightId);
@@ -128,16 +129,25 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
         </div>
 
         <div className="px-6 py-6">
-          {guild.progress.length > 0 ? (
-            guild.progress
-              .sort((a, b) => {
-                // Sort by difficulty (mythic first)
-                if (a.difficulty !== b.difficulty) {
-                  return a.difficulty === "mythic" ? -1 : 1;
-                }
-                return 0;
-              })
-              .map((progress) => renderProgressSection(progress))
+          {guild.progress.length > 0 && selectedRaidId ? (
+            (() => {
+              // Filter progress for only the selected raid
+              const raidProgress = guild.progress.filter((p) => p.raidId === selectedRaidId);
+
+              if (raidProgress.length === 0) {
+                return <div className="text-center py-12 text-gray-500">No progress data available for the selected raid yet.</div>;
+              }
+
+              // Sort by difficulty (mythic first)
+              return raidProgress
+                .sort((a, b) => {
+                  if (a.difficulty !== b.difficulty) {
+                    return a.difficulty === "mythic" ? -1 : 1;
+                  }
+                  return 0;
+                })
+                .map((progress) => renderProgressSection(progress));
+            })()
           ) : (
             <div className="text-center py-12 text-gray-500">No progress data available for this guild yet.</div>
           )}

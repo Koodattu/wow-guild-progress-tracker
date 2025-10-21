@@ -6,6 +6,7 @@ import guildService from "./services/guild.service";
 import scheduler from "./services/scheduler.service";
 import guildsRouter from "./routes/guilds";
 import eventsRouter from "./routes/events";
+import raidsRouter from "./routes/raids";
 
 // Load environment variables
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(express.json());
 // Routes
 app.use("/api/guilds", guildsRouter);
 app.use("/api/events", eventsRouter);
+app.use("/api/raids", raidsRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {

@@ -195,20 +195,28 @@ class GuildService {
 
   // Fetch all reports for a guild and process both Mythic and Heroic from the same data
   private async fetchAndProcessAllReports(guild: IGuild): Promise<void> {
+    // Process all tracked raids
+    for (const raidId of TRACKED_RAIDS) {
+      await this.fetchAndProcessReportsForRaid(guild, raidId);
+    }
+  }
+
+  // Fetch and process reports for a specific raid
+  private async fetchAndProcessReportsForRaid(guild: IGuild, raidId: number): Promise<void> {
     // Get raid data from database
-    const raidData = await this.getRaidData(CURRENT_RAID_ID);
+    const raidData = await this.getRaidData(raidId);
     if (!raidData) {
-      console.error(`Raid data not found for zone ${CURRENT_RAID_ID}. Run syncRaidsFromWCL first!`);
+      console.error(`Raid data not found for zone ${raidId}. Run syncRaidsFromWCL first!`);
       return;
     }
 
-    console.log(`Using raid data: ${raidData.name} with ${raidData.bosses.length} bosses`);
+    console.log(`[${guild.name}] Using raid data: ${raidData.name} (ID: ${raidId}) with ${raidData.bosses.length} bosses`);
 
     try {
       // Check if we have any reports for this guild/zone already
       const existingReports = await Report.find({
         guildId: guild._id,
-        zoneId: CURRENT_RAID_ID,
+        zoneId: raidId,
       })
         .sort({ startTime: -1 })
         .limit(1);
@@ -221,12 +229,12 @@ class GuildService {
         guild.name,
         guild.realm.toLowerCase().replace(/\s+/g, "-"),
         guild.region.toLowerCase(),
-        CURRENT_RAID_ID,
+        raidId,
         5 // Only check the 5 most recent reports
       );
 
       if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
-        console.log(`No reports found for ${guild.name}`);
+        console.log(`[${guild.name}] No reports found for raid ${raidId} (${raidData.name})`);
         return;
       }
 
@@ -239,11 +247,11 @@ class GuildService {
       const ongoingReports = recentReportsList.filter((r: any) => !r.endTime || r.endTime === 0);
 
       if (newReportCodes.length === 0 && ongoingReports.length === 0) {
-        console.log(`No new or ongoing reports for ${guild.name}`);
+        console.log(`[${guild.name}] No new or ongoing reports for raid ${raidId} (${raidData.name})`);
         return;
       }
 
-      console.log(`Found ${newReportCodes.length} new reports and ${ongoingReports.length} ongoing reports for ${guild.name}`);
+      console.log(`[${guild.name}] Found ${newReportCodes.length} new reports and ${ongoingReports.length} ongoing reports for raid ${raidId} (${raidData.name})`);
 
       // Fetch full details only for new reports and ongoing reports
       // We fetch reports WITHOUT difficulty filter to get ALL fights
@@ -251,7 +259,7 @@ class GuildService {
 
       if (!hasExistingData) {
         // First time fetch - get all historical data
-        console.log(`No existing data for ${guild.name}, fetching all historical reports`);
+        console.log(`[${guild.name}] No existing data for raid ${raidId} (${raidData.name}), fetching all historical reports`);
         const reportsPerPage = 50;
         let page = 1;
         const maxPages = 10;
@@ -262,7 +270,7 @@ class GuildService {
             guild.name,
             guild.realm.toLowerCase().replace(/\s+/g, "-"),
             guild.region.toLowerCase(),
-            CURRENT_RAID_ID,
+            raidId,
             reportsPerPage,
             page
           );
@@ -273,7 +281,7 @@ class GuildService {
 
           const pageReports = data.reportData.reports.data;
           reportsToProcess.push(...pageReports);
-          console.log(`Fetched page ${page}: ${pageReports.length} reports for ${guild.name}`);
+          console.log(`[${guild.name}] Fetched page ${page}: ${pageReports.length} reports for raid ${raidId} (${raidData.name})`);
 
           // Update guild faction if available (only on first page)
           if (page === 1 && data.guildData?.guild?.faction?.name) {
@@ -293,17 +301,17 @@ class GuildService {
           const reportData = await wclService.getReportByCodeAllDifficulties(code);
           if (reportData.reportData?.report) {
             reportsToProcess.push(reportData.reportData.report);
-            console.log(`Fetched report ${code} for ${guild.name}`);
+            console.log(`[${guild.name}] Fetched report ${code} for raid ${raidId} (${raidData.name})`);
           }
         }
       }
 
       if (reportsToProcess.length === 0) {
-        console.log(`No reports to process for ${guild.name}`);
+        console.log(`[${guild.name}] No reports to process for raid ${raidId} (${raidData.name})`);
         return;
       }
 
-      console.log(`Total reports to process: ${reportsToProcess.length} for ${guild.name}`);
+      console.log(`[${guild.name}] Total reports to process: ${reportsToProcess.length} for raid ${raidId} (${raidData.name})`);
 
       // Now process both Mythic and Heroic from the same report data
       await this.processReportsForDifficulty(guild, raidData, reportsToProcess, "mythic");
@@ -336,7 +344,7 @@ class GuildService {
           {
             code: report.code,
             guildId: guild._id,
-            zoneId: CURRENT_RAID_ID,
+            zoneId: raidId,
             startTime: report.startTime,
             endTime: report.endTime,
             isOngoing,
@@ -348,9 +356,9 @@ class GuildService {
         );
       }
 
-      console.log(`Saved ${reportsToProcess.length} reports for ${guild.name}`);
+      console.log(`[${guild.name}] Saved ${reportsToProcess.length} reports for raid ${raidId} (${raidData.name})`);
     } catch (error) {
-      console.error(`Error fetching reports for ${guild.name}:`, error);
+      console.error(`[${guild.name}] Error fetching reports for raid ${raidId}:`, error);
       throw error;
     }
   }
@@ -622,10 +630,10 @@ class GuildService {
 
   // Check if guild has ongoing reports (currently raiding)
   async updateRaidingStatus(guild: IGuild): Promise<void> {
-    // Check if there are any ongoing reports for this guild in the current raid
+    // Check if there are any ongoing reports for this guild in any tracked raid
     const ongoingReports = await Report.countDocuments({
       guildId: guild._id,
-      zoneId: CURRENT_RAID_ID,
+      zoneId: { $in: TRACKED_RAIDS },
       isOngoing: true,
     });
 
