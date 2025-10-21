@@ -1,7 +1,7 @@
 "use client";
 
 import { Guild, RaidProgress } from "@/types";
-import { formatTime, formatPercent } from "@/lib/utils";
+import { formatTime, formatPercent, formatPhaseDisplay } from "@/lib/utils";
 
 interface GuildTableProps {
   guilds: Guild[];
@@ -19,6 +19,12 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
     if (!progress) return 0;
     const currentBoss = progress.bosses.find((b) => b.kills === 0);
     return currentBoss?.bestPercent || 0;
+  };
+
+  const getBestPullDisplayString = (progress: RaidProgress | null): string => {
+    if (!progress) return "";
+    const currentBoss = progress.bosses.find((b) => b.kills === 0);
+    return currentBoss?.bestPullPhase?.displayString || "";
   };
 
   const getCurrentPullCount = (progress: RaidProgress | null): number => {
@@ -47,6 +53,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             const mythicProgress = getLatestProgress(guild, "mythic");
             const heroicProgress = getLatestProgress(guild, "heroic");
             const mythicBestPull = getBestPullForProgress(mythicProgress);
+            const mythicBestPullDisplay = getBestPullDisplayString(mythicProgress);
             const mythicPulls = getCurrentPullCount(mythicProgress);
 
             return (
@@ -70,7 +77,9 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                   <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
                 </td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicPulls > 0 ? mythicPulls : "-"}</td>
-                <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}</td>
+                <td className="px-4 py-3 text-center text-sm text-gray-300">
+                  {mythicBestPullDisplay ? formatPhaseDisplay(mythicBestPullDisplay) : mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}
+                </td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicProgress ? formatTime(mythicProgress.totalTimeSpent) : "-"}</td>
               </tr>
             );

@@ -1,7 +1,7 @@
 "use client";
 
 import { Guild, RaidProgress, BossProgress } from "@/types";
-import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl } from "@/lib/utils";
+import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 
 interface GuildDetailProps {
   guild: Guild;
@@ -42,10 +42,7 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
           {isDefeated ? (
             <span className="text-green-400">✓</span>
           ) : boss.bestPullPhase?.displayString ? (
-            <div className="flex flex-col items-center">
-              <span className="text-gray-300 font-medium">{boss.bestPullPhase.displayString}</span>
-              {boss.bestPullPhase.phaseName && boss.bestPullPhase.phaseName !== "Phase 1" && <span className="text-xs text-gray-500">{boss.bestPullPhase.phaseName}</span>}
-            </div>
+            <span className="text-gray-300 font-medium">{formatPhaseDisplay(boss.bestPullPhase.displayString)}</span>
           ) : boss.bestPercent < 100 ? (
             <span className="text-gray-300">{formatPercent(boss.bestPercent)}</span>
           ) : (

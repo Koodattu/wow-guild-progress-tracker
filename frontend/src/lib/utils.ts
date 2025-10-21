@@ -56,3 +56,27 @@ export function getTimeAgo(dateString: string): string {
 export function getKillLogUrl(reportCode: string, fightId: number): string {
   return `https://www.warcraftlogs.com/reports/${reportCode}#fight=${fightId}`;
 }
+
+// Format phase display string by shortening phase names
+// Examples: "45.2% Stage One: XYZ" -> "45.2% P1", "67.8% Intermission 2: XYZ" -> "67.8% I2"
+export function formatPhaseDisplay(displayString: string): string {
+  if (!displayString) return displayString;
+
+  // Remove everything after colons (e.g., "Stage One: XYZ" -> "Stage One")
+  let formatted = displayString.replace(/:.*$/, "").trim();
+
+  // Apply transformations
+  formatted = formatted
+    // Stage One -> P1, Stage Two -> P2, etc.
+    .replace(/Stage One\b/gi, "P1")
+    .replace(/Stage Two\b/gi, "P2")
+    .replace(/Stage Three\b/gi, "P3")
+    .replace(/Stage Four\b/gi, "P4")
+    .replace(/Stage Five\b/gi, "P5")
+    // Intermission 1 -> I1, Intermission 2 -> I2, etc.
+    .replace(/Intermission (\d+)\b/gi, "I$1")
+    // Intermission (without number) -> I
+    .replace(/Intermission\b/gi, "I");
+
+  return formatted;
+}
