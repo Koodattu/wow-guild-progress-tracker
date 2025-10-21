@@ -35,9 +35,17 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
             {isClickable && <span className="ml-2 text-xs text-gray-500">🔗</span>}
           </span>
         </td>
-        <td className="px-4 py-3 text-center text-sm">{isDefeated ? <span className="text-green-400">✓ {boss.kills}</span> : <span className="text-gray-500">-</span>}</td>
+        <td className="px-4 py-3 text-center text-sm">{isDefeated ? <span className="text-white">{boss.kills}</span> : <span className="text-gray-500">-</span>}</td>
         <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.pullCount || 0}</td>
-        <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.bestPercent < 100 ? formatPercent(boss.bestPercent) : "-"}</td>
+        <td className="px-4 py-3 text-center text-sm">
+          {isDefeated ? (
+            <span className="text-green-400">✓</span>
+          ) : boss.bestPercent < 100 ? (
+            <span className="text-gray-300">{formatPercent(boss.bestPercent)}</span>
+          ) : (
+            <span className="text-gray-500">-</span>
+          )}
+        </td>
         <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.timeSpent > 0 ? formatTime(boss.timeSpent) : "-"}</td>
         <td className="px-4 py-3 text-center text-sm text-gray-400">{boss.firstKillTime ? new Date(boss.firstKillTime).toLocaleDateString("fi-FI") : "-"}</td>
       </tr>
