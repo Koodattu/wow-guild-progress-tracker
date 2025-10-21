@@ -12,7 +12,7 @@ export interface IBossProgress {
   bossId: number;
   bossName: string;
   kills: number;
-  bestPercent: number; // Best pull: lowest boss health % reached (0 = kill, 100 = no progress)
+  bestPercent: number; // Best pull: lowest fight completion % reached (0 = complete, 100 = no progress) - uses fightPercentage
   bestPhase?: number; // Best phase reached (for multi-phase bosses)
   pullCount: number;
   timeSpent: number; // in seconds

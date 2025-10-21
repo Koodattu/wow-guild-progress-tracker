@@ -451,7 +451,8 @@ class GuildService {
       for (const fight of difficultyFights) {
         const encounterId = fight.encounterID;
         const isKill = fight.kill === true;
-        const percent = fight.bossPercentage || 0;
+        const bossPercent = fight.bossPercentage || 0; // Boss health remaining (for display/phase info)
+        const fightPercent = fight.fightPercentage || 0; // Fight completion (for determining best pull)
         const duration = (fight.endTime - fight.startTime) / 1000; // Convert to seconds
 
         // Determine phase information
@@ -470,8 +471,8 @@ class GuildService {
             encounterName: fight.name || `Boss ${encounterId}`,
             difficulty: difficultyId,
             isKill,
-            bossPercentage: percent,
-            fightPercentage: fight.fightPercentage || 0,
+            bossPercentage: bossPercent,
+            fightPercentage: fightPercent,
             // Phase information
             lastPhaseId: phaseInfo.lastPhase?.phaseId,
             lastPhaseName: phaseInfo.lastPhase?.phaseName,
@@ -539,18 +540,19 @@ class GuildService {
           }
         } else {
           // Track best pull percentage for non-kills
-          // Lower boss health % = better progress (0% = dead, 100% = full health)
+          // Use fightPercentage (not bossPercentage) as it's more accurate for complex encounters
+          // Lower fightPercentage = better progress (0% = complete, 100% = no progress)
           // Only track best percent for pulls before first kill
-          if (shouldCountPull && percent < bossData.bestPercent) {
-            bossData.bestPercent = percent;
+          if (shouldCountPull && fightPercent < bossData.bestPercent) {
+            bossData.bestPercent = fightPercent;
 
             // Store best pull phase info
             if (phaseInfo.lastPhase) {
               bossData.bestPullPhase = {
                 phaseId: phaseInfo.lastPhase.phaseId,
                 phaseName: phaseInfo.lastPhase.phaseName,
-                bossHealth: percent,
-                fightCompletion: fight.fightPercentage || 0,
+                bossHealth: bossPercent,
+                fightCompletion: fightPercent,
                 displayString: phaseInfo.progressDisplay,
               };
             }
