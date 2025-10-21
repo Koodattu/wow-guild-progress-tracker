@@ -16,7 +16,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
     }
   };
 
-  const renderBossRow = (boss: BossProgress) => {
+  const renderBossRow = (boss: BossProgress, bossNumber: number) => {
     const isDefeated = boss.kills > 0;
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const isClickable = isDefeated && hasKillLog;
@@ -28,7 +28,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
         className={`border-b border-gray-800 ${isDefeated ? "bg-green-900/10" : ""} ${isClickable ? "cursor-pointer hover:bg-gray-800/50 transition-colors" : ""}`}
         title={isClickable ? "Click to view kill log on WarcraftLogs" : ""}
       >
-        <td className="px-4 py-3 text-sm text-gray-400">{boss.killOrder || "-"}</td>
+        <td className="px-4 py-3 text-sm text-gray-400">{bossNumber}</td>
         <td className="px-4 py-3">
           <span className={isDefeated ? "text-green-400 font-semibold" : "text-white"}>
             {boss.bossName}
@@ -45,6 +45,13 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
   };
 
   const renderProgressSection = (progress: RaidProgress) => {
+    // First, create a mapping of bossId to sequential number (1, 2, 3, etc.) based on bossId order
+    const bossesByIdAsc = [...progress.bosses].sort((a, b) => a.bossId - b.bossId);
+    const bossNumberMap = new Map<number, number>();
+    bossesByIdAsc.forEach((boss, index) => {
+      bossNumberMap.set(boss.bossId, index + 1);
+    });
+
     // Sort bosses: unkilled first, then killed bosses in reverse order (latest first)
     const sortedBosses = [...progress.bosses].sort((a, b) => {
       // Unkilled bosses (no kill order) should come first
@@ -90,7 +97,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
                 <th className="px-4 py-2 text-center text-sm font-semibold text-gray-300">First Kill</th>
               </tr>
             </thead>
-            <tbody>{sortedBosses.map((boss) => renderBossRow(boss))}</tbody>
+            <tbody>{sortedBosses.map((boss) => renderBossRow(boss, bossNumberMap.get(boss.bossId)!))}</tbody>
           </table>
         </div>
       </div>
