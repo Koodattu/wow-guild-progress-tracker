@@ -1,3 +1,11 @@
+export interface BestPullPhase {
+  phaseId: number;
+  phaseName: string;
+  bossHealth: number;
+  fightCompletion: number;
+  displayString: string; // e.g., "45% P3"
+}
+
 export interface BossProgress {
   bossId: number;
   bossName: string;
@@ -9,6 +17,7 @@ export interface BossProgress {
   firstKillReportCode?: string; // WCL report code for first kill
   firstKillFightId?: number; // Fight ID within the report
   killOrder?: number; // Order in which this boss was first killed (1 = first, 2 = second, etc.)
+  bestPullPhase?: BestPullPhase; // Phase context for best pull
   lastUpdated: string;
 }
 

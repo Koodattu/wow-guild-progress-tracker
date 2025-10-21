@@ -41,6 +41,11 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
         <td className="px-4 py-3 text-center text-sm">
           {isDefeated ? (
             <span className="text-green-400">✓</span>
+          ) : boss.bestPullPhase?.displayString ? (
+            <div className="flex flex-col items-center">
+              <span className="text-gray-300 font-medium">{boss.bestPullPhase.displayString}</span>
+              {boss.bestPullPhase.phaseName && boss.bestPullPhase.phaseName !== "Phase 1" && <span className="text-xs text-gray-500">{boss.bestPullPhase.phaseName}</span>}
+            </div>
           ) : boss.bestPercent < 100 ? (
             <span className="text-gray-300">{formatPercent(boss.bestPercent)}</span>
           ) : (

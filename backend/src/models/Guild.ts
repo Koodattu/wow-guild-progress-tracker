@@ -1,5 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IBestPullPhase {
+  phaseId: number;
+  phaseName: string;
+  bossHealth: number; // Boss health at wipe
+  fightCompletion: number; // Fight % at wipe
+  displayString: string; // e.g., "45% P3"
+}
+
 export interface IBossProgress {
   bossId: number;
   bossName: string;
@@ -12,6 +20,7 @@ export interface IBossProgress {
   firstKillReportCode?: string; // WCL report code for first kill (e.g., "a:1234567890")
   firstKillFightId?: number; // Fight ID within the report for first kill
   killOrder?: number; // Order in which this boss was first killed (1 = first boss killed, 2 = second, etc.)
+  bestPullPhase?: IBestPullPhase; // Phase context for best pull
   lastUpdated: Date;
 }
 
@@ -52,6 +61,13 @@ const BossProgressSchema: Schema = new Schema(
     firstKillReportCode: { type: String },
     firstKillFightId: { type: Number },
     killOrder: { type: Number },
+    bestPullPhase: {
+      phaseId: { type: Number },
+      phaseName: { type: String },
+      bossHealth: { type: Number },
+      fightCompletion: { type: Number },
+      displayString: { type: String },
+    },
     lastUpdated: { type: Date, default: Date.now },
   },
   { _id: false }

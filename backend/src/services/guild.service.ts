@@ -260,9 +260,9 @@ class GuildService {
       if (!hasExistingData) {
         // First time fetch - get all historical data
         console.log(`[${guild.name}] No existing data for raid ${raidId} (${raidData.name}), fetching all historical reports`);
-        const reportsPerPage = 50;
+        const reportsPerPage = 10; // Reduced from 50 to avoid WCL query complexity limits with phase data
         let page = 1;
-        const maxPages = 10;
+        const maxPages = 20; // Increased to compensate for smaller page size (10*20=200 vs 50*10=500)
         let shouldContinue = true;
 
         while (shouldContinue && page <= maxPages) {
@@ -385,6 +385,13 @@ class GuildService {
         firstKillTime?: Date;
         firstKillReportCode?: string;
         firstKillFightId?: number;
+        bestPullPhase?: {
+          phaseId: number;
+          phaseName: string;
+          bossHealth: number;
+          fightCompletion: number;
+          displayString: string;
+        };
       }
     >();
 
@@ -426,6 +433,9 @@ class GuildService {
 
       console.log(`[${guild.name}] Report ${report.code} has ${report.fights.length} total fights`);
 
+      // Get phase metadata from report
+      const encounterPhases = report.phases || [];
+
       // Filter fights by difficulty since we're fetching all difficulties
       const difficultyFights = report.fights.filter((fight: any) => fight.difficulty === difficultyId);
 
@@ -444,6 +454,9 @@ class GuildService {
         const percent = fight.bossPercentage || 0;
         const duration = (fight.endTime - fight.startTime) / 1000; // Convert to seconds
 
+        // Determine phase information
+        const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
+
         // SAVE INDIVIDUAL FIGHT TO DATABASE
         const fightTimestamp = new Date(report.startTime + fight.startTime);
         await Fight.findOneAndUpdate(
@@ -459,6 +472,15 @@ class GuildService {
             isKill,
             bossPercentage: percent,
             fightPercentage: fight.fightPercentage || 0,
+            // Phase information
+            lastPhaseId: phaseInfo.lastPhase?.phaseId,
+            lastPhaseName: phaseInfo.lastPhase?.phaseName,
+            phaseTransitions: fight.phaseTransitions?.map((pt: any) => ({
+              id: pt.id,
+              startTime: pt.startTime,
+              name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
+            })),
+            progressDisplay: phaseInfo.progressDisplay,
             reportStartTime: report.startTime,
             reportEndTime: report.endTime || 0,
             fightStartTime: fight.startTime,
@@ -480,6 +502,7 @@ class GuildService {
             firstKillTime: undefined,
             firstKillReportCode: undefined,
             firstKillFightId: undefined,
+            bestPullPhase: undefined,
           });
         }
 
@@ -520,6 +543,17 @@ class GuildService {
           // Only track best percent for pulls before first kill
           if (shouldCountPull && percent < bossData.bestPercent) {
             bossData.bestPercent = percent;
+
+            // Store best pull phase info
+            if (phaseInfo.lastPhase) {
+              bossData.bestPullPhase = {
+                phaseId: phaseInfo.lastPhase.phaseId,
+                phaseName: phaseInfo.lastPhase.phaseName,
+                bossHealth: percent,
+                fightCompletion: fight.fightPercentage || 0,
+                displayString: phaseInfo.progressDisplay,
+              };
+            }
           }
         }
       }
@@ -589,6 +623,7 @@ class GuildService {
         firstKillReportCode: bossInfo.firstKillReportCode,
         firstKillFightId: bossInfo.firstKillFightId,
         killOrder: killOrderMap.get(encounterId),
+        bestPullPhase: bossInfo.bestPullPhase,
         lastUpdated: new Date(),
       };
 

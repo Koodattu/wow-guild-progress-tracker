@@ -244,6 +244,15 @@ class WarcraftLogsService {
             code
             startTime
             endTime
+            phases {
+              encounterID
+              separatesWipes
+              phases {
+                id
+                name
+                isIntermission
+              }
+            }
             fights(killType: Encounters) {
               id
               encounterID
@@ -254,6 +263,10 @@ class WarcraftLogsService {
               fightPercentage
               startTime
               endTime
+              phaseTransitions {
+                id
+                startTime
+              }
             }
           }
         }
@@ -268,7 +281,8 @@ class WarcraftLogsService {
   }
 
   // Get guild info and recent reports for a specific raid - ALL difficulties (not filtered)
-  async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 50, page: number = 1) {
+  // Note: Limit kept low (10) to avoid WCL query complexity limits when fetching phase data
+  async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 10, page: number = 1) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -289,6 +303,15 @@ class WarcraftLogsService {
               code
               startTime
               endTime
+              phases {
+                encounterID
+                separatesWipes
+                phases {
+                  id
+                  name
+                  isIntermission
+                }
+              }
               fights(killType: Encounters) {
                 id
                 encounterID
@@ -299,6 +322,10 @@ class WarcraftLogsService {
                 fightPercentage
                 startTime
                 endTime
+                phaseTransitions {
+                  id
+                  startTime
+                }
               }
             }
           }
@@ -436,6 +463,94 @@ class WarcraftLogsService {
       this.zonesCacheTime = now;
       console.log(`Cached ${this.zonesCache.length} zones`);
     }
+
+    return result;
+  }
+
+  /**
+   * Determines which phase a fight ended in and creates display string
+   */
+  determinePhaseInfo(
+    fight: any,
+    encounterPhases: any[]
+  ): {
+    lastPhase?: { phaseId: number; phaseName: string; isIntermission: boolean };
+    allPhases: Array<{ phaseId: number; phaseName: string; isIntermission: boolean }>;
+    progressDisplay: string;
+  } {
+    const result: {
+      lastPhase?: { phaseId: number; phaseName: string; isIntermission: boolean };
+      allPhases: Array<{ phaseId: number; phaseName: string; isIntermission: boolean }>;
+      progressDisplay: string;
+    } = {
+      allPhases: [],
+      progressDisplay: "",
+    };
+
+    // Find phase metadata for this encounter
+    const encounterMeta = encounterPhases?.find((ep: any) => ep.encounterID === fight.encounterID);
+
+    if (!encounterMeta?.phases || encounterMeta.phases.length === 0) {
+      // No phase data available, use simple display
+      if (fight.bossPercentage !== undefined && fight.bossPercentage !== null) {
+        result.progressDisplay = `${fight.bossPercentage.toFixed(1)}%`;
+      } else if (fight.fightPercentage !== undefined) {
+        result.progressDisplay = `${fight.fightPercentage.toFixed(1)}% overall`;
+      }
+      return result;
+    }
+
+    // Build phase map for lookup
+    const phaseMap = new Map<number, { phaseId: number; phaseName: string; isIntermission: boolean }>();
+    encounterMeta.phases.forEach((p: any) => {
+      phaseMap.set(p.id, {
+        phaseId: p.id,
+        phaseName: p.name,
+        isIntermission: p.isIntermission || false,
+      });
+    });
+
+    // Determine which phases occurred
+    if (fight.phaseTransitions && fight.phaseTransitions.length > 0) {
+      // Sort transitions by time
+      const transitions = [...fight.phaseTransitions].sort((a: any, b: any) => a.startTime - b.startTime);
+
+      // Build all phases that occurred
+      transitions.forEach((trans: any) => {
+        const phaseInfo = phaseMap.get(trans.id);
+        if (phaseInfo) {
+          result.allPhases.push(phaseInfo);
+        }
+      });
+
+      // Last phase is the one active at fight end
+      const lastTransition = transitions[transitions.length - 1];
+      result.lastPhase = phaseMap.get(lastTransition.id);
+    } else {
+      // No transitions recorded, assume Phase 1
+      result.lastPhase = phaseMap.get(1) || {
+        phaseId: 1,
+        phaseName: "Phase 1",
+        isIntermission: false,
+      };
+      result.allPhases.push(result.lastPhase);
+    }
+
+    // Create display string
+    const bossHealth = fight.bossPercentage?.toFixed(1) || "?";
+    const phaseName = result.lastPhase?.phaseName || "Unknown";
+
+    // Format phase name for display (shorten if needed)
+    let phaseDisplay = phaseName;
+    if (phaseName.toLowerCase().includes("phase")) {
+      // "Phase 3" -> "P3"
+      phaseDisplay = phaseName.replace(/phase\s*/i, "P");
+    } else if (phaseName.toLowerCase().includes("intermission")) {
+      // "Intermission 1" -> "I1"
+      phaseDisplay = phaseName.replace(/intermission\s*/i, "I");
+    }
+
+    result.progressDisplay = `${bossHealth}% ${phaseDisplay}`;
 
     return result;
   }

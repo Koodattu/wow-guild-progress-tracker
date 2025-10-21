@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IPhaseTransition {
+  id: number; // Phase ID (1-indexed)
+  startTime: number; // When phase started (ms, relative to report start)
+  name?: string; // Phase name if available
+}
+
 export interface IFight extends Document {
   reportCode: string; // WCL report code this fight belongs to
   guildId: mongoose.Types.ObjectId;
@@ -17,6 +23,11 @@ export interface IFight extends Document {
   fightEndTime: number; // Fight end time relative to report start (ms)
   duration: number; // Fight duration in milliseconds (in-combat time)
   timestamp: Date; // Actual timestamp when the fight occurred
+  // Phase information
+  lastPhaseId?: number; // ID of last phase reached
+  lastPhaseName?: string; // Name of last phase (e.g., "Phase 3", "Intermission")
+  phaseTransitions?: IPhaseTransition[]; // All phases that occurred
+  progressDisplay?: string; // Human-readable like "45% P3"
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,6 +50,17 @@ const FightSchema: Schema = new Schema(
     fightEndTime: { type: Number, required: true },
     duration: { type: Number, required: true },
     timestamp: { type: Date, required: true, index: true },
+    // Phase information
+    lastPhaseId: { type: Number },
+    lastPhaseName: { type: String },
+    phaseTransitions: [
+      {
+        id: { type: Number, required: true },
+        startTime: { type: Number, required: true },
+        name: { type: String },
+      },
+    ],
+    progressDisplay: { type: String },
   },
   {
     timestamps: true,
