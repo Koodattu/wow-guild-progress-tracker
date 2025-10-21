@@ -391,7 +391,33 @@ class GuildService {
     // Track kill order - which boss was killed first, second, etc.
     const killOrderTracker: Array<{ encounterId: number; killTime: Date }> = [];
 
-    // Process all reports and filter fights by difficulty
+    // FIRST PASS: Identify first kill times for each boss
+    // This is necessary to determine which pulls should be counted
+    const firstKillTimes = new Map<number, Date>();
+
+    for (const report of reports) {
+      if (!report.fights || report.fights.length === 0) continue;
+
+      const difficultyFights = report.fights.filter((fight: any) => fight.difficulty === difficultyId);
+
+      for (const fight of difficultyFights) {
+        const encounterId = fight.encounterID;
+        const isKill = fight.kill === true;
+
+        if (isKill && !firstKillTimes.has(encounterId)) {
+          // Calculate actual kill time: report start + fight end time offset
+          const killTime = new Date(report.startTime + fight.endTime);
+          firstKillTimes.set(encounterId, killTime);
+        }
+      }
+    }
+
+    console.log(
+      `[${guild.name}] First kill times identified for ${difficulty}:`,
+      Array.from(firstKillTimes.entries()).map(([id, time]) => `Boss ${id}: ${time.toISOString()}`)
+    );
+
+    // SECOND PASS: Process all fights and count only pulls up to first kill
     for (const report of reports) {
       if (!report.fights || report.fights.length === 0) {
         console.log(`[${guild.name}] Report ${report.code} has no fights`);
@@ -458,8 +484,22 @@ class GuildService {
         }
 
         const bossData = bossDataMap.get(encounterId)!;
-        bossData.pulls++;
-        bossData.totalTime += duration;
+
+        // KEY CHANGE: Only count pulls and time up to (and including) the first kill
+        const firstKillTime = firstKillTimes.get(encounterId);
+        const shouldCountPull = !firstKillTime || fightTimestamp <= firstKillTime;
+
+        if (shouldCountPull) {
+          bossData.pulls++;
+          bossData.totalTime += duration;
+        } else {
+          // Log when we skip a pull (for debugging purposes)
+          console.log(
+            `[${guild.name}] Skipping pull for ${
+              fight.name
+            } (encounter ${encounterId}) - fight occurred after first kill (${fightTimestamp.toISOString()} > ${firstKillTime?.toISOString()})`
+          );
+        }
 
         if (isKill) {
           bossData.kills++;
@@ -477,7 +517,8 @@ class GuildService {
         } else {
           // Track best pull percentage for non-kills
           // Lower boss health % = better progress (0% = dead, 100% = full health)
-          if (percent < bossData.bestPercent) {
+          // Only track best percent for pulls before first kill
+          if (shouldCountPull && percent < bossData.bestPercent) {
             bossData.bestPercent = percent;
           }
         }
