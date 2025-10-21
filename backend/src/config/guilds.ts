@@ -4,7 +4,11 @@ export interface TrackedGuild {
   region: string;
 }
 
-export const GUILDS: TrackedGuild[] = [{ name: "Tuju", realm: "Kazzak", region: "EU" }];
+export const GUILDS: TrackedGuild[] = [
+  { name: "Tuju", realm: "Kazzak", region: "EU" },
+  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
+  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
+];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
 export const TRACKED_RAIDS = [
