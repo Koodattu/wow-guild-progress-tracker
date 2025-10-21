@@ -12,70 +12,101 @@ class GuildService {
     console.log("Syncing raid data from WarcraftLogs...");
 
     try {
-      // Fetch all zones from WarcraftLogs
-      const result = await wclService.getZones();
-      const zones = result.worldData?.zones;
+      // Check if we have any raids in the database
+      const existingRaidCount = await Raid.countDocuments();
+      console.log(`Found ${existingRaidCount} raids in database`);
 
-      if (!zones || zones.length === 0) {
-        console.warn("No zones data returned from WarcraftLogs");
-        return;
-      }
+      // If we have existing raids, check if all tracked raids are present
+      let needsFullFetch = existingRaidCount === 0;
 
-      console.log(`Found ${zones.length} zones from WarcraftLogs`);
+      if (!needsFullFetch) {
+        // Check if all TRACKED_RAIDS exist in our database
+        const existingTrackedRaids = await Raid.find({
+          id: { $in: TRACKED_RAIDS },
+        }).select("id");
 
-      // Sync all zones to database
-      for (const zone of zones) {
-        try {
-          // Get detailed zone info with encounters
-          const detailResult = await wclService.getZone(zone.id);
-          const zoneData = detailResult.worldData?.zone;
+        const existingTrackedIds = new Set(existingTrackedRaids.map((r) => r.id));
+        const missingRaidIds = TRACKED_RAIDS.filter((id) => !existingTrackedIds.has(id));
 
-          if (!zoneData) {
-            console.warn(`No detailed data found for zone ${zone.id} (${zone.name})`);
-            continue;
-          }
-
-          console.log(`Zone ${zone.id} data:`, JSON.stringify(zoneData, null, 2));
-
-          // Check if encounters exist
-          if (!zoneData.encounters || zoneData.encounters.length === 0) {
-            console.warn(`Zone ${zone.id} (${zoneData.name}) has no encounters, skipping...`);
-            continue;
-          }
-
-          // Convert encounters to bosses format
-          const bosses = (zoneData.encounters || []).map((enc: any) => ({
-            id: enc.id,
-            name: enc.name,
-            slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-          }));
-
-          console.log(`Syncing zone ${zone.id} with ${bosses.length} encounters`);
-
-          // Update or create raid in database
-          await Raid.findOneAndUpdate(
-            { id: zone.id },
-            {
-              $set: {
-                name: zoneData.name,
-                slug: zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-                expansion: "The War Within", // You might want to make this dynamic based on zone
-                bosses,
-              },
-              $setOnInsert: {
-                id: zone.id,
-              },
-            },
-            { upsert: true, new: true }
-          );
-
-          console.log(`Synced raid: ${zoneData.name} (${bosses.length} bosses)`);
-        } catch (error) {
-          console.error(`Error syncing zone ${zone.id}:`, error);
+        if (missingRaidIds.length > 0) {
+          console.log(`Missing tracked raid IDs in database: ${missingRaidIds.join(", ")}`);
+          console.log("Triggering full zone refetch...");
+          needsFullFetch = true;
+        } else {
+          console.log("All tracked raids already exist in database, skipping zone fetch");
+          return;
         }
+      } else {
+        console.log("Database is empty, fetching all zones for initial setup");
       }
 
-      console.log("Raid sync completed");
+      // Only fetch zones if needed (first time or missing tracked raids)
+      if (needsFullFetch) {
+        // Fetch all zones from WarcraftLogs
+        const result = await wclService.getZones();
+        const zones = result.worldData?.zones;
+
+        if (!zones || zones.length === 0) {
+          console.warn("No zones data returned from WarcraftLogs");
+          return;
+        }
+
+        console.log(`Found ${zones.length} zones from WarcraftLogs`);
+
+        // Sync all zones to database
+        for (const zone of zones) {
+          try {
+            // Get detailed zone info with encounters
+            const detailResult = await wclService.getZone(zone.id);
+            const zoneData = detailResult.worldData?.zone;
+
+            if (!zoneData) {
+              console.warn(`No detailed data found for zone ${zone.id} (${zone.name})`);
+              continue;
+            }
+
+            console.log(`Zone ${zone.id} data:`, JSON.stringify(zoneData, null, 2));
+
+            // Check if encounters exist
+            if (!zoneData.encounters || zoneData.encounters.length === 0) {
+              console.warn(`Zone ${zone.id} (${zoneData.name}) has no encounters, skipping...`);
+              continue;
+            }
+
+            // Convert encounters to bosses format
+            const bosses = (zoneData.encounters || []).map((enc: any) => ({
+              id: enc.id,
+              name: enc.name,
+              slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            }));
+
+            console.log(`Syncing zone ${zone.id} with ${bosses.length} encounters`);
+
+            // Update or create raid in database
+            await Raid.findOneAndUpdate(
+              { id: zone.id },
+              {
+                $set: {
+                  name: zoneData.name,
+                  slug: zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                  expansion: "The War Within", // You might want to make this dynamic based on zone
+                  bosses,
+                },
+                $setOnInsert: {
+                  id: zone.id,
+                },
+              },
+              { upsert: true, new: true }
+            );
+
+            console.log(`Synced raid: ${zoneData.name} (${bosses.length} bosses)`);
+          } catch (error) {
+            console.error(`Error syncing zone ${zone.id}:`, error);
+          }
+        }
+
+        console.log("Raid sync completed");
+      }
     } catch (error) {
       console.error("Error syncing raids from WarcraftLogs:", error);
     }
