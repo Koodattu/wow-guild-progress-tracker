@@ -16,7 +16,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
     }
   };
 
-  const renderBossRow = (boss: BossProgress, index: number) => {
+  const renderBossRow = (boss: BossProgress) => {
     const isDefeated = boss.kills > 0;
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const isClickable = isDefeated && hasKillLog;
@@ -28,7 +28,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
         className={`border-b border-gray-800 ${isDefeated ? "bg-green-900/10" : ""} ${isClickable ? "cursor-pointer hover:bg-gray-800/50 transition-colors" : ""}`}
         title={isClickable ? "Click to view kill log on WarcraftLogs" : ""}
       >
-        <td className="px-4 py-3 text-sm text-gray-400">{boss.killOrder || index + 1}</td>
+        <td className="px-4 py-3 text-sm text-gray-400">{boss.killOrder || "-"}</td>
         <td className="px-4 py-3">
           <span className={isDefeated ? "text-green-400 font-semibold" : "text-white"}>
             {boss.bossName}
@@ -90,7 +90,7 @@ export default function GuildDetail({ guild, onClose }: GuildDetailProps) {
                 <th className="px-4 py-2 text-center text-sm font-semibold text-gray-300">First Kill</th>
               </tr>
             </thead>
-            <tbody>{sortedBosses.map((boss, index) => renderBossRow(boss, index))}</tbody>
+            <tbody>{sortedBosses.map((boss) => renderBossRow(boss))}</tbody>
           </table>
         </div>
       </div>
