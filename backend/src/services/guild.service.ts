@@ -1,11 +1,91 @@
 import Guild, { IGuild, IRaidProgress, IBossProgress } from "../models/Guild";
 import Event from "../models/Event";
-import Raid from "../models/Raid";
+import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
+import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
-import { GUILDS, CURRENT_RAID, DIFFICULTIES } from "../config/guilds";
+import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES } from "../config/guilds";
 
 class GuildService {
+  // Sync raid information from WarcraftLogs to database
+  async syncRaidsFromWCL(): Promise<void> {
+    console.log("Syncing raid data from WarcraftLogs...");
+
+    try {
+      // Fetch all zones from WarcraftLogs
+      const result = await wclService.getZones();
+      const zones = result.worldData?.zones;
+
+      if (!zones || zones.length === 0) {
+        console.warn("No zones data returned from WarcraftLogs");
+        return;
+      }
+
+      console.log(`Found ${zones.length} zones from WarcraftLogs`);
+
+      // Sync all zones to database
+      for (const zone of zones) {
+        try {
+          // Get detailed zone info with encounters
+          const detailResult = await wclService.getZone(zone.id);
+          const zoneData = detailResult.worldData?.zone;
+
+          if (!zoneData) {
+            console.warn(`No detailed data found for zone ${zone.id} (${zone.name})`);
+            continue;
+          }
+
+          console.log(`Zone ${zone.id} data:`, JSON.stringify(zoneData, null, 2));
+
+          // Check if encounters exist
+          if (!zoneData.encounters || zoneData.encounters.length === 0) {
+            console.warn(`Zone ${zone.id} (${zoneData.name}) has no encounters, skipping...`);
+            continue;
+          }
+
+          // Convert encounters to bosses format
+          const bosses = (zoneData.encounters || []).map((enc: any) => ({
+            id: enc.id,
+            name: enc.name,
+            slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          }));
+
+          console.log(`Syncing zone ${zone.id} with ${bosses.length} encounters`);
+
+          // Update or create raid in database
+          await Raid.findOneAndUpdate(
+            { id: zone.id },
+            {
+              $set: {
+                name: zoneData.name,
+                slug: zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                expansion: "The War Within", // You might want to make this dynamic based on zone
+                bosses,
+              },
+              $setOnInsert: {
+                id: zone.id,
+              },
+            },
+            { upsert: true, new: true }
+          );
+
+          console.log(`Synced raid: ${zoneData.name} (${bosses.length} bosses)`);
+        } catch (error) {
+          console.error(`Error syncing zone ${zone.id}:`, error);
+        }
+      }
+
+      console.log("Raid sync completed");
+    } catch (error) {
+      console.error("Error syncing raids from WarcraftLogs:", error);
+    }
+  }
+
+  // Get raid data from database
+  async getRaidData(zoneId: number): Promise<IRaid | null> {
+    return await Raid.findOne({ id: zoneId });
+  }
+
   // Initialize all guilds from config
   async initializeGuilds(): Promise<void> {
     console.log("Initializing guilds from config...");
@@ -45,10 +125,31 @@ class GuildService {
       await this.fetchAndProcessAllReports(guild);
 
       // Update raiding status based on ongoing reports
-      await this.updateRaidingStatus(guildId);
+      await this.updateRaidingStatus(guild);
 
       guild.lastFetched = new Date();
+
+      // Log what we're about to save
+      console.log(`[${guild.name}] RIGHT BEFORE SAVE - progress data:`);
+      for (const progress of guild.progress) {
+        console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
+        if (progress.bosses.length > 0) {
+          console.log(
+            `    First 3 bosses: ${progress.bosses
+              .slice(0, 3)
+              .map((b) => b.bossName)
+              .join(", ")}`
+          );
+        }
+      }
+
       await guild.save();
+
+      // Log the saved progress data
+      console.log(`[${guild.name}] AFTER SAVE - progress data:`);
+      for (const progress of guild.progress) {
+        console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
+      }
 
       console.log(`Successfully updated: ${guild.name}`);
       return guild;
@@ -60,11 +161,20 @@ class GuildService {
 
   // Fetch all reports for a guild and process both Mythic and Heroic from the same data
   private async fetchAndProcessAllReports(guild: IGuild): Promise<void> {
+    // Get raid data from database
+    const raidData = await this.getRaidData(CURRENT_RAID_ID);
+    if (!raidData) {
+      console.error(`Raid data not found for zone ${CURRENT_RAID_ID}. Run syncRaidsFromWCL first!`);
+      return;
+    }
+
+    console.log(`Using raid data: ${raidData.name} with ${raidData.bosses.length} bosses`);
+
     try {
       // Check if we have any reports for this guild/zone already
       const existingReports = await Report.find({
         guildId: guild._id,
-        zoneId: CURRENT_RAID.id,
+        zoneId: CURRENT_RAID_ID,
       })
         .sort({ startTime: -1 })
         .limit(1);
@@ -77,7 +187,7 @@ class GuildService {
         guild.name,
         guild.realm.toLowerCase().replace(/\s+/g, "-"),
         guild.region.toLowerCase(),
-        CURRENT_RAID.id,
+        CURRENT_RAID_ID,
         5 // Only check the 5 most recent reports
       );
 
@@ -118,7 +228,7 @@ class GuildService {
             guild.name,
             guild.realm.toLowerCase().replace(/\s+/g, "-"),
             guild.region.toLowerCase(),
-            CURRENT_RAID.id,
+            CURRENT_RAID_ID,
             reportsPerPage,
             page
           );
@@ -162,24 +272,42 @@ class GuildService {
       console.log(`Total reports to process: ${reportsToProcess.length} for ${guild.name}`);
 
       // Now process both Mythic and Heroic from the same report data
-      await this.processReportsForDifficulty(guild, reportsToProcess, "mythic");
-      await this.processReportsForDifficulty(guild, reportsToProcess, "heroic");
+      await this.processReportsForDifficulty(guild, raidData, reportsToProcess, "mythic");
+      await this.processReportsForDifficulty(guild, raidData, reportsToProcess, "heroic");
 
       // Save processed reports to database
       for (const report of reportsToProcess) {
         const fightCount = report.fights?.length || 0;
         const isOngoing = !report.endTime || report.endTime === 0;
 
+        // Build encounter summary from fights
+        const encounterFights: Record<number, { total: number; kills: number; wipes: number }> = {};
+        if (report.fights) {
+          for (const fight of report.fights) {
+            const encounterID = fight.encounterID;
+            if (!encounterFights[encounterID]) {
+              encounterFights[encounterID] = { total: 0, kills: 0, wipes: 0 };
+            }
+            encounterFights[encounterID].total++;
+            if (fight.kill) {
+              encounterFights[encounterID].kills++;
+            } else {
+              encounterFights[encounterID].wipes++;
+            }
+          }
+        }
+
         await Report.findOneAndUpdate(
           { code: report.code },
           {
             code: report.code,
             guildId: guild._id,
-            zoneId: CURRENT_RAID.id,
+            zoneId: CURRENT_RAID_ID,
             startTime: report.startTime,
             endTime: report.endTime,
             isOngoing,
             fightCount,
+            encounterFights,
             lastProcessed: new Date(),
           },
           { upsert: true, new: true }
@@ -194,8 +322,10 @@ class GuildService {
   }
 
   // Process reports for a specific difficulty from already-fetched report data
-  private async processReportsForDifficulty(guild: IGuild, allReports: any[], difficulty: "mythic" | "heroic"): Promise<void> {
+  private async processReportsForDifficulty(guild: IGuild, raidData: IRaid, allReports: any[], difficulty: "mythic" | "heroic"): Promise<void> {
     const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
+
+    console.log(`[${guild.name}] Processing ${difficulty} (difficultyId: ${difficultyId}) with ${allReports.length} reports`);
 
     // Sort reports by start time (oldest first) to properly track kill order
     const reports = [...allReports].sort((a, b) => a.startTime - b.startTime);
@@ -221,16 +351,55 @@ class GuildService {
 
     // Process all reports and filter fights by difficulty
     for (const report of reports) {
-      if (!report.fights || report.fights.length === 0) continue;
+      if (!report.fights || report.fights.length === 0) {
+        console.log(`[${guild.name}] Report ${report.code} has no fights`);
+        continue;
+      }
+
+      console.log(`[${guild.name}] Report ${report.code} has ${report.fights.length} total fights`);
 
       // Filter fights by difficulty since we're fetching all difficulties
       const difficultyFights = report.fights.filter((fight: any) => fight.difficulty === difficultyId);
+
+      console.log(`[${guild.name}] Report ${report.code} has ${difficultyFights.length} ${difficulty} fights (filtered from ${report.fights.length} total)`);
+
+      if (difficultyFights.length > 0) {
+        console.log(
+          `[${guild.name}] Sample fight difficulties in this report:`,
+          report.fights.slice(0, 3).map((f: any) => ({ name: f.name, difficulty: f.difficulty }))
+        );
+      }
 
       for (const fight of difficultyFights) {
         const encounterId = fight.encounterID;
         const isKill = fight.kill === true;
         const percent = fight.bossPercentage || 0;
         const duration = (fight.endTime - fight.startTime) / 1000; // Convert to seconds
+
+        // SAVE INDIVIDUAL FIGHT TO DATABASE
+        const fightTimestamp = new Date(report.startTime + fight.startTime);
+        await Fight.findOneAndUpdate(
+          { reportCode: report.code, fightId: fight.id },
+          {
+            reportCode: report.code,
+            guildId: guild._id,
+            fightId: fight.id,
+            zoneId: raidData.id,
+            encounterID: encounterId,
+            encounterName: fight.name || `Boss ${encounterId}`,
+            difficulty: difficultyId,
+            isKill,
+            bossPercentage: percent,
+            fightPercentage: fight.fightPercentage || 0,
+            reportStartTime: report.startTime,
+            reportEndTime: report.endTime || 0,
+            fightStartTime: fight.startTime,
+            fightEndTime: fight.endTime,
+            duration: fight.endTime - fight.startTime, // Duration in ms (combat time)
+            timestamp: fightTimestamp,
+          },
+          { upsert: true, new: true }
+        );
 
         if (!bossDataMap.has(encounterId)) {
           bossDataMap.set(encounterId, {
@@ -281,25 +450,38 @@ class GuildService {
 
     // If no boss data found for this difficulty, skip
     if (bossDataMap.size === 0) {
-      console.log(`No ${difficulty} encounters found for ${guild.name}`);
+      console.log(`[${guild.name}] No ${difficulty} encounters found - bossDataMap is empty`);
       return;
     }
 
+    console.log(
+      `[${guild.name}] Found ${bossDataMap.size} unique bosses for ${difficulty}:`,
+      Array.from(bossDataMap.keys()).map((id) => {
+        const boss = bossDataMap.get(id)!;
+        return `${boss.name} (${boss.kills} kills, ${boss.pulls} pulls)`;
+      })
+    );
+
     // Update or create raid progress entry
-    let raidProgress = guild.progress.find((p) => p.raidId === CURRENT_RAID.id && p.difficulty === difficulty);
+    let raidProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
 
     if (!raidProgress) {
-      raidProgress = {
-        raidId: CURRENT_RAID.id,
-        raidName: CURRENT_RAID.name,
+      // Create a new progress entry by pushing to the array
+      // This ensures Mongoose properly tracks it as a subdocument
+      guild.progress.push({
+        raidId: raidData.id,
+        raidName: raidData.name,
         difficulty,
         bossesDefeated: 0,
-        totalBosses: bossDataMap.size,
+        totalBosses: raidData.bosses.length,
         totalTimeSpent: 0,
         bosses: [],
         lastUpdated: new Date(),
-      } as IRaidProgress;
-      guild.progress.push(raidProgress);
+      } as IRaidProgress);
+
+      // Now get a reference to the newly added progress
+      raidProgress = guild.progress[guild.progress.length - 1];
+      console.log(`[${guild.name}] Created new ${difficulty} progress entry`);
     }
 
     // Process each boss
@@ -336,16 +518,31 @@ class GuildService {
         Object.assign(bossProgress, bossData);
       } else {
         // New boss progress
+        console.log(`[${guild.name}] Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
         raidProgress.bosses.push(bossData);
       }
     }
 
     raidProgress.bossesDefeated = defeatedCount;
-    raidProgress.totalBosses = bossDataMap.size;
+    raidProgress.totalBosses = raidData.bosses.length; // Use boss count from database!
     raidProgress.totalTimeSpent = totalTime;
     raidProgress.lastUpdated = new Date();
 
-    console.log(`Processed ${difficulty} progress for ${guild.name}: ${defeatedCount}/${bossDataMap.size} bosses`);
+    console.log(`[${guild.name}] Before markModified - ${difficulty} progress has ${raidProgress.bosses.length} bosses in array`);
+
+    // Mark the specific progress subdocument as modified
+    // Find the index of this progress entry
+    const progressIndex = guild.progress.findIndex((p) => p.raidId === raidData.id && p.difficulty === difficulty);
+    if (progressIndex !== -1) {
+      guild.markModified(`progress.${progressIndex}.bosses`);
+      guild.markModified(`progress.${progressIndex}.bossesDefeated`);
+      guild.markModified(`progress.${progressIndex}.totalTimeSpent`);
+    }
+
+    // Also mark the entire progress array as modified
+    guild.markModified("progress");
+
+    console.log(`[${guild.name}] Processed ${difficulty} progress: ${defeatedCount}/${raidData.bosses.length} bosses defeated, ${raidProgress.bosses.length} bosses tracked`);
   }
 
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
@@ -389,14 +586,11 @@ class GuildService {
   }
 
   // Check if guild has ongoing reports (currently raiding)
-  async updateRaidingStatus(guildId: string): Promise<void> {
-    const guild = await Guild.findById(guildId);
-    if (!guild) return;
-
+  async updateRaidingStatus(guild: IGuild): Promise<void> {
     // Check if there are any ongoing reports for this guild in the current raid
     const ongoingReports = await Report.countDocuments({
       guildId: guild._id,
-      zoneId: CURRENT_RAID.id,
+      zoneId: CURRENT_RAID_ID,
       isOngoing: true,
     });
 
@@ -405,7 +599,7 @@ class GuildService {
 
     if (wasRaiding !== guild.isCurrentlyRaiding) {
       console.log(`${guild.name} raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
-      await guild.save();
+      // Don't save here - let the caller save to avoid overwriting changes
     }
   }
 

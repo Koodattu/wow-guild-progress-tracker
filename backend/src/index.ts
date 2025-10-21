@@ -32,6 +32,9 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDB();
 
+    // Sync raid data from WarcraftLogs (zones, bosses, etc.)
+    await guildService.syncRaidsFromWCL();
+
     // Initialize guilds from config
     await guildService.initializeGuilds();
 

@@ -369,19 +369,12 @@ class WarcraftLogsService {
     return this.query<any>(query, variables);
   }
 
-  // Get zone (raid) information - with caching
+  // Get zone (raid) information with encounters - NOT using cache since encounters needed
   async getZone(zoneId: number) {
-    // Check if we have cached zones data that's still valid
-    const now = Date.now();
-    if (this.zonesCache && now - this.zonesCacheTime < this.ZONES_CACHE_TTL) {
-      const zone = this.zonesCache.find((z: any) => z.id === zoneId);
-      if (zone) {
-        console.log(`Using cached zone data for zone ${zoneId}`);
-        return { worldData: { zone } };
-      }
-    }
+    // Don't use cache here because we need detailed encounter data
+    // The getZones() cache only has id and name, not encounters
 
-    // Fetch fresh data
+    // Fetch fresh data with encounters
     const query = `
       query($zoneId: Int!) {
         rateLimitData {

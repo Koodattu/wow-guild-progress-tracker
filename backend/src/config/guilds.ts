@@ -6,12 +6,13 @@ export interface TrackedGuild {
 
 export const GUILDS: TrackedGuild[] = [{ name: "Tuju", realm: "Kazzak", region: "EU" }];
 
-// Manaforge Omega (latest raid as of request)
-export const CURRENT_RAID = {
-  id: 44, // Correct zone ID for Manaforge Omega
-  name: "Manaforge Omega",
-  slug: "manaforge-omega",
-};
+// Raid zones to track (IDs only - names and encounter info come from DB)
+export const TRACKED_RAIDS = [
+  44, // Manaforge Omega
+];
+
+// Use the first/latest raid as the current one
+export const CURRENT_RAID_ID = TRACKED_RAIDS[0];
 
 export const DIFFICULTIES = {
   MYTHIC: 5,

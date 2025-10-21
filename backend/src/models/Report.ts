@@ -8,6 +8,14 @@ export interface IReport extends Document {
   endTime?: number; // Unix timestamp, undefined if ongoing
   isOngoing: boolean;
   fightCount: number;
+  encounterFights: {
+    // Quick summary of fights by encounter
+    [encounterID: number]: {
+      total: number;
+      kills: number;
+      wipes: number;
+    };
+  };
   lastProcessed: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +30,7 @@ const ReportSchema: Schema = new Schema(
     endTime: { type: Number },
     isOngoing: { type: Boolean, default: false },
     fightCount: { type: Number, default: 0 },
+    encounterFights: { type: Map, of: Object, default: new Map() },
     lastProcessed: { type: Date, default: Date.now },
   },
   {
