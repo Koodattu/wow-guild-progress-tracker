@@ -195,9 +195,20 @@ class GuildService {
 
   // Fetch all reports for a guild and process both Mythic and Heroic from the same data
   private async fetchAndProcessAllReports(guild: IGuild): Promise<void> {
-    // Process all tracked raids
-    for (const raidId of TRACKED_RAIDS) {
-      await this.fetchAndProcessReportsForRaid(guild, raidId);
+    // Determine if this is an initial fetch by checking if guild has any reports at all
+    const hasAnyReports = await Report.exists({ guildId: guild._id });
+    const isInitialFetch = !hasAnyReports;
+
+    if (isInitialFetch) {
+      // Initial fetch: Process ALL tracked raids to get historical data
+      console.log(`[${guild.name}] Initial fetch detected - processing all tracked raids`);
+      for (const raidId of TRACKED_RAIDS) {
+        await this.fetchAndProcessReportsForRaid(guild, raidId);
+      }
+    } else {
+      // Update: Only process the current raid
+      console.log(`[${guild.name}] Update detected - processing only current raid (ID: ${CURRENT_RAID_ID})`);
+      await this.fetchAndProcessReportsForRaid(guild, CURRENT_RAID_ID);
     }
   }
 
