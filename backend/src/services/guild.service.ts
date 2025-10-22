@@ -605,14 +605,10 @@ class GuildService {
     }
 
     // Process each boss
-    let totalTime = 0;
-    let defeatedCount = 0;
-
+    // IMPORTANT: Only update bosses that appear in current reports
+    // We must NOT recalculate totals from scratch as that would ignore bosses not in current reports
     for (const [encounterId, bossInfo] of bossDataMap.entries()) {
       let bossProgress = raidProgress.bosses.find((b) => b.bossId === encounterId);
-
-      const isDefeated = bossInfo.kills > 0;
-      if (isDefeated) defeatedCount++;
 
       const bossData: IBossProgress = {
         bossId: encounterId,
@@ -629,8 +625,6 @@ class GuildService {
         lastUpdated: new Date(),
       };
 
-      totalTime += bossData.timeSpent;
-
       if (bossProgress) {
         // Check if we should create events
         await this.checkAndCreateEvents(guild, raidProgress, bossProgress, bossData);
@@ -642,6 +636,14 @@ class GuildService {
         console.log(`[${guild.name}] Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
         raidProgress.bosses.push(bossData);
       }
+    }
+
+    // Recalculate totals from ALL bosses (not just ones in current reports)
+    let totalTime = 0;
+    let defeatedCount = 0;
+    for (const boss of raidProgress.bosses) {
+      totalTime += boss.timeSpent;
+      if (boss.kills > 0) defeatedCount++;
     }
 
     raidProgress.bossesDefeated = defeatedCount;
