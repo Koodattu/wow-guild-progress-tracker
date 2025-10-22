@@ -160,6 +160,74 @@ class WarcraftLogsService {
     return this.query<any>(query, variables);
   }
 
+  // Get guild reports with full fight data - NO zone filter (for initial fetch)
+  // This fetches all reports across all content (raids, dungeons, etc.)
+  async getGuildReportsWithFights(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10, page: number = 1) {
+    const query = `
+      query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!, $page: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        guildData {
+          guild(name: $guildName, serverSlug: $serverSlug, serverRegion: $serverRegion) {
+            faction {
+              name
+            }
+          }
+        }
+        reportData {
+          reports(guildName: $guildName, guildServerSlug: $serverSlug, guildServerRegion: $serverRegion, limit: $limit, page: $page) {
+            data {
+              code
+              startTime
+              endTime
+              zone {
+                id
+                name
+              }
+              phases {
+                encounterID
+                separatesWipes
+                phases {
+                  id
+                  name
+                  isIntermission
+                }
+              }
+              fights(killType: Encounters) {
+                id
+                encounterID
+                name
+                difficulty
+                kill
+                bossPercentage
+                fightPercentage
+                startTime
+                endTime
+                phaseTransitions {
+                  id
+                  startTime
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      guildName,
+      serverSlug,
+      serverRegion,
+      limit,
+      page,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
   // Lightweight check for new reports - only fetches codes and timestamps, no fights data
   // This is much cheaper (uses fewer points) than fetching full report data
   async checkForNewReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 5) {
