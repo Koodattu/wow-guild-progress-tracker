@@ -14,6 +14,7 @@ export interface IEvent extends Document {
     pullCount?: number;
     bestPercent?: number;
     timeSpent?: number;
+    progressDisplay?: string; // Phase-enhanced display string like "45% P3"
   };
   timestamp: Date;
   createdAt: Date;
@@ -34,6 +35,7 @@ const EventSchema: Schema = new Schema(
       pullCount: { type: Number },
       bestPercent: { type: Number },
       timeSpent: { type: Number },
+      progressDisplay: { type: String },
     },
     timestamp: { type: Date, required: true },
   },

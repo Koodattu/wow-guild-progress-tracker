@@ -22,7 +22,13 @@ export function getDifficultyColor(difficulty: "mythic" | "heroic"): string {
 }
 
 // Format event message
-export function formatEventMessage(event: { type: string; guildName: string; bossName: string; difficulty: string; data: { pullCount?: number; bestPercent?: number } }): string {
+export function formatEventMessage(event: {
+  type: string;
+  guildName: string;
+  bossName: string;
+  difficulty: string;
+  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string };
+}): string {
   const { type, guildName, bossName, difficulty, data } = event;
 
   if (type === "boss_kill") {
@@ -31,6 +37,10 @@ export function formatEventMessage(event: { type: string; guildName: string; bos
   }
 
   if (type === "best_pull") {
+    // Use progressDisplay if available (includes phase info), otherwise fall back to simple percent
+    if (data.progressDisplay) {
+      return `${guildName} reached ${formatPhaseDisplay(data.progressDisplay)} on ${bossName} (${difficulty})!`;
+    }
     const percent = data.bestPercent || 0;
     return `${guildName} reached ${percent.toFixed(1)}% on ${bossName} (${difficulty})!`;
   }

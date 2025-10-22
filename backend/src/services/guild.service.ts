@@ -702,6 +702,7 @@ class GuildService {
         data: {
           bestPercent: newBoss.bestPercent,
           pullCount: newBoss.pullCount,
+          progressDisplay: newBoss.bestPullPhase?.displayString, // Include phase display string
         },
         timestamp: new Date(),
       });

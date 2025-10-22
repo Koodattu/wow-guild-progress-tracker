@@ -60,6 +60,7 @@ export interface Event {
     pullCount?: number;
     bestPercent?: number;
     timeSpent?: number;
+    progressDisplay?: string; // Phase-enhanced display string like "45% P3"
   };
   timestamp: string;
   createdAt: string;
