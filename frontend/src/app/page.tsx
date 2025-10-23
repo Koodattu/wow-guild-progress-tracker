@@ -27,9 +27,14 @@ export default function Home() {
         setSelectedRaidId(raidsData[0].id);
       }
 
-      // Sort guilds by mythic progress for the selected raid
-      const sortedGuilds = guildsData.sort((a, b) => {
-        const currentRaidId = selectedRaidId || (raidsData.length > 0 ? raidsData[0].id : null);
+      // Filter and sort guilds by mythic progress for the selected raid
+      const currentRaidId = selectedRaidId || (raidsData.length > 0 ? raidsData[0].id : null);
+
+      // Filter out guilds with no progress for the selected raid
+      const filteredGuilds = currentRaidId ? guildsData.filter((guild) => guild.progress.some((p) => p.raidId === currentRaidId)) : guildsData;
+
+      // Sort by mythic progress
+      const sortedGuilds = filteredGuilds.sort((a, b) => {
         if (!currentRaidId) return 0;
 
         const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === currentRaidId);
