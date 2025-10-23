@@ -136,9 +136,7 @@ export default function Home() {
           {/* Guild List - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-              <h2 className="text-2xl font-bold mb-4">
-                Guild Rankings {selectedRaidId && raids.length > 0 && <span className="text-gray-400 text-lg">- {raids.find((r) => r.id === selectedRaidId)?.name}</span>}
-              </h2>
+              <h2 className="text-2xl font-bold mb-4">{raids.find((r) => r.id === selectedRaidId)?.name}</h2>
               <GuildTable guilds={guilds} onGuildClick={setSelectedGuild} selectedRaidId={selectedRaidId} />
             </div>
           </div>
