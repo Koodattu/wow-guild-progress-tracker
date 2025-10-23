@@ -14,7 +14,6 @@ export default function Home() {
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -50,21 +49,6 @@ export default function Home() {
       setError("Failed to load data. Make sure the backend server is running.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await api.refreshAllGuilds();
-      // Wait a bit then refresh the view
-      setTimeout(() => {
-        fetchData();
-        setRefreshing(false);
-      }, 2000);
-    } catch (err) {
-      console.error("Error refreshing guilds:", err);
-      setRefreshing(false);
     }
   };
 
@@ -114,21 +98,33 @@ export default function Home() {
                     onChange={(e) => setSelectedRaidId(Number(e.target.value))}
                     className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {raids.map((raid) => (
-                      <option key={raid.id} value={raid.id}>
-                        {raid.name}
-                      </option>
-                    ))}
+                    {(() => {
+                      // Group raids by expansion while maintaining order
+                      const groupedRaids: { [expansion: string]: Raid[] } = {};
+                      const expansionOrder: string[] = [];
+
+                      raids.forEach((raid) => {
+                        if (!groupedRaids[raid.expansion]) {
+                          groupedRaids[raid.expansion] = [];
+                          expansionOrder.push(raid.expansion);
+                        }
+                        groupedRaids[raid.expansion].push(raid);
+                      });
+
+                      // Render expansion headers and their raids
+                      return expansionOrder.map((expansion) => (
+                        <optgroup key={expansion} label={expansion}>
+                          {groupedRaids[expansion].map((raid) => (
+                            <option key={raid.id} value={raid.id}>
+                              {raid.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ));
+                    })()}
                   </select>
                 </div>
               )}
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-6 py-2 rounded-lg font-semibold transition-colors mt-5"
-              >
-                {refreshing ? "Refreshing..." : "Refresh All"}
-              </button>
             </div>
           </div>
 
