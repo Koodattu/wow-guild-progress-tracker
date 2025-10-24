@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Guild, Event, Raid } from "@/types";
 import { api } from "@/lib/api";
+import { getIconUrl } from "@/lib/utils";
 import GuildTable from "@/components/GuildTable";
 import GuildDetail from "@/components/GuildDetail";
 import EventsFeed from "@/components/EventsFeed";
@@ -110,7 +111,8 @@ export default function Home() {
                 {/* Show selected raid icon */}
                 {(() => {
                   const selectedRaid = raids.find((r) => r.id === selectedRaidId);
-                  return selectedRaid?.iconUrl && <Image src={selectedRaid.iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />;
+                  const iconUrl = getIconUrl(selectedRaid?.iconUrl);
+                  return iconUrl && <Image src={iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />;
                 })()}
                 <h2 className="text-2xl font-bold">{raids.find((r) => r.id === selectedRaidId)?.name}</h2>
               </div>

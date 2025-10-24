@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { Raid } from "@/types";
+import { getIconUrl } from "@/lib/utils";
 
 interface RaidSelectorProps {
   raids: Raid[];
@@ -51,7 +52,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
         className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-[250px] justify-between hover:bg-gray-750 transition-colors"
       >
         <div className="flex items-center gap-2">
-          {selectedRaid?.iconUrl && <Image src={selectedRaid.iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
+          {selectedRaid?.iconUrl && <Image src={getIconUrl(selectedRaid.iconUrl)!} alt="Raid icon" width={24} height={24} className="rounded" />}
           <span>{selectedRaid?.name || "Select a raid"}</span>
         </div>
         <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,7 +75,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
                   className={`w-full px-4 py-2 text-left hover:bg-gray-700 transition-colors flex items-center gap-2 ${raid.id === selectedRaidId ? "bg-gray-700" : ""}`}
                 >
                   {raid.iconUrl ? (
-                    <Image src={raid.iconUrl} alt={`${raid.name} icon`} width={24} height={24} className="rounded" />
+                    <Image src={getIconUrl(raid.iconUrl)!} alt={`${raid.name} icon`} width={24} height={24} className="rounded" />
                   ) : (
                     <div className="w-6 h-6 bg-gray-600 rounded" />
                   )}

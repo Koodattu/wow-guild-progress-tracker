@@ -62,7 +62,7 @@ class GuildService {
         // Collect all raid and boss names for batch icon fetching
         const allRaidNames: string[] = [];
         const allBossNames: string[] = [];
-        const raidBossMapping = new Map<number, string[]>(); // zoneId -> boss names
+        const zoneDataCache = new Map<number, any>(); // Cache zone data to avoid refetching
 
         // Sync all zones to database
         for (const zone of zones) {
@@ -84,6 +84,9 @@ class GuildService {
               continue;
             }
 
+            // Cache the zone data for later use
+            zoneDataCache.set(zone.id, zoneData);
+
             // Get expansion name from the zone data
             const expansionName = zoneData.expansion?.name || "Unknown";
 
@@ -98,7 +101,6 @@ class GuildService {
             allRaidNames.push(zoneData.name);
             const bossNames = bosses.map((b: any) => b.name);
             allBossNames.push(...bossNames);
-            raidBossMapping.set(zone.id, bossNames);
 
             console.log(`Syncing zone ${zone.id} (${expansionName}) with ${bosses.length} encounters`);
 
@@ -130,24 +132,14 @@ class GuildService {
         const raidIconMap = await blizzardService.getRaidIconUrls(allRaidNames);
         const bossIconMap = await blizzardService.getBossIconUrls(allBossNames);
 
-        // Update raids with icons
+        // Update raids with icons using cached zone data
         console.log("Updating raids with icon URLs...");
-        for (const zone of zones) {
+        for (const [zoneId, zoneData] of zoneDataCache.entries()) {
           try {
-            const detailResult = await wclService.getZone(zone.id);
-            const zoneData = detailResult.worldData?.zone;
-
-            if (!zoneData || !zoneData.encounters || zoneData.encounters.length === 0) {
-              continue;
-            }
-
             // Get raid icon
             const raidIconUrl = raidIconMap.get(zoneData.name) || undefined;
 
-            // Get boss names for this raid
-            const bossNames = raidBossMapping.get(zone.id) || [];
-
-            // Get boss icons
+            // Get boss icons from the cached zone data
             const bossesWithIcons = (zoneData.encounters || []).map((enc: any) => ({
               id: enc.id,
               name: enc.name,
@@ -157,7 +149,7 @@ class GuildService {
 
             // Update raid with icons
             await Raid.findOneAndUpdate(
-              { id: zone.id },
+              { id: zoneId },
               {
                 $set: {
                   iconUrl: raidIconUrl,
@@ -168,7 +160,7 @@ class GuildService {
 
             console.log(`Updated icons for raid: ${zoneData.name} (raid icon: ${raidIconUrl ? "✅" : "❌"})`);
           } catch (error) {
-            console.error(`Error updating icons for zone ${zone.id}:`, error);
+            console.error(`Error updating icons for zone ${zoneId}:`, error);
           }
         }
 

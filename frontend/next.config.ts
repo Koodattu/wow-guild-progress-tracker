@@ -4,14 +4,21 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "render.worldofwarcraft.com",
-        pathname: "/**",
+        protocol: "http",
+        hostname: "localhost",
+        port: "3001",
+        pathname: "/icons/**",
+      },
+      {
+        protocol: "http",
+        hostname: "backend",
+        port: "3001",
+        pathname: "/icons/**",
       },
       {
         protocol: "https",
-        hostname: "*.blizzard.com",
-        pathname: "/**",
+        hostname: "**",
+        pathname: "/icons/**",
       },
     ],
   },

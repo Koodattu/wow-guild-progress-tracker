@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import connectDB from "./config/database";
 import guildService from "./services/guild.service";
 import blizzardService from "./services/blizzard.service";
@@ -18,6 +19,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static icons
+app.use("/icons", express.static(path.join(__dirname, "../public/icons")));
 
 // Routes
 app.use("/api/guilds", guildsRouter);

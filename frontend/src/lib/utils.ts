@@ -11,6 +11,20 @@ export function formatTime(seconds: number): string {
   return `${minutes}m`;
 }
 
+// Get the full icon URL from filename
+export function getIconUrl(iconFilename: string | undefined): string | undefined {
+  if (!iconFilename) return undefined;
+
+  // If it's already a full URL (for backwards compatibility), return as-is
+  if (iconFilename.startsWith("http://") || iconFilename.startsWith("https://")) {
+    return iconFilename;
+  }
+
+  // Otherwise construct URL from API base and filename
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  return `${apiUrl}/icons/${iconFilename}`;
+}
+
 // Format percentage
 export function formatPercent(percent: number): string {
   return `${percent.toFixed(1)}%`;

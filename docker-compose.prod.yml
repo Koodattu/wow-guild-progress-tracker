@@ -5,6 +5,7 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    restart: unless-stopped
 
   backend:
     build: ./backend
@@ -14,21 +15,24 @@ services:
       - ./backend/.env
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/wow_guild_tracker
-      - NODE_ENV=development
+      - NODE_ENV=production
     depends_on:
       - mongodb
     volumes:
-      - ./backend/public/icons:/app/public/icons
+      - icons_data:/app/public/icons
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://backend:3001
+      - NODE_ENV=production
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   mongodb_data:
+  icons_data:

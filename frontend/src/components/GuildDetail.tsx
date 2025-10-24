@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Guild, RaidProgress, BossProgress, Raid } from "@/types";
-import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
+import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getIconUrl } from "@/lib/utils";
 import { api } from "@/lib/api";
 
 interface GuildDetailProps {
@@ -47,7 +47,8 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
     const isDefeated = boss.kills > 0;
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const isClickable = isDefeated && hasKillLog;
-    const bossIconUrl = getBossIconUrl(boss.bossName);
+    const bossIconFilename = getBossIconUrl(boss.bossName);
+    const bossIconUrl = getIconUrl(bossIconFilename);
 
     return (
       <tr

@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { Achievement, BossIcon, RaidIcon, AuthToken, AchievementUpdateLog } from "../models/Achievement";
+import iconCacheService from "./icon-cache.service";
 
 interface BlizzardTokenResponse {
   access_token: string;
@@ -230,6 +231,60 @@ export class BlizzardApiClient {
         return { id: achievement.id, name: achievement.name };
       }
 
+      // Try fuzzy matching with alternative boss name formats
+      // Some achievements only use the first part of the boss name before a comma
+      // Example: "Rashok, the Elder" -> "Mythic: Rashok"
+      if (bossName.includes(",")) {
+        const firstPart = bossName.split(",")[0].trim();
+        const mythicFirstPart = `Mythic: ${firstPart}`;
+        const escapedFirstPart = firstPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(`^${mythicFirstPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(escapedFirstPart, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+      }
+
+      // Try using just the first word of the boss name
+      // Example: "Igira the Cruel" -> "Mythic: Igira"
+      const firstWord = bossName.split(" ")[0].trim();
+      if (firstWord && firstWord.length > 3) {
+        // Only try if first word is substantial
+        const mythicFirstWord = `Mythic: ${firstWord}`;
+        const escapedFirstWord = firstWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(`^${mythicFirstWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(escapedFirstWord, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+      }
+
       console.log(`⚠️  No achievement found for boss: "${bossName}"`);
       return null;
     } catch (error: any) {
@@ -263,6 +318,33 @@ export class BlizzardApiClient {
 
       if (achievement) {
         return { id: achievement.id, name: achievement.name };
+      }
+
+      // Try fuzzy matching with "first word + raider" pattern
+      // Example: "Hellfire Citadel" -> "Hellfire Raider"
+      const firstWord = raidName.split(" ")[0].trim();
+      if (firstWord && firstWord.length > 3) {
+        // Only try if first word is substantial
+        const raiderPattern = `${firstWord} Raider`;
+        const escapedRaiderPattern = raiderPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(`^${escapedRaiderPattern}$`, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+
+        achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(escapedRaiderPattern, "i") },
+        });
+
+        if (achievement) {
+          console.log(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
       }
 
       console.log(`⚠️  No achievement found for raid: "${raidName}"`);
@@ -335,26 +417,30 @@ export class BlizzardApiClient {
         return null;
       }
 
-      // Get the icon from the achievement media
-      const iconUrl = await this.getAchievementMedia(achievement.id);
-      if (!iconUrl) {
+      // Get the icon from the achievement media (Blizzard URL)
+      const blizzardIconUrl = await this.getAchievementMedia(achievement.id);
+      if (!blizzardIconUrl) {
         return null;
       }
+
+      // Download and cache the icon locally (returns filename only)
+      const iconFilename = await iconCacheService.downloadAndCacheIcon(blizzardIconUrl);
 
       // Cache the result using upsert to avoid race conditions
       await BossIcon.findOneAndUpdate(
         { bossName },
         {
           bossName,
-          iconUrl,
+          blizzardIconUrl,
+          iconUrl: iconFilename, // Store just the filename
           achievementId: achievement.id,
           lastUpdated: new Date(),
         },
         { upsert: true, new: true }
       );
 
-      console.log(`✅ Cached new icon for boss: ${bossName} -> ${iconUrl}`);
-      return iconUrl;
+      console.log(`✅ Cached new icon for boss: ${bossName} -> ${iconFilename}`);
+      return iconFilename;
     } catch (error: any) {
       console.error(`Error getting boss icon for "${bossName}":`, error.message);
       return null;
@@ -402,26 +488,30 @@ export class BlizzardApiClient {
         return null;
       }
 
-      // Get the icon from the achievement media
-      const iconUrl = await this.getAchievementMedia(achievement.id);
-      if (!iconUrl) {
+      // Get the icon from the achievement media (Blizzard URL)
+      const blizzardIconUrl = await this.getAchievementMedia(achievement.id);
+      if (!blizzardIconUrl) {
         return null;
       }
+
+      // Download and cache the icon locally (returns filename only)
+      const iconFilename = await iconCacheService.downloadAndCacheIcon(blizzardIconUrl);
 
       // Cache the result using upsert to avoid race conditions
       await RaidIcon.findOneAndUpdate(
         { raidName },
         {
           raidName,
-          iconUrl,
+          blizzardIconUrl,
+          iconUrl: iconFilename, // Store just the filename
           achievementId: achievement.id,
           lastUpdated: new Date(),
         },
         { upsert: true, new: true }
       );
 
-      console.log(`✅ Cached new icon for raid: ${raidName} -> ${iconUrl}`);
-      return iconUrl;
+      console.log(`✅ Cached new icon for raid: ${raidName} -> ${iconFilename}`);
+      return iconFilename;
     } catch (error: any) {
       console.error(`Error getting raid icon for "${raidName}":`, error.message);
       return null;

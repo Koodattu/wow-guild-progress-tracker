@@ -11,7 +11,8 @@ export interface IAchievement extends Document {
 // Boss icon cache
 export interface IBossIcon extends Document {
   bossName: string;
-  iconUrl: string;
+  blizzardIconUrl: string; // Original Blizzard URL
+  iconUrl: string; // Local URL served by our backend
   achievementId: number;
   lastUpdated: Date;
 }
@@ -19,7 +20,8 @@ export interface IBossIcon extends Document {
 // Raid icon cache
 export interface IRaidIcon extends Document {
   raidName: string;
-  iconUrl: string;
+  blizzardIconUrl: string; // Original Blizzard URL
+  iconUrl: string; // Local URL served by our backend
   achievementId: number;
   lastUpdated: Date;
 }
@@ -50,6 +52,7 @@ const AchievementSchema = new Schema({
 // Boss icon schema
 const BossIconSchema = new Schema({
   bossName: { type: String, required: true, unique: true },
+  blizzardIconUrl: { type: String, required: true },
   iconUrl: { type: String, required: true },
   achievementId: { type: Number, required: true },
   lastUpdated: { type: Date, default: Date.now },
@@ -58,6 +61,7 @@ const BossIconSchema = new Schema({
 // Raid icon schema
 const RaidIconSchema = new Schema({
   raidName: { type: String, required: true, unique: true },
+  blizzardIconUrl: { type: String, required: true },
   iconUrl: { type: String, required: true },
   achievementId: { type: Number, required: true },
   lastUpdated: { type: Date, default: Date.now },
