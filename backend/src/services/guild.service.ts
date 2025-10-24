@@ -659,6 +659,59 @@ class GuildService {
 
     console.log(`[${guild.name}] Calculating ${difficulty} statistics from ${fights.length} fights for ${raidData.name}`);
 
+    // Filter fights by raid's "current content" date range for the guild's region
+    const guildRegion = guild.region.toLowerCase();
+    let raidStartDate = raidData.starts?.[guildRegion as keyof typeof raidData.starts];
+    let raidEndDate = raidData.ends?.[guildRegion as keyof typeof raidData.ends];
+
+    // For older raids (pre-Legion) that don't have start/end dates in Raider.IO,
+    // use very permissive dates so all fights are included
+    if (!raidStartDate && !raidEndDate) {
+      raidStartDate = new Date("1970-01-01T00:00:00Z"); // Very old date
+      raidEndDate = new Date("2100-12-31T23:59:59Z"); // Very far future date
+      console.log(`[${guild.name}] No dates available for ${raidData.name} - using permissive date range (all fights included)`);
+    }
+
+    let filteredFights = fights;
+    let dateFilteredCount = 0;
+
+    if (raidStartDate || raidEndDate) {
+      const beforeFilterCount = fights.length;
+
+      filteredFights = fights.filter((fight) => {
+        const fightTimestamp = fight.timestamp;
+
+        // Check if fight is after raid start (if start date exists)
+        if (raidStartDate && fightTimestamp < raidStartDate) {
+          return false;
+        }
+
+        // Check if fight is before raid end (if end date exists)
+        if (raidEndDate && fightTimestamp > raidEndDate) {
+          return false;
+        }
+
+        return true;
+      });
+
+      dateFilteredCount = beforeFilterCount - filteredFights.length;
+
+      if (dateFilteredCount > 0) {
+        console.log(
+          `[${guild.name}] Filtered out ${dateFilteredCount} ${difficulty} fights outside raid's current content window (${raidStartDate?.toISOString() || "no start"} to ${
+            raidEndDate?.toISOString() || "no end"
+          }) for region ${guildRegion}`
+        );
+      }
+    }
+
+    if (filteredFights.length === 0) {
+      console.log(`[${guild.name}] No ${difficulty} fights remaining after date filtering for ${raidData.name}`);
+      return;
+    }
+
+    console.log(`[${guild.name}] Processing ${filteredFights.length} ${difficulty} fights (after date filtering) for ${raidData.name}`);
+
     // Aggregate boss data from database fights
     const bossDataMap = new Map<
       number,
@@ -691,7 +744,7 @@ class GuildService {
     const uniqueFights: any[] = [];
     let duplicateCount = 0;
 
-    for (const fight of fights) {
+    for (const fight of filteredFights) {
       const duplicateCheck = this.isDuplicateFightInMemory(fight, uniqueFights, seenFights);
 
       if (duplicateCheck.isDuplicate) {
