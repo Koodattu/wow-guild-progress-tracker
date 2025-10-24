@@ -24,14 +24,6 @@ export const api = {
     return response.json();
   },
 
-  async refreshAllGuilds(): Promise<{ message: string }> {
-    const response = await fetch(`${API_URL}/api/guilds/refresh-all`, {
-      method: "POST",
-    });
-    if (!response.ok) throw new Error("Failed to refresh all guilds");
-    return response.json();
-  },
-
   // Event endpoints
   async getEvents(limit: number = 50): Promise<Event[]> {
     const response = await fetch(`${API_URL}/api/events?limit=${limit}`);
