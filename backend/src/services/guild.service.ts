@@ -5,6 +5,7 @@ import Report from "../models/Report";
 import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
+import raiderIOService from "./raiderio.service";
 import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES } from "../config/guilds";
 import mongoose from "mongoose";
 
@@ -132,8 +133,12 @@ class GuildService {
         const raidIconMap = await blizzardService.getRaidIconUrls(allRaidNames);
         const bossIconMap = await blizzardService.getBossIconUrls(allBossNames);
 
-        // Update raids with icons using cached zone data
-        console.log("Updating raids with icon URLs...");
+        // Fetch raid dates from Raider.IO
+        console.log("Fetching raid start/end dates from Raider.IO API...");
+        const raidDatesMap = await raiderIOService.fetchAllRaidDates();
+
+        // Update raids with icons and dates using cached zone data
+        console.log("Updating raids with icon URLs and start/end dates...");
         for (const [zoneId, zoneData] of zoneDataCache.entries()) {
           try {
             // Get raid icon
@@ -147,20 +152,51 @@ class GuildService {
               iconUrl: bossIconMap.get(enc.name) || undefined,
             }));
 
-            // Update raid with icons
+            // Find matching Raider.IO data
+            const raidSlug = zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+            const raiderIOMatch = raiderIOService.findRaidMatch(raidDatesMap, zoneData.name, raidSlug);
+
+            // Prepare update object with icons
+            const updateData: any = {
+              iconUrl: raidIconUrl,
+              bosses: bossesWithIcons,
+            };
+
+            // Add start/end dates if we found a match
+            if (raiderIOMatch) {
+              console.log(`✅ Found Raider.IO dates for: ${zoneData.name}`);
+
+              // Convert string dates to Date objects
+              updateData.starts = {
+                us: raiderIOMatch.starts.us ? new Date(raiderIOMatch.starts.us) : undefined,
+                eu: raiderIOMatch.starts.eu ? new Date(raiderIOMatch.starts.eu) : undefined,
+                tw: raiderIOMatch.starts.tw ? new Date(raiderIOMatch.starts.tw) : undefined,
+                kr: raiderIOMatch.starts.kr ? new Date(raiderIOMatch.starts.kr) : undefined,
+                cn: raiderIOMatch.starts.cn ? new Date(raiderIOMatch.starts.cn) : undefined,
+              };
+
+              updateData.ends = {
+                us: raiderIOMatch.ends.us ? new Date(raiderIOMatch.ends.us) : undefined,
+                eu: raiderIOMatch.ends.eu ? new Date(raiderIOMatch.ends.eu) : undefined,
+                tw: raiderIOMatch.ends.tw ? new Date(raiderIOMatch.ends.tw) : undefined,
+                kr: raiderIOMatch.ends.kr ? new Date(raiderIOMatch.ends.kr) : undefined,
+                cn: raiderIOMatch.ends.cn ? new Date(raiderIOMatch.ends.cn) : undefined,
+              };
+            } else {
+              console.log(`⚠️  No Raider.IO dates found for: ${zoneData.name}`);
+            }
+
+            // Update raid with icons and dates
             await Raid.findOneAndUpdate(
               { id: zoneId },
               {
-                $set: {
-                  iconUrl: raidIconUrl,
-                  bosses: bossesWithIcons,
-                },
+                $set: updateData,
               }
             );
 
-            console.log(`Updated icons for raid: ${zoneData.name} (raid icon: ${raidIconUrl ? "✅" : "❌"})`);
+            console.log(`Updated raid: ${zoneData.name} (icon: ${raidIconUrl ? "✅" : "❌"}, dates: ${raiderIOMatch ? "✅" : "❌"})`);
           } catch (error) {
-            console.error(`Error updating icons for zone ${zoneId}:`, error);
+            console.error(`Error updating raid data for zone ${zoneId}:`, error);
           }
         }
 
