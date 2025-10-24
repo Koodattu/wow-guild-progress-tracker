@@ -1,0 +1,14 @@
+# Scraper state files
+scraper_state/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+cookies.txt

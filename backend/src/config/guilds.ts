@@ -6,6 +6,7 @@ export interface TrackedGuild {
 
 export const GUILDS: TrackedGuild[] = [
   { name: "Tuju", realm: "Kazzak", region: "EU" },
+  { name: "Kilta", realm: "Ravencrest", region: "EU" },
   //{ name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
   //{ name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
 ];
