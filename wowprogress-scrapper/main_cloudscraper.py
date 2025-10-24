@@ -81,6 +81,13 @@ def has_mythic_progress(soup: BeautifulSoup) -> bool:
 
     return False
 
+def has_heroic_progress(soup: BeautifulSoup) -> bool:
+    """Check if the last guild on the page has heroic progress"""
+    progress_spans = soup.find_all('span', class_='ratingProgress')
+    if not progress_spans:
+        return False
+    return '(H)' in progress_spans[-1].get_text()
+
 def extract_guilds_from_page(soup: BeautifulSoup) -> List[Dict[str, str]]:
     """Extract guild information from a page"""
     guilds = []
@@ -147,8 +154,8 @@ def scrape_tier_guilds(tier: int, start_page: int = -1) -> List[Dict[str, str]]:
 
         prev_url = url
 
-        if not has_mythic_progress(soup):
-            print(f"No more mythic progress on page {page}, stopping tier {tier}")
+        if not has_heroic_progress(soup):
+            print(f"No more heroic progress on page {page}, stopping tier {tier}")
             break
 
         # Save progress after each page
