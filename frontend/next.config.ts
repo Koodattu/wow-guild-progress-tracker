@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
         pathname: "/icons/**",
       },
     ],
+    // Disable image optimization for development to avoid issues with localhost images
+    unoptimized: process.env.NODE_ENV === "development",
   },
 };
 
