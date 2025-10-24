@@ -1,7 +1,10 @@
 "use client";
 
-import { Guild, RaidProgress, BossProgress } from "@/types";
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { Guild, RaidProgress, BossProgress, Raid } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 interface GuildDetailProps {
   guild: Guild;
@@ -10,6 +13,29 @@ interface GuildDetailProps {
 }
 
 export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDetailProps) {
+  const [raids, setRaids] = useState<Raid[]>([]);
+
+  useEffect(() => {
+    // Fetch raids to get boss icons
+    const fetchRaids = async () => {
+      try {
+        const raidsData = await api.getRaids();
+        setRaids(raidsData);
+      } catch (error) {
+        console.error("Error fetching raids:", error);
+      }
+    };
+    fetchRaids();
+  }, []);
+
+  const getBossIconUrl = (bossName: string): string | undefined => {
+    if (!selectedRaidId) return undefined;
+    const raid = raids.find((r) => r.id === selectedRaidId);
+    if (!raid) return undefined;
+    const boss = raid.bosses.find((b) => b.name === bossName);
+    return boss?.iconUrl;
+  };
+
   const handleBossClick = (boss: BossProgress) => {
     if (boss.firstKillReportCode && boss.firstKillFightId) {
       const url = getKillLogUrl(boss.firstKillReportCode, boss.firstKillFightId);
@@ -21,6 +47,7 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
     const isDefeated = boss.kills > 0;
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const isClickable = isDefeated && hasKillLog;
+    const bossIconUrl = getBossIconUrl(boss.bossName);
 
     return (
       <tr
@@ -31,10 +58,13 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
       >
         <td className="px-4 py-3 text-sm text-gray-400">{bossNumber}</td>
         <td className="px-4 py-3">
-          <span className={isDefeated ? "text-green-400 font-semibold" : "text-white"}>
-            {boss.bossName}
-            {isClickable && <span className="ml-2 text-xs text-gray-500">🔗</span>}
-          </span>
+          <div className="flex items-center gap-2">
+            {bossIconUrl ? <Image src={bossIconUrl} alt={`${boss.bossName} icon`} width={32} height={32} className="rounded" /> : <div className="w-8 h-8 bg-gray-700 rounded" />}
+            <span className={isDefeated ? "text-green-400 font-semibold" : "text-white"}>
+              {boss.bossName}
+              {isClickable && <span className="ml-2 text-xs text-gray-500">🔗</span>}
+            </span>
+          </div>
         </td>
         <td className="px-4 py-3 text-center text-sm">{isDefeated ? <span className="text-white">{boss.kills}</span> : <span className="text-gray-500">-</span>}</td>
         <td className="px-4 py-3 text-center text-sm text-gray-300">{boss.pullCount || 0}</td>

@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/database";
 import guildService from "./services/guild.service";
+import blizzardService from "./services/blizzard.service";
 import scheduler from "./services/scheduler.service";
 import guildsRouter from "./routes/guilds";
 import eventsRouter from "./routes/events";
@@ -34,7 +35,11 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDB();
 
+    // Initialize Blizzard API (check if achievements exist)
+    await blizzardService.initializeIfNeeded();
+
     // Sync raid data from WarcraftLogs (zones, bosses, etc.)
+    // This will also fetch achievements from Blizzard if needed
     await guildService.syncRaidsFromWCL();
 
     // Initialize guilds from config

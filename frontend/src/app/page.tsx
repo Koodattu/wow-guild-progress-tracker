@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Guild, Event, Raid } from "@/types";
 import { api } from "@/lib/api";
 import GuildTable from "@/components/GuildTable";
 import GuildDetail from "@/components/GuildDetail";
 import EventsFeed from "@/components/EventsFeed";
+import RaidSelector from "@/components/RaidSelector";
 
 export default function Home() {
   const [guilds, setGuilds] = useState<Guild[]>([]);
@@ -92,44 +94,7 @@ export default function Home() {
             </div>
             <div className="flex gap-4 items-center">
               {/* Raid Selector */}
-              {raids.length > 0 && (
-                <div className="flex flex-col">
-                  <label htmlFor="raid-select" className="text-xs text-gray-400 mb-1">
-                    Select Raid
-                  </label>
-                  <select
-                    id="raid-select"
-                    value={selectedRaidId || ""}
-                    onChange={(e) => setSelectedRaidId(Number(e.target.value))}
-                    className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {(() => {
-                      // Group raids by expansion while maintaining order
-                      const groupedRaids: { [expansion: string]: Raid[] } = {};
-                      const expansionOrder: string[] = [];
-
-                      raids.forEach((raid) => {
-                        if (!groupedRaids[raid.expansion]) {
-                          groupedRaids[raid.expansion] = [];
-                          expansionOrder.push(raid.expansion);
-                        }
-                        groupedRaids[raid.expansion].push(raid);
-                      });
-
-                      // Render expansion headers and their raids
-                      return expansionOrder.map((expansion) => (
-                        <optgroup key={expansion} label={expansion}>
-                          {groupedRaids[expansion].map((raid) => (
-                            <option key={raid.id} value={raid.id}>
-                              {raid.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ));
-                    })()}
-                  </select>
-                </div>
-              )}
+              {raids.length > 0 && <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={setSelectedRaidId} />}
             </div>
           </div>
 
@@ -141,7 +106,14 @@ export default function Home() {
           {/* Guild List - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-              <h2 className="text-2xl font-bold mb-4">{raids.find((r) => r.id === selectedRaidId)?.name}</h2>
+              <div className="flex items-center gap-3 mb-4">
+                {/* Show selected raid icon */}
+                {(() => {
+                  const selectedRaid = raids.find((r) => r.id === selectedRaidId);
+                  return selectedRaid?.iconUrl && <Image src={selectedRaid.iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />;
+                })()}
+                <h2 className="text-2xl font-bold">{raids.find((r) => r.id === selectedRaidId)?.name}</h2>
+              </div>
               <GuildTable guilds={guilds} onGuildClick={setSelectedGuild} selectedRaidId={selectedRaidId} />
             </div>
           </div>

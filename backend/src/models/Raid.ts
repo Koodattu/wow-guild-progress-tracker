@@ -5,6 +5,7 @@ export interface IRaid extends Document {
   name: string;
   slug: string;
   expansion: string;
+  iconUrl?: string;
   bosses: {
     id: number;
     name: string;
@@ -21,6 +22,7 @@ const RaidSchema: Schema = new Schema(
     name: { type: String, required: true },
     slug: { type: String, required: true },
     expansion: { type: String, required: true },
+    iconUrl: { type: String },
     bosses: [
       {
         id: { type: Number, required: true },

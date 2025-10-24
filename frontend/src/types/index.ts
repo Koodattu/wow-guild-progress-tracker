@@ -79,6 +79,7 @@ export interface Raid {
   name: string;
   slug: string;
   expansion: string;
+  iconUrl?: string;
   bosses: Boss[];
   createdAt: string;
   updatedAt: string;

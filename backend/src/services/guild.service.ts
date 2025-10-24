@@ -4,6 +4,7 @@ import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
+import blizzardService from "./blizzard.service";
 import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES } from "../config/guilds";
 import mongoose from "mongoose";
 
@@ -43,6 +44,10 @@ class GuildService {
 
       // Only fetch zones if needed (first time or missing tracked raids)
       if (needsFullFetch) {
+        // Fetch achievements from Blizzard API (same trigger as zones)
+        console.log("Fetching achievements from Blizzard API...");
+        await blizzardService.updateAchievements();
+
         // Fetch all zones from WarcraftLogs
         const result = await wclService.getZones();
         const zones = result.worldData?.zones;
@@ -53,6 +58,11 @@ class GuildService {
         }
 
         console.log(`Found ${zones.length} zones from WarcraftLogs`);
+
+        // Collect all raid and boss names for batch icon fetching
+        const allRaidNames: string[] = [];
+        const allBossNames: string[] = [];
+        const raidBossMapping = new Map<number, string[]>(); // zoneId -> boss names
 
         // Sync all zones to database
         for (const zone of zones) {
@@ -84,9 +94,15 @@ class GuildService {
               slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
             }));
 
+            // Collect names for batch fetching
+            allRaidNames.push(zoneData.name);
+            const bossNames = bosses.map((b: any) => b.name);
+            allBossNames.push(...bossNames);
+            raidBossMapping.set(zone.id, bossNames);
+
             console.log(`Syncing zone ${zone.id} (${expansionName}) with ${bosses.length} encounters`);
 
-            // Update or create raid in database
+            // Update or create raid in database (without icons first)
             await Raid.findOneAndUpdate(
               { id: zone.id },
               {
@@ -106,6 +122,53 @@ class GuildService {
             console.log(`Synced raid: ${zoneData.name} (${expansionName}, ${bosses.length} bosses)`);
           } catch (error) {
             console.error(`Error syncing zone ${zone.id}:`, error);
+          }
+        }
+
+        // Batch fetch all raid and boss icons from Blizzard
+        console.log("Fetching raid and boss icons from Blizzard API...");
+        const raidIconMap = await blizzardService.getRaidIconUrls(allRaidNames);
+        const bossIconMap = await blizzardService.getBossIconUrls(allBossNames);
+
+        // Update raids with icons
+        console.log("Updating raids with icon URLs...");
+        for (const zone of zones) {
+          try {
+            const detailResult = await wclService.getZone(zone.id);
+            const zoneData = detailResult.worldData?.zone;
+
+            if (!zoneData || !zoneData.encounters || zoneData.encounters.length === 0) {
+              continue;
+            }
+
+            // Get raid icon
+            const raidIconUrl = raidIconMap.get(zoneData.name) || undefined;
+
+            // Get boss names for this raid
+            const bossNames = raidBossMapping.get(zone.id) || [];
+
+            // Get boss icons
+            const bossesWithIcons = (zoneData.encounters || []).map((enc: any) => ({
+              id: enc.id,
+              name: enc.name,
+              slug: enc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+              iconUrl: bossIconMap.get(enc.name) || undefined,
+            }));
+
+            // Update raid with icons
+            await Raid.findOneAndUpdate(
+              { id: zone.id },
+              {
+                $set: {
+                  iconUrl: raidIconUrl,
+                  bosses: bossesWithIcons,
+                },
+              }
+            );
+
+            console.log(`Updated icons for raid: ${zoneData.name} (raid icon: ${raidIconUrl ? "✅" : "❌"})`);
+          } catch (error) {
+            console.error(`Error updating icons for zone ${zone.id}:`, error);
           }
         }
 
