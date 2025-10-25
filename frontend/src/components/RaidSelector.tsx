@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { Raid } from "@/types";
 import IconImage from "./IconImage";
 
@@ -8,6 +9,12 @@ interface RaidSelectorProps {
   raids: Raid[];
   selectedRaidId: number | null;
   onRaidSelect: (raidId: number) => void;
+}
+
+// Convert expansion name to filename format (lowercase, spaces to hyphens)
+function getExpansionIconPath(expansionName: string): string {
+  const filename = expansionName.toLowerCase().replace(/\s+/g, "-");
+  return `/expansions/${filename}.png`;
 }
 
 export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: RaidSelectorProps) {
@@ -48,7 +55,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
       <button
         id="raid-select"
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-[250px] justify-between hover:bg-gray-750 transition-colors"
+        className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-[350px] justify-between hover:bg-gray-750 transition-colors"
       >
         <div className="flex items-center gap-2">
           {selectedRaid?.iconUrl && <IconImage iconFilename={selectedRaid.iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
@@ -63,7 +70,10 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
         <div className="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-96 overflow-y-auto">
           {expansionOrder.map((expansion) => (
             <div key={expansion}>
-              <div className="px-3 py-2 text-xs font-semibold text-gray-400 bg-gray-900 sticky top-0">{expansion}</div>
+              <div className="px-3 py-2 text-xs font-semibold text-gray-400 bg-gray-900 sticky top-0 flex items-center gap-2">
+                <span>{expansion}</span>
+                <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={25} width={40} />
+              </div>
               {groupedRaids[expansion].map((raid) => (
                 <button
                   key={raid.id}
