@@ -1,33 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Guild, RaidProgress, BossProgress, Raid } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
-import { api } from "@/lib/api";
 import IconImage from "./IconImage";
 
 interface GuildDetailProps {
   guild: Guild;
   onClose: () => void;
   selectedRaidId: number | null;
+  raids: Raid[];
 }
 
-export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDetailProps) {
-  const [raids, setRaids] = useState<Raid[]>([]);
-
-  useEffect(() => {
-    // Fetch raids to get boss icons
-    const fetchRaids = async () => {
-      try {
-        const raidsData = await api.getRaids();
-        setRaids(raidsData);
-      } catch (error) {
-        console.error("Error fetching raids:", error);
-      }
-    };
-    fetchRaids();
-  }, []);
-
+export default function GuildDetail({ guild, onClose, selectedRaidId, raids }: GuildDetailProps) {
   const getBossIconUrl = (bossName: string): string | undefined => {
     if (!selectedRaidId) return undefined;
     const raid = raids.find((r) => r.id === selectedRaidId);
@@ -86,26 +70,48 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
   };
 
   const renderProgressSection = (progress: RaidProgress) => {
-    // First, create a mapping of bossId to sequential number (1, 2, 3, etc.) based on bossId order
-    const bossesByIdAsc = [...progress.bosses].sort((a, b) => a.bossId - b.bossId);
-    const bossNumberMap = new Map<number, number>();
-    bossesByIdAsc.forEach((boss, index) => {
-      bossNumberMap.set(boss.bossId, index + 1);
+    if (!selectedRaidId) return null;
+
+    // Get the raid to know the boss order
+    const raid = raids.find((r) => r.id === selectedRaidId);
+    if (!raid) return null;
+
+    const totalBosses = raid.bosses.length;
+
+    // Create a map of bossId to its default order position (1-indexed)
+    const bossDefaultOrderMap = new Map<number, number>();
+    raid.bosses.forEach((boss, index) => {
+      bossDefaultOrderMap.set(boss.id, index + 1);
     });
 
-    // Sort bosses: unkilled first, then killed bosses in reverse order (latest first)
+    // Sort bosses for display:
+    // 1. Unkilled bosses first, in reverse default order (last boss first)
+    // 2. Then killed bosses, in reverse kill order (most recent kill first)
     const sortedBosses = [...progress.bosses].sort((a, b) => {
-      // Unkilled bosses (no kill order) should come first
-      if (!a.killOrder && !b.killOrder) {
-        // Both unkilled, sort by boss ID in reverse
-        return b.bossId - a.bossId;
+      const aKilled = a.kills > 0;
+      const bKilled = b.kills > 0;
+
+      // Both unkilled: sort by default order in reverse (higher bossId first)
+      if (!aKilled && !bKilled) {
+        const aOrder = bossDefaultOrderMap.get(a.bossId) || 0;
+        const bOrder = bossDefaultOrderMap.get(b.bossId) || 0;
+        return bOrder - aOrder; // Reverse order
       }
-      // If only a is unkilled, it comes first
-      if (!a.killOrder) return -1;
-      // If only b is unkilled, it comes first
-      if (!b.killOrder) return -1;
-      // Both have kill order, sort by that in reverse (highest first)
-      return b.killOrder - a.killOrder;
+
+      // Unkilled bosses come before killed bosses
+      if (!aKilled) return -1;
+      if (!bKilled) return 1;
+
+      // Both killed: sort by kill order in reverse (higher killOrder first)
+      const aKillOrder = a.killOrder || 0;
+      const bKillOrder = b.killOrder || 0;
+      return bKillOrder - aKillOrder;
+    });
+
+    // Create display numbers based on sorted order: first item gets highest number
+    const bossDisplayNumberMap = new Map<number, number>();
+    sortedBosses.forEach((boss, index) => {
+      bossDisplayNumberMap.set(boss.bossId, totalBosses - index);
     });
 
     return (
@@ -138,7 +144,7 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
                 <th className="px-4 py-2 text-center text-sm font-semibold text-gray-300">First Kill</th>
               </tr>
             </thead>
-            <tbody>{sortedBosses.map((boss) => renderBossRow(boss, bossNumberMap.get(boss.bossId)!))}</tbody>
+            <tbody>{sortedBosses.map((boss) => renderBossRow(boss, bossDisplayNumberMap.get(boss.bossId)!))}</tbody>
           </table>
         </div>
       </div>

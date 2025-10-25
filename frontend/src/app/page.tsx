@@ -127,7 +127,7 @@ export default function Home() {
         </div>
 
         {/* Guild Detail Modal */}
-        {selectedGuild && <GuildDetail guild={selectedGuild} onClose={() => setSelectedGuild(null)} selectedRaidId={selectedRaidId} />}
+        {selectedGuild && <GuildDetail guild={selectedGuild} onClose={() => setSelectedGuild(null)} selectedRaidId={selectedRaidId} raids={raids} />}
       </div>
     </main>
   );
