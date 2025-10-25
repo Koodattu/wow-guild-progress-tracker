@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { Guild, RaidProgress, BossProgress, Raid } from "@/types";
-import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getIconUrl } from "@/lib/utils";
+import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import { api } from "@/lib/api";
+import IconImage from "./IconImage";
 
 interface GuildDetailProps {
   guild: Guild;
@@ -48,7 +48,6 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const isClickable = isDefeated && hasKillLog;
     const bossIconFilename = getBossIconUrl(boss.bossName);
-    const bossIconUrl = getIconUrl(bossIconFilename);
 
     return (
       <tr
@@ -60,7 +59,7 @@ export default function GuildDetail({ guild, onClose, selectedRaidId }: GuildDet
         <td className="px-4 py-3 text-sm text-gray-400">{bossNumber}</td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
-            {bossIconUrl ? <Image src={bossIconUrl} alt={`${boss.bossName} icon`} width={32} height={32} className="rounded" /> : <div className="w-8 h-8 bg-gray-700 rounded" />}
+            <IconImage iconFilename={bossIconFilename} alt={`${boss.bossName} icon`} width={32} height={32} className="rounded" />
             <span className={isDefeated ? "text-green-400 font-semibold" : "text-white"}>
               {boss.bossName}
               {isClickable && <span className="ml-2 text-xs text-gray-500">🔗</span>}

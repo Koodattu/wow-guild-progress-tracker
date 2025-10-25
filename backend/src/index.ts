@@ -1,6 +1,9 @@
+// Load environment variables
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import path from "path";
 import connectDB from "./config/database";
 import guildService from "./services/guild.service";
@@ -9,9 +12,6 @@ import scheduler from "./services/scheduler.service";
 import guildsRouter from "./routes/guilds";
 import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
-
-// Load environment variables
-dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
