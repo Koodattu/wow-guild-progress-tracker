@@ -1,6 +1,6 @@
 "use client";
 
-import { Guild, RaidProgress, BossProgress, Raid } from "@/types";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import IconImage from "./IconImage";
 
@@ -8,15 +8,13 @@ interface GuildDetailProps {
   guild: Guild;
   onClose: () => void;
   selectedRaidId: number | null;
-  raids: Raid[];
+  raids: RaidInfo[];
+  bosses: Boss[];
 }
 
-export default function GuildDetail({ guild, onClose, selectedRaidId, raids }: GuildDetailProps) {
+export default function GuildDetail({ guild, onClose, selectedRaidId, raids, bosses }: GuildDetailProps) {
   const getBossIconUrl = (bossName: string): string | undefined => {
-    if (!selectedRaidId) return undefined;
-    const raid = raids.find((r) => r.id === selectedRaidId);
-    if (!raid) return undefined;
-    const boss = raid.bosses.find((b) => b.name === bossName);
+    const boss = bosses.find((b) => b.name === bossName);
     return boss?.iconUrl;
   };
 
@@ -76,11 +74,11 @@ export default function GuildDetail({ guild, onClose, selectedRaidId, raids }: G
     const raid = raids.find((r) => r.id === selectedRaidId);
     if (!raid) return null;
 
-    const totalBosses = raid.bosses.length;
+    const totalBosses = bosses.length;
 
     // Create a map of bossId to its default order position (1-indexed)
     const bossDefaultOrderMap = new Map<number, number>();
-    raid.bosses.forEach((boss, index) => {
+    bosses.forEach((boss, index) => {
       bossDefaultOrderMap.set(boss.id, index + 1);
     });
 

@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { Raid } from "@/types";
+import { RaidInfo } from "@/types";
 import IconImage from "./IconImage";
 
 interface RaidSelectorProps {
-  raids: Raid[];
+  raids: RaidInfo[];
   selectedRaidId: number | null;
   onRaidSelect: (raidId: number) => void;
 }
@@ -36,7 +36,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
   const selectedRaid = raids.find((r) => r.id === selectedRaidId);
 
   // Group raids by expansion
-  const groupedRaids: { [expansion: string]: Raid[] } = {};
+  const groupedRaids: { [expansion: string]: RaidInfo[] } = {};
   const expansionOrder: string[] = [];
 
   raids.forEach((raid) => {

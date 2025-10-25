@@ -1011,6 +1011,18 @@ class GuildService {
     return guilds;
   }
 
+  // Get all guilds with progress filtered by raidId
+  async getAllGuildsForRaid(raidId: number): Promise<IGuild[]> {
+    const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });
+
+    // Filter each guild's progress array to only include the specified raid
+    return guilds.map((guild) => {
+      const filteredGuild = guild.toObject();
+      filteredGuild.progress = filteredGuild.progress.filter((p) => p.raidId === raidId);
+      return filteredGuild as IGuild;
+    });
+  }
+
   // Get single guild by ID
   async getGuildById(id: string): Promise<IGuild | null> {
     return await Guild.findById(id);

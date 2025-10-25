@@ -1,11 +1,12 @@
-import { Guild, Event, Raid } from "@/types";
+import { Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export const api = {
   // Guild endpoints
-  async getGuilds(): Promise<Guild[]> {
-    const response = await fetch(`${API_URL}/api/guilds`);
+  async getGuilds(raidId?: number): Promise<Guild[]> {
+    const url = raidId ? `${API_URL}/api/guilds?raidId=${raidId}` : `${API_URL}/api/guilds`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
   },
@@ -38,15 +39,21 @@ export const api = {
   },
 
   // Raid endpoints
-  async getRaids(): Promise<Raid[]> {
+  async getRaids(): Promise<RaidInfo[]> {
     const response = await fetch(`${API_URL}/api/raids`);
     if (!response.ok) throw new Error("Failed to fetch raids");
     return response.json();
   },
 
-  async getRaid(id: number): Promise<Raid> {
-    const response = await fetch(`${API_URL}/api/raids/${id}`);
-    if (!response.ok) throw new Error("Failed to fetch raid");
+  async getBosses(raidId: number): Promise<Boss[]> {
+    const response = await fetch(`${API_URL}/api/raids/${raidId}/bosses`);
+    if (!response.ok) throw new Error("Failed to fetch raid bosses");
+    return response.json();
+  },
+
+  async getRaidDates(raidId: number): Promise<RaidDates> {
+    const response = await fetch(`${API_URL}/api/raids/${raidId}/dates`);
+    if (!response.ok) throw new Error("Failed to fetch raid dates");
     return response.json();
   },
 };

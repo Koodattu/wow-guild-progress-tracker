@@ -81,16 +81,26 @@ export interface RegionDates {
   cn?: string;
 }
 
-export interface Raid {
-  _id: string;
+export interface RaidDates {
+  starts?: RegionDates;
+  ends?: RegionDates;
+}
+
+// Minimal raid info (without bosses or dates) - used in raid selector
+export interface RaidInfo {
   id: number;
   name: string;
   slug: string;
   expansion: string;
   iconUrl?: string;
+}
+
+// Full raid info with bosses and dates - for backward compatibility
+export interface Raid extends RaidInfo {
   starts?: RegionDates;
   ends?: RegionDates;
   bosses: Boss[];
-  createdAt: string;
-  updatedAt: string;
+  _id?: string; // Optional for backward compatibility
+  createdAt?: string; // Optional for backward compatibility
+  updatedAt?: string; // Optional for backward compatibility
 }

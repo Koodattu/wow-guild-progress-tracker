@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
-import { Guild, Event, Raid } from "@/types";
+import { Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
 import { api } from "@/lib/api";
 import { getIconUrl } from "@/lib/utils";
 import GuildTable from "@/components/GuildTable";
@@ -13,35 +13,48 @@ import RaidSelector from "@/components/RaidSelector";
 export default function Home() {
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
-  const [raids, setRaids] = useState<Raid[]>([]);
+  const [raids, setRaids] = useState<RaidInfo[]>([]);
+  const [bosses, setBosses] = useState<Boss[]>([]);
+  const [raidDates, setRaidDates] = useState<RaidDates | null>(null);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  // Initial data fetch - only raids and events
+  const fetchInitialData = useCallback(async () => {
     try {
       setError(null);
-      const [guildsData, eventsData, raidsData] = await Promise.all([api.getGuilds(), api.getEvents(50), api.getRaids()]);
+      const [raidsData, eventsData] = await Promise.all([api.getRaids(), api.getEvents(50)]);
 
-      // Set raids and select the first one by default (most recent raid)
       setRaids(raidsData);
+      setEvents(eventsData);
+
+      // Select the first raid by default (most recent raid)
       if (raidsData.length > 0 && selectedRaidId === null) {
         setSelectedRaidId(raidsData[0].id);
       }
+    } catch (err) {
+      console.error("Error fetching initial data:", err);
+      setError("Failed to load data. Make sure the backend server is running.");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedRaidId]);
 
-      // Filter and sort guilds by mythic progress for the selected raid
-      const currentRaidId = selectedRaidId || (raidsData.length > 0 ? raidsData[0].id : null);
+  // Fetch raid-specific data (bosses, dates, and guilds) when raid is selected
+  const fetchRaidData = useCallback(async (raidId: number) => {
+    try {
+      setError(null);
+      const [bossesData, datesData, guildsData] = await Promise.all([api.getBosses(raidId), api.getRaidDates(raidId), api.getGuilds(raidId)]);
 
-      // Filter out guilds with no progress for the selected raid
-      const filteredGuilds = currentRaidId ? guildsData.filter((guild) => guild.progress.some((p) => p.raidId === currentRaidId)) : guildsData;
+      setBosses(bossesData);
+      setRaidDates(datesData);
 
-      // Sort by mythic progress
-      const sortedGuilds = filteredGuilds.sort((a, b) => {
-        if (!currentRaidId) return 0;
-
-        const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === currentRaidId);
-        const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === currentRaidId);
+      // Sort guilds by mythic progress
+      const sortedGuilds = guildsData.sort((a, b) => {
+        const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
+        const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
 
         if (!aMythic && !bMythic) return 0;
         if (!aMythic) return 1;
@@ -51,26 +64,35 @@ export default function Home() {
       });
 
       setGuilds(sortedGuilds);
-      setEvents(eventsData);
     } catch (err) {
-      console.error("Error fetching data:", err);
-      setError("Failed to load data. Make sure the backend server is running.");
-    } finally {
-      setLoading(false);
+      console.error("Error fetching raid data:", err);
+      setError("Failed to load raid data.");
     }
-  };
+  }, []);
 
+  // Initial fetch on mount
   useEffect(() => {
-    fetchData();
+    fetchInitialData();
+  }, [fetchInitialData]);
 
-    // Auto-refresh every 30 seconds
+  // Fetch raid-specific data when raid selection changes
+  useEffect(() => {
+    if (selectedRaidId !== null) {
+      fetchRaidData(selectedRaidId);
+    }
+  }, [selectedRaidId, fetchRaidData]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
     const interval = setInterval(() => {
-      fetchData();
+      if (selectedRaidId !== null) {
+        fetchRaidData(selectedRaidId);
+        api.getEvents(50).then(setEvents);
+      }
     }, 30000);
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRaidId]);
+  }, [selectedRaidId, fetchRaidData]);
 
   if (loading) {
     return (
@@ -124,8 +146,8 @@ export default function Home() {
                   });
                 };
 
-                const startDate = formatDate(selectedRaid.starts?.eu);
-                const endDate = formatDate(selectedRaid.ends?.eu);
+                const startDate = formatDate(raidDates?.starts?.eu);
+                const endDate = formatDate(raidDates?.ends?.eu);
 
                 return (
                   <div className="mb-4">
@@ -163,7 +185,7 @@ export default function Home() {
         </div>
 
         {/* Guild Detail Modal */}
-        {selectedGuild && <GuildDetail guild={selectedGuild} onClose={() => setSelectedGuild(null)} selectedRaidId={selectedRaidId} raids={raids} />}
+        {selectedGuild && <GuildDetail guild={selectedGuild} onClose={() => setSelectedGuild(null)} selectedRaidId={selectedRaidId} raids={raids} bosses={bosses} />}
       </div>
     </main>
   );
