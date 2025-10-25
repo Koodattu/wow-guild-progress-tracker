@@ -73,6 +73,14 @@ export interface Boss {
   iconUrl?: string;
 }
 
+export interface RegionDates {
+  us?: string;
+  eu?: string;
+  tw?: string;
+  kr?: string;
+  cn?: string;
+}
+
 export interface Raid {
   _id: string;
   id: number;
@@ -80,6 +88,8 @@ export interface Raid {
   slug: string;
   expansion: string;
   iconUrl?: string;
+  starts?: RegionDates;
+  ends?: RegionDates;
   bosses: Boss[];
   createdAt: string;
   updatedAt: string;

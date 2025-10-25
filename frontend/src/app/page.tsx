@@ -107,15 +107,51 @@ export default function Home() {
           {/* Guild List - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                {/* Show selected raid icon */}
-                {(() => {
-                  const selectedRaid = raids.find((r) => r.id === selectedRaidId);
-                  const iconUrl = getIconUrl(selectedRaid?.iconUrl);
-                  return iconUrl && <Image src={iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />;
-                })()}
-                <h2 className="text-2xl font-bold">{raids.find((r) => r.id === selectedRaidId)?.name}</h2>
-              </div>
+              {(() => {
+                const selectedRaid = raids.find((r) => r.id === selectedRaidId);
+                if (!selectedRaid) return null;
+
+                const iconUrl = getIconUrl(selectedRaid.iconUrl);
+                const expansionIconPath = selectedRaid.expansion.toLowerCase().replace(/\s+/g, "-");
+
+                // Format dates (EU by default)
+                const formatDate = (dateString?: string) => {
+                  if (!dateString) return "N/A";
+                  return new Date(dateString).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  });
+                };
+
+                const startDate = formatDate(selectedRaid.starts?.eu);
+                const endDate = formatDate(selectedRaid.ends?.eu);
+
+                return (
+                  <div className="mb-4">
+                    {/* Expansion name and icon */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-bold text-gray-400">{selectedRaid.expansion}</span>
+                      <Image src={`/expansions/${expansionIconPath}.png`} alt={`${selectedRaid.expansion} icon`} height={20} width={32} />
+                    </div>
+
+                    {/* Raid name, icon, and dates */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {iconUrl && <Image src={iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />}
+                        <h2 className="text-2xl font-bold">{selectedRaid.name}</h2>
+                      </div>
+
+                      {/* Season dates */}
+                      <div className="text-right text-sm text-gray-400">
+                        <div>
+                          {startDate} - {endDate}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               <GuildTable guilds={guilds} onGuildClick={setSelectedGuild} selectedRaidId={selectedRaidId} />
             </div>
           </div>
