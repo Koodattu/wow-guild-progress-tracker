@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
-import { Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
+import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
 import { api } from "@/lib/api";
 import { getIconUrl } from "@/lib/utils";
 import GuildTable from "@/components/GuildTable";
@@ -11,7 +11,7 @@ import EventsFeed from "@/components/EventsFeed";
 import RaidSelector from "@/components/RaidSelector";
 
 export default function Home() {
-  const [guilds, setGuilds] = useState<Guild[]>([]);
+  const [guilds, setGuilds] = useState<GuildListItem[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [raids, setRaids] = useState<RaidInfo[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
@@ -94,6 +94,22 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedRaidId, fetchRaidData]);
 
+  // Handle guild click - fetch detailed data before opening modal
+  const handleGuildClick = useCallback(
+    async (guild: GuildListItem) => {
+      if (!selectedRaidId) return;
+
+      try {
+        const detailedGuild = await api.getGuildDetail(guild._id, selectedRaidId);
+        setSelectedGuild(detailedGuild);
+      } catch (err) {
+        console.error("Error fetching guild details:", err);
+        setError("Failed to load guild details.");
+      }
+    },
+    [selectedRaidId]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -174,7 +190,7 @@ export default function Home() {
                   </div>
                 );
               })()}
-              <GuildTable guilds={guilds} onGuildClick={setSelectedGuild} selectedRaidId={selectedRaidId} />
+              <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />
             </div>
           </div>
 

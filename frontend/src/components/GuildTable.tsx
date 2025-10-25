@@ -1,36 +1,33 @@
 "use client";
 
-import { Guild, RaidProgress } from "@/types";
+import { GuildListItem, RaidProgressSummary } from "@/types";
 import { formatTime, formatPercent, formatPhaseDisplay } from "@/lib/utils";
 
 interface GuildTableProps {
-  guilds: Guild[];
-  onGuildClick: (guild: Guild) => void;
+  guilds: GuildListItem[];
+  onGuildClick: (guild: GuildListItem) => void;
   selectedRaidId: number | null;
 }
 
 export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: GuildTableProps) {
-  const getLatestProgress = (guild: Guild, difficulty: "mythic" | "heroic"): RaidProgress | null => {
+  const getLatestProgress = (guild: GuildListItem, difficulty: "mythic" | "heroic"): RaidProgressSummary | null => {
     if (!selectedRaidId) return null;
     return guild.progress.find((p) => p.difficulty === difficulty && p.raidId === selectedRaidId) || null;
   };
 
-  const getBestPullForProgress = (progress: RaidProgress | null): number => {
+  const getBestPullForProgress = (progress: RaidProgressSummary | null): number => {
     if (!progress) return 0;
-    const currentBoss = progress.bosses.find((b) => b.kills === 0);
-    return currentBoss?.bestPercent || 0;
+    return progress.bestPullPercent || 0;
   };
 
-  const getBestPullDisplayString = (progress: RaidProgress | null): string => {
+  const getBestPullDisplayString = (progress: RaidProgressSummary | null): string => {
     if (!progress) return "";
-    const currentBoss = progress.bosses.find((b) => b.kills === 0);
-    return currentBoss?.bestPullPhase?.displayString || "";
+    return progress.bestPullPhase?.displayString || "";
   };
 
-  const getCurrentPullCount = (progress: RaidProgress | null): number => {
+  const getCurrentPullCount = (progress: RaidProgressSummary | null): number => {
     if (!progress) return 0;
-    const currentBoss = progress.bosses.find((b) => b.kills === 0);
-    return currentBoss?.pullCount || 0;
+    return progress.currentBossPulls || 0;
   };
 
   return (

@@ -1011,16 +1011,72 @@ class GuildService {
     return guilds;
   }
 
-  // Get all guilds with progress filtered by raidId
-  async getAllGuildsForRaid(raidId: number): Promise<IGuild[]> {
+  // Get all guilds with progress filtered by raidId (minimal data for leaderboard)
+  async getAllGuildsForRaid(raidId: number): Promise<any[]> {
     const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });
 
-    // Filter each guild's progress array to only include the specified raid
+    // Filter and transform to minimal structure for leaderboard
     return guilds.map((guild) => {
-      const filteredGuild = guild.toObject();
-      filteredGuild.progress = filteredGuild.progress.filter((p) => p.raidId === raidId);
-      return filteredGuild as IGuild;
+      const guildObj = guild.toObject();
+
+      // Filter progress for the specified raid
+      const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+
+      // Transform progress to minimal structure
+      const minimalProgress = raidProgress.map((p) => {
+        // Find current boss (first unkilled boss) to get best pull info
+        const currentBoss = p.bosses.find((b) => b.kills === 0);
+
+        return {
+          raidId: p.raidId,
+          raidName: p.raidName,
+          difficulty: p.difficulty,
+          bossesDefeated: p.bossesDefeated,
+          totalBosses: p.totalBosses,
+          totalTimeSpent: p.totalTimeSpent,
+          currentBossPulls: currentBoss?.pullCount || 0,
+          bestPullPercent: currentBoss?.bestPercent || 0,
+          bestPullPhase: currentBoss?.bestPullPhase,
+        };
+      });
+
+      // Return minimal guild structure
+      return {
+        _id: guildObj._id,
+        name: guildObj.name,
+        realm: guildObj.realm,
+        region: guildObj.region,
+        faction: guildObj.faction,
+        isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+        lastFetched: guildObj.lastFetched,
+        progress: minimalProgress,
+      };
     });
+  }
+
+  // Get detailed guild info for a specific raid (includes full boss progress)
+  async getGuildDetailForRaid(guildId: string, raidId: number): Promise<any | null> {
+    const guild = await Guild.findById(guildId);
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Filter progress for the specified raid only
+    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+
+    return {
+      _id: guildObj._id,
+      name: guildObj.name,
+      realm: guildObj.realm,
+      region: guildObj.region,
+      faction: guildObj.faction,
+      isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+      lastFetched: guildObj.lastFetched,
+      progress: raidProgress, // Full progress with bosses array
+    };
   }
 
   // Get single guild by ID

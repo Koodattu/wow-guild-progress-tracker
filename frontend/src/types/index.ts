@@ -21,6 +21,20 @@ export interface BossProgress {
   lastUpdated: string;
 }
 
+// Minimal progress for leaderboard (without detailed bosses array)
+export interface RaidProgressSummary {
+  raidId: number;
+  raidName: string;
+  difficulty: "mythic" | "heroic";
+  bossesDefeated: number;
+  totalBosses: number;
+  totalTimeSpent: number;
+  currentBossPulls: number;
+  bestPullPercent: number;
+  bestPullPhase?: BestPullPhase;
+}
+
+// Full progress with bosses array (for guild detail view)
 export interface RaidProgress {
   raidId: number;
   raidName: string;
@@ -32,17 +46,28 @@ export interface RaidProgress {
   lastUpdated: string;
 }
 
+// Minimal guild info for leaderboard
+export interface GuildListItem {
+  _id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  isCurrentlyRaiding: boolean;
+  lastFetched?: string;
+  progress: RaidProgressSummary[];
+}
+
+// Full guild info with detailed boss progress (for detail view)
 export interface Guild {
   _id: string;
   name: string;
   realm: string;
   region: string;
   faction?: string;
-  iconUrl?: string;
-  progress: RaidProgress[];
+  isCurrentlyRaiding: boolean;
   lastFetched?: string;
-  createdAt: string;
-  updatedAt: string;
+  progress: RaidProgress[];
 }
 
 export interface Event {
