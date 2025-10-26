@@ -24,7 +24,7 @@ export default function Navigation() {
             <Link
               href="/"
               className={`text-sm font-medium transition-colors ${
-                isActive("/") && !pathname.startsWith("/guilds") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
+                isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
               } py-5`}
             >
               Progress Leaderboard
@@ -34,6 +34,12 @@ export default function Navigation() {
               className={`text-sm font-medium transition-colors ${isActive("/guilds") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
             >
               All Guilds
+            </Link>
+            <Link
+              href="/events"
+              className={`text-sm font-medium transition-colors ${isActive("/events") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+            >
+              Latest Events
             </Link>
           </div>
         </div>

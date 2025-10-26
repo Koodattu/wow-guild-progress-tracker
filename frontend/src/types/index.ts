@@ -142,3 +142,15 @@ export interface Raid extends RaidInfo {
   createdAt?: string; // Optional for backward compatibility
   updatedAt?: string; // Optional for backward compatibility
 }
+
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalCount: number;
+}
+
+export interface EventsResponse {
+  events: Event[];
+  pagination: PaginationInfo;
+}

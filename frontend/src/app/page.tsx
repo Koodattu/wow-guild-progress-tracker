@@ -44,7 +44,7 @@ function HomeContent() {
   const fetchInitialData = useCallback(async () => {
     try {
       setError(null);
-      const [raidsData, eventsData] = await Promise.all([api.getRaids(), api.getEvents(50)]);
+      const [raidsData, eventsData] = await Promise.all([api.getRaids(), api.getEvents(5)]);
 
       setRaids(raidsData);
       setEvents(eventsData);
@@ -238,7 +238,7 @@ function HomeContent() {
     const interval = setInterval(() => {
       if (selectedRaidId !== null) {
         fetchRaidData(selectedRaidId);
-        api.getEvents(50).then(setEvents);
+        api.getEvents(5).then(setEvents);
       }
     }, 30000);
 
@@ -292,7 +292,7 @@ function HomeContent() {
 
           {/* Events Feed - Takes 1/3 on large screens */}
           <div className="lg:col-span-1">
-            <EventsFeed events={events} />
+            <EventsFeed events={events} maxDisplay={5} />
           </div>
         </div>
 

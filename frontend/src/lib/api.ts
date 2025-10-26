@@ -1,4 +1,4 @@
-import { GuildListItem, Guild, GuildSummary, Event, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
+import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -53,13 +53,36 @@ export const api = {
   async getEvents(limit: number = 50): Promise<Event[]> {
     const response = await fetch(`${API_URL}/api/events?limit=${limit}`);
     if (!response.ok) throw new Error("Failed to fetch events");
-    return response.json();
+    const data = await response.json();
+    // Support both old (array) and new (paginated) response formats
+    return Array.isArray(data) ? data : data.events;
+  },
+
+  async getEventsPaginated(page: number = 1, limit: number = 50): Promise<EventsResponse> {
+    const response = await fetch(`${API_URL}/api/events?limit=${limit}&page=${page}`);
+    if (!response.ok) throw new Error("Failed to fetch events");
+    const data = await response.json();
+    // If old format (array), convert to new format
+    if (Array.isArray(data)) {
+      return {
+        events: data,
+        pagination: {
+          page: 1,
+          limit: data.length,
+          totalPages: 1,
+          totalCount: data.length,
+        },
+      };
+    }
+    return data;
   },
 
   async getGuildEvents(guildId: string, limit: number = 50): Promise<Event[]> {
     const response = await fetch(`${API_URL}/api/events/guild/${guildId}?limit=${limit}`);
     if (!response.ok) throw new Error("Failed to fetch guild events");
-    return response.json();
+    const data = await response.json();
+    // Support both old (array) and new (paginated) response formats
+    return Array.isArray(data) ? data : data.events;
   },
 
   // Raid endpoints

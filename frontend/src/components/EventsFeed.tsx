@@ -1,20 +1,35 @@
 "use client";
 
+import Link from "next/link";
 import { Event } from "@/types";
 import { formatEventMessage, getTimeAgo } from "@/lib/utils";
 
 interface EventsFeedProps {
   events: Event[];
+  maxDisplay?: number; // If set, only show this many events and add a "View All" link
+  showHeader?: boolean; // Whether to show the header
 }
 
-export default function EventsFeed({ events }: EventsFeedProps) {
+export default function EventsFeed({ events, maxDisplay, showHeader = true }: EventsFeedProps) {
+  const displayEvents = maxDisplay ? events.slice(0, maxDisplay) : events;
+  const hasMore = maxDisplay && events.length > maxDisplay;
+
   return (
     <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-      <h2 className="text-2xl font-bold text-white mb-4">Latest Events</h2>
+      {showHeader && (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-white">Latest Events</h2>
+          {hasMore && (
+            <Link href="/events" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+              View All →
+            </Link>
+          )}
+        </div>
+      )}
 
-      {events.length > 0 ? (
+      {displayEvents.length > 0 ? (
         <div className="space-y-3">
-          {events.map((event) => (
+          {displayEvents.map((event) => (
             <div
               key={event._id}
               className="border-l-4 border-gray-600 bg-gray-800/50 px-4 py-3 hover:bg-gray-800/70 transition-colors"
