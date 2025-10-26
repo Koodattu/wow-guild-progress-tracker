@@ -782,6 +782,14 @@ class GuildService {
       page++;
     }
 
+    // Update the guild's lastLogEndTime from the database (find most recent report)
+    const mostRecentReport = await Report.findOne({ guildId: guild._id }).sort({ endTime: -1 }).limit(1);
+
+    if (mostRecentReport && mostRecentReport.endTime) {
+      guild.lastLogEndTime = new Date(mostRecentReport.endTime);
+      console.log(`[${guild.name}] Set lastLogEndTime to ${guild.lastLogEndTime.toISOString()}`);
+    }
+
     console.log(`[${guild.name}] Initial fetch complete: ${totalReportsFetched} reports, ${totalFightsSaved} fights saved`);
     return totalFightsSaved > 0;
   }
@@ -973,6 +981,22 @@ class GuildService {
         }
 
         console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} new fights`);
+      }
+    }
+
+    // Update the guild's lastLogEndTime with the most recent report's end time
+    if (recentReports.length > 0) {
+      // Find the most recent report end time (reports are sorted by start time descending)
+      const mostRecentEndTime = Math.max(...recentReports.filter((r: any) => r.endTime && r.endTime > 0).map((r: any) => r.endTime));
+
+      if (mostRecentEndTime > 0 && mostRecentEndTime !== -Infinity) {
+        const newLastLogEndTime = new Date(mostRecentEndTime);
+
+        // Only update if it's newer than what we have
+        if (!guild.lastLogEndTime || newLastLogEndTime > guild.lastLogEndTime) {
+          guild.lastLogEndTime = newLastLogEndTime;
+          console.log(`[${guild.name}] Updated lastLogEndTime to ${newLastLogEndTime.toISOString()}`);
+        }
       }
     }
 

@@ -46,6 +46,8 @@ export interface IGuild extends Document {
   iconUrl?: string;
   progress: IRaidProgress[];
   isCurrentlyRaiding: boolean;
+  lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
+  activityStatus?: "active" | "inactive"; // active = logs within 30 days, inactive = no logs for 30+ days
   lastFetched?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -102,6 +104,8 @@ const GuildSchema: Schema = new Schema(
     iconUrl: { type: String },
     progress: [RaidProgressSchema],
     isCurrentlyRaiding: { type: Boolean, default: false },
+    lastLogEndTime: { type: Date }, // End time of the most recent log
+    activityStatus: { type: String, enum: ["active", "inactive"], default: "active" }, // Track guild activity
     lastFetched: { type: Date },
   },
   {
