@@ -35,6 +35,7 @@ export interface RaidProgressSummary {
   lastKillTime?: string | null; // Timestamp of the most recent boss kill
   worldRank?: number; // World progress rank from WarcraftLogs
   worldRankColor?: string; // Color class for the world rank
+  guildRank?: number; // Rank among tracked guilds (1 = best)
 }
 
 // Full progress with bosses array (for guild detail view)
@@ -48,6 +49,7 @@ export interface RaidProgress {
   bosses: BossProgress[];
   worldRank?: number; // World progress rank from WarcraftLogs
   worldRankColor?: string; // Color class for the world rank
+  guildRank?: number; // Rank among tracked guilds (1 = best)
   lastUpdated: string;
 }
 

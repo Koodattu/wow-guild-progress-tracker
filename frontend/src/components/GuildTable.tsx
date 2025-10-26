@@ -53,6 +53,9 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             const mythicBestPullDisplay = getBestPullDisplayString(mythicProgress);
             const mythicPulls = getCurrentPullCount(mythicProgress);
 
+            // Get guild rank - prefer mythic, fall back to heroic, then use display order
+            const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
+
             // Get world rank - prefer mythic, fall back to heroic
             const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
             const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
@@ -64,7 +67,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 className={`border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}
               >
                 <td className="px-4 py-3 text-center">
-                  <span className={`font-semibold ${getLeaderboardRankColor(index + 1)}`}>{index + 1}</span>
+                  <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span>
                 </td>
                 <td className="px-4 py-3">
                   {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}

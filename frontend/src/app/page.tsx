@@ -84,7 +84,7 @@ function HomeContent() {
 
       setRaidDates(datesData);
 
-      // Sort guilds by proper ranking criteria
+      // Sort guilds by backend-calculated guild rank (lower is better)
       const sortedGuilds = guildsData.sort((a, b) => {
         const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
         const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
@@ -95,53 +95,16 @@ function HomeContent() {
         const aProgress = aMythic || aHeroic;
         const bProgress = bMythic || bHeroic;
 
-        // If neither guild has any progress, they're equal
+        // Guilds without progress go to the end
         if (!aProgress && !bProgress) return 0;
         if (!aProgress) return 1;
         if (!bProgress) return -1;
 
-        // Rule 2: Even one mythic boss kill is better than any number of heroic boss kills
-        const aIsMythic = !!aMythic && aMythic.bossesDefeated > 0;
-        const bIsMythic = !!bMythic && bMythic.bossesDefeated > 0;
+        // Use backend-calculated guildRank (lower is better)
+        const aRank = aProgress.guildRank ?? 999;
+        const bRank = bProgress.guildRank ?? 999;
 
-        if (aIsMythic && !bIsMythic) return -1;
-        if (!aIsMythic && bIsMythic) return 1;
-
-        // Rule 1: Most boss kills first (within the same difficulty tier)
-        const aBossesKilled = aProgress.bossesDefeated;
-        const bBossesKilled = bProgress.bossesDefeated;
-
-        if (aBossesKilled !== bBossesKilled) {
-          return bBossesKilled - aBossesKilled;
-        }
-
-        // Rule 3: If same amount of boss kills, who killed the latest boss first is ranked higher
-        if (aBossesKilled > 0 && bBossesKilled > 0) {
-          const aLastKill = aProgress.lastKillTime ? new Date(aProgress.lastKillTime).getTime() : 0;
-          const bLastKill = bProgress.lastKillTime ? new Date(bProgress.lastKillTime).getTime() : 0;
-
-          if (aLastKill !== bLastKill) {
-            // Earlier kill time = better rank (lower number)
-            return aLastKill - bLastKill;
-          }
-        }
-
-        // Rule 4: If same boss kills and progressing, best pull progress wins
-        // fightCompletion goes from 100 (start) to 0 (end/kill), so LOWER is better
-        const aFightCompletion = aProgress.bestPullPhase?.fightCompletion ?? 100;
-        const bFightCompletion = bProgress.bestPullPhase?.fightCompletion ?? 100;
-
-        if (aFightCompletion !== bFightCompletion) {
-          return aFightCompletion - bFightCompletion; // Lower is better
-        }
-
-        // If still tied, use bestPullPercent as tiebreaker (lower is better)
-        if (aProgress.bestPullPercent !== bProgress.bestPullPercent) {
-          return aProgress.bestPullPercent - bProgress.bestPullPercent;
-        }
-
-        // Final tiebreaker: alphabetically by guild name
-        return a.name.localeCompare(b.name);
+        return aRank - bRank;
       });
 
       setGuilds(sortedGuilds);

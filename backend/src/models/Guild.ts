@@ -34,6 +34,7 @@ export interface IRaidProgress {
   bosses: IBossProgress[];
   worldRank?: number; // World progress rank from WarcraftLogs (always uses highest difficulty)
   worldRankColor?: string; // Color class for the world rank (e.g., "rare", "epic", "legendary")
+  guildRank?: number; // Rank among tracked guilds (1 = best)
   lastUpdated: Date;
 }
 
@@ -86,6 +87,7 @@ const RaidProgressSchema: Schema = new Schema(
     bosses: [BossProgressSchema],
     worldRank: { type: Number }, // World progress rank from WarcraftLogs
     worldRankColor: { type: String }, // Color class for the world rank
+    guildRank: { type: Number }, // Rank among tracked guilds (1 = best)
     lastUpdated: { type: Date, default: Date.now },
   },
   { _id: false }

@@ -337,11 +337,13 @@ class GuildService {
 
       // Update world rankings only if there was new data and only for current raid
       if (hasNewData && isInitialFetch) {
-        // Initial fetch: update ranks for all raids with progress
+        // Initial fetch: update ranks for all raids with progress, then calculate guild rankings
         await this.updateGuildWorldRankings(guildId);
+        await this.calculateGuildRankingsForAllRaids();
       } else if (hasNewData && !isInitialFetch) {
         // Update: only update rank for current raid if not completed
         await this.updateCurrentRaidWorldRanking(guildId);
+        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
       }
 
       console.log(`Successfully updated: ${guild.name}`);
@@ -499,6 +501,133 @@ class GuildService {
       }
     } catch (error) {
       console.error(`[${guild.name}] Error fetching world rank for current raid:`, error);
+    }
+  }
+
+  // Calculate guild rankings for all tracked raids
+  async calculateGuildRankingsForAllRaids(): Promise<void> {
+    console.log("Calculating guild rankings for all tracked raids...");
+
+    for (const raidId of TRACKED_RAIDS) {
+      await this.calculateGuildRankingsForRaid(raidId);
+    }
+
+    console.log("Guild rankings calculation complete for all raids");
+  }
+
+  // Calculate guild rankings for a specific raid
+  // Rankings are calculated per difficulty (mythic and heroic separately)
+  async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
+    console.log(`Calculating guild rankings for raid ${raidId}...`);
+
+    // Get all guilds
+    const guilds = await Guild.find();
+
+    if (guilds.length === 0) {
+      console.log("No guilds found, skipping ranking calculation");
+      return;
+    }
+
+    // Calculate rankings for both difficulties
+    for (const difficulty of ["mythic", "heroic"] as const) {
+      // Collect all guild progress for this raid and difficulty
+      const guildProgressPairs = guilds
+        .map((guild) => {
+          const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+          if (progress && progress.bossesDefeated > 0) {
+            // Only include guilds with at least 1 boss kill
+            return { guild, progress };
+          }
+          return null;
+        })
+        .filter((pair) => pair !== null) as Array<{ guild: IGuild; progress: IRaidProgress }>;
+
+      if (guildProgressPairs.length === 0) {
+        console.log(`No guilds with progress for raid ${raidId} ${difficulty}, skipping ranking`);
+        continue;
+      }
+
+      // Sort guilds according to ranking rules
+      const sortedPairs = guildProgressPairs.sort((a, b) => {
+        const aProgress = a.progress;
+        const bProgress = b.progress;
+
+        // Rule 1: One mythic boss kill is worth more than any number of heroic boss kills
+        // If we're comparing mythic progress, this doesn't apply (both are mythic)
+        // If we're comparing heroic progress, this doesn't apply (both are heroic)
+        // This rule is already enforced by calculating rankings per difficulty
+
+        // Rule 2: Most boss kills first
+        if (aProgress.bossesDefeated !== bProgress.bossesDefeated) {
+          return bProgress.bossesDefeated - aProgress.bossesDefeated; // Higher is better
+        }
+
+        // Rule 3: If all bosses killed, whoever killed the last boss first wins
+        if (aProgress.bossesDefeated === aProgress.totalBosses && bProgress.bossesDefeated === bProgress.totalBosses) {
+          // Both completed - find last boss kill time
+          const aLastBoss = aProgress.bosses.reduce((latest, boss) => {
+            if (boss.kills > 0 && boss.firstKillTime) {
+              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
+                return boss;
+              }
+            }
+            return latest;
+          }, null as any);
+
+          const bLastBoss = bProgress.bosses.reduce((latest, boss) => {
+            if (boss.kills > 0 && boss.firstKillTime) {
+              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
+                return boss;
+              }
+            }
+            return latest;
+          }, null as any);
+
+          if (aLastBoss?.firstKillTime && bLastBoss?.firstKillTime) {
+            const aTime = new Date(aLastBoss.firstKillTime).getTime();
+            const bTime = new Date(bLastBoss.firstKillTime).getTime();
+            return aTime - bTime; // Earlier is better
+          }
+        }
+
+        // Rule 4: If same boss kills and progressing, best pull progress wins
+        // Find the current boss (first unkilled boss)
+        const aCurrentBoss = aProgress.bosses.find((b) => b.kills === 0);
+        const bCurrentBoss = bProgress.bosses.find((b) => b.kills === 0);
+
+        if (aCurrentBoss && bCurrentBoss) {
+          // Compare best pull progress (fightCompletion: lower is better)
+          const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
+          const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
+
+          if (aFightCompletion !== bFightCompletion) {
+            return aFightCompletion - bFightCompletion; // Lower is better
+          }
+
+          // Tiebreaker: bossHealth (lower is better)
+          const aBossHealth = aCurrentBoss.bestPullPhase?.bossHealth ?? aCurrentBoss.bestPercent ?? 100;
+          const bBossHealth = bCurrentBoss.bestPullPhase?.bossHealth ?? bCurrentBoss.bestPercent ?? 100;
+
+          if (aBossHealth !== bBossHealth) {
+            return aBossHealth - bBossHealth; // Lower is better
+          }
+        }
+
+        // Final tiebreaker: alphabetically by guild name
+        return a.guild.name.localeCompare(b.guild.name);
+      });
+
+      // Assign ranks
+      sortedPairs.forEach((pair, index) => {
+        pair.progress.guildRank = index + 1;
+      });
+
+      // Save all guilds with updated ranks
+      for (const pair of sortedPairs) {
+        await pair.guild.save();
+      }
+
+      console.log(`Ranked ${sortedPairs.length} guilds for raid ${raidId} ${difficulty}`);
     }
   }
 
@@ -1239,6 +1368,7 @@ class GuildService {
             lastKillTime: lastKilledBoss?.firstKillTime || null,
             worldRank: p.worldRank,
             worldRankColor: p.worldRankColor,
+            guildRank: p.guildRank,
           };
         });
 
@@ -1312,6 +1442,7 @@ class GuildService {
         lastKillTime: lastKilledBoss?.firstKillTime || null,
         worldRank: p.worldRank,
         worldRankColor: p.worldRankColor,
+        guildRank: p.guildRank,
       };
     });
 

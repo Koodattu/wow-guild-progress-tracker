@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor } from "@/lib/utils";
+import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
 
 interface PageProps {
@@ -284,6 +284,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                             ? formatPercent(mythicProgress.bestPullPercent)
                             : "-";
 
+                          // Get guild rank - prefer mythic, fall back to heroic
+                          const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
+
                           // Get world rank - prefer mythic, fall back to heroic
                           const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
                           const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
@@ -302,7 +305,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   <span className="font-semibold text-white">{raid.name}</span>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-center">-</td>
+                              <td className="px-4 py-3 text-center">
+                                {guildRank ? <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span> : <span className="text-gray-500">-</span>}
+                              </td>
                               <td className="px-4 py-3 text-center">
                                 {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
