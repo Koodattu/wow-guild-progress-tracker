@@ -99,7 +99,7 @@ export default function GuildsPage() {
                     className={`block text-gray-300 hover:text-white transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}
                   >
                     <span className="text-4xl font-semibold">{guild.name}</span>
-                    <span className="text-4xl"> - {guild.realm}</span>
+                    <span className="text-4xl text-gray-400"> - {guild.realm}</span>
                     {guild.isCurrentlyRaiding && <span className="ml-3 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
                   </Link>
                 ))}

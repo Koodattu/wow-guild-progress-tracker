@@ -178,10 +178,10 @@ export default function GuildDetail({ guild, onClose, selectedRaidId, raids, bos
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-5xl w-full my-8 border border-gray-700">
         <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center justify-between rounded-t-lg">
           <div>
-            <h2 className="text-2xl font-bold text-white">{guild.name}</h2>
-            <p className="text-gray-400">
-              {guild.realm} - {guild.region}
-            </p>
+            <h2 className="text-2xl font-bold text-white">
+              {guild.name}
+              <span className="text-gray-400 font-normal"> - {guild.realm}</span>
+            </h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none px-3 py-1">
             ×

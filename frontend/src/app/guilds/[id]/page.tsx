@@ -211,18 +211,11 @@ export default function GuildProfilePage({ params }: PageProps) {
         <div className={`mb-4 flex items-start justify-between ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <h1 className="text-5xl font-bold text-white">{guildSummary.name}</h1>
-              {guildSummary.faction && (
-                <span className={`text-sm px-3 py-1 rounded font-semibold ${guildSummary.faction === "Alliance" ? "bg-blue-900/50 text-blue-300" : "bg-red-900/50 text-red-300"}`}>
-                  {guildSummary.faction}
-                </span>
-              )}
+              <h1 className="text-5xl font-bold text-white">
+                {guildSummary.name}
+                <span className="text-gray-400 font-normal"> - {guildSummary.realm}</span>
+              </h1>
               {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-gray-400 text-lg">
-                {guildSummary.realm} - {guildSummary.region.toUpperCase()}
-              </span>
             </div>
           </div>
           {guildSummary.lastFetched && (

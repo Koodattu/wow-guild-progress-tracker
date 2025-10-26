@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense, useRef } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
+import { GuildListItem, Event, RaidInfo, RaidDates } from "@/types";
 import { api } from "@/lib/api";
 import GuildTable from "@/components/GuildTable";
-import GuildDetail from "@/components/GuildDetail";
 import EventsFeed from "@/components/EventsFeed";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 
@@ -13,25 +12,20 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const isClosingModalRef = useRef(false);
 
   const [guilds, setGuilds] = useState<GuildListItem[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [raids, setRaids] = useState<RaidInfo[]>([]);
-  const [bosses, setBosses] = useState<Boss[]>([]);
   const [raidDates, setRaidDates] = useState<RaidDates | null>(null);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
-  const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
-    (raidId: number | null, guildId: string | null) => {
+    (raidId: number | null) => {
       const params = new URLSearchParams();
       if (raidId) params.set("raidid", raidId.toString());
-      if (guildId) params.set("guildid", guildId);
 
       const queryString = params.toString();
       const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
@@ -51,7 +45,6 @@ function HomeContent() {
 
       // Check URL parameters
       const raidIdParam = searchParams.get("raidid");
-      const guildIdParam = searchParams.get("guildid");
 
       let raidToSelect: number | null = null;
 
@@ -72,16 +65,8 @@ function HomeContent() {
         setSelectedRaidId(raidToSelect);
         // Update URL if raid was auto-selected (not from URL param)
         if (!raidIdParam) {
-          updateURL(raidToSelect, null);
+          updateURL(raidToSelect);
         }
-      }
-
-      setInitialLoadComplete(true);
-
-      // If there's a guild ID in URL, we'll handle it after raid data loads
-      if (guildIdParam && raidToSelect) {
-        // We'll trigger guild selection after guilds are loaded
-        // This is handled in a separate effect below
       }
     } catch (err) {
       console.error("Error fetching initial data:", err);
@@ -91,13 +76,12 @@ function HomeContent() {
     }
   }, [searchParams, updateURL]);
 
-  // Fetch raid-specific data (bosses, dates, and guilds) when raid is selected
+  // Fetch raid-specific data (dates and guilds) when raid is selected
   const fetchRaidData = useCallback(async (raidId: number) => {
     try {
       setError(null);
-      const [bossesData, datesData, guildsData] = await Promise.all([api.getBosses(raidId), api.getRaidDates(raidId), api.getGuilds(raidId)]);
+      const [datesData, guildsData] = await Promise.all([api.getRaidDates(raidId), api.getGuilds(raidId)]);
 
-      setBosses(bossesData);
       setRaidDates(datesData);
 
       // Sort guilds by proper ranking criteria
@@ -179,59 +163,14 @@ function HomeContent() {
     }
   }, [selectedRaidId, fetchRaidData]);
 
-  // Handle guild click - fetch boss progress and merge with existing guild info
+  // Handle guild click - navigate to guild profile page
   const handleGuildClick = useCallback(
     async (guild: GuildListItem) => {
-      if (!selectedRaidId) return;
-
-      try {
-        // Fetch only the boss progress (not the entire guild data again)
-        const bossProgress = await api.getGuildBossProgress(guild._id, selectedRaidId);
-
-        // Merge the guild info we already have with the detailed boss progress
-        const detailedGuild: Guild = {
-          _id: guild._id,
-          name: guild.name,
-          realm: guild.realm,
-          region: guild.region,
-          faction: guild.faction,
-          isCurrentlyRaiding: guild.isCurrentlyRaiding,
-          lastFetched: guild.lastFetched,
-          progress: bossProgress, // Use the full progress with bosses array
-        };
-
-        setSelectedGuild(detailedGuild);
-        // Update URL with guild ID
-        updateURL(selectedRaidId, guild._id);
-      } catch (err) {
-        console.error("Error fetching guild boss progress:", err);
-        setError("Failed to load guild details.");
-      }
+      // Navigate to guild profile page without raid ID
+      router.push(`/guilds/${guild._id}`);
     },
-    [selectedRaidId, updateURL]
+    [router]
   );
-
-  // Handle guild selection from URL parameter after guilds are loaded
-  useEffect(() => {
-    if (!initialLoadComplete || guilds.length === 0 || !selectedRaidId) return;
-
-    const guildIdParam = searchParams.get("guildid");
-
-    // Only open guild if there's a guildid in URL AND we don't have a guild selected
-    // AND we're not in the process of closing the modal
-    if (guildIdParam && !selectedGuild && !isClosingModalRef.current) {
-      // Find the guild in the loaded guilds list
-      const guildToOpen = guilds.find((g) => g._id === guildIdParam);
-      if (guildToOpen) {
-        handleGuildClick(guildToOpen);
-      }
-    }
-
-    // Reset the closing flag after the effect runs
-    if (isClosingModalRef.current) {
-      isClosingModalRef.current = false;
-    }
-  }, [guilds, initialLoadComplete, selectedRaidId, selectedGuild, searchParams, handleGuildClick]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -249,19 +188,10 @@ function HomeContent() {
   const handleRaidSelect = useCallback(
     (raidId: number) => {
       setSelectedRaidId(raidId);
-      setSelectedGuild(null); // Close guild modal when switching raids
-      updateURL(raidId, null);
+      updateURL(raidId);
     },
     [updateURL]
   );
-
-  // Handle closing guild modal
-  const handleCloseGuildModal = useCallback(() => {
-    isClosingModalRef.current = true; // Set flag to prevent reopening
-    setSelectedGuild(null);
-    // Remove guild ID from URL but keep raid ID
-    updateURL(selectedRaidId, null);
-  }, [selectedRaidId, updateURL]);
 
   if (loading) {
     return (
@@ -295,9 +225,6 @@ function HomeContent() {
             <EventsFeed events={events} maxDisplay={5} />
           </div>
         </div>
-
-        {/* Guild Detail Modal */}
-        {selectedGuild && <GuildDetail guild={selectedGuild} onClose={handleCloseGuildModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bosses} />}
       </div>
     </main>
   );

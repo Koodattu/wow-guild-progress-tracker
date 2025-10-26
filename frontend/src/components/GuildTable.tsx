@@ -36,11 +36,10 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
         <thead>
           <tr className="border-b border-gray-700 bg-gray-800/50">
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Rank</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">World</th>
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Guild</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Realm</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">World Rank</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Pull %</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Time Spent</th>
@@ -65,26 +64,23 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 className={`border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}
               >
                 <td className="px-4 py-3 text-sm text-gray-400">{index + 1}</td>
+                <td className="px-4 py-3 text-center">
+                  {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">{guild.name}</span>
-                    {guild.faction && (
-                      <span className={`text-xs px-2 py-0.5 rounded ${guild.faction === "Alliance" ? "bg-blue-900/50 text-blue-300" : "bg-red-900/50 text-red-300"}`}>
-                        {guild.faction}
-                      </span>
-                    )}
+                    <span className="font-semibold text-white">
+                      {guild.name}
+                      <span className="text-gray-400 font-thin text-sm"> - {guild.realm}</span>
+                    </span>
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-400">{guild.realm}</td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
                 </td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicPulls > 0 ? mythicPulls : "-"}</td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">
