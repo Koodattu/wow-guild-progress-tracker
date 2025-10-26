@@ -1,4 +1,4 @@
-import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
+import { GuildListItem, Guild, GuildSummary, Event, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -20,6 +20,24 @@ export const api = {
   async getGuild(id: string): Promise<Guild> {
     const response = await fetch(`${API_URL}/api/guilds/${id}`);
     if (!response.ok) throw new Error("Failed to fetch guild");
+    return response.json();
+  },
+
+  async getGuildSummary(id: string): Promise<GuildSummary> {
+    const response = await fetch(`${API_URL}/api/guilds/${id}/summary`);
+    if (!response.ok) throw new Error("Failed to fetch guild summary");
+    return response.json();
+  },
+
+  async getGuildFullProfile(id: string): Promise<Guild> {
+    const response = await fetch(`${API_URL}/api/guilds/${id}/profile`);
+    if (!response.ok) throw new Error("Failed to fetch guild profile");
+    return response.json();
+  },
+
+  async getAllGuilds(): Promise<GuildListItem[]> {
+    const response = await fetch(`${API_URL}/api/guilds`);
+    if (!response.ok) throw new Error("Failed to fetch all guilds");
     return response.json();
   },
 

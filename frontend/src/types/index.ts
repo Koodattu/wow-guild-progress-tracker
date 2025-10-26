@@ -59,6 +59,18 @@ export interface GuildListItem {
   progress: RaidProgressSummary[];
 }
 
+// Guild with summary progress (for guild profile page initial load)
+export interface GuildSummary {
+  _id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  isCurrentlyRaiding: boolean;
+  lastFetched?: string;
+  progress: RaidProgressSummary[];
+}
+
 // Full guild info with detailed boss progress (for detail view)
 export interface Guild {
   _id: string;

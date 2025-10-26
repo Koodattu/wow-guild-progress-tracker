@@ -1084,6 +1084,75 @@ class GuildService {
     return await Guild.findById(id);
   }
 
+  // Get guild summary with progress summaries (without boss arrays)
+  async getGuildSummary(guildId: string): Promise<any | null> {
+    const guild = await Guild.findById(guildId);
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Transform progress to summary format (without boss arrays)
+    const summaryProgress = guildObj.progress.map((p) => {
+      // Find current boss (first unkilled boss) to get best pull info
+      const currentBoss = p.bosses.find((b) => b.kills === 0);
+
+      // Find the last killed boss to get the most recent kill timestamp
+      const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
+      const lastKilledBoss =
+        killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+
+      return {
+        raidId: p.raidId,
+        raidName: p.raidName,
+        difficulty: p.difficulty,
+        bossesDefeated: p.bossesDefeated,
+        totalBosses: p.totalBosses,
+        totalTimeSpent: p.totalTimeSpent,
+        currentBossPulls: currentBoss?.pullCount || 0,
+        bestPullPercent: currentBoss?.bestPercent || 0,
+        bestPullPhase: currentBoss?.bestPullPhase,
+        lastKillTime: lastKilledBoss?.firstKillTime || null,
+      };
+    });
+
+    return {
+      _id: guildObj._id,
+      name: guildObj.name,
+      realm: guildObj.realm,
+      region: guildObj.region,
+      faction: guildObj.faction,
+      isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+      lastFetched: guildObj.lastFetched,
+      progress: summaryProgress,
+    };
+  }
+
+  // Get full guild profile with all raid progress including boss details
+  async getGuildFullProfile(guildId: string): Promise<any | null> {
+    const guild = await Guild.findById(guildId);
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Return full guild with all progress data
+    return {
+      _id: guildObj._id,
+      name: guildObj.name,
+      realm: guildObj.realm,
+      region: guildObj.region,
+      faction: guildObj.faction,
+      isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+      lastFetched: guildObj.lastFetched,
+      progress: guildObj.progress, // Full progress with boss arrays
+    };
+  }
+
   // Get guilds that need updating (haven't been updated in a while)
   async getGuildsNeedingUpdate(maxAge: number = 5 * 60 * 1000): Promise<IGuild[]> {
     const cutoff = new Date(Date.now() - maxAge);

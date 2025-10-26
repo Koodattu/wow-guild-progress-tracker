@@ -42,7 +42,24 @@ router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
   }
 });
 
-// Get single guild by ID
+// Get single guild by ID with summary progress (without boss details)
+router.get("/:id/summary", async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+    const summary = await guildService.getGuildSummary(guildId);
+
+    if (!summary) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    res.json(summary);
+  } catch (error) {
+    console.error("Error fetching guild summary:", error);
+    res.status(500).json({ error: "Failed to fetch guild summary" });
+  }
+});
+
+// Get single guild by ID with full progress for all raids
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const guild = await guildService.getGuildById(req.params.id);
@@ -55,6 +72,23 @@ router.get("/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching guild:", error);
     res.status(500).json({ error: "Failed to fetch guild" });
+  }
+});
+
+// Get full guild profile with all raid progress (including boss details)
+router.get("/:id/profile", async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+    const fullProfile = await guildService.getGuildFullProfile(guildId);
+
+    if (!fullProfile) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    res.json(fullProfile);
+  } catch (error) {
+    console.error("Error fetching guild profile:", error);
+    res.status(500).json({ error: "Failed to fetch guild profile" });
   }
 });
 

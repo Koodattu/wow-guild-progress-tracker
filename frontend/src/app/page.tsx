@@ -279,21 +279,10 @@ function HomeContent() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 py-8 max-w-[75%]">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">WoW Guild Progress Tracker</h1>
-              <p className="text-gray-400">Tracking World of Warcraft raid progression</p>
-            </div>
-            <div className="flex gap-4 items-center">
-              {/* Raid Selector */}
-              {raids.length > 0 && <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} />}
-            </div>
-          </div>
+        {/* Raid Selector */}
+        <div className="mb-6 flex justify-end">{raids.length > 0 && <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} />}</div>
 
-          {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg">{error}</div>}
-        </div>
+        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
