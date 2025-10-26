@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
       },
     ],
     // Disable image optimization for development to avoid issues with localhost images
-    unoptimized: process.env.NODE_ENV === "development",
+    unoptimized: true, //process.env.NODE_ENV === "development",
   },
 };
 
