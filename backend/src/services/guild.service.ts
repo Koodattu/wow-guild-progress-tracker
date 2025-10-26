@@ -306,10 +306,13 @@ class GuildService {
       const isInitialFetch = !hasAnyReports;
 
       // Fetch reports and process - scope depends on whether initial or update
+      // Note: performUpdate now handles raiding status internally
       const hasNewData = await this.fetchAndProcessReports(guild, isInitialFetch);
 
-      // Update raiding status based on ongoing reports
-      await this.updateRaidingStatus(guild);
+      // For initial fetch, ensure raiding status is set to false
+      if (isInitialFetch) {
+        guild.isCurrentlyRaiding = false;
+      }
 
       guild.lastFetched = new Date();
 
@@ -792,17 +795,7 @@ class GuildService {
     const validBossIds = await this.getValidBossEncounterIdsForRaid(CURRENT_RAID_ID);
     console.log(`[${guild.name}] Current raid has ${validBossIds.size} bosses to track`);
 
-    // Get the latest report we have for this raid
-    const latestReport = await Report.findOne({
-      guildId: guild._id,
-      zoneId: CURRENT_RAID_ID,
-    })
-      .sort({ startTime: -1 })
-      .limit(1);
-
-    const latestReportTime = latestReport ? latestReport.startTime : 0;
-
-    // Check for new reports (lightweight check)
+    // Check for new reports (lightweight check - get last 3 reports)
     const checkData = await wclService.checkForNewReports(
       guild.name,
       guild.realm.toLowerCase().replace(/\s+/g, "-"),
@@ -811,7 +804,6 @@ class GuildService {
       3 // Check last 3 reports
     );
 
-    // log the check data for debugging
     console.log(`[${guild.name}] Report check data:`, JSON.stringify(checkData, null, 2));
 
     if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
@@ -820,20 +812,61 @@ class GuildService {
     }
 
     const recentReports = checkData.reportData.reports.data;
+    const currentTime = Date.now();
+    const THIRTY_MINUTES_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
 
-    // Find new reports and ongoing reports
-    const newReportCodes = recentReports.filter((r: any) => r.startTime > latestReportTime).map((r: any) => r.code);
+    // Determine which reports are "live" (endTime within 30 minutes) or new
+    const reportsToFetch: string[] = [];
+    let hasLiveLog = false;
 
-    const ongoingReportCodes = recentReports.filter((r: any) => !r.endTime || r.endTime === 0).map((r: any) => r.code);
+    for (const report of recentReports) {
+      const reportCode = report.code;
+      const endTime = report.endTime;
+      const startTime = report.startTime;
 
-    const reportsToFetch = [...new Set([...newReportCodes, ...ongoingReportCodes])];
+      // Check if we already have this report in our database
+      const existingReport = await Report.findOne({
+        code: reportCode,
+        guildId: guild._id,
+      });
+
+      // If endTime is within 30 minutes of now, it's a live log
+      const isLive = endTime && currentTime - endTime < THIRTY_MINUTES_MS;
+
+      if (isLive) {
+        hasLiveLog = true;
+        console.log(`[${guild.name}] Report ${reportCode} is LIVE (endTime: ${new Date(endTime).toISOString()}, ${Math.round((currentTime - endTime) / 1000)}s ago)`);
+        reportsToFetch.push(reportCode);
+      } else if (!existingReport) {
+        // New report we haven't seen before
+        console.log(`[${guild.name}] Report ${reportCode} is NEW (not in database)`);
+        reportsToFetch.push(reportCode);
+      } else if (existingReport && existingReport.lastProcessed) {
+        // Check if the report has been updated since we last processed it
+        // We can detect this by comparing the endTime
+        const lastKnownEndTime = existingReport.endTime || 0;
+        if (endTime && endTime > lastKnownEndTime) {
+          console.log(
+            `[${guild.name}] Report ${reportCode} has been UPDATED (endTime changed from ${new Date(lastKnownEndTime).toISOString()} to ${new Date(endTime).toISOString()})`
+          );
+          reportsToFetch.push(reportCode);
+        }
+      }
+    }
+
+    // Update guild raiding status based on whether we found a live log
+    const wasRaiding = guild.isCurrentlyRaiding;
+    guild.isCurrentlyRaiding = hasLiveLog;
+    if (wasRaiding !== guild.isCurrentlyRaiding) {
+      console.log(`[${guild.name}] Raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
+    }
 
     if (reportsToFetch.length === 0) {
-      console.log(`[${guild.name}] No new or ongoing reports for current raid`);
+      console.log(`[${guild.name}] No new or live reports to process for current raid`);
       return false;
     }
 
-    console.log(`[${guild.name}] Found ${reportsToFetch.length} reports to process (${newReportCodes.length} new, ${ongoingReportCodes.length} ongoing)`);
+    console.log(`[${guild.name}] Found ${reportsToFetch.length} reports to process`);
 
     let totalFightsSaved = 0;
 
@@ -847,9 +880,20 @@ class GuildService {
       }
 
       const report = reportData.reportData.report;
+      const reportEndTime = report.endTime || 0;
+      const isLive = reportEndTime && currentTime - reportEndTime < THIRTY_MINUTES_MS;
+
+      // Get existing fights for this report to avoid duplicates
+      const existingFights = await Fight.find({
+        reportCode: report.code,
+        guildId: guild._id,
+      }).select("fightId");
+
+      const existingFightIds = new Set(existingFights.map((f) => f.fightId));
+
+      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights already in database, ${report.fights?.length || 0} fights in report`);
 
       // Save report metadata
-      const isOngoing = !report.endTime || report.endTime === 0;
       await Report.findOneAndUpdate(
         { code: report.code },
         {
@@ -857,8 +901,8 @@ class GuildService {
           guildId: guild._id,
           zoneId: CURRENT_RAID_ID,
           startTime: report.startTime,
-          endTime: report.endTime,
-          isOngoing,
+          endTime: reportEndTime,
+          isOngoing: isLive,
           fightCount: report.fights?.length || 0,
           lastProcessed: new Date(),
         },
@@ -868,12 +912,18 @@ class GuildService {
       // Process fights
       if (report.fights && report.fights.length > 0) {
         const encounterPhases = report.phases || [];
+        let newFightsInThisReport = 0;
 
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
 
           // CRITICAL: Only save fights for current raid bosses
           if (!validBossIds.has(encounterId)) {
+            continue;
+          }
+
+          // Skip if we already have this fight
+          if (existingFightIds.has(fight.id)) {
             continue;
           }
 
@@ -909,7 +959,7 @@ class GuildService {
               })),
               progressDisplay: phaseInfo.progressDisplay,
               reportStartTime: report.startTime,
-              reportEndTime: report.endTime || 0,
+              reportEndTime: reportEndTime,
               fightStartTime: fight.startTime,
               fightEndTime: fight.endTime,
               duration: duration,
@@ -918,12 +968,15 @@ class GuildService {
             { upsert: true, new: true }
           );
 
+          newFightsInThisReport++;
           totalFightsSaved++;
         }
+
+        console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} new fights`);
       }
     }
 
-    console.log(`[${guild.name}] Update complete: ${reportsToFetch.length} reports processed, ${totalFightsSaved} fights saved`);
+    console.log(`[${guild.name}] Update complete: ${reportsToFetch.length} reports processed, ${totalFightsSaved} new fights saved`);
     return totalFightsSaved > 0;
   }
 
@@ -1334,16 +1387,31 @@ class GuildService {
   }
 
   // Check if guild has ongoing reports (currently raiding)
+  // NOTE: This method is now deprecated in favor of the live log detection in performUpdate()
+  // which checks if report endTime is within 30 minutes of current time
+  // Keeping this for backward compatibility and manual status checks
   async updateRaidingStatus(guild: IGuild): Promise<void> {
-    // Check if there are any ongoing reports for this guild in any tracked raid
-    const ongoingReports = await Report.countDocuments({
+    const currentTime = Date.now();
+    const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+
+    // Check if there are any reports with endTime within 30 minutes for this guild
+    const recentReports = await Report.find({
       guildId: guild._id,
       zoneId: { $in: TRACKED_RAIDS },
-      isOngoing: true,
-    });
+    })
+      .sort({ endTime: -1 })
+      .limit(5);
+
+    let hasLiveLog = false;
+    for (const report of recentReports) {
+      if (report.endTime && currentTime - report.endTime < THIRTY_MINUTES_MS) {
+        hasLiveLog = true;
+        break;
+      }
+    }
 
     const wasRaiding = guild.isCurrentlyRaiding;
-    guild.isCurrentlyRaiding = ongoingReports > 0;
+    guild.isCurrentlyRaiding = hasLiveLog;
 
     if (wasRaiding !== guild.isCurrentlyRaiding) {
       console.log(`${guild.name} raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
