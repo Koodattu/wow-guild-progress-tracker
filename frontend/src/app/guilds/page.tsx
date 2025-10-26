@@ -68,7 +68,7 @@ export default function GuildsPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 max-w-5xl">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-4">All Guilds</h1>
           <p className="text-gray-400 mb-6">Browse all guilds tracked in the system</p>
@@ -90,22 +90,16 @@ export default function GuildsPage() {
         {sortedLetters.length === 0 && searchQuery && <div className="text-center py-12 text-gray-500">No guilds found matching &quot;{searchQuery}&quot;</div>}
 
         {/* Guild list grouped by letter */}
-        <div className="space-y-8">
+        <div className="space-y-6">
           {sortedLetters.map((letter) => (
-            <div key={letter} className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-              <h2 className="text-3xl font-bold text-blue-400 mb-4 border-b border-gray-700 pb-2">{letter}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div key={letter}>
+              <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
+              <div className="space-y-1">
                 {groupedGuilds[letter].map((guild) => (
-                  <Link
-                    key={guild._id}
-                    href={`/guilds/${guild._id}`}
-                    className="block px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700 hover:border-gray-600"
-                  >
-                    <div className="font-semibold text-white">{guild.name}</div>
-                    <div className="text-sm text-gray-400">
-                      {guild.realm} - {guild.region.toUpperCase()}
-                    </div>
-                    {guild.faction && <div className="text-xs text-gray-500 mt-1">{guild.faction}</div>}
+                  <Link key={guild._id} href={`/guilds/${guild._id}`} className="block text-gray-300 hover:text-white transition-colors">
+                    <span className="text-4xl font-semibold">{guild.name}</span>
+                    <span className="text-4xl"> - {guild.realm}</span>
+                    <span className="text-4xl"> - {guild.region.toUpperCase()}</span>
                   </Link>
                 ))}
               </div>
