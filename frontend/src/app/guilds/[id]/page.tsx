@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getIconUrl } from "@/lib/utils";
+import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
 
 interface PageProps {
@@ -27,6 +27,7 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [showAllRaids, setShowAllRaids] = useState(false);
 
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
@@ -176,8 +177,9 @@ export default function GuildProfilePage({ params }: PageProps) {
     const mythicProgress = guildSummary.progress.find((p) => p.raidId === raid.id && p.difficulty === "mythic") || null;
     const heroicProgress = guildSummary.progress.find((p) => p.raidId === raid.id && p.difficulty === "heroic") || null;
 
-    // Only include raids where the guild has some progress
-    if (mythicProgress || heroicProgress) {
+    // Include raids based on showAllRaids toggle
+    const hasProgress = mythicProgress || heroicProgress;
+    if (showAllRaids || hasProgress) {
       if (!progressByExpansion.has(raid.expansion)) {
         progressByExpansion.set(raid.expansion, []);
       }
@@ -240,7 +242,22 @@ export default function GuildProfilePage({ params }: PageProps) {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-gray-700 bg-gray-800/50">
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Raid</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">
+                      <div className="flex items-center gap-3">
+                        <span>Raid</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setShowAllRaids(!showAllRaids)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
+                            role="switch"
+                            aria-checked={showAllRaids}
+                          >
+                            <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${showAllRaids ? "translate-x-5" : "translate-x-1"}`} />
+                          </button>
+                          <span className="text-xs text-gray-400 font-normal whitespace-nowrap">Show All</span>
+                        </div>
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Total Time</th>
@@ -269,12 +286,20 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const iconUrl = getIconUrl(raid.iconUrl);
                           const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
                           const currentBossPulls = mythicProgress?.currentBossPulls || 0;
-                          const bestProgress =
-                            mythicProgress?.bestPullPhase?.displayString ||
-                            (mythicProgress && mythicProgress.bestPullPercent < 100 ? formatPercent(mythicProgress.bestPullPercent) : "-");
+                          const bestProgress = mythicProgress?.bestPullPhase?.displayString
+                            ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
+                            : mythicProgress && mythicProgress.bestPullPercent < 100
+                            ? formatPercent(mythicProgress.bestPullPercent)
+                            : "-";
+
+                          // Check if this raid has any progress
+                          const hasProgress = mythicProgress || heroicProgress;
+                          const rowClasses = hasProgress
+                            ? "border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors"
+                            : "border-b border-gray-800 opacity-40 cursor-not-allowed";
 
                           return (
-                            <tr key={raid.id} onClick={() => handleRaidClick(raid.id)} className="border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors">
+                            <tr key={raid.id} onClick={() => hasProgress && handleRaidClick(raid.id)} className={rowClasses}>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
                                   {iconUrl && <Image src={iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
