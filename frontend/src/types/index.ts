@@ -33,6 +33,8 @@ export interface RaidProgressSummary {
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
   lastKillTime?: string | null; // Timestamp of the most recent boss kill
+  worldRank?: number; // World progress rank from WarcraftLogs
+  worldRankColor?: string; // Color class for the world rank
 }
 
 // Full progress with bosses array (for guild detail view)
@@ -44,6 +46,8 @@ export interface RaidProgress {
   totalBosses: number;
   totalTimeSpent: number;
   bosses: BossProgress[];
+  worldRank?: number; // World progress rank from WarcraftLogs
+  worldRankColor?: string; // Color class for the world rank
   lastUpdated: string;
 }
 

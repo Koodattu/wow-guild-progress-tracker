@@ -1,7 +1,7 @@
 "use client";
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
-import { formatTime, formatPercent, formatPhaseDisplay } from "@/lib/utils";
+import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor } from "@/lib/utils";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
@@ -31,7 +31,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
   };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto bg-gray-900 rounded-lg border border-gray-700">
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-700 bg-gray-800/50">
@@ -40,6 +40,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Realm</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">World Rank</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Pull %</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Time Spent</th>
@@ -53,8 +54,16 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             const mythicBestPullDisplay = getBestPullDisplayString(mythicProgress);
             const mythicPulls = getCurrentPullCount(mythicProgress);
 
+            // Get world rank - prefer mythic, fall back to heroic
+            const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+            const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
+
             return (
-              <tr key={guild._id} onClick={() => onGuildClick(guild)} className="border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors">
+              <tr
+                key={guild._id}
+                onClick={() => onGuildClick(guild)}
+                className={`border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}
+              >
                 <td className="px-4 py-3 text-sm text-gray-400">{index + 1}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -64,6 +73,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                         {guild.faction}
                       </span>
                     )}
+                    {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-400">{guild.realm}</td>
@@ -72,6 +82,9 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
                 </td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicPulls > 0 ? mythicPulls : "-"}</td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">

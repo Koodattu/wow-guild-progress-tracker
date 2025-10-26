@@ -92,4 +92,43 @@ router.get("/:id/profile", async (req: Request, res: Response) => {
   }
 });
 
+// DEBUG: Fetch and log guild zone rankings for a specific zone
+router.get("/:id/debug/rankings/:zoneId", async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+    const zoneId = parseInt(req.params.zoneId);
+
+    console.log(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId}, zone ${zoneId}`);
+
+    await guildService.fetchGuildZoneRankings(guildId, zoneId);
+
+    res.json({
+      success: true,
+      message: "Zone rankings fetched. Check server console logs for detailed output.",
+    });
+  } catch (error) {
+    console.error("Error fetching guild zone rankings:", error);
+    res.status(500).json({ error: "Failed to fetch guild zone rankings" });
+  }
+});
+
+// DEBUG: Fetch and log guild zone rankings for current raid
+router.get("/:id/debug/rankings", async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.id;
+
+    console.log(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId} (current raid)`);
+
+    await guildService.fetchGuildZoneRankings(guildId);
+
+    res.json({
+      success: true,
+      message: "Zone rankings fetched. Check server console logs for detailed output.",
+    });
+  } catch (error) {
+    console.error("Error fetching guild zone rankings:", error);
+    res.status(500).json({ error: "Failed to fetch guild zone rankings" });
+  }
+});
+
 export default router;

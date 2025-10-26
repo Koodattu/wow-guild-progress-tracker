@@ -70,9 +70,6 @@ export default function GuildsPage() {
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 max-w-5xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-4">All Guilds</h1>
-          <p className="text-gray-400 mb-6">Browse all guilds tracked in the system</p>
-
           {/* Search box */}
           <input
             type="text"
@@ -96,10 +93,14 @@ export default function GuildsPage() {
               <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
               <div className="space-y-1">
                 {groupedGuilds[letter].map((guild) => (
-                  <Link key={guild._id} href={`/guilds/${guild._id}`} className="block text-gray-300 hover:text-white transition-colors">
+                  <Link
+                    key={guild._id}
+                    href={`/guilds/${guild._id}`}
+                    className={`block text-gray-300 hover:text-white transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}
+                  >
                     <span className="text-4xl font-semibold">{guild.name}</span>
                     <span className="text-4xl"> - {guild.realm}</span>
-                    <span className="text-4xl"> - {guild.region.toUpperCase()}</span>
+                    {guild.isCurrentlyRaiding && <span className="ml-3 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
                   </Link>
                 ))}
               </div>

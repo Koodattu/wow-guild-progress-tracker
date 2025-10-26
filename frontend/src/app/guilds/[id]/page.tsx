@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay } from "@/lib/utils";
+import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
 
 interface PageProps {
@@ -208,7 +208,7 @@ export default function GuildProfilePage({ params }: PageProps) {
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Guild Header */}
-        <div className="mb-4 flex items-start justify-between">
+        <div className={`mb-4 flex items-start justify-between ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
           <div>
             <div className="flex items-center gap-3 mb-3">
               <h1 className="text-5xl font-bold text-white">{guildSummary.name}</h1>
@@ -217,6 +217,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                   {guildSummary.faction}
                 </span>
               )}
+              {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-gray-400 text-lg">
@@ -256,6 +257,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                     </th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500">Mythic</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World Rank</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Total Time</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Best Progress</th>
@@ -269,7 +271,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <Fragment key={`expansion-${expansion}`}>
                         {/* Expansion Separator Row */}
                         <tr className="bg-gray-800/70 border-b border-gray-700">
-                          <td colSpan={6} className="px-4 py-2">
+                          <td colSpan={7} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold text-gray-300">{expansion}</span>
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
@@ -287,6 +289,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                             : mythicProgress && mythicProgress.bestPullPercent < 100
                             ? formatPercent(mythicProgress.bestPullPercent)
                             : "-";
+
+                          // Get world rank - prefer mythic, fall back to heroic
+                          const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+                          const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
 
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;
@@ -307,6 +313,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
                               <td className="px-4 py-3 text-center text-sm text-gray-300">{totalTime > 0 ? formatTime(totalTime) : "-"}</td>
                               <td className="px-4 py-3 text-center text-sm text-gray-300">{currentBossPulls > 0 ? currentBossPulls : "-"}</td>

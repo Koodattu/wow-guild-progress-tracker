@@ -622,6 +622,45 @@ class WarcraftLogsService {
 
     return result;
   }
+
+  /**
+   * Fetch guild zone rankings for a specific zone
+   * Returns world progress ranking (always uses highest difficulty - Mythic)
+   */
+  async getGuildZoneRanking(guildName: string, serverSlug: string, serverRegion: string, zoneId: number) {
+    const query = `
+      query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        guildData {
+          guild(name: $guildName, serverSlug: $serverSlug, serverRegion: $serverRegion) {
+            name
+            id
+            zoneRanking(zoneId: $zoneId) {
+              progress {
+                worldRank {
+                  number
+                  color
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      guildName,
+      serverSlug,
+      serverRegion,
+      zoneId,
+    };
+
+    return this.query<any>(query, variables);
+  }
 }
 
 export default new WarcraftLogsService();

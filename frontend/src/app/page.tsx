@@ -276,14 +276,14 @@ function HomeContent() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4 py-8 max-w-[75%]">
+      <div className="container mx-auto px-4 max-w-[85%]">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Guild List - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
-            <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
+            <div className="">
               {/* Integrated Raid Selector - replaces both the dropdown and the header */}
               {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
               <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />

@@ -82,10 +82,34 @@ export default function GuildDetail({ guild, onClose, selectedRaidId, raids, bos
       bossDefaultOrderMap.set(boss.id, index + 1);
     });
 
+    // Create a map of existing progress data
+    const progressMap = new Map<number, BossProgress>();
+    progress.bosses.forEach((boss) => {
+      progressMap.set(boss.bossId, boss);
+    });
+
+    // Merge all bosses with progress data (create placeholder for missing bosses)
+    const allBossesWithProgress: BossProgress[] = bosses.map((boss) => {
+      const existingProgress = progressMap.get(boss.id);
+      if (existingProgress) {
+        return existingProgress;
+      }
+      // Create a placeholder for bosses with no progress
+      return {
+        bossId: boss.id,
+        bossName: boss.name,
+        kills: 0,
+        bestPercent: 100,
+        pullCount: 0,
+        timeSpent: 0,
+        lastUpdated: new Date().toISOString(),
+      };
+    });
+
     // Sort bosses for display:
     // 1. Unkilled bosses first, in reverse default order (last boss first)
     // 2. Then killed bosses, in reverse kill order (most recent kill first)
-    const sortedBosses = [...progress.bosses].sort((a, b) => {
+    const sortedBosses = [...allBossesWithProgress].sort((a, b) => {
       const aKilled = a.kills > 0;
       const bKilled = b.kills > 0;
 

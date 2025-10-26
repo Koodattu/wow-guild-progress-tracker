@@ -332,12 +332,109 @@ class GuildService {
         console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
       }
 
+      // Update world rankings for raids with progress
+      await this.updateGuildWorldRankings(guildId);
+
       console.log(`Successfully updated: ${guild.name}`);
       return guild;
     } catch (error) {
       console.error(`Error updating guild ${guild.name}:`, error);
       return null;
     }
+  }
+
+  // Fetch and log guild zone rankings for debugging
+  async fetchGuildZoneRankings(guildId: string, zoneId?: number): Promise<void> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      console.error(`Guild not found: ${guildId}`);
+      return;
+    }
+
+    console.log(`\n========== FETCHING ZONE RANKINGS FOR ${guild.name} ==========`);
+
+    // If no zoneId specified, use the current raid
+    const targetZoneId = zoneId || CURRENT_RAID_ID;
+
+    try {
+      // Get raid info
+      const raid = await this.getRaidData(targetZoneId);
+      if (!raid) {
+        console.error(`Raid not found for zone ID: ${targetZoneId}`);
+        return;
+      }
+
+      console.log(`Raid: ${raid.name} (Zone ID: ${targetZoneId})`);
+      console.log(`Bosses: ${raid.bosses?.length || 0}\n`);
+
+      try {
+        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), targetZoneId);
+
+        // Debug: Log the entire result structure
+        console.log(`Full API Response:`);
+        console.log(JSON.stringify(result, null, 2));
+
+        // Access the ranking data
+        const zoneRanking = result.guildData?.guild?.zoneRanking;
+
+        if (zoneRanking?.progress?.worldRank) {
+          const worldRank = zoneRanking.progress.worldRank;
+          console.log(`\n✅ World Progress Rank: #${worldRank.number} (${worldRank.color})`);
+        } else {
+          console.log(`\n⚠️  No world rank data found`);
+        }
+      } catch (error) {
+        console.error(`Error fetching rankings:`, error);
+      }
+
+      console.log(`\n========== END ZONE RANKINGS FOR ${guild.name} ==========\n`);
+    } catch (error) {
+      console.error(`Error in fetchGuildZoneRankings:`, error);
+    }
+  }
+
+  // Update world rankings for all raids the guild has progress in
+  async updateGuildWorldRankings(guildId: string): Promise<void> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      console.error(`Guild not found: ${guildId}`);
+      return;
+    }
+
+    console.log(`[${guild.name}] Updating world rankings...`);
+
+    // Only update rankings for raids where the guild has made progress
+    const raidsWithProgress = guild.progress.filter((p) => p.bossesDefeated > 0);
+
+    if (raidsWithProgress.length === 0) {
+      console.log(`[${guild.name}] No raids with progress, skipping world rank update`);
+      return;
+    }
+
+    for (const raidProgress of raidsWithProgress) {
+      try {
+        console.log(`[${guild.name}] Fetching world rank for ${raidProgress.raidName}...`);
+
+        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidProgress.raidId);
+
+        const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
+
+        if (worldRank?.number) {
+          // Update the world rank in the guild's progress
+          raidProgress.worldRank = worldRank.number;
+          raidProgress.worldRankColor = worldRank.color;
+          console.log(`[${guild.name}] ${raidProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+        } else {
+          console.log(`[${guild.name}] ${raidProgress.raidName}: No world rank data available`);
+        }
+      } catch (error) {
+        console.error(`[${guild.name}] Error fetching world rank for ${raidProgress.raidName}:`, error);
+      }
+    }
+
+    // Save the updated guild with world rankings
+    await guild.save();
+    console.log(`[${guild.name}] World rankings updated and saved`);
   }
 
   // Fetch all reports for a guild and process both Mythic and Heroic from the same data
@@ -506,8 +603,11 @@ class GuildService {
       guild.realm.toLowerCase().replace(/\s+/g, "-"),
       guild.region.toLowerCase(),
       CURRENT_RAID_ID,
-      10 // Check last 10 reports
+      3 // Check last 3 reports
     );
+
+    // log the check data for debugging
+    console.log(`[${guild.name}] Report check data:`, JSON.stringify(checkData, null, 2));
 
     if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
       console.log(`[${guild.name}] No reports found for current raid`);
