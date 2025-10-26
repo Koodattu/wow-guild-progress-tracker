@@ -91,7 +91,7 @@ class UpdateScheduler {
     console.log("    * Active guilds: every 60 minutes");
     console.log("    * Inactive guilds: once daily at 10:00");
 
-    // Do an initial update
+    // Do an initial update based on current time
     if (this.isHotHours()) {
       console.log("Currently HOT HOURS - starting initial active guild check");
       this.updateActiveGuilds();

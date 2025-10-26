@@ -279,13 +279,22 @@ class GuildService {
       });
 
       if (!existing) {
-        await Guild.create({
+        const newGuild = await Guild.create({
           name: guildConfig.name,
           realm: guildConfig.realm,
           region: guildConfig.region,
           progress: [],
         });
         console.log(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
+
+        // Immediately fetch initial data for the newly created guild
+        console.log(`Fetching initial data for: ${guildConfig.name} - ${guildConfig.realm}`);
+        try {
+          await this.updateGuildProgress(String(newGuild._id));
+          console.log(`Initial fetch completed for: ${guildConfig.name} - ${guildConfig.realm}`);
+        } catch (error) {
+          console.error(`Error during initial fetch for ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
+        }
       }
     }
   }
