@@ -964,14 +964,22 @@ class GuildService {
   }
 
   // Calculate statistics for a specific raid and difficulty from database fights
+  // IMPORTANT: This method now properly filters fights by the raid's boss encounter IDs
+  // to prevent unrelated bosses from being included in the statistics
   private async calculateRaidStatistics(guild: IGuild, raidData: IRaid, difficulty: "mythic" | "heroic"): Promise<void> {
     const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
 
+    // Get valid boss encounter IDs for this specific raid
+    const validBossIds = await this.getValidBossEncounterIdsForRaid(raidData.id);
+    console.log(`[${guild.name}] Valid boss IDs for ${raidData.name}: ${Array.from(validBossIds).join(", ")}`);
+
     // Get all fights from database for this guild, raid, and difficulty
+    // IMPORTANT: Also filter by encounterID to ensure we only get bosses that belong to this raid
     const fights = await Fight.find({
       guildId: guild._id as mongoose.Types.ObjectId,
       zoneId: raidData.id,
       difficulty: difficultyId,
+      encounterID: { $in: Array.from(validBossIds) }, // Only include fights for bosses in this raid
     }).sort({ timestamp: 1 }); // Sort by timestamp (oldest first) for proper kill order tracking
 
     if (fights.length === 0) {
@@ -1207,8 +1215,21 @@ class GuildService {
       console.log(`[${guild.name}] Created new ${difficulty} progress entry for ${raidData.name}`);
     }
 
-    // Process each boss
+    // First, remove any bosses that don't belong to this raid (cleanup old invalid data)
+    const initialBossCount = raidProgress.bosses.length;
+    raidProgress.bosses = raidProgress.bosses.filter((b) => validBossIds.has(b.bossId));
+    if (raidProgress.bosses.length < initialBossCount) {
+      console.log(`[${guild.name}] Removed ${initialBossCount - raidProgress.bosses.length} invalid boss(es) that don't belong to ${raidData.name} (${difficulty})`);
+    }
+
+    // Process each boss from our calculated data
     for (const [encounterId, bossInfo] of bossDataMap.entries()) {
+      // Double-check this boss belongs to the raid (should always be true due to earlier filtering)
+      if (!validBossIds.has(encounterId)) {
+        console.warn(`[${guild.name}] Skipping boss ${bossInfo.name} (ID: ${encounterId}) - not in raid ${raidData.name}'s boss list`);
+        continue;
+      }
+
       let bossProgress = raidProgress.bosses.find((b) => b.bossId === encounterId);
 
       const bossData: IBossProgress = {
@@ -1239,12 +1260,15 @@ class GuildService {
       }
     }
 
-    // Recalculate totals from ALL bosses
+    // Recalculate totals from only the valid bosses that belong to this raid
     let totalTime = 0;
     let defeatedCount = 0;
     for (const boss of raidProgress.bosses) {
-      totalTime += boss.timeSpent;
-      if (boss.kills > 0) defeatedCount++;
+      // Extra safety check - only count bosses that belong to this raid
+      if (validBossIds.has(boss.bossId)) {
+        totalTime += boss.timeSpent;
+        if (boss.kills > 0) defeatedCount++;
+      }
     }
 
     raidProgress.bossesDefeated = defeatedCount;
