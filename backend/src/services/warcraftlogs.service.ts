@@ -78,7 +78,7 @@ class WarcraftLogsService {
     await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay = max 600 requests/minute
   }
 
-  async query<T>(query: string, variables?: any): Promise<T> {
+  async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false): Promise<T> {
     await this.rateLimitCheck();
     const token = await this.authenticate();
 
@@ -97,7 +97,14 @@ class WarcraftLogsService {
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default to 60s if not specified
       console.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return this.query<T>(query, variables); // Retry the request
+      return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
+    }
+
+    // Handle gateway timeouts with infinite retry (only for initial fetch)
+    if (retryOnGatewayTimeout && (response.status === 504 || response.statusText === "Gateway Time-out")) {
+      console.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, 15000)); // Wait 15 seconds
+      return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
     }
 
     if (!response.ok) {
@@ -162,7 +169,7 @@ class WarcraftLogsService {
 
   // Get guild reports with full fight data - NO zone filter (for initial fetch)
   // This fetches all reports across all content (raids, dungeons, etc.)
-  async getGuildReportsWithFights(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10, page: number = 1) {
+  async getGuildReportsWithFights(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10, page: number = 1, retryOnGatewayTimeout: boolean = false) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -225,7 +232,7 @@ class WarcraftLogsService {
       page,
     };
 
-    return this.query<any>(query, variables);
+    return this.query<any>(query, variables, retryOnGatewayTimeout);
   }
 
   // Lightweight check for new reports - only fetches codes and timestamps, no fights data

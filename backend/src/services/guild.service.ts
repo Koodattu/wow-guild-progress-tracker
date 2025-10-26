@@ -678,7 +678,7 @@ class GuildService {
     let totalFightsSaved = 0;
 
     while (page <= maxPages) {
-      const data = await wclService.getGuildReportsWithFights(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), reportsPerPage, page);
+      const data = await wclService.getGuildReportsWithFights(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), reportsPerPage, page, true);
 
       if (!data.reportData?.reports?.data || data.reportData.reports.data.length === 0) {
         console.log(`[${guild.name}] No more reports found at page ${page}`);
