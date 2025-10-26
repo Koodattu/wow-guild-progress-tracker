@@ -900,7 +900,7 @@ class GuildService {
         firstKillReportCode: bossInfo.firstKillReportCode,
         firstKillFightId: bossInfo.firstKillFightId,
         killOrder: killOrderMap.get(encounterId),
-        bestPullPhase: bossInfo.bestPullPhase,
+        bestPullPhase: bossInfo.kills > 0 ? undefined : bossInfo.bestPullPhase,
         lastUpdated: new Date(),
       };
 
