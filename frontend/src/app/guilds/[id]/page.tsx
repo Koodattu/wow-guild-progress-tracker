@@ -248,9 +248,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                         </div>
                       </div>
                     </th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Rank</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500">Mythic</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World Rank</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Total Time</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Best Progress</th>
@@ -301,14 +302,15 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   <span className="font-semibold text-white">{raid.name}</span>
                                 </div>
                               </td>
+                              <td className="px-4 py-3 text-center">-</td>
+                              <td className="px-4 py-3 text-center">
+                                {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
+                              </td>
                               <td className="px-4 py-3 text-center">
                                 <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
                               <td className="px-4 py-3 text-center text-sm text-gray-300">{totalTime > 0 ? formatTime(totalTime) : "-"}</td>
                               <td className="px-4 py-3 text-center text-sm text-gray-300">{currentBossPulls > 0 ? currentBossPulls : "-"}</td>

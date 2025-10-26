@@ -1,7 +1,7 @@
 "use client";
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
-import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor } from "@/lib/utils";
+import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
@@ -35,8 +35,8 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-700 bg-gray-800/50">
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Rank</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">World</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Rank</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">World</th>
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Guild</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
@@ -63,9 +63,11 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 onClick={() => onGuildClick(guild)}
                 className={`border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}
               >
-                <td className="px-4 py-3 text-sm text-gray-400">{index + 1}</td>
                 <td className="px-4 py-3 text-center">
-                  {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>#{worldRank}</span> : <span className="text-gray-500">-</span>}
+                  <span className={`font-semibold ${getLeaderboardRankColor(index + 1)}`}>{index + 1}</span>
+                </td>
+                <td className="px-4 py-3">
+                  {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

@@ -1144,6 +1144,8 @@ class GuildService {
             bestPullPercent: currentBoss?.bestPercent || 0,
             bestPullPhase: currentBoss?.bestPullPhase,
             lastKillTime: lastKilledBoss?.firstKillTime || null,
+            worldRank: p.worldRank,
+            worldRankColor: p.worldRankColor,
           };
         });
 
@@ -1215,6 +1217,8 @@ class GuildService {
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
         lastKillTime: lastKilledBoss?.firstKillTime || null,
+        worldRank: p.worldRank,
+        worldRankColor: p.worldRankColor,
       };
     });
 

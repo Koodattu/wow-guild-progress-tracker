@@ -123,3 +123,11 @@ export function getWorldRankColor(color: string | undefined): string {
       return "text-gray-300";
   }
 }
+
+// Get Tailwind color class for leaderboard rank (1-5 orange, 6-20 purple, 21-50 blue, rest green)
+export function getLeaderboardRankColor(rank: number): string {
+  if (rank <= 5) return "text-orange-500"; // Legendary
+  if (rank <= 20) return "text-purple-500"; // Epic
+  if (rank <= 50) return "text-blue-400"; // Rare
+  return "text-green-500"; // Uncommon
+}
