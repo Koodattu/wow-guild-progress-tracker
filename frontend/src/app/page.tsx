@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import Image from "next/image";
 import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
 import { api } from "@/lib/api";
-import { getIconUrl } from "@/lib/utils";
 import GuildTable from "@/components/GuildTable";
 import GuildDetail from "@/components/GuildDetail";
 import EventsFeed from "@/components/EventsFeed";
-import RaidSelector from "@/components/RaidSelector";
+import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -279,9 +277,6 @@ function HomeContent() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 py-8 max-w-[75%]">
-        {/* Raid Selector */}
-        <div className="mb-6 flex justify-end">{raids.length > 0 && <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} />}</div>
-
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 
         {/* Main Content Grid */}
@@ -289,51 +284,8 @@ function HomeContent() {
           {/* Guild List - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-              {(() => {
-                const selectedRaid = raids.find((r) => r.id === selectedRaidId);
-                if (!selectedRaid) return null;
-
-                const iconUrl = getIconUrl(selectedRaid.iconUrl);
-                const expansionIconPath = selectedRaid.expansion.toLowerCase().replace(/\s+/g, "-");
-
-                // Format dates (EU by default)
-                const formatDate = (dateString?: string) => {
-                  if (!dateString) return "N/A";
-                  return new Date(dateString).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  });
-                };
-
-                const startDate = formatDate(raidDates?.starts?.eu);
-                const endDate = formatDate(raidDates?.ends?.eu);
-
-                return (
-                  <div className="mb-4">
-                    {/* Expansion name and icon */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-bold text-gray-400">{selectedRaid.expansion}</span>
-                      <Image src={`/expansions/${expansionIconPath}.png`} alt={`${selectedRaid.expansion} icon`} height={20} width={32} />
-                    </div>
-
-                    {/* Raid name, icon, and dates */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {iconUrl && <Image src={iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />}
-                        <h2 className="text-2xl font-bold">{selectedRaid.name}</h2>
-                      </div>
-
-                      {/* Season dates */}
-                      <div className="text-right text-sm text-gray-400">
-                        <div>
-                          {startDate} - {endDate}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* Integrated Raid Selector - replaces both the dropdown and the header */}
+              {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
               <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />
             </div>
           </div>
