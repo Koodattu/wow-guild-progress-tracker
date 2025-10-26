@@ -301,9 +301,12 @@ class GuildService {
     console.log(`Updating guild: ${guild.name} - ${guild.realm}`);
 
     try {
-      // Fetch reports once and process both difficulties from the same data
-      // This is much more efficient than fetching separately for mythic and heroic
-      await this.fetchAndProcessAllReports(guild);
+      // Determine if this is an initial fetch by checking if guild has any reports at all
+      const hasAnyReports = await Report.exists({ guildId: guild._id });
+      const isInitialFetch = !hasAnyReports;
+
+      // Fetch reports and process - scope depends on whether initial or update
+      const hasNewData = await this.fetchAndProcessReports(guild, isInitialFetch);
 
       // Update raiding status based on ongoing reports
       await this.updateRaidingStatus(guild);
@@ -332,8 +335,14 @@ class GuildService {
         console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
       }
 
-      // Update world rankings for raids with progress
-      await this.updateGuildWorldRankings(guildId);
+      // Update world rankings only if there was new data and only for current raid
+      if (hasNewData && isInitialFetch) {
+        // Initial fetch: update ranks for all raids with progress
+        await this.updateGuildWorldRankings(guildId);
+      } else if (hasNewData && !isInitialFetch) {
+        // Update: only update rank for current raid if not completed
+        await this.updateCurrentRaidWorldRanking(guildId);
+      }
 
       console.log(`Successfully updated: ${guild.name}`);
       return guild;
@@ -437,28 +446,93 @@ class GuildService {
     console.log(`[${guild.name}] World rankings updated and saved`);
   }
 
-  // Fetch all reports for a guild and process both Mythic and Heroic from the same data
-  private async fetchAndProcessAllReports(guild: IGuild): Promise<void> {
-    // Determine if this is an initial fetch by checking if guild has any reports at all
-    const hasAnyReports = await Report.exists({ guildId: guild._id });
-    const isInitialFetch = !hasAnyReports;
+  // Update world ranking for only the current raid
+  // Skip if guild has completed the current raid (all mythic bosses defeated)
+  async updateCurrentRaidWorldRanking(guildId: string): Promise<void> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      console.error(`Guild not found: ${guildId}`);
+      return;
+    }
+
+    // Find the current raid data to get total boss count
+    const currentRaidData = await this.getRaidData(CURRENT_RAID_ID);
+    if (!currentRaidData) {
+      console.warn(`[${guild.name}] Current raid data not found (ID: ${CURRENT_RAID_ID}), skipping world rank update`);
+      return;
+    }
+
+    // Find mythic progress for current raid
+    const mythicProgress = guild.progress.find((p) => p.raidId === CURRENT_RAID_ID && p.difficulty === "mythic");
+
+    if (!mythicProgress) {
+      console.log(`[${guild.name}] No mythic progress for current raid, skipping world rank update`);
+      return;
+    }
+
+    // Check if guild has completed all mythic bosses
+    const hasCompletedMythic = mythicProgress.bossesDefeated >= currentRaidData.bosses.length;
+
+    if (hasCompletedMythic) {
+      console.log(`[${guild.name}] Has completed current raid mythic (${mythicProgress.bossesDefeated}/${currentRaidData.bosses.length}), world rank is final - skipping update`);
+      return;
+    }
+
+    console.log(`[${guild.name}] Updating world rank for current raid only (${mythicProgress.raidName})...`);
+
+    try {
+      const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), CURRENT_RAID_ID);
+
+      const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
+
+      if (worldRank?.number) {
+        // Update the world rank in mythic progress
+        mythicProgress.worldRank = worldRank.number;
+        mythicProgress.worldRankColor = worldRank.color;
+        console.log(`[${guild.name}] ${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+
+        // Save the updated guild
+        await guild.save();
+        console.log(`[${guild.name}] Current raid world rank updated`);
+      } else {
+        console.log(`[${guild.name}] ${mythicProgress.raidName}: No world rank data available`);
+      }
+    } catch (error) {
+      console.error(`[${guild.name}] Error fetching world rank for current raid:`, error);
+    }
+  }
+
+  // Fetch reports for a guild and process both Mythic and Heroic from the same data
+  // Returns true if new data was found and processed
+  private async fetchAndProcessReports(guild: IGuild, isInitialFetch: boolean): Promise<boolean> {
+    let hasNewData = false;
 
     if (isInitialFetch) {
       // Initial fetch: Get ALL reports across all content, filter by tracked raid bosses
       console.log(`[${guild.name}] INITIAL FETCH - fetching all historical reports`);
-      await this.performInitialFetch(guild);
+      hasNewData = await this.performInitialFetch(guild);
+
+      // Calculate statistics from database fights for ALL tracked raids (initial setup)
+      await this.calculateGuildStatistics(guild, null);
     } else {
       // Update: Only check the current raid for new reports
       console.log(`[${guild.name}] UPDATE - checking only current raid (ID: ${CURRENT_RAID_ID})`);
-      await this.performUpdate(guild);
+      hasNewData = await this.performUpdate(guild);
+
+      // Only recalculate statistics for the current raid if we found new data
+      if (hasNewData) {
+        await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+      } else {
+        console.log(`[${guild.name}] No new data for current raid, skipping statistics recalculation`);
+      }
     }
 
-    // Calculate statistics from database fights for all tracked raids
-    await this.calculateGuildStatistics(guild);
+    return hasNewData;
   }
 
   // Initial fetch: Get ALL reports for guild (no zone filter), save to DB
-  private async performInitialFetch(guild: IGuild): Promise<void> {
+  // Returns true if any data was found and saved
+  private async performInitialFetch(guild: IGuild): Promise<boolean> {
     console.log(`[${guild.name}] Performing initial fetch of all reports`);
 
     // Get valid boss encounter IDs from all tracked raids
@@ -577,10 +651,12 @@ class GuildService {
     }
 
     console.log(`[${guild.name}] Initial fetch complete: ${totalReportsFetched} reports, ${totalFightsSaved} fights saved`);
+    return totalFightsSaved > 0;
   }
 
   // Update: Check only the current raid for new reports
-  private async performUpdate(guild: IGuild): Promise<void> {
+  // Returns true if new data was found and saved
+  private async performUpdate(guild: IGuild): Promise<boolean> {
     console.log(`[${guild.name}] Checking for updates on current raid (ID: ${CURRENT_RAID_ID})`);
 
     // Get valid boss encounter IDs for the current raid only
@@ -611,7 +687,7 @@ class GuildService {
 
     if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
       console.log(`[${guild.name}] No reports found for current raid`);
-      return;
+      return false;
     }
 
     const recentReports = checkData.reportData.reports.data;
@@ -625,7 +701,7 @@ class GuildService {
 
     if (reportsToFetch.length === 0) {
       console.log(`[${guild.name}] No new or ongoing reports for current raid`);
-      return;
+      return false;
     }
 
     console.log(`[${guild.name}] Found ${reportsToFetch.length} reports to process (${newReportCodes.length} new, ${ongoingReportCodes.length} ongoing)`);
@@ -719,23 +795,40 @@ class GuildService {
     }
 
     console.log(`[${guild.name}] Update complete: ${reportsToFetch.length} reports processed, ${totalFightsSaved} fights saved`);
+    return totalFightsSaved > 0;
   }
 
-  // Calculate guild statistics from database fights for all tracked raids
-  private async calculateGuildStatistics(guild: IGuild): Promise<void> {
-    console.log(`[${guild.name}] Calculating statistics from database fights`);
+  // Calculate guild statistics from database fights
+  // If raidId is provided, only calculate for that raid (used during updates)
+  // If raidId is null, calculate for all tracked raids (used during initial fetch)
+  private async calculateGuildStatistics(guild: IGuild, raidId: number | null): Promise<void> {
+    if (raidId !== null) {
+      console.log(`[${guild.name}] Calculating statistics for current raid only (ID: ${raidId})`);
 
-    // Process each tracked raid
-    for (const raidId of TRACKED_RAIDS) {
       const raidData = await this.getRaidData(raidId);
       if (!raidData) {
         console.warn(`[${guild.name}] Raid data not found for zone ${raidId}, skipping`);
-        continue;
+        return;
       }
 
       // Calculate for both difficulties
       await this.calculateRaidStatistics(guild, raidData, "mythic");
       await this.calculateRaidStatistics(guild, raidData, "heroic");
+    } else {
+      console.log(`[${guild.name}] Calculating statistics from database fights for all tracked raids`);
+
+      // Process each tracked raid
+      for (const trackedRaidId of TRACKED_RAIDS) {
+        const raidData = await this.getRaidData(trackedRaidId);
+        if (!raidData) {
+          console.warn(`[${guild.name}] Raid data not found for zone ${trackedRaidId}, skipping`);
+          continue;
+        }
+
+        // Calculate for both difficulties
+        await this.calculateRaidStatistics(guild, raidData, "mythic");
+        await this.calculateRaidStatistics(guild, raidData, "heroic");
+      }
     }
 
     console.log(`[${guild.name}] Statistics calculation complete`);
