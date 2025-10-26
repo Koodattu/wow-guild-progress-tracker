@@ -1016,48 +1016,53 @@ class GuildService {
     const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });
 
     // Filter and transform to minimal structure for leaderboard
-    return guilds.map((guild) => {
-      const guildObj = guild.toObject();
+    return guilds
+      .map((guild) => {
+        const guildObj = guild.toObject();
 
-      // Filter progress for the specified raid
-      const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+        // Filter progress for the specified raid
+        const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
 
-      // Transform progress to minimal structure
-      const minimalProgress = raidProgress.map((p) => {
-        // Find current boss (first unkilled boss) to get best pull info
-        const currentBoss = p.bosses.find((b) => b.kills === 0);
+        // Transform progress to minimal structure
+        const minimalProgress = raidProgress.map((p) => {
+          // Find current boss (first unkilled boss) to get best pull info
+          const currentBoss = p.bosses.find((b) => b.kills === 0);
 
-        // Find the last killed boss to get the most recent kill timestamp
-        const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
-        const lastKilledBoss =
-          killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+          // Find the last killed boss to get the most recent kill timestamp
+          const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
+          const lastKilledBoss =
+            killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
 
+          return {
+            raidId: p.raidId,
+            raidName: p.raidName,
+            difficulty: p.difficulty,
+            bossesDefeated: p.bossesDefeated,
+            totalBosses: p.totalBosses,
+            totalTimeSpent: p.totalTimeSpent,
+            currentBossPulls: currentBoss?.pullCount || 0,
+            bestPullPercent: currentBoss?.bestPercent || 0,
+            bestPullPhase: currentBoss?.bestPullPhase,
+            lastKillTime: lastKilledBoss?.firstKillTime || null,
+          };
+        });
+
+        // Return minimal guild structure
         return {
-          raidId: p.raidId,
-          raidName: p.raidName,
-          difficulty: p.difficulty,
-          bossesDefeated: p.bossesDefeated,
-          totalBosses: p.totalBosses,
-          totalTimeSpent: p.totalTimeSpent,
-          currentBossPulls: currentBoss?.pullCount || 0,
-          bestPullPercent: currentBoss?.bestPercent || 0,
-          bestPullPhase: currentBoss?.bestPullPhase,
-          lastKillTime: lastKilledBoss?.firstKillTime || null,
+          _id: guildObj._id,
+          name: guildObj.name,
+          realm: guildObj.realm,
+          region: guildObj.region,
+          faction: guildObj.faction,
+          isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+          lastFetched: guildObj.lastFetched,
+          progress: minimalProgress,
         };
+      })
+      .filter((guild) => {
+        // Only include guilds that have killed at least one boss (on any difficulty) for this raid
+        return guild.progress.some((p) => p.bossesDefeated > 0);
       });
-
-      // Return minimal guild structure
-      return {
-        _id: guildObj._id,
-        name: guildObj.name,
-        realm: guildObj.realm,
-        region: guildObj.region,
-        faction: guildObj.faction,
-        isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
-        lastFetched: guildObj.lastFetched,
-        progress: minimalProgress,
-      };
-    });
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
