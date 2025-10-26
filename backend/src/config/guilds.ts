@@ -9,6 +9,8 @@ export const GUILDS: TrackedGuild[] = [
   { name: "Kilta", realm: "Ravencrest", region: "EU" },
   { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
   { name: "Nave", realm: "Kazzak", region: "EU" },
+  { name: "Pohjoinen", realm: "Kazzak", region: "EU" },
+  { name: "Marras", realm: "Kazzak", region: "EU" },
   //{ name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
   //{ name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
 ];
