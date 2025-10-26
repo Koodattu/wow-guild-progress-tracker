@@ -252,9 +252,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500">Mythic</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Total Time</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Best Progress</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Time</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Pulls</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Progress</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,7 +265,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <Fragment key={`expansion-${expansion}`}>
                         {/* Expansion Separator Row */}
                         <tr className="bg-gray-800/70 border-b border-gray-700">
-                          <td colSpan={7} className="px-4 py-2">
+                          <td colSpan={8} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold text-gray-300">{expansion}</span>
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />

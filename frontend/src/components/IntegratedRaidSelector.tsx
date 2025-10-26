@@ -104,8 +104,8 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
             <div key={expansion}>
               {/* Expansion Header */}
               <div className="px-4 py-2.5 text-xs font-bold text-gray-300 bg-gray-900 sticky top-0 flex items-center gap-2 border-b border-gray-700">
-                <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={20} width={32} />
                 <span>{expansion}</span>
+                <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={20} width={32} />
               </div>
 
               {/* Raids in this expansion */}

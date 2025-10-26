@@ -40,9 +40,9 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Guild</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Pull %</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Time Spent</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Pulls</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Progress</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Time</th>
           </tr>
         </thead>
         <tbody>
