@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback, useRef } from "react";
+import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
@@ -233,34 +233,38 @@ export default function GuildProfilePage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Progress by Expansion */}
+        {/* Progress Table */}
         {guildSummary.progress.length > 0 ? (
-          <div className="space-y-8">
-            {sortedExpansions.map(([expansion, raidEntries]) => {
-              const expansionIconPath = expansion.toLowerCase().replace(/\s+/g, "-");
+          <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-700 bg-gray-800/50">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Raid</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Total Time</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Progress</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedExpansions.map(([expansion, raidEntries]) => {
+                    const expansionIconPath = expansion.toLowerCase().replace(/\s+/g, "-");
 
-              return (
-                <div key={expansion} className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
-                  {/* Expansion Header */}
-                  <div className="flex items-center gap-2 px-6 py-4 bg-gray-800/50 border-b border-gray-700">
-                    <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={24} width={38} />
-                    <h2 className="text-2xl font-bold text-gray-300">{expansion}</h2>
-                  </div>
-
-                  {/* Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-700 bg-gray-800/30">
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Raid</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Total Time</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Progress</th>
+                    return (
+                      <Fragment key={`expansion-${expansion}`}>
+                        {/* Expansion Separator Row */}
+                        <tr className="bg-gray-800/70 border-b border-gray-700">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-gray-300">{expansion}</span>
+                              <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
+
+                        {/* Raid Rows */}
                         {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
                           const iconUrl = getIconUrl(raid.iconUrl);
                           const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
@@ -289,12 +293,12 @@ export default function GuildProfilePage({ params }: PageProps) {
                             </tr>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-lg border border-gray-700">No progress data available for this guild yet.</div>
