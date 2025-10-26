@@ -1,4 +1,4 @@
-import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates } from "@/types";
+import { GuildListItem, Guild, Event, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -11,9 +11,9 @@ export const api = {
     return response.json();
   },
 
-  async getGuildDetail(guildId: string, raidId: number): Promise<Guild> {
-    const response = await fetch(`${API_URL}/api/guilds/${guildId}/raids/${raidId}`);
-    if (!response.ok) throw new Error("Failed to fetch guild detail");
+  async getGuildBossProgress(guildId: string, raidId: number): Promise<RaidProgress[]> {
+    const response = await fetch(`${API_URL}/api/guilds/${guildId}/raids/${raidId}/bosses`);
+    if (!response.ok) throw new Error("Failed to fetch guild boss progress");
     return response.json();
   },
 

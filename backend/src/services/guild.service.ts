@@ -1054,8 +1054,8 @@ class GuildService {
     });
   }
 
-  // Get detailed guild info for a specific raid (includes full boss progress)
-  async getGuildDetailForRaid(guildId: string, raidId: number): Promise<any | null> {
+  // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
+  async getGuildBossProgressForRaid(guildId: string, raidId: number): Promise<any[] | null> {
     const guild = await Guild.findById(guildId);
 
     if (!guild) {
@@ -1064,22 +1064,11 @@ class GuildService {
 
     const guildObj = guild.toObject();
 
-    // Filter progress for the specified raid only
+    // Return only the progress array for the specified raid
     const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
 
-    return {
-      _id: guildObj._id,
-      name: guildObj.name,
-      realm: guildObj.realm,
-      region: guildObj.region,
-      faction: guildObj.faction,
-      isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
-      lastFetched: guildObj.lastFetched,
-      progress: raidProgress, // Full progress with bosses array
-    };
-  }
-
-  // Get single guild by ID
+    return raidProgress;
+  } // Get single guild by ID
   async getGuildById(id: string): Promise<IGuild | null> {
     return await Guild.findById(id);
   }

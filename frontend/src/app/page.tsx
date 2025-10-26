@@ -94,16 +94,30 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedRaidId, fetchRaidData]);
 
-  // Handle guild click - fetch detailed data before opening modal
+  // Handle guild click - fetch boss progress and merge with existing guild info
   const handleGuildClick = useCallback(
     async (guild: GuildListItem) => {
       if (!selectedRaidId) return;
 
       try {
-        const detailedGuild = await api.getGuildDetail(guild._id, selectedRaidId);
+        // Fetch only the boss progress (not the entire guild data again)
+        const bossProgress = await api.getGuildBossProgress(guild._id, selectedRaidId);
+
+        // Merge the guild info we already have with the detailed boss progress
+        const detailedGuild: Guild = {
+          _id: guild._id,
+          name: guild.name,
+          realm: guild.realm,
+          region: guild.region,
+          faction: guild.faction,
+          isCurrentlyRaiding: guild.isCurrentlyRaiding,
+          lastFetched: guild.lastFetched,
+          progress: bossProgress, // Use the full progress with bosses array
+        };
+
         setSelectedGuild(detailedGuild);
       } catch (err) {
-        console.error("Error fetching guild details:", err);
+        console.error("Error fetching guild boss progress:", err);
         setError("Failed to load guild details.");
       }
     },

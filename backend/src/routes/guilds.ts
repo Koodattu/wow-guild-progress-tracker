@@ -23,22 +23,22 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Get detailed guild info for a specific raid
-router.get("/:id/raids/:raidId", async (req: Request, res: Response) => {
+// Get detailed boss progress for a specific guild and raid (returns only progress array)
+router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
   try {
     const guildId = req.params.id;
     const raidId = parseInt(req.params.raidId);
 
-    const guildDetail = await guildService.getGuildDetailForRaid(guildId, raidId);
+    const bossProgress = await guildService.getGuildBossProgressForRaid(guildId, raidId);
 
-    if (!guildDetail) {
+    if (!bossProgress) {
       return res.status(404).json({ error: "Guild not found" });
     }
 
-    res.json(guildDetail);
+    res.json(bossProgress);
   } catch (error) {
-    console.error("Error fetching guild detail:", error);
-    res.status(500).json({ error: "Failed to fetch guild detail" });
+    console.error("Error fetching guild boss progress:", error);
+    res.status(500).json({ error: "Failed to fetch guild boss progress" });
   }
 });
 
