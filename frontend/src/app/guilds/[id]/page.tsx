@@ -206,33 +206,29 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="container mx-auto px-4 max-w-6xl">
         {/* Guild Header */}
-        <div className="mb-8 bg-gray-900 rounded-lg border border-gray-700 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">{guildSummary.name}</h1>
-              <p className="text-gray-400 text-lg">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <h1 className="text-5xl font-bold text-white">{guildSummary.name}</h1>
+              {guildSummary.faction && (
+                <span className={`text-sm px-3 py-1 rounded font-semibold ${guildSummary.faction === "Alliance" ? "bg-blue-900/50 text-blue-300" : "bg-red-900/50 text-red-300"}`}>
+                  {guildSummary.faction}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-gray-400 text-lg">
                 {guildSummary.realm} - {guildSummary.region.toUpperCase()}
-              </p>
-              {guildSummary.faction && <p className="text-gray-500 mt-1">{guildSummary.faction}</p>}
+              </span>
             </div>
-            <button onClick={() => router.push("/guilds")} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors border border-gray-700">
-              Back to Guilds
-            </button>
           </div>
-          <div className="flex gap-4 text-sm">
-            <div>
-              <span className="text-gray-400">Currently Raiding: </span>
-              <span className={guildSummary.isCurrentlyRaiding ? "text-green-400 font-semibold" : "text-gray-500"}>{guildSummary.isCurrentlyRaiding ? "Yes" : "No"}</span>
+          {guildSummary.lastFetched && (
+            <div className="text-right text-sm text-gray-400 self-end">
+              <div className="text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>
             </div>
-            {guildSummary.lastFetched && (
-              <div>
-                <span className="text-gray-400">Last Updated: </span>
-                <span className="text-white">{new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Progress Table */}
@@ -258,11 +254,11 @@ export default function GuildProfilePage({ params }: PageProps) {
                         </div>
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Total Time</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Progress</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500">Mythic</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Total Time</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Best Progress</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -273,7 +269,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <Fragment key={`expansion-${expansion}`}>
                         {/* Expansion Separator Row */}
                         <tr className="bg-gray-800/70 border-b border-gray-700">
-                          <td colSpan={6} className="px-4 py-3">
+                          <td colSpan={6} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold text-gray-300">{expansion}</span>
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
