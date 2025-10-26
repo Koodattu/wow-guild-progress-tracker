@@ -32,6 +32,7 @@ export interface RaidProgressSummary {
   currentBossPulls: number;
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
+  lastKillTime?: string | null; // Timestamp of the most recent boss kill
 }
 
 // Full progress with bosses array (for guild detail view)

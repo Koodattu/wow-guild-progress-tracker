@@ -1027,6 +1027,11 @@ class GuildService {
         // Find current boss (first unkilled boss) to get best pull info
         const currentBoss = p.bosses.find((b) => b.kills === 0);
 
+        // Find the last killed boss to get the most recent kill timestamp
+        const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
+        const lastKilledBoss =
+          killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+
         return {
           raidId: p.raidId,
           raidName: p.raidName,
@@ -1037,6 +1042,7 @@ class GuildService {
           currentBossPulls: currentBoss?.pullCount || 0,
           bestPullPercent: currentBoss?.bestPercent || 0,
           bestPullPhase: currentBoss?.bestPullPhase,
+          lastKillTime: lastKilledBoss?.firstKillTime || null,
         };
       });
 
