@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getDifficultyColor, getIconUrl } from "@/lib/utils";
+import { formatTime, formatPercent, getIconUrl } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
 
 interface PageProps {
@@ -155,26 +155,39 @@ export default function GuildProfilePage({ params }: PageProps) {
     );
   }
 
+  // Group progress by expansion and consolidate raid data
+  const progressByExpansion = new Map<
+    string,
+    {
+      raid: RaidInfo;
+      mythicProgress: RaidProgressSummary | null;
+      heroicProgress: RaidProgressSummary | null;
+    }[]
+  >();
+
+  // First, get all unique raids
+  const uniqueRaids = new Map<number, RaidInfo>();
+  raids.forEach((raid) => {
+    uniqueRaids.set(raid.id, raid);
+  });
+
   // Group progress by expansion
-  const progressByExpansion = new Map<string, { raid: RaidInfo; progress: RaidProgressSummary[] }[]>();
+  uniqueRaids.forEach((raid) => {
+    const mythicProgress = guildSummary.progress.find((p) => p.raidId === raid.id && p.difficulty === "mythic") || null;
+    const heroicProgress = guildSummary.progress.find((p) => p.raidId === raid.id && p.difficulty === "heroic") || null;
 
-  guildSummary.progress.forEach((progress) => {
-    const raid = raids.find((r) => r.id === progress.raidId);
-    if (!raid) return;
+    // Only include raids where the guild has some progress
+    if (mythicProgress || heroicProgress) {
+      if (!progressByExpansion.has(raid.expansion)) {
+        progressByExpansion.set(raid.expansion, []);
+      }
 
-    if (!progressByExpansion.has(raid.expansion)) {
-      progressByExpansion.set(raid.expansion, []);
+      progressByExpansion.get(raid.expansion)!.push({
+        raid,
+        mythicProgress,
+        heroicProgress,
+      });
     }
-
-    const expansionRaids = progressByExpansion.get(raid.expansion)!;
-    let raidEntry = expansionRaids.find((entry) => entry.raid.id === raid.id);
-
-    if (!raidEntry) {
-      raidEntry = { raid, progress: [] };
-      expansionRaids.push(raidEntry);
-    }
-
-    raidEntry.progress.push(progress);
   });
 
   // Sort expansions by newest first (based on raid IDs)
@@ -227,85 +240,57 @@ export default function GuildProfilePage({ params }: PageProps) {
               const expansionIconPath = expansion.toLowerCase().replace(/\s+/g, "-");
 
               return (
-                <div key={expansion} className="bg-gray-900 rounded-lg border border-gray-700 p-6">
-                  <div className="flex items-center gap-2 mb-6">
+                <div key={expansion} className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+                  {/* Expansion Header */}
+                  <div className="flex items-center gap-2 px-6 py-4 bg-gray-800/50 border-b border-gray-700">
                     <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={24} width={38} />
                     <h2 className="text-2xl font-bold text-gray-300">{expansion}</h2>
                   </div>
 
-                  <div className="space-y-6">
-                    {raidEntries.map(({ raid, progress: raidProgress }) => {
-                      const iconUrl = getIconUrl(raid.iconUrl);
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-700 bg-gray-800/30">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Raid</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Total Time</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Current Boss Pulls</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Best Progress</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
+                          const iconUrl = getIconUrl(raid.iconUrl);
+                          const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                          const currentBossPulls = mythicProgress?.currentBossPulls || 0;
+                          const bestProgress =
+                            mythicProgress?.bestPullPhase?.displayString ||
+                            (mythicProgress && mythicProgress.bestPullPercent < 100 ? formatPercent(mythicProgress.bestPullPercent) : "-");
 
-                      // Sort progress by difficulty (mythic first)
-                      const sortedProgress = [...raidProgress].sort((a, b) => {
-                        if (a.difficulty !== b.difficulty) {
-                          return a.difficulty === "mythic" ? -1 : 1;
-                        }
-                        return 0;
-                      });
-
-                      return (
-                        <div key={raid.id} className="border-l-4 border-gray-700 pl-4">
-                          <div className="flex items-center gap-3 mb-3">
-                            {iconUrl && <Image src={iconUrl} alt="Raid icon" width={32} height={32} className="rounded" />}
-                            <h3 className="text-xl font-bold text-white">{raid.name}</h3>
-                          </div>
-
-                          <div className="space-y-2">
-                            {sortedProgress.map((diffProgress) => {
-                              const hasProgress = diffProgress.bossesDefeated > 0 || diffProgress.currentBossPulls > 0;
-                              if (!hasProgress) return null;
-
-                              return (
-                                <button
-                                  key={`${raid.id}-${diffProgress.difficulty}`}
-                                  onClick={() => handleRaidClick(raid.id)}
-                                  className="w-full text-left bg-gray-800 hover:bg-gray-700 rounded-lg p-4 transition-colors border border-gray-700 hover:border-gray-600"
-                                >
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className={`font-semibold ${getDifficultyColor(diffProgress.difficulty)}`}>
-                                      {diffProgress.difficulty.charAt(0).toUpperCase() + diffProgress.difficulty.slice(1)}
-                                    </span>
-                                    <span className="text-sm text-gray-500">Click to view details →</span>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                    <div>
-                                      <div className="text-gray-400 mb-1">Progress</div>
-                                      <div className="text-white font-semibold">
-                                        {diffProgress.bossesDefeated}/{diffProgress.totalBosses}
-                                      </div>
-                                    </div>
-
-                                    <div>
-                                      <div className="text-gray-400 mb-1">Total Time</div>
-                                      <div className="text-white font-semibold">{formatTime(diffProgress.totalTimeSpent)}</div>
-                                    </div>
-
-                                    <div>
-                                      <div className="text-gray-400 mb-1">Current Boss Pulls</div>
-                                      <div className="text-white font-semibold">{diffProgress.currentBossPulls || "-"}</div>
-                                    </div>
-
-                                    <div>
-                                      <div className="text-gray-400 mb-1">Best Progress</div>
-                                      <div className="text-white font-semibold">
-                                        {diffProgress.bestPullPhase?.displayString || (diffProgress.bestPullPercent < 100 ? formatPercent(diffProgress.bestPullPercent) : "-")}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {diffProgress.lastKillTime && (
-                                    <div className="mt-2 text-xs text-gray-500">Last kill: {new Date(diffProgress.lastKillTime).toLocaleString("fi-FI")}</div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                          return (
+                            <tr key={raid.id} onClick={() => handleRaidClick(raid.id)} className="border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  {iconUrl && <Image src={iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
+                                  <span className="font-semibold text-white">{raid.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+                              </td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-300">{totalTime > 0 ? formatTime(totalTime) : "-"}</td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-300">{currentBossPulls > 0 ? currentBossPulls : "-"}</td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-300">{bestProgress}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
