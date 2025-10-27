@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import { Achievement, BossIcon, RaidIcon, AuthToken, AchievementUpdateLog } from "../models/Achievement";
+import { Achievement, BossIcon, RaidIcon, AuthToken, AchievementUpdateLog, GuildCrestEmblem, GuildCrestBorder } from "../models/Achievement";
 import iconCacheService from "./icon-cache.service";
 
 interface BlizzardTokenResponse {
@@ -38,10 +38,139 @@ interface BlizzardAchievementMedia {
   id: number;
 }
 
+interface BlizzardGuildCrestIndex {
+  _links: {
+    self: {
+      href: string;
+    };
+  };
+  emblems: Array<{
+    id: number;
+    media: {
+      key: {
+        href: string;
+      };
+      id: number;
+    };
+  }>;
+  borders: Array<{
+    id: number;
+    media: {
+      key: {
+        href: string;
+      };
+      id: number;
+    };
+  }>;
+}
+
+interface BlizzardGuildCrestMedia {
+  _links: {
+    self: {
+      href: string;
+    };
+  };
+  assets: Array<{
+    key: string;
+    value: string;
+  }>;
+  id: number;
+}
+
+interface BlizzardGuildData {
+  _links: {
+    self: {
+      href: string;
+    };
+  };
+  id: number;
+  name: string;
+  faction: {
+    type: string;
+    name: string;
+  };
+  achievement_points: number;
+  member_count: number;
+  realm: {
+    key: {
+      href: string;
+    };
+    name: string;
+    id: number;
+    slug: string;
+  };
+  crest: {
+    emblem: {
+      id: number;
+      media: {
+        key: {
+          href: string;
+        };
+        id: number;
+      };
+      color: {
+        id: number;
+        rgba: {
+          r: number;
+          g: number;
+          b: number;
+          a: number;
+        };
+      };
+    };
+    border: {
+      id: number;
+      media: {
+        key: {
+          href: string;
+        };
+        id: number;
+      };
+      color: {
+        id: number;
+        rgba: {
+          r: number;
+          g: number;
+          b: number;
+          a: number;
+        };
+      };
+    };
+    background: {
+      color: {
+        id: number;
+        rgba: {
+          r: number;
+          g: number;
+          b: number;
+          a: number;
+        };
+      };
+    };
+  };
+  roster: {
+    href: string;
+  };
+  achievements: {
+    href: string;
+  };
+  created_timestamp: number;
+  activity: {
+    href: string;
+  };
+  name_search: string;
+}
+
 export class BlizzardApiClient {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly oauthUrl = "https://oauth.battle.net/token";
+  private readonly regionApiUrls: { [key: string]: string } = {
+    us: "https://us.api.blizzard.com",
+    eu: "https://eu.api.blizzard.com",
+    kr: "https://kr.api.blizzard.com",
+    tw: "https://tw.api.blizzard.com",
+  };
   private readonly apiBaseUrl = "https://us.api.blizzard.com";
   private readonly namespace = "static-us";
   private readonly locale = "en_US";
@@ -588,9 +717,245 @@ export class BlizzardApiClient {
       } else {
         console.log(`✅ Found ${count} achievements in database`);
       }
+
+      // Also initialize guild crest components
+      const emblemCount = await GuildCrestEmblem.countDocuments();
+      const borderCount = await GuildCrestBorder.countDocuments();
+      if (emblemCount === 0 || borderCount === 0) {
+        console.log("🚀 Guild crest components not cached, performing initial fetch...");
+        await this.cacheGuildCrestComponents();
+      } else {
+        console.log(`✅ Found ${emblemCount} emblems and ${borderCount} borders in database`);
+      }
     } catch (error: any) {
       console.error("Error during Blizzard API initialization:", error.message);
       // Don't throw here, as this is initialization and shouldn't block startup
+    }
+  }
+
+  /**
+   * Cache all guild crest components (emblems and borders)
+   * This is called on startup to download and cache all crest images
+   */
+  public async cacheGuildCrestComponents(): Promise<void> {
+    try {
+      console.log("🎨 Fetching guild crest index from Blizzard API...");
+
+      // We'll use EU region for the crest index (crests are the same across regions)
+      const region = "eu";
+      const namespace = `static-${region}`;
+      const apiUrl = this.regionApiUrls[region];
+      const url = `${apiUrl}/data/wow/guild-crest/index?namespace=${namespace}&locale=${this.locale}`;
+
+      const crestIndex = await this.makeAuthenticatedRequest<BlizzardGuildCrestIndex>(url);
+
+      console.log(`🎨 Found ${crestIndex.emblems.length} emblems and ${crestIndex.borders.length} borders`);
+
+      // Process emblems
+      let emblemsFetched = 0;
+      for (const emblem of crestIndex.emblems) {
+        // Check if we already have this emblem cached
+        const existing = await GuildCrestEmblem.findOne({ id: emblem.id });
+        if (existing) {
+          console.log(`✅ Emblem ${emblem.id} already cached, skipping...`);
+          continue;
+        }
+
+        // Fetch the media URL for this emblem
+        const mediaUrl = emblem.media.key.href;
+        const media = await this.makeAuthenticatedRequest<BlizzardGuildCrestMedia>(mediaUrl);
+
+        const imageAsset = media.assets.find((asset) => asset.key === "image");
+        if (!imageAsset) {
+          console.warn(`⚠️  No image found for emblem ${emblem.id}`);
+          continue;
+        }
+
+        // Download and cache the image
+        const imageName = await iconCacheService.downloadAndCacheIcon(imageAsset.value);
+
+        // Store in database
+        await GuildCrestEmblem.create({
+          id: emblem.id,
+          imageName,
+          blizzardIconUrl: imageAsset.value,
+          lastUpdated: new Date(),
+        });
+
+        emblemsFetched++;
+        console.log(`✅ Cached emblem ${emblem.id} -> ${imageName}`);
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Process borders
+      let bordersFetched = 0;
+      for (const border of crestIndex.borders) {
+        // Check if we already have this border cached
+        const existing = await GuildCrestBorder.findOne({ id: border.id });
+        if (existing) {
+          console.log(`✅ Border ${border.id} already cached, skipping...`);
+          continue;
+        }
+
+        // Fetch the media URL for this border
+        const mediaUrl = border.media.key.href;
+        const media = await this.makeAuthenticatedRequest<BlizzardGuildCrestMedia>(mediaUrl);
+
+        const imageAsset = media.assets.find((asset) => asset.key === "image");
+        if (!imageAsset) {
+          console.warn(`⚠️  No image found for border ${border.id}`);
+          continue;
+        }
+
+        // Download and cache the image
+        const imageName = await iconCacheService.downloadAndCacheIcon(imageAsset.value);
+
+        // Store in database
+        await GuildCrestBorder.create({
+          id: border.id,
+          imageName,
+          blizzardIconUrl: imageAsset.value,
+          lastUpdated: new Date(),
+        });
+
+        bordersFetched++;
+        console.log(`✅ Cached border ${border.id} -> ${imageName}`);
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      console.log(`✅ Guild crest caching completed: ${emblemsFetched} new emblems, ${bordersFetched} new borders`);
+    } catch (error: any) {
+      console.error("Error caching guild crest components:", error.message);
+      throw new Error(`Failed to cache guild crest components: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch a specific crest component if it's missing from cache
+   */
+  private async fetchMissingCrestComponent(type: "emblem" | "border", id: number): Promise<string | null> {
+    try {
+      console.log(`🔍 Fetching missing ${type} ${id}...`);
+
+      const region = "eu";
+      const namespace = `static-${region}`;
+      const apiUrl = this.regionApiUrls[region];
+      const url = `${apiUrl}/data/wow/media/guild-crest/${type}/${id}?namespace=${namespace}&locale=${this.locale}`;
+
+      const media = await this.makeAuthenticatedRequest<BlizzardGuildCrestMedia>(url);
+
+      const imageAsset = media.assets.find((asset) => asset.key === "image");
+      if (!imageAsset) {
+        console.warn(`⚠️  No image found for ${type} ${id}`);
+        return null;
+      }
+
+      // Download and cache the image
+      const imageName = await iconCacheService.downloadAndCacheIcon(imageAsset.value);
+
+      // Store in database
+      if (type === "emblem") {
+        await GuildCrestEmblem.create({
+          id,
+          imageName,
+          blizzardIconUrl: imageAsset.value,
+          lastUpdated: new Date(),
+        });
+      } else {
+        await GuildCrestBorder.create({
+          id,
+          imageName,
+          blizzardIconUrl: imageAsset.value,
+          lastUpdated: new Date(),
+        });
+      }
+
+      console.log(`✅ Cached ${type} ${id} -> ${imageName}`);
+      return imageName;
+    } catch (error: any) {
+      console.error(`Error fetching ${type} ${id}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch guild data from Blizzard API
+   */
+  public async getGuildData(
+    guildName: string,
+    realmSlug: string,
+    region: string
+  ): Promise<{
+    crest: {
+      emblem: { id: number; imageName: string; color: { r: number; g: number; b: number; a: number } };
+      border: { id: number; imageName: string; color: { r: number; g: number; b: number; a: number } };
+      background: { color: { r: number; g: number; b: number; a: number } };
+    };
+    faction?: string;
+  } | null> {
+    try {
+      // Normalize region to lowercase
+      const regionLower = region.toLowerCase();
+
+      // Create guild name slug (replace spaces with dashes, lowercase)
+      const guildSlug = guildName.toLowerCase().replace(/\s+/g, "-");
+
+      // Build the URL
+      const namespace = `profile-${regionLower}`;
+      const apiUrl = this.regionApiUrls[regionLower] || this.apiBaseUrl;
+      const url = `${apiUrl}/data/wow/guild/${realmSlug}/${encodeURIComponent(guildSlug)}?namespace=${namespace}&locale=${this.locale}`;
+
+      console.log(`🔍 Fetching guild data for ${guildName} - ${realmSlug} (${regionLower})...`);
+      const guildData = await this.makeAuthenticatedRequest<BlizzardGuildData>(url);
+
+      // Get emblem image name (check cache or fetch if missing)
+      let emblemImageName: string | null = null;
+      const cachedEmblem = await GuildCrestEmblem.findOne({ id: guildData.crest.emblem.id });
+      if (cachedEmblem) {
+        emblemImageName = cachedEmblem.imageName;
+      } else {
+        emblemImageName = await this.fetchMissingCrestComponent("emblem", guildData.crest.emblem.id);
+      }
+
+      // Get border image name (check cache or fetch if missing)
+      let borderImageName: string | null = null;
+      const cachedBorder = await GuildCrestBorder.findOne({ id: guildData.crest.border.id });
+      if (cachedBorder) {
+        borderImageName = cachedBorder.imageName;
+      } else {
+        borderImageName = await this.fetchMissingCrestComponent("border", guildData.crest.border.id);
+      }
+
+      if (!emblemImageName || !borderImageName) {
+        console.error(`⚠️  Failed to get crest images for guild ${guildName}`);
+        return null;
+      }
+
+      return {
+        crest: {
+          emblem: {
+            id: guildData.crest.emblem.id,
+            imageName: emblemImageName,
+            color: guildData.crest.emblem.color.rgba,
+          },
+          border: {
+            id: guildData.crest.border.id,
+            imageName: borderImageName,
+            color: guildData.crest.border.color.rgba,
+          },
+          background: {
+            color: guildData.crest.background.color.rgba,
+          },
+        },
+        faction: guildData.faction.type,
+      };
+    } catch (error: any) {
+      console.error(`Error fetching guild data for ${guildName} - ${realmSlug}:`, error.message);
+      return null;
     }
   }
 }

@@ -38,12 +38,44 @@ export interface IRaidProgress {
   lastUpdated: Date;
 }
 
+export interface IGuildCrest {
+  emblem: {
+    id: number;
+    imageName: string; // e.g., "emblem_22.png"
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+  border: {
+    id: number;
+    imageName: string; // e.g., "border_0.png"
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+  background: {
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+}
+
 export interface IGuild extends Document {
   name: string;
   realm: string;
   region: string;
   faction?: string;
   iconUrl?: string;
+  crest?: IGuildCrest;
   progress: IRaidProgress[];
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
@@ -102,6 +134,36 @@ const GuildSchema: Schema = new Schema(
     region: { type: String, required: true, default: "EU" },
     faction: { type: String },
     iconUrl: { type: String },
+    crest: {
+      emblem: {
+        id: { type: Number },
+        imageName: { type: String },
+        color: {
+          r: { type: Number },
+          g: { type: Number },
+          b: { type: Number },
+          a: { type: Number },
+        },
+      },
+      border: {
+        id: { type: Number },
+        imageName: { type: String },
+        color: {
+          r: { type: Number },
+          g: { type: Number },
+          b: { type: Number },
+          a: { type: Number },
+        },
+      },
+      background: {
+        color: {
+          r: { type: Number },
+          g: { type: Number },
+          b: { type: Number },
+          a: { type: Number },
+        },
+      },
+    },
     progress: [RaidProgressSchema],
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log

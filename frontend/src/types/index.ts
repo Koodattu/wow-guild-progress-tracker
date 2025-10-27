@@ -6,6 +6,37 @@ export interface BestPullPhase {
   displayString: string; // e.g., "45% P3"
 }
 
+export interface GuildCrest {
+  emblem: {
+    id: number;
+    imageName: string;
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+  border: {
+    id: number;
+    imageName: string;
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+  background: {
+    color: {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    };
+  };
+}
+
 export interface BossProgress {
   bossId: number;
   bossName: string;
@@ -60,6 +91,7 @@ export interface GuildListItem {
   realm: string;
   region: string;
   faction?: string;
+  crest?: GuildCrest;
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
@@ -72,6 +104,7 @@ export interface GuildSummary {
   realm: string;
   region: string;
   faction?: string;
+  crest?: GuildCrest;
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
@@ -84,6 +117,7 @@ export interface Guild {
   realm: string;
   region: string;
   faction?: string;
+  crest?: GuildCrest;
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgress[];

@@ -41,6 +41,22 @@ export interface IAchievementUpdateLog extends Document {
   attemptCount: number;
 }
 
+// Guild crest emblem cache
+export interface IGuildCrestEmblem extends Document {
+  id: number;
+  imageName: string; // e.g., "emblem_22.png"
+  blizzardIconUrl: string; // Original Blizzard URL
+  lastUpdated: Date;
+}
+
+// Guild crest border cache
+export interface IGuildCrestBorder extends Document {
+  id: number;
+  imageName: string; // e.g., "border_0.png"
+  blizzardIconUrl: string; // Original Blizzard URL
+  lastUpdated: Date;
+}
+
 // Achievement schema
 const AchievementSchema = new Schema({
   id: { type: Number, required: true, unique: true },
@@ -82,6 +98,22 @@ const AchievementUpdateLogSchema = new Schema({
   attemptCount: { type: Number, default: 0 },
 });
 
+// Guild crest emblem schema
+const GuildCrestEmblemSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  imageName: { type: String, required: true },
+  blizzardIconUrl: { type: String, required: true },
+  lastUpdated: { type: Date, default: Date.now },
+});
+
+// Guild crest border schema
+const GuildCrestBorderSchema = new Schema({
+  id: { type: Number, required: true, unique: true },
+  imageName: { type: String, required: true },
+  blizzardIconUrl: { type: String, required: true },
+  lastUpdated: { type: Date, default: Date.now },
+});
+
 // Add indexes
 AchievementSchema.index({ name: "text" }); // For text search
 AuthTokenSchema.index({ service: 1 }, { unique: true }); // One token per service
@@ -92,3 +124,5 @@ export const BossIcon = mongoose.model<IBossIcon>("BossIcon", BossIconSchema);
 export const RaidIcon = mongoose.model<IRaidIcon>("RaidIcon", RaidIconSchema);
 export const AuthToken = mongoose.model<IAuthToken>("AuthToken", AuthTokenSchema);
 export const AchievementUpdateLog = mongoose.model<IAchievementUpdateLog>("AchievementUpdateLog", AchievementUpdateLogSchema);
+export const GuildCrestEmblem = mongoose.model<IGuildCrestEmblem>("GuildCrestEmblem", GuildCrestEmblemSchema);
+export const GuildCrestBorder = mongoose.model<IGuildCrestBorder>("GuildCrestBorder", GuildCrestBorderSchema);

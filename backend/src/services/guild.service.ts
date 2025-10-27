@@ -279,10 +279,30 @@ class GuildService {
       });
 
       if (!existing) {
+        // Fetch guild crest data from Blizzard API
+        console.log(`Fetching crest data for: ${guildConfig.name} - ${guildConfig.realm}`);
+        let crestData = null;
+        let faction = undefined;
+
+        try {
+          const guildData = await blizzardService.getGuildData(guildConfig.name, guildConfig.realm.toLowerCase(), guildConfig.region);
+          if (guildData) {
+            crestData = guildData.crest;
+            faction = guildData.faction;
+            console.log(`✅ Retrieved crest data for: ${guildConfig.name}`);
+          } else {
+            console.warn(`⚠️  Could not fetch crest data for: ${guildConfig.name}`);
+          }
+        } catch (error) {
+          console.error(`Error fetching crest data for ${guildConfig.name}:`, error instanceof Error ? error.message : "Unknown error");
+        }
+
         const newGuild = await Guild.create({
           name: guildConfig.name,
           realm: guildConfig.realm,
           region: guildConfig.region,
+          faction,
+          crest: crestData,
           progress: [],
         });
         console.log(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
@@ -799,8 +819,6 @@ class GuildService {
       CURRENT_RAID_ID,
       3 // Check last 3 reports
     );
-
-    console.log(`[${guild.name}] Report check data:`, JSON.stringify(checkData, null, 2));
 
     if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
       console.log(`[${guild.name}] No reports found for current raid`);
@@ -1483,6 +1501,7 @@ class GuildService {
           realm: guildObj.realm,
           region: guildObj.region,
           faction: guildObj.faction,
+          crest: guildObj.crest,
           isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
           lastFetched: guildObj.lastFetched,
           progress: minimalProgress,
@@ -1556,6 +1575,7 @@ class GuildService {
       realm: guildObj.realm,
       region: guildObj.region,
       faction: guildObj.faction,
+      crest: guildObj.crest,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,

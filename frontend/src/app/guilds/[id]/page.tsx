@@ -7,6 +7,7 @@ import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/type
 import { api } from "@/lib/api";
 import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
+import GuildCrest from "@/components/GuildCrest";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -211,6 +212,7 @@ export default function GuildProfilePage({ params }: PageProps) {
         <div className={`mb-4 flex items-start justify-between ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
           <div>
             <div className="flex items-center gap-3 mb-3">
+              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={64} className="shrink-0" />
               <h1 className="text-5xl font-bold text-white">
                 {guildSummary.name}
                 <span className="text-gray-400 font-normal"> - {guildSummary.realm}</span>

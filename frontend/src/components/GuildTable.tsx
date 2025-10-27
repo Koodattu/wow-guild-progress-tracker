@@ -2,6 +2,7 @@
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
 import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
+import GuildCrest from "./GuildCrest";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
@@ -74,6 +75,7 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
+                    <GuildCrest crest={guild.crest} faction={guild.faction} size={32} />
                     <span className="font-semibold text-white">
                       {guild.name}
                       <span className="text-gray-400 font-thin text-sm"> - {guild.realm}</span>
