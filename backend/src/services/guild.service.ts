@@ -324,28 +324,7 @@ class GuildService {
       }
 
       guild.lastFetched = new Date();
-
-      // Log what we're about to save
-      console.log(`[${guild.name}] RIGHT BEFORE SAVE - progress data:`);
-      for (const progress of guild.progress) {
-        console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
-        if (progress.bosses.length > 0) {
-          console.log(
-            `    First 3 bosses: ${progress.bosses
-              .slice(0, 3)
-              .map((b) => b.bossName)
-              .join(", ")}`
-          );
-        }
-      }
-
       await guild.save();
-
-      // Log the saved progress data
-      console.log(`[${guild.name}] AFTER SAVE - progress data:`);
-      for (const progress of guild.progress) {
-        console.log(`  - ${progress.raidName} (${progress.difficulty}): ${progress.bossesDefeated}/${progress.totalBosses} bosses, ${progress.bosses.length} bosses in array`);
-      }
 
       // Update world rankings only if there was new data and only for current raid
       if (hasNewData && isInitialFetch) {
