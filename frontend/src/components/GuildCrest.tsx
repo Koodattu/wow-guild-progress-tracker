@@ -36,7 +36,7 @@ export default function GuildCrest({ crest, faction, size = 48, className = "" }
   // Helper function to get image source for API-provided images
   const getImageSrc = (imageName: string, imageState: "local" | "backend" | "placeholder"): string => {
     if (imageState === "local") {
-      return `/icons/${imageName}`;
+      return `/components/${imageName}`;
     } else {
       return `${apiUrl}/icons/${imageName}`;
     }
