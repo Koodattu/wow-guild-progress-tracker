@@ -75,8 +75,8 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 shrink-0">
-                      <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
+                    <div className="w-9 h-10 shrink-0">
+                      <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] origin-top-left" />
                     </div>
                     <span className="font-semibold text-white">
                       {guild.name}

@@ -19,6 +19,7 @@ interface GuildCrestProps {
   faction?: string; // "Alliance" or "Horde"
   size?: number; // Size in pixels (width and height will be the same)
   className?: string;
+  drawFactionCircle?: boolean;
 }
 
 /**
@@ -30,7 +31,7 @@ interface GuildCrestProps {
  * 5. Emblem image from API (colored with emblem color using multiply blend)
  * 6. Rings (top layer)
  */
-export default function GuildCrest({ crest, faction, size = 48, className = "" }: GuildCrestProps) {
+export default function GuildCrest({ crest, faction, size = 48, className = "", drawFactionCircle = false }: GuildCrestProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -155,16 +156,18 @@ export default function GuildCrest({ crest, faction, size = 48, className = "" }
           return { x, y, width: layerSize, height: layerSize };
         };
 
-        // Layer 1: Faction circle base
-        if (factionCircle.status === "fulfilled") {
-          const dims = getLayerDimensions(LAYER_CONFIG.factionCircle);
-          ctx.drawImage(factionCircle.value, dims.x, dims.y, dims.width, dims.height);
-        }
+        if (drawFactionCircle) {
+          // Layer 1: Faction circle base
+          if (factionCircle.status === "fulfilled") {
+            const dims = getLayerDimensions(LAYER_CONFIG.factionCircle);
+            ctx.drawImage(factionCircle.value, dims.x, dims.y, dims.width, dims.height);
+          }
 
-        // Layer 2: Circle border
-        if (circleBorder.status === "fulfilled") {
-          const dims = getLayerDimensions(LAYER_CONFIG.circleBorder);
-          ctx.drawImage(circleBorder.value, dims.x, dims.y, dims.width, dims.height);
+          // Layer 2: Circle border
+          if (circleBorder.status === "fulfilled") {
+            const dims = getLayerDimensions(LAYER_CONFIG.circleBorder);
+            ctx.drawImage(circleBorder.value, dims.x, dims.y, dims.width, dims.height);
+          }
         }
 
         // Layer 3: Banner with background color (multiply blend)
@@ -185,10 +188,12 @@ export default function GuildCrest({ crest, faction, size = 48, className = "" }
           applyMultiplyBlend(ctx, emblemImg.value, dims.x, dims.y, dims.width, dims.height, crest.emblem.color);
         }
 
-        // Layer 6: Rings (top layer)
-        if (rings.status === "fulfilled") {
-          const dims = getLayerDimensions(LAYER_CONFIG.rings);
-          ctx.drawImage(rings.value, dims.x, dims.y, dims.width, dims.height);
+        if (drawFactionCircle) {
+          // Layer 6: Rings (top layer)
+          if (rings.status === "fulfilled") {
+            const dims = getLayerDimensions(LAYER_CONFIG.rings);
+            ctx.drawImage(rings.value, dims.x, dims.y, dims.width, dims.height);
+          }
         }
 
         setIsLoading(false);
