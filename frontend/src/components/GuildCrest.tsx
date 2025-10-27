@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import { GuildCrest as GuildCrestType } from "@/types";
+
+// Layer positioning and scaling configuration
+// Adjust these values to fine-tune the positioning of each layer
+const LAYER_CONFIG = {
+  factionCircle: { scale: 0.95, offsetX: 0, offsetY: 0 },
+  circleBorder: { scale: 1.0, offsetX: 0, offsetY: 0 },
+  banner: { scale: 0.8, offsetX: 0, offsetY: 0 },
+  border: { scale: 0.7, offsetX: -0.5, offsetY: -6 },
+  emblem: { scale: 0.55, offsetX: -4.5, offsetY: -7 },
+  rings: { scale: 0.85, offsetX: 0, offsetY: 0 },
+};
 
 interface GuildCrestProps {
   crest: GuildCrestType | undefined;
@@ -12,123 +22,198 @@ interface GuildCrestProps {
 }
 
 /**
- * Component that renders a guild crest using custom components with the following layers:
+ * Component that renders a guild crest using canvas with the following layers:
  * 1. Faction circle base (alliance_circle or horde_circle)
  * 2. Circle border
- * 3. Banner (colored with background color)
- * 4. Border image from API (colored with border color)
- * 5. Emblem image from API (colored with emblem color)
+ * 3. Banner (colored with background color using multiply blend)
+ * 4. Border image from API (colored with border color using multiply blend)
+ * 5. Emblem image from API (colored with emblem color using multiply blend)
  * 6. Rings (top layer)
  */
 export default function GuildCrest({ crest, faction, size = 48, className = "" }: GuildCrestProps) {
-  const [emblemImageState, setEmblemImageState] = useState<"local" | "backend" | "placeholder">("local");
-  const [borderImageState, setBorderImageState] = useState<"local" | "backend" | "placeholder">("local");
-  const [emblemBackendFailed, setEmblemBackendFailed] = useState(false);
-  const [borderBackendFailed, setBorderBackendFailed] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+  useEffect(() => {
+    if (!crest || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d", { willReadFrequently: false });
+    if (!ctx) return;
+
+    // Set canvas size (use 2x for better quality on high DPI displays)
+    const scale = 1;
+    canvas.width = size * scale;
+    canvas.height = size * scale;
+    ctx.scale(scale, scale);
+
+    let isMounted = true;
+
+    // Helper function to load an image with fallback
+    const loadImage = (imageName: string, isApiImage: boolean): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+
+        const tryLoad = (src: string, isFallback: boolean = false) => {
+          img.src = src;
+          img.onload = () => resolve(img);
+          img.onerror = () => {
+            if (!isFallback && isApiImage) {
+              // Try backend as fallback
+              tryLoad(`${apiUrl}/icons/${imageName}`, true);
+            } else {
+              reject(new Error(`Failed to load image: ${src}`));
+            }
+          };
+        };
+
+        if (isApiImage) {
+          tryLoad(`/components/${imageName}`);
+        } else {
+          tryLoad(imageName);
+        }
+      });
+    };
+
+    // Apply multiply blend mode color to an image
+    const applyMultiplyBlend = (
+      ctx: CanvasRenderingContext2D,
+      image: HTMLImageElement,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      color: { r: number; g: number; b: number; a: number }
+    ) => {
+      // Create a temporary canvas to draw and color the image
+      const tempCanvas = document.createElement("canvas");
+      const scaledWidth = width * scale;
+      const scaledHeight = height * scale;
+      tempCanvas.width = scaledWidth;
+      tempCanvas.height = scaledHeight;
+      const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+
+      if (!tempCtx) return;
+
+      // Draw the image to the temporary canvas
+      tempCtx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+
+      // Get the image data from the temporary canvas
+      const imageData = tempCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+      const data = imageData.data;
+
+      // Apply multiply blend mode
+      // Multiply formula: result = (base * blend) / 255
+      // Only apply to non-transparent pixels
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+
+        // Only apply color multiplication if pixel has opacity
+        if (alpha > 0) {
+          data[i] = (data[i] * color.r) / 255; // Red
+          data[i + 1] = (data[i + 1] * color.g) / 255; // Green
+          data[i + 2] = (data[i + 2] * color.b) / 255; // Blue
+          // Alpha stays the same (data[i + 3])
+        }
+      }
+
+      // Put the colored image data back to the temporary canvas
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Draw the colored image from the temporary canvas to the main canvas
+      ctx.drawImage(tempCanvas, x * scale, y * scale);
+    };
+
+    // Render the crest
+    const renderCrest = async () => {
+      try {
+        // Determine faction circle
+        const factionCirclePath = faction?.toLowerCase() === "horde" ? "/custom_components/horde_circle.png" : "/custom_components/alliance_circle.png";
+
+        // Load all images
+        const [factionCircle, circleBorder, banner, borderImg, emblemImg, rings] = await Promise.allSettled([
+          loadImage(factionCirclePath, false),
+          loadImage("/custom_components/circle_border.png", false),
+          loadImage("/custom_components/banner.png", false),
+          loadImage(crest.border.imageName, true),
+          loadImage(crest.emblem.imageName, true),
+          loadImage("/custom_components/rings.png", false),
+        ]);
+
+        if (!isMounted) return;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, size, size);
+
+        // Helper function to calculate layer dimensions and position
+        const getLayerDimensions = (config: { scale: number; offsetX: number; offsetY: number }) => {
+          const layerSize = size * config.scale;
+          const x = (size - layerSize) / 2 + config.offsetX;
+          const y = (size - layerSize) / 2 + config.offsetY;
+          return { x, y, width: layerSize, height: layerSize };
+        };
+
+        // Layer 1: Faction circle base
+        if (factionCircle.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.factionCircle);
+          ctx.drawImage(factionCircle.value, dims.x, dims.y, dims.width, dims.height);
+        }
+
+        // Layer 2: Circle border
+        if (circleBorder.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.circleBorder);
+          ctx.drawImage(circleBorder.value, dims.x, dims.y, dims.width, dims.height);
+        }
+
+        // Layer 3: Banner with background color (multiply blend)
+        if (banner.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.banner);
+          applyMultiplyBlend(ctx, banner.value, dims.x, dims.y, dims.width, dims.height, crest.background.color);
+        }
+
+        // Layer 4: Border image with border color (multiply blend)
+        if (borderImg.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.border);
+          applyMultiplyBlend(ctx, borderImg.value, dims.x, dims.y, dims.width, dims.height, crest.border.color);
+        }
+
+        // Layer 5: Emblem image with emblem color (multiply blend)
+        if (emblemImg.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.emblem);
+          applyMultiplyBlend(ctx, emblemImg.value, dims.x, dims.y, dims.width, dims.height, crest.emblem.color);
+        }
+
+        // Layer 6: Rings (top layer)
+        if (rings.status === "fulfilled") {
+          const dims = getLayerDimensions(LAYER_CONFIG.rings);
+          ctx.drawImage(rings.value, dims.x, dims.y, dims.width, dims.height);
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error rendering guild crest:", error);
+        setIsLoading(false);
+      }
+    };
+
+    renderCrest();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [crest, faction, size, apiUrl]);
 
   // If no crest data, show placeholder
   if (!crest) {
     return <div className={`bg-gray-700 rounded ${className}`} style={{ width: size, height: size }} />;
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
-  // Helper function to get image source for API-provided images
-  const getImageSrc = (imageName: string, imageState: "local" | "backend" | "placeholder"): string => {
-    if (imageState === "local") {
-      return `/components/${imageName}`;
-    } else {
-      return `${apiUrl}/icons/${imageName}`;
-    }
-  };
-
-  // Convert RGBA color to CSS rgba string
-  const rgbaToString = (color: { r: number; g: number; b: number; a: number }) => {
-    return `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-  };
-
-  const backgroundColor = rgbaToString(crest.background.color);
-  const emblemColor = rgbaToString(crest.emblem.color);
-  const borderColor = rgbaToString(crest.border.color);
-
-  // Determine which faction circle to use (default to alliance if not specified)
-  const factionCircle = faction?.toLowerCase() === "horde" ? "/custom_components/horde_circle.png" : "/custom_components/alliance_circle.png";
-
   return (
     <div className={`relative ${className}`} style={{ width: size, height: size }}>
-      {/* Layer 1: Faction circle base (alliance or horde) */}
-      <div className="absolute inset-0">
-        <Image src={factionCircle} alt="Faction base" width={size} height={size} className="object-contain" />
-      </div>
-
-      {/* Layer 2: Circle border */}
-      <div className="absolute inset-0">
-        <Image src="/custom_components/circle_border.png" alt="Circle border" width={size} height={size} className="object-contain" />
-      </div>
-
-      {/* Layer 3: Banner (colored with background color using multiply blend) */}
-      <div className="absolute inset-0">
-        <div className="relative w-full h-full">
-          <Image src="/custom_components/banner.png" alt="Banner" width={size} height={size} className="object-contain" />
-          {/* Color overlay for banner - preserves texture and shading */}
-          <div className="absolute inset-0 mix-blend-multiply pointer-events-none" style={{ backgroundColor }} />
-        </div>
-      </div>
-
-      {/* Layer 4: Border image from API (colored with border color) */}
-      {!borderBackendFailed && borderImageState !== "placeholder" && (
-        <div className="absolute inset-0">
-          <div className="relative w-full h-full">
-            <Image
-              src={getImageSrc(crest.border.imageName, borderImageState)}
-              alt="Guild border"
-              width={size}
-              height={size}
-              className="object-contain"
-              onError={() => {
-                if (borderImageState === "local") {
-                  setBorderImageState("backend");
-                } else if (borderImageState === "backend") {
-                  setBorderBackendFailed(true);
-                  setBorderImageState("placeholder");
-                }
-              }}
-            />
-            {/* Color overlay for border - preserves texture */}
-            <div className="absolute inset-0 mix-blend-multiply pointer-events-none" style={{ backgroundColor: borderColor }} />
-          </div>
-        </div>
-      )}
-
-      {/* Layer 5: Emblem image from API (colored with emblem color) */}
-      {!emblemBackendFailed && emblemImageState !== "placeholder" && (
-        <div className="absolute inset-0">
-          <div className="relative w-full h-full">
-            <Image
-              src={getImageSrc(crest.emblem.imageName, emblemImageState)}
-              alt="Guild emblem"
-              width={size}
-              height={size}
-              className="object-contain"
-              onError={() => {
-                if (emblemImageState === "local") {
-                  setEmblemImageState("backend");
-                } else if (emblemImageState === "backend") {
-                  setEmblemBackendFailed(true);
-                  setEmblemImageState("placeholder");
-                }
-              }}
-            />
-            {/* Color overlay for emblem - preserves texture */}
-            <div className="absolute inset-0 mix-blend-multiply pointer-events-none" style={{ backgroundColor: emblemColor }} />
-          </div>
-        </div>
-      )}
-
-      {/* Layer 6: Rings (top layer) */}
-      <div className="absolute inset-0">
-        <Image src="/custom_components/rings.png" alt="Rings" width={size} height={size} className="object-contain" />
-      </div>
+      <canvas ref={canvasRef} style={{ width: size, height: size }} className={`${isLoading ? "opacity-0" : "opacity-100"} transition-opacity duration-200`} />
+      {isLoading && <div className="absolute inset-0 bg-gray-700 rounded animate-pulse" />}
     </div>
   );
 }
