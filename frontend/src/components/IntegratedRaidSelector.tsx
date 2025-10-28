@@ -42,8 +42,8 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
         const rect = dropdownRef.current?.getBoundingClientRect();
         if (rect) {
           const viewportHeight = window.innerHeight;
-          const spaceBelow = viewportHeight - rect.bottom - 8; // 8px margin from bottom
-          setMaxHeight(Math.max(200, spaceBelow)); // minimum 200px
+          const spaceBelow = viewportHeight - rect.bottom - 32;
+          setMaxHeight(Math.max(200, spaceBelow));
         }
       };
 
