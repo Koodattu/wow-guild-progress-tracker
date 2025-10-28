@@ -108,27 +108,29 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
                 <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={20} width={32} />
               </div>
 
-              {/* Raids in this expansion */}
-              {groupedRaids[expansion].map((raid) => {
-                const raidIconUrl = getIconUrl(raid.iconUrl);
-                const isSelected = raid.id === selectedRaidId;
+              {/* Raids in this expansion - Flex Layout */}
+              <div className="flex flex-wrap gap-2 p-3">
+                {groupedRaids[expansion].map((raid) => {
+                  const raidIconUrl = getIconUrl(raid.iconUrl);
+                  const isSelected = raid.id === selectedRaidId;
 
-                return (
-                  <button
-                    key={raid.id}
-                    onClick={() => {
-                      onRaidSelect(raid.id);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full px-4 py-3 text-left transition-all duration-150 flex items-center gap-3 ${
-                      isSelected ? "bg-blue-900/40 border-l-4 border-blue-500" : "hover:bg-gray-700/50 border-l-4 border-transparent"
-                    }`}
-                  >
-                    {raidIconUrl && <Image src={raidIconUrl} alt={`${raid.name} icon`} width={32} height={32} className="rounded" />}
-                    <span className={`font-medium ${isSelected ? "text-blue-300" : "text-gray-200"}`}>{raid.name}</span>
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={raid.id}
+                      onClick={() => {
+                        onRaidSelect(raid.id);
+                        setIsOpen(false);
+                      }}
+                      className={`p-2 rounded-lg transition-all duration-150 flex items-center gap-2 shrink-0 ${
+                        isSelected ? "bg-blue-900/40 ring-2 ring-blue-500" : "hover:bg-gray-700/50 ring-2 ring-transparent hover:ring-gray-600"
+                      }`}
+                    >
+                      {raidIconUrl && <Image src={raidIconUrl} alt={`${raid.name} icon`} width={32} height={32} className="rounded" />}
+                      <span className={`text-sm font-medium whitespace-nowrap ${isSelected ? "text-blue-300" : "text-gray-200"}`}>{raid.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>

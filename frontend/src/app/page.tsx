@@ -178,10 +178,10 @@ function HomeContent() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 max-w-[85%]">
-        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
+        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
 
         {/* Horizontal Events Feed at the top */}
-        <div className="mb-8">
+        <div className="mb-2">
           <HorizontalEventsFeed events={events} />
         </div>
 
