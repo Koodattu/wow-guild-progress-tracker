@@ -135,16 +135,24 @@ function HomeContent() {
     [router]
   );
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh with different intervals
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Refresh events every 1 minute
+    const eventsInterval = setInterval(() => {
+      api.getEvents(5).then(setEvents);
+    }, 60000);
+
+    // Refresh guilds every 5 minutes
+    const guildsInterval = setInterval(() => {
       if (selectedRaidId !== null) {
         fetchRaidData(selectedRaidId);
-        api.getEvents(5).then(setEvents);
       }
-    }, 30000);
+    }, 300000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(eventsInterval);
+      clearInterval(guildsInterval);
+    };
   }, [selectedRaidId, fetchRaidData]);
 
   // Handle raid selection change

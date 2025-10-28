@@ -10,7 +10,7 @@ router.get("/", async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const skip = (page - 1) * limit;
 
-    const [events, totalCount] = await Promise.all([Event.find().sort({ timestamp: -1 }).skip(skip).limit(limit), Event.countDocuments()]);
+    const [events, totalCount] = await Promise.all([Event.find().sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"), Event.countDocuments()]);
 
     res.json({
       events,
@@ -35,7 +35,7 @@ router.get("/guild/:guildId", async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
 
     const [events, totalCount] = await Promise.all([
-      Event.find({ guildId: req.params.guildId }).sort({ timestamp: -1 }).skip(skip).limit(limit),
+      Event.find({ guildId: req.params.guildId }).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"),
       Event.countDocuments({ guildId: req.params.guildId }),
     ]);
 

@@ -141,7 +141,6 @@ export interface Event {
     progressDisplay?: string; // Phase-enhanced display string like "45% P3"
   };
   timestamp: string;
-  createdAt: string;
 }
 
 export interface Boss {

@@ -45,7 +45,7 @@ export default function HorizontalEventsFeed({ events }: HorizontalEventsFeedPro
         <EventCard key={event._id} event={event} className="flex-1 min-w-0" />
       ))}
 
-      {/* Always show View All button */}
+      {/* Always show View All button
       <Link
         href="/events"
         className="shrink-0 w-24 bg-gray-800/30 border border-gray-700 rounded px-3 py-4 flex items-center justify-center hover:bg-gray-800/50 hover:border-gray-600 transition-colors group"
@@ -54,6 +54,7 @@ export default function HorizontalEventsFeed({ events }: HorizontalEventsFeedPro
           <div className="text-blue-400 group-hover:text-blue-300 text-sm font-medium">View All</div>
         </div>
       </Link>
+      */}
     </div>
   );
 }
