@@ -21,6 +21,7 @@ function getExpansionIconPath(expansionName: string): string {
 export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSelect, raidDates }: IntegratedRaidSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number>(384); // default max-h-96 (384px)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -33,6 +34,29 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Calculate max height based on available space
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      const updateMaxHeight = () => {
+        const rect = dropdownRef.current?.getBoundingClientRect();
+        if (rect) {
+          const viewportHeight = window.innerHeight;
+          const spaceBelow = viewportHeight - rect.bottom - 8; // 8px margin from bottom
+          setMaxHeight(Math.max(200, spaceBelow)); // minimum 200px
+        }
+      };
+
+      updateMaxHeight();
+      window.addEventListener("resize", updateMaxHeight);
+      window.addEventListener("scroll", updateMaxHeight);
+
+      return () => {
+        window.removeEventListener("resize", updateMaxHeight);
+        window.removeEventListener("scroll", updateMaxHeight);
+      };
+    }
+  }, [isOpen]);
 
   const selectedRaid = raids.find((r) => r.id === selectedRaidId);
 
@@ -99,7 +123,10 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-2 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-h-96 overflow-y-auto backdrop-blur-sm">
+        <div
+          className="absolute z-50 mt-2 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl overflow-y-auto backdrop-blur-sm"
+          style={{ maxHeight: `${maxHeight}px` }}
+        >
           {expansionOrder.map((expansion) => (
             <div key={expansion}>
               {/* Expansion Header */}
