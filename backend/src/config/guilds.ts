@@ -12,7 +12,7 @@ export const GUILDS: TrackedGuild[] = [
   //{ name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   //{ name: "Marras", realm: "Kazzak", region: "EU" },
   //{ name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
-  //{ name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
+  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)

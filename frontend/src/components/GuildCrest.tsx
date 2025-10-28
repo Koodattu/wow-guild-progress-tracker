@@ -8,7 +8,7 @@ import { GuildCrest as GuildCrestType } from "@/types";
 const LAYER_CONFIG = {
   factionCircle: { scale: 0.95, offsetX: 0, offsetY: 0 },
   circleBorder: { scale: 1.0, offsetX: 0, offsetY: 0 },
-  banner: { scale: 0.8, offsetX: 0, offsetY: 0 },
+  banner: { scale: 0.95, offsetX: 0, offsetY: 7 },
   border: { scale: 0.7, offsetX: -0.5, offsetY: -6 },
   emblem: { scale: 0.55, offsetX: -4.5, offsetY: -7 },
   rings: { scale: 0.85, offsetX: 0, offsetY: 0 },
