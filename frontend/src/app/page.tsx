@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Event, RaidInfo, RaidDates } from "@/types";
 import { api } from "@/lib/api";
 import GuildTable from "@/components/GuildTable";
-import EventsFeed from "@/components/EventsFeed";
+import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 
 function HomeContent() {
@@ -172,21 +172,16 @@ function HomeContent() {
       <div className="container mx-auto px-4 max-w-[85%]">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Guild List - Takes 2/3 on large screens */}
-          <div className="lg:col-span-2">
-            <div className="">
-              {/* Integrated Raid Selector - replaces both the dropdown and the header */}
-              {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
-              <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />
-            </div>
-          </div>
+        {/* Horizontal Events Feed at the top */}
+        <div className="mb-8">
+          <HorizontalEventsFeed events={events} />
+        </div>
 
-          {/* Events Feed - Takes 1/3 on large screens */}
-          <div className="lg:col-span-1">
-            <EventsFeed events={events} maxDisplay={5} />
-          </div>
+        {/* Guild Leaderboard in the middle */}
+        <div>
+          {/* Integrated Raid Selector - replaces both the dropdown and the header */}
+          {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
+          <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />
         </div>
       </div>
     </main>
