@@ -214,8 +214,18 @@ export default function GuildProfilePage({ params }: PageProps) {
             <div className="flex items-center gap-3 mb-3">
               <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0" drawFactionCircle={true} />
               <h1 className="text-5xl font-bold text-white">
-                {guildSummary.name}
-                <span className="text-gray-400 font-normal"> - {guildSummary.realm}</span>
+                {guildSummary.parent_guild ? (
+                  <>
+                    <span className="text-gray-400 font-normal">{guildSummary.parent_guild} (</span>
+                    {guildSummary.name}
+                    <span className="text-gray-400 font-normal">)-{guildSummary.realm}</span>
+                  </>
+                ) : (
+                  <>
+                    {guildSummary.name}
+                    <span className="text-gray-400 font-normal">-{guildSummary.realm}</span>
+                  </>
+                )}
               </h1>
               {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
             </div>

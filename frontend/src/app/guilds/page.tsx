@@ -35,7 +35,9 @@ export default function GuildsPage() {
     const grouped: Record<string, GuildListItem[]> = {};
 
     filtered.forEach((guild) => {
-      const firstLetter = guild.name.charAt(0).toUpperCase();
+      // Use parent_guild for grouping if it exists, otherwise use guild name
+      const nameForGrouping = guild.parent_guild || guild.name;
+      const firstLetter = nameForGrouping.charAt(0).toUpperCase();
       if (!grouped[firstLetter]) {
         grouped[firstLetter] = [];
       }
@@ -44,7 +46,12 @@ export default function GuildsPage() {
 
     // Sort guilds within each letter group alphabetically
     Object.keys(grouped).forEach((letter) => {
-      grouped[letter].sort((a, b) => a.name.localeCompare(b.name));
+      grouped[letter].sort((a, b) => {
+        // Use parent_guild for sorting if it exists, otherwise use guild name
+        const aName = a.parent_guild || a.name;
+        const bName = b.parent_guild || b.name;
+        return aName.localeCompare(bName);
+      });
     });
 
     return grouped;
@@ -98,8 +105,18 @@ export default function GuildsPage() {
                     href={`/guilds/${guild._id}`}
                     className={`block text-gray-300 hover:text-white transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}
                   >
-                    <span className="text-4xl font-semibold">{guild.name}</span>
-                    <span className="text-4xl text-gray-400"> - {guild.realm}</span>
+                    {guild.parent_guild ? (
+                      <>
+                        <span className="text-4xl text-gray-400">{guild.parent_guild} (</span>
+                        <span className="text-4xl font-semibold">{guild.name}</span>
+                        <span className="text-4xl text-gray-400">)-{guild.realm}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-semibold">{guild.name}</span>
+                        <span className="text-4xl text-gray-400">-{guild.realm}</span>
+                      </>
+                    )}
                     {guild.isCurrentlyRaiding && <span className="ml-3 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
                   </Link>
                 ))}

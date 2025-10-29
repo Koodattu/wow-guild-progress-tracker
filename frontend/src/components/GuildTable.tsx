@@ -79,8 +79,18 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                       <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] origin-top-left" />
                     </div>
                     <span className="font-semibold text-white">
-                      {guild.name}
-                      <span className="text-gray-400 font-thin text-sm"> - {guild.realm}</span>
+                      {guild.parent_guild ? (
+                        <>
+                          <span className="text-gray-400 font-thin text-sm">{guild.parent_guild} (</span>
+                          {guild.name}
+                          <span className="text-gray-400 font-thin text-sm">)-{guild.realm}</span>
+                        </>
+                      ) : (
+                        <>
+                          {guild.name}
+                          <span className="text-gray-400 font-thin text-sm">-{guild.realm}</span>
+                        </>
+                      )}
                     </span>
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>

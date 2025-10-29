@@ -92,6 +92,7 @@ export interface GuildListItem {
   region: string;
   faction?: string;
   crest?: GuildCrest;
+  parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
@@ -105,6 +106,7 @@ export interface GuildSummary {
   region: string;
   faction?: string;
   crest?: GuildCrest;
+  parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
@@ -118,6 +120,7 @@ export interface Guild {
   region: string;
   faction?: string;
   crest?: GuildCrest;
+  parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgress[];

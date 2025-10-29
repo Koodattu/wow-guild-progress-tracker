@@ -2,17 +2,22 @@ export interface TrackedGuild {
   name: string;
   realm: string;
   region: string;
+  parent_guild?: string;
 }
 
 export const GUILDS: TrackedGuild[] = [
   { name: "Tuju", realm: "Kazzak", region: "EU" },
+  //{ name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
+  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
   //{ name: "Kilta", realm: "Ravencrest", region: "EU" },
-  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
+  //{ name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
   //{ name: "Nave", realm: "Kazzak", region: "EU" },
   //{ name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   //{ name: "Marras", realm: "Kazzak", region: "EU" },
   //{ name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
-  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
+  //{ name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)

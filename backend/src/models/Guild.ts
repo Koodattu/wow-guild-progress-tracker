@@ -76,6 +76,7 @@ export interface IGuild extends Document {
   faction?: string;
   iconUrl?: string;
   crest?: IGuildCrest;
+  parent_guild?: string; // Parent guild name if this is a team/sub-guild
   progress: IRaidProgress[];
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
@@ -164,6 +165,7 @@ const GuildSchema: Schema = new Schema(
         },
       },
     },
+    parent_guild: { type: String }, // Parent guild name if this is a team/sub-guild
     progress: [RaidProgressSchema],
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log

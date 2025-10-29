@@ -280,21 +280,23 @@ class GuildService {
 
       if (!existing) {
         // Fetch guild crest data from Blizzard API
-        console.log(`Fetching crest data for: ${guildConfig.name} - ${guildConfig.realm}`);
+        // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
+        const blizzardGuildName = guildConfig.parent_guild || guildConfig.name;
+        console.log(`Fetching crest data for: ${blizzardGuildName} - ${guildConfig.realm}${guildConfig.parent_guild ? ` (parent guild for ${guildConfig.name})` : ""}`);
         let crestData = null;
         let faction = undefined;
 
         try {
-          const guildData = await blizzardService.getGuildData(guildConfig.name, guildConfig.realm.toLowerCase(), guildConfig.region);
+          const guildData = await blizzardService.getGuildData(blizzardGuildName, guildConfig.realm.toLowerCase(), guildConfig.region);
           if (guildData) {
             crestData = guildData.crest;
             faction = guildData.faction;
-            console.log(`✅ Retrieved crest data for: ${guildConfig.name}`);
+            console.log(`✅ Retrieved crest data for: ${blizzardGuildName}`);
           } else {
-            console.warn(`⚠️  Could not fetch crest data for: ${guildConfig.name}`);
+            console.warn(`⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
           }
         } catch (error) {
-          console.error(`Error fetching crest data for ${guildConfig.name}:`, error instanceof Error ? error.message : "Unknown error");
+          console.error(`Error fetching crest data for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
         }
 
         const newGuild = await Guild.create({
@@ -303,6 +305,7 @@ class GuildService {
           region: guildConfig.region,
           faction,
           crest: crestData,
+          parent_guild: guildConfig.parent_guild,
           progress: [],
         });
         console.log(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
@@ -1502,6 +1505,7 @@ class GuildService {
           region: guildObj.region,
           faction: guildObj.faction,
           crest: guildObj.crest,
+          parent_guild: guildObj.parent_guild,
           isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
           lastFetched: guildObj.lastFetched,
           progress: minimalProgress,
@@ -1576,6 +1580,7 @@ class GuildService {
       region: guildObj.region,
       faction: guildObj.faction,
       crest: guildObj.crest,
+      parent_guild: guildObj.parent_guild,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,

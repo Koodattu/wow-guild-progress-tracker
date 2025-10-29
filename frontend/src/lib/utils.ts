@@ -131,3 +131,13 @@ export function getLeaderboardRankColor(rank: number): string {
   if (rank <= 50) return "text-blue-400"; // Rare
   return "text-green-500"; // Uncommon
 }
+
+// Format guild name with parent guild if applicable
+// Format: parent_guild (guild_name) - server_name
+// Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)
+export function formatGuildName(guildName: string, realm: string, parentGuild?: string): string {
+  if (parentGuild) {
+    return `${parentGuild} (${guildName}) - ${realm}`;
+  }
+  return `${guildName} - ${realm}`;
+}
