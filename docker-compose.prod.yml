@@ -22,7 +22,10 @@ services:
       - app-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=https://suomiwow.vaarattu.tv
     container_name: wow-prog-frontend
     restart: unless-stopped
     environment:
