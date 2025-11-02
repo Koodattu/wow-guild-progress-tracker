@@ -81,9 +81,11 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                     <span className="font-semibold text-white">
                       {guild.parent_guild ? (
                         <>
-                          <span className="text-gray-400 font-thin text-sm">{guild.parent_guild} (</span>
                           {guild.name}
-                          <span className="text-gray-400 font-thin text-sm">)-{guild.realm}</span>
+                          <span className="text-gray-400 font-thin text-sm">
+                            {" "}
+                            ({guild.parent_guild}-{guild.realm}){" "}
+                          </span>
                         </>
                       ) : (
                         <>

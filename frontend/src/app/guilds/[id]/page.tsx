@@ -216,9 +216,11 @@ export default function GuildProfilePage({ params }: PageProps) {
               <h1 className="text-5xl font-bold text-white">
                 {guildSummary.parent_guild ? (
                   <>
-                    <span className="text-gray-400 font-normal">{guildSummary.parent_guild} (</span>
                     {guildSummary.name}
-                    <span className="text-gray-400 font-normal">)-{guildSummary.realm}</span>
+                    <span className="text-gray-400 font-normal">
+                      {" "}
+                      ({guildSummary.parent_guild}-{guildSummary.realm})
+                    </span>
                   </>
                 ) : (
                   <>

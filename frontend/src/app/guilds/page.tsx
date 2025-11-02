@@ -30,13 +30,18 @@ export default function GuildsPage() {
 
   // Filter and group guilds by first letter
   const groupedGuilds = useMemo(() => {
-    const filtered = guilds.filter((guild) => guild.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filtered = guilds.filter(
+      (guild) =>
+        guild.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guild.parent_guild?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guild.realm.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const grouped: Record<string, GuildListItem[]> = {};
 
     filtered.forEach((guild) => {
       // Use parent_guild for grouping if it exists, otherwise use guild name
-      const nameForGrouping = guild.parent_guild || guild.name;
+      const nameForGrouping = guild.name; //guild.parent_guild || guild.name;
       const firstLetter = nameForGrouping.charAt(0).toUpperCase();
       if (!grouped[firstLetter]) {
         grouped[firstLetter] = [];
@@ -107,9 +112,11 @@ export default function GuildsPage() {
                   >
                     {guild.parent_guild ? (
                       <>
-                        <span className="text-4xl text-gray-400">{guild.parent_guild} (</span>
                         <span className="text-4xl font-semibold">{guild.name}</span>
-                        <span className="text-4xl text-gray-400">)-{guild.realm}</span>
+                        <span className="text-4xl text-gray-400">
+                          {" "}
+                          ({guild.parent_guild}-{guild.realm})
+                        </span>
                       </>
                     ) : (
                       <>
