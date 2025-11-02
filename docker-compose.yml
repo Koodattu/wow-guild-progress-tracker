@@ -1,5 +1,6 @@
 services:
   mongodb:
+    container_name: wow-prog-db
     image: mongo:7.0
     ports:
       - "27017:27017"
@@ -7,6 +8,7 @@ services:
       - mongodb_data:/data/db
 
   backend:
+    container_name: wow-prog-backend
     build: ./backend
     ports:
       - "3001:3001"
@@ -22,6 +24,7 @@ services:
 
   frontend:
     build: ./frontend
+    container_name: wow-prog-frontend
     ports:
       - "3000:3000"
     environment:

@@ -1,38 +1,57 @@
 services:
-  mongodb:
-    image: mongo:7.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
+  mongo:
+    image: mongo:7
+    container_name: wow-prog-db
     restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app-network
 
   backend:
     build: ./backend
-    ports:
-      - "3001:3001"
+    container_name: wow-prog-backend
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/wow_guild_tracker
-      - NODE_ENV=production
-    depends_on:
-      - mongodb
+      - MONGODB_URI=mongodb://mongo:27017/wow_guild_tracker
     volumes:
-      - icons_data:/app/public/icons
-    restart: unless-stopped
+      - ./data/images:/app/data/images
+    networks:
+      - app-network
 
   frontend:
     build: ./frontend
-    ports:
-      - "3000:3000"
+    container_name: wow-prog-frontend
+    restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:3001
+      - NEXT_PUBLIC_API_URL=/api
       - NODE_ENV=production
     depends_on:
       - backend
+    networks:
+      - app-network
+
+  nginx:
+    build: ./nginx
+    container_name: wow-prog-nginx
     restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/html:/var/www/html
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network
 
 volumes:
-  mongodb_data:
-  icons_data:
+  mongo_data:
+
+networks:
+  app-network:
+    driver: bridge
