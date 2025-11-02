@@ -1,6 +1,17 @@
 import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress } from "@/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// For client-side: use NEXT_PUBLIC_API_URL (browser requests)
+// For server-side: use API_URL (internal Docker network)
+const getApiUrl = () => {
+  if (typeof window === "undefined") {
+    // Server-side: use internal Docker network
+    return process.env.API_URL || "http://localhost:3001";
+  }
+  // Client-side: use public URL
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+};
+
+const API_URL = getApiUrl();
 
 export const api = {
   // Guild endpoints
