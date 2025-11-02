@@ -684,7 +684,7 @@ class GuildService {
 
     const reportsPerPage = 10;
     let page = 1;
-    const maxPages = 500; // Fetch up to 500 reports maximum
+    const maxPages = 500; // Fetch up to 5000 reports maximum
     let totalReportsFetched = 0;
     let totalFightsSaved = 0;
 
