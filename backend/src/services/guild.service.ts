@@ -244,26 +244,39 @@ class GuildService {
     return validBossIds;
   }
 
-  // Check if a fight is a duplicate based on unique characteristics
+  // Check if a fight is a duplicate based on unique characteristics with tolerance
   // A fight is considered duplicate if it has the same:
-  // - encounterID
-  // - difficulty
-  // - bossPercentage
-  // - fightPercentage
-  // - duration
-  // This indicates the same log uploaded multiple times
+  // - encounterID (exact match)
+  // - difficulty (exact match)
+  // - bossPercentage (within 0.1%)
+  // - fightPercentage (within 0.1%)
+  // - duration (within 1 second)
+  // This indicates the same log uploaded multiple times by different users
   // Returns the canonical fight (first occurrence by timestamp) if this is a duplicate
   private isDuplicateFightInMemory(fight: any, allFights: any[], seenFights: Map<string, any>): { isDuplicate: boolean; canonical?: any } {
-    // Create a unique key based on fight characteristics
-    const key = `${fight.encounterID}-${fight.difficulty}-${fight.bossPercentage}-${fight.fightPercentage}-${fight.duration}`;
+    // Tolerance values for fuzzy matching
+    const PERCENTAGE_TOLERANCE = 0.1; // 0.1% tolerance for percentages
+    const DURATION_TOLERANCE = 1000; // 1 second (1000ms) tolerance for duration
 
-    if (seenFights.has(key)) {
-      // This is a duplicate
-      return { isDuplicate: true, canonical: seenFights.get(key) };
+    // Check against all previously seen fights for this encounter+difficulty
+    const lookupKey = `${fight.encounterID}-${fight.difficulty}`;
+    const candidateFights = seenFights.get(lookupKey) || [];
+
+    for (const seenFight of candidateFights) {
+      // Check if percentages and duration are within tolerance
+      const bossPercentageDiff = Math.abs((fight.bossPercentage || 0) - (seenFight.bossPercentage || 0));
+      const fightPercentageDiff = Math.abs((fight.fightPercentage || 0) - (seenFight.fightPercentage || 0));
+      const durationDiff = Math.abs((fight.duration || 0) - (seenFight.duration || 0));
+
+      if (bossPercentageDiff <= PERCENTAGE_TOLERANCE && fightPercentageDiff <= PERCENTAGE_TOLERANCE && durationDiff <= DURATION_TOLERANCE) {
+        // This is a duplicate
+        return { isDuplicate: true, canonical: seenFight };
+      }
     }
 
-    // First occurrence - mark it as seen
-    seenFights.set(key, fight);
+    // Not a duplicate - add to the list of seen fights for this encounter+difficulty
+    candidateFights.push(fight);
+    seenFights.set(lookupKey, candidateFights);
     return { isDuplicate: false };
   }
 
@@ -319,6 +332,59 @@ class GuildService {
           console.error(`Error during initial fetch for ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
         }
       }
+    }
+  }
+
+  // Recalculate statistics for existing guilds on startup
+  // This is used when CALCULATE_GUILD_STATISTICS_ON_STARTUP is set to true
+  async recalculateExistingGuildStatistics(currentTierOnly: boolean = true): Promise<void> {
+    console.log("Recalculating statistics for existing guilds...");
+    console.log(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
+
+    try {
+      // Get all guilds from database
+      const guilds = await Guild.find();
+
+      if (guilds.length === 0) {
+        console.log("No guilds found in database, skipping statistics recalculation");
+        return;
+      }
+
+      console.log(`Found ${guilds.length} guilds to recalculate statistics for`);
+
+      // Process each guild
+      for (const guild of guilds) {
+        try {
+          // Check if guild has any reports (i.e., has already been initialized with data)
+          const hasReports = await Report.exists({ guildId: guild._id });
+
+          if (!hasReports) {
+            console.log(`[${guild.name}] No reports found, skipping statistics recalculation`);
+            continue;
+          }
+
+          console.log(`[${guild.name}] Recalculating statistics...`);
+
+          // Recalculate statistics based on the mode
+          if (currentTierOnly) {
+            // Only recalculate for current raid
+            await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+          } else {
+            // Recalculate for all tracked raids
+            await this.calculateGuildStatistics(guild, null);
+          }
+
+          console.log(`[${guild.name}] Statistics recalculation complete`);
+        } catch (error) {
+          console.error(`[${guild.name}] Error recalculating statistics:`, error instanceof Error ? error.message : "Unknown error");
+          // Continue with next guild even if one fails
+        }
+      }
+
+      console.log("Finished recalculating statistics for all guilds");
+    } catch (error) {
+      console.error("Error in recalculateExistingGuildStatistics:", error);
+      throw error;
     }
   }
 
