@@ -49,6 +49,17 @@ const startServer = async () => {
     // Initialize guilds from config
     await guildService.initializeGuilds();
 
+    // Recalculate statistics for existing guilds if enabled
+    const calculateOnStartup = process.env.CALCULATE_GUILD_STATISTICS_ON_STARTUP !== "false";
+    const currentTierOnly = process.env.CURRENT_TIER_ONLY !== "false";
+
+    if (calculateOnStartup) {
+      console.log("CALCULATE_GUILD_STATISTICS_ON_STARTUP is enabled");
+      await guildService.recalculateExistingGuildStatistics(currentTierOnly);
+    } else {
+      console.log("CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation");
+    }
+
     // Start background scheduler
     scheduler.start();
 
