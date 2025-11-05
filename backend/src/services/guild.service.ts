@@ -255,8 +255,8 @@ class GuildService {
   // Returns the canonical fight (first occurrence by timestamp) if this is a duplicate
   private isDuplicateFightInMemory(fight: any, allFights: any[], seenFights: Map<string, any>): { isDuplicate: boolean; canonical?: any } {
     // Tolerance values for fuzzy matching
-    const PERCENTAGE_TOLERANCE = 0.1; // 0.1% tolerance for percentages
-    const DURATION_TOLERANCE = 1000; // 1 second (1000ms) tolerance for duration
+    const PERCENTAGE_TOLERANCE = 0.01; //0.1; // 0.1% tolerance for percentages
+    const DURATION_TOLERANCE = 100; //1000; // 1 second (1000ms) tolerance for duration
 
     // Check against all previously seen fights for this encounter+difficulty
     const lookupKey = `${fight.encounterID}-${fight.difficulty}`;
@@ -374,7 +374,9 @@ class GuildService {
             await this.calculateGuildStatistics(guild, null);
           }
 
-          console.log(`[${guild.name}] Statistics recalculation complete`);
+          // Save the guild with updated statistics
+          await guild.save();
+          console.log(`[${guild.name}] Statistics recalculation complete and saved`);
         } catch (error) {
           console.error(`[${guild.name}] Error recalculating statistics:`, error instanceof Error ? error.message : "Unknown error");
           // Continue with next guild even if one fails
