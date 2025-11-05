@@ -23,6 +23,7 @@ export const GUILDS: TrackedGuild[] = [
   { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU" },
   { name: "Taikaolennot", realm: "Outland", region: "EU" },
   { name: "Hakkapeliitta", realm: "Darkspear", region: "EU" },
+  { name: "Urheilujätkät", realm: "Stormreaver", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
