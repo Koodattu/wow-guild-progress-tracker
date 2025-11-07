@@ -24,7 +24,9 @@ export default function Navigation() {
             <Link
               href="/"
               className={`text-sm font-medium transition-colors ${
-                isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
+                isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") && !pathname.startsWith("/timetable")
+                  ? "text-blue-400 border-b-2 border-blue-400"
+                  : "text-gray-400 hover:text-white"
               } py-5`}
             >
               Progress Leaderboard
@@ -34,6 +36,12 @@ export default function Navigation() {
               className={`text-sm font-medium transition-colors ${isActive("/guilds") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
             >
               All Guilds
+            </Link>
+            <Link
+              href="/timetable"
+              className={`text-sm font-medium transition-colors ${isActive("/timetable") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+            >
+              Raid Timetable
             </Link>
             <Link
               href="/events"

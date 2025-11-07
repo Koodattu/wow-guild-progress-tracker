@@ -196,3 +196,23 @@ export interface EventsResponse {
   events: Event[];
   pagination: PaginationInfo;
 }
+
+export interface RaidScheduleDay {
+  day: string; // "Monday", "Tuesday", etc.
+  startHour: number; // 0-23.5 (supports half hours)
+  endHour: number; // 0-23.5 (supports half hours)
+}
+
+export interface RaidSchedule {
+  days: RaidScheduleDay[];
+  lastCalculated?: string;
+}
+
+export interface GuildSchedule {
+  _id: string;
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+  raidSchedule: RaidSchedule;
+}

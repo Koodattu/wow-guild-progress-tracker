@@ -1789,6 +1789,30 @@ class GuildService {
     }
   }
 
+  // Get all guilds with only their raid schedules (for calendar/timetable view)
+  async getAllGuildSchedules(): Promise<any[]> {
+    const guilds = await Guild.find().select("_id name realm region parent_guild raidSchedule").lean();
+
+    // Filter out guilds without raid schedules and remove raidCount from days
+    return guilds
+      .filter((guild) => guild.raidSchedule && guild.raidSchedule.days && guild.raidSchedule.days.length > 0)
+      .map((guild) => ({
+        _id: guild._id,
+        name: guild.name,
+        realm: guild.realm,
+        region: guild.region,
+        parent_guild: guild.parent_guild,
+        raidSchedule: {
+          days: guild.raidSchedule!.days.map((day: any) => ({
+            day: day.day,
+            startHour: day.startHour,
+            endHour: day.endHour,
+          })),
+          lastCalculated: guild.raidSchedule!.lastCalculated,
+        },
+      }));
+  }
+
   // Get all guilds sorted by progress
   async getAllGuilds(): Promise<IGuild[]> {
     const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });

@@ -3,6 +3,17 @@ import guildService from "../services/guild.service";
 
 const router = Router();
 
+// Get all guilds with only their raid schedules (for calendar/timetable view)
+router.get("/schedules", async (req: Request, res: Response) => {
+  try {
+    const schedules = await guildService.getAllGuildSchedules();
+    res.json(schedules);
+  } catch (error) {
+    console.error("Error fetching guild schedules:", error);
+    res.status(500).json({ error: "Failed to fetch guild schedules" });
+  }
+});
+
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
 router.get("/", async (req: Request, res: Response) => {
