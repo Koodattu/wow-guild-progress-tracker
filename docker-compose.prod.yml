@@ -16,6 +16,7 @@ services:
       - ./backend/.env
     environment:
       - MONGODB_URI=mongodb://mongo:27017/wow_guild_tracker
+      - NODE_ENV=production
     volumes:
       - ./data/images:/app/data/images
     networks:

@@ -7,6 +7,14 @@ export interface TrackedGuild {
 
 export const GUILDS: TrackedGuild[] = [
   { name: "Tuju", realm: "Kazzak", region: "EU" },
+  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
+];
+
+export const GUILDS_PROD: TrackedGuild[] = [
+  { name: "Tuju", realm: "Kazzak", region: "EU" },
   { name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },

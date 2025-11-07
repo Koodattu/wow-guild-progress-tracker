@@ -69,6 +69,18 @@ export interface IGuildCrest {
   };
 }
 
+export interface IRaidScheduleDay {
+  day: string; // "Monday", "Tuesday", etc.
+  startHour: number; // 0-23.5 (supports half hours: 0, 0.5, 1, 1.5, ..., 23, 23.5)
+  endHour: number; // 0-23.5 (supports half hours: 0, 0.5, 1, 1.5, ..., 23, 23.5)
+  raidCount: number; // How many raids occurred on this day/time slot
+}
+
+export interface IRaidSchedule {
+  days: IRaidScheduleDay[]; // Most common raiding days and hours
+  lastCalculated?: Date;
+}
+
 export interface IGuild extends Document {
   name: string;
   realm: string;
@@ -78,6 +90,7 @@ export interface IGuild extends Document {
   crest?: IGuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   progress: IRaidProgress[];
+  raidSchedule?: IRaidSchedule; // Calculated raiding schedule for current tier
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
   activityStatus?: "active" | "inactive"; // active = logs within 30 days, inactive = no logs for 30+ days
@@ -167,6 +180,17 @@ const GuildSchema: Schema = new Schema(
     },
     parent_guild: { type: String }, // Parent guild name if this is a team/sub-guild
     progress: [RaidProgressSchema],
+    raidSchedule: {
+      days: [
+        {
+          day: { type: String, required: true },
+          startHour: { type: Number, required: true },
+          endHour: { type: Number, required: true },
+          raidCount: { type: Number, required: true },
+        },
+      ],
+      lastCalculated: { type: Date },
+    },
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log
     activityStatus: { type: String, enum: ["active", "inactive"], default: "active" }, // Track guild activity

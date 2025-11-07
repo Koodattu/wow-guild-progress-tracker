@@ -6,7 +6,7 @@ import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
-import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES } from "../config/guilds";
+import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES, GUILDS_PROD } from "../config/guilds";
 import mongoose from "mongoose";
 
 class GuildService {
@@ -284,7 +284,10 @@ class GuildService {
   async initializeGuilds(): Promise<void> {
     console.log("Initializing guilds from config...");
 
-    for (const guildConfig of GUILDS) {
+    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+    console.log(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
+
+    for (const guildConfig of guildsToTrack) {
       const existing = await Guild.findOne({
         name: guildConfig.name,
         realm: guildConfig.realm,
@@ -1115,6 +1118,272 @@ class GuildService {
     }
 
     console.log(`[${guild.name}] Statistics calculation complete`);
+
+    // Calculate raiding schedule for current raid only
+    if (raidId === CURRENT_RAID_ID) {
+      await this.calculateRaidingSchedule(guild, raidId);
+    }
+  }
+
+  // Calculate the guild's raiding schedule (days and hours) for the current raid tier
+  private async calculateRaidingSchedule(guild: IGuild, raidId: number): Promise<void> {
+    console.log(`[${guild.name}] Calculating raiding schedule for raid ID: ${raidId}`);
+
+    try {
+      // Get raid data to get the boss encounter IDs and date range
+      const raidData = await this.getRaidData(raidId);
+      if (!raidData) {
+        console.warn(`[${guild.name}] Raid data not found for zone ${raidId}, skipping schedule calculation`);
+        return;
+      }
+
+      // Get valid boss encounter IDs for this raid
+      const validBossIds = await this.getValidBossEncounterIdsForRaid(raidData.id);
+
+      // Get the raid's date range for the guild's region
+      const guildRegion = guild.region.toLowerCase();
+      const raidStartDate = raidData.starts?.[guildRegion as keyof typeof raidData.starts];
+      const raidEndDate = raidData.ends?.[guildRegion as keyof typeof raidData.ends];
+
+      if (!raidStartDate && !raidEndDate) {
+        console.log(`[${guild.name}] No date range available for ${raidData.name}, skipping schedule calculation`);
+        return;
+      }
+
+      // Get all fights for this raid's bosses only
+      const fights = await Fight.find({
+        guildId: guild._id as mongoose.Types.ObjectId,
+        zoneId: raidData.id,
+        encounterID: { $in: Array.from(validBossIds) },
+      }).sort({ timestamp: 1 });
+
+      if (fights.length === 0) {
+        console.log(`[${guild.name}] No fights found for ${raidData.name}, skipping schedule calculation`);
+        return;
+      }
+
+      // Filter fights by date range
+      let filteredFights = fights.filter((fight) => {
+        const fightTimestamp = fight.timestamp;
+        if (raidStartDate && fightTimestamp < raidStartDate) return false;
+        if (raidEndDate && fightTimestamp > raidEndDate) return false;
+        return true;
+      });
+
+      if (filteredFights.length === 0) {
+        console.log(`[${guild.name}] No fights in date range for ${raidData.name}, skipping schedule calculation`);
+        return;
+      }
+
+      console.log(`[${guild.name}] Processing ${filteredFights.length} fights for schedule calculation`);
+
+      // Group fights by report to calculate accurate raid session times
+      const reportSessions = new Map<
+        string,
+        {
+          reportCode: string;
+          reportStartTime: number;
+          fights: typeof filteredFights;
+        }
+      >();
+
+      for (const fight of filteredFights) {
+        if (!reportSessions.has(fight.reportCode)) {
+          reportSessions.set(fight.reportCode, {
+            reportCode: fight.reportCode,
+            reportStartTime: fight.reportStartTime,
+            fights: [],
+          });
+        }
+        reportSessions.get(fight.reportCode)!.fights.push(fight);
+      }
+
+      console.log(`[${guild.name}] Found ${reportSessions.size} unique raid sessions (reports)`);
+
+      // Helper function to round time to nearest half hour
+      const roundToNearestHalfHour = (date: Date): number => {
+        const hours = date.getHours();
+        const minutes = date.getMinutes();
+
+        // Convert to decimal hours (e.g., 18:45 = 18.75)
+        const decimalHours = hours + minutes / 60;
+
+        // Round to nearest 0.5
+        const rounded = Math.round(decimalHours * 2) / 2;
+
+        return rounded;
+      };
+
+      // Calculate actual start and end times for each report
+      interface RaidSession {
+        startTime: Date;
+        endTime: Date;
+        day: string;
+        startHour: number;
+        endHour: number;
+      }
+
+      const raidSessions: RaidSession[] = [];
+
+      for (const [reportCode, session] of reportSessions.entries()) {
+        // Find earliest fightStartTime and latest fightEndTime in this report
+        let earliestFightStart = Number.MAX_SAFE_INTEGER;
+        let latestFightEnd = 0;
+
+        for (const fight of session.fights) {
+          if (fight.fightStartTime < earliestFightStart) {
+            earliestFightStart = fight.fightStartTime;
+          }
+          if (fight.fightEndTime > latestFightEnd) {
+            latestFightEnd = fight.fightEndTime;
+          }
+        }
+
+        // Calculate actual start and end times
+        // reportStartTime is in unix milliseconds
+        // fightStartTime and fightEndTime are in milliseconds relative to report start
+        const actualStartTime = new Date(session.reportStartTime + earliestFightStart);
+        const actualEndTime = new Date(session.reportStartTime + latestFightEnd);
+
+        // Get day of week and round hours to nearest half hour
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const day = dayNames[actualStartTime.getDay()];
+        const startHour = roundToNearestHalfHour(actualStartTime);
+        const endHour = roundToNearestHalfHour(actualEndTime);
+
+        raidSessions.push({
+          startTime: actualStartTime,
+          endTime: actualEndTime,
+          day,
+          startHour,
+          endHour,
+        });
+
+        // Format hours for display (e.g., 18.5 -> "18:30", 19 -> "19:00")
+        const formatHour = (hour: number): string => {
+          const h = Math.floor(hour);
+          const m = (hour % 1) * 60;
+          return `${h}:${m.toString().padStart(2, "0")}`;
+        };
+
+        console.log(
+          `[${guild.name}] Report ${reportCode}: ${day} ${formatHour(startHour)}-${formatHour(endHour)} (${actualStartTime.toISOString()} to ${actualEndTime.toISOString()})`
+        );
+      }
+
+      // Analyze raiding patterns - find most common day/time combinations
+      interface DayTimeSlot {
+        day: string;
+        startHour: number;
+        endHour: number;
+        count: number;
+      }
+
+      const dayTimeMap = new Map<string, DayTimeSlot>();
+
+      for (const session of raidSessions) {
+        // Create a key for this day/time combination
+        const key = `${session.day}:${session.startHour}:${session.endHour}`;
+
+        if (!dayTimeMap.has(key)) {
+          dayTimeMap.set(key, {
+            day: session.day,
+            startHour: session.startHour,
+            endHour: session.endHour,
+            count: 0,
+          });
+        }
+
+        dayTimeMap.get(key)!.count++;
+      }
+
+      // Convert to array and sort by count (most common first)
+      const allDayTimeSlots = Array.from(dayTimeMap.values()).sort((a, b) => b.count - a.count);
+
+      console.log(`[${guild.name}] Found ${allDayTimeSlots.length} unique day/time patterns:`);
+      allDayTimeSlots.forEach((slot) => {
+        const formatHour = (hour: number): string => {
+          const h = Math.floor(hour);
+          const m = (hour % 1) * 60;
+          return `${h}:${m.toString().padStart(2, "0")}`;
+        };
+        console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+      });
+
+      // Filter to get only the most likely days (no duplicates)
+      // Keep only the most common time slot for each unique day
+      const seenDays = new Set<string>();
+      const mostLikelyDays: DayTimeSlot[] = [];
+
+      for (const slot of allDayTimeSlots) {
+        if (!seenDays.has(slot.day)) {
+          seenDays.add(slot.day);
+          mostLikelyDays.push(slot);
+        }
+      }
+
+      console.log(`[${guild.name}] Most likely raiding days (${mostLikelyDays.length} unique days):`);
+      mostLikelyDays.forEach((slot) => {
+        const formatHour = (hour: number): string => {
+          const h = Math.floor(hour);
+          const m = (hour % 1) * 60;
+          return `${h}:${m.toString().padStart(2, "0")}`;
+        };
+        console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+      });
+
+      // Filter out outliers based on relative raid count
+      // Days with significantly fewer raids compared to the top days should be excluded
+      let filteredDays = mostLikelyDays;
+
+      if (mostLikelyDays.length > 0) {
+        const maxRaidCount = mostLikelyDays[0].count; // Highest raid count (already sorted)
+
+        // Calculate a threshold: keep days that have at least 40% of the max raid count
+        // This helps filter out one-off or infrequent raid days
+        const threshold = maxRaidCount * 0.4;
+
+        const beforeFilterCount = mostLikelyDays.length;
+        filteredDays = mostLikelyDays.filter((slot) => slot.count >= threshold);
+
+        if (filteredDays.length < beforeFilterCount) {
+          console.log(
+            `[${guild.name}] Filtered out ${beforeFilterCount - filteredDays.length} outlier day(s) with raid count < ${threshold.toFixed(1)} (${(
+              (threshold / maxRaidCount) *
+              100
+            ).toFixed(0)}% of max ${maxRaidCount})`
+          );
+          console.log(`[${guild.name}] Final raiding days after outlier filtering:`);
+          filteredDays.forEach((slot) => {
+            const formatHour = (hour: number): string => {
+              const h = Math.floor(hour);
+              const m = (hour % 1) * 60;
+              return `${h}:${m.toString().padStart(2, "0")}`;
+            };
+            console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+          });
+        } else {
+          console.log(`[${guild.name}] No outliers detected - all days have similar raid counts`);
+        }
+      }
+
+      // Save the raiding schedule (only most likely days, no duplicates, no outliers)
+      guild.raidSchedule = {
+        days: filteredDays.map((slot) => ({
+          day: slot.day,
+          startHour: slot.startHour,
+          endHour: slot.endHour,
+          raidCount: slot.count,
+        })),
+        lastCalculated: new Date(),
+      };
+
+      guild.markModified("raidSchedule");
+
+      console.log(`[${guild.name}] Raiding schedule calculated: ${filteredDays.length} unique days from ${raidSessions.length} raid sessions`);
+    } catch (error) {
+      console.error(`[${guild.name}] Error calculating raiding schedule:`, error);
+    }
   }
 
   // Calculate statistics for a specific raid and difficulty from database fights
