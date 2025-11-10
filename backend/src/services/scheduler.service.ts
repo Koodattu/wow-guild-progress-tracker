@@ -2,6 +2,7 @@ import cron from "node-cron";
 import mongoose from "mongoose";
 import Guild from "../models/Guild";
 import guildService from "./guild.service";
+import { CURRENT_RAID_ID } from "../config/guilds";
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
@@ -12,6 +13,7 @@ class UpdateScheduler {
   private isUpdatingHotRaiding: boolean = false;
   private isUpdatingOffActive: boolean = false;
   private isUpdatingOffInactive: boolean = false;
+  private isUpdatingNightlyWorldRanks: boolean = false;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -83,6 +85,22 @@ class UpdateScheduler {
       }
     );
 
+    // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM European time)
+    // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
+    cron.schedule(
+      "0 4 * * *",
+      async () => {
+        if (this.isUpdatingNightlyWorldRanks) {
+          console.log("[Nightly/WorldRanks] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateAllGuildsWorldRanks();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      }
+    );
+
     console.log("Background scheduler started:");
     console.log("  - Hot hours (16:00-01:00):");
     console.log("    * Active guilds: every 15 minutes");
@@ -90,6 +108,8 @@ class UpdateScheduler {
     console.log("  - Off hours (01:00-16:00):");
     console.log("    * Active guilds: every 60 minutes");
     console.log("    * Inactive guilds: once daily at 10:00");
+    console.log("  - Nightly jobs:");
+    console.log("    * World ranks update: daily at 04:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -298,6 +318,53 @@ class UpdateScheduler {
     }
 
     console.log("Full update completed");
+  }
+
+  // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)
+  // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
+  private async updateAllGuildsWorldRanks(): Promise<void> {
+    this.isUpdatingNightlyWorldRanks = true;
+
+    try {
+      // Get all guilds
+      const guilds = await Guild.find();
+
+      if (guilds.length === 0) {
+        console.log("[Nightly/WorldRanks] No guilds to update");
+        this.isUpdatingNightlyWorldRanks = false;
+        return;
+      }
+
+      console.log(`[Nightly/WorldRanks] Updating world ranks for current raid for ${guilds.length} guild(s)...`);
+
+      // Update world ranks for all guilds sequentially with a small delay between each
+      for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
+        console.log(`[Nightly/WorldRanks] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
+
+        try {
+          await guildService.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+
+          // Small delay to avoid overwhelming the API (3 seconds between guilds)
+          if (i < guilds.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+        } catch (error) {
+          console.error(`[Nightly/WorldRanks] Failed to update world rank for ${guild.name}:`, error);
+          // Continue with next guild even if one fails
+        }
+      }
+
+      // Recalculate guild rankings after all world ranks are updated
+      console.log(`[Nightly/WorldRanks] Recalculating guild rankings for current raid...`);
+      await guildService.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+
+      console.log(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);
+    } catch (error) {
+      console.error("[Nightly/WorldRanks] Error:", error);
+    } finally {
+      this.isUpdatingNightlyWorldRanks = false;
+    }
   }
 }
 

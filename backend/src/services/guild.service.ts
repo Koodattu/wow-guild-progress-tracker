@@ -1733,6 +1733,13 @@ class GuildService {
         },
         timestamp: newBoss.firstKillTime || new Date(),
       });
+
+      // Update world rank after boss kill event (only for current raid)
+      if (raidProgress.raidId === CURRENT_RAID_ID && raidProgress.difficulty === "mythic") {
+        console.log(`[${guild.name}] Boss kill event created, updating world rank for current raid...`);
+        await this.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+      }
     }
 
     // Check for new best pull (improvement of at least 5% lower health)
@@ -1753,6 +1760,13 @@ class GuildService {
         },
         timestamp: new Date(),
       });
+
+      // Update world rank after significant progress event (only for current raid)
+      if (raidProgress.raidId === CURRENT_RAID_ID && raidProgress.difficulty === "mythic") {
+        console.log(`[${guild.name}] Best pull event created, updating world rank for current raid...`);
+        await this.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+      }
     }
   }
 
