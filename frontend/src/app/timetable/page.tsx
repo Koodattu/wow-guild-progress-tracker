@@ -180,10 +180,8 @@ export default function TimetablePage() {
   const todayDayName = getTodayDayName();
 
   return (
-    <div className="w-full px-4 py-8" style={{ maxWidth: "85vw", margin: "0 auto" }}>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white mb-4">Raid Timetable</h1>
-
+    <div className="w-full px-4 py-2" style={{ maxWidth: "85vw", margin: "0 auto" }}>
+      <div className="mb-4">
         {/* Guild Filter */}
         <div className="flex items-center gap-4">
           <label htmlFor="guild-filter" className="text-gray-400">
@@ -206,33 +204,33 @@ export default function TimetablePage() {
         </div>
       </div>
 
-      {/* Day Navigation Buttons */}
-      <div className="mb-4 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        <div className="grid grid-cols-7 gap-0">
-          {WEEKDAYS.map((day) => (
-            <button
-              key={day}
-              onClick={() => setSelectedDay(day)}
-              className={`py-2 px-2 text-sm font-semibold transition-colors border-r border-gray-700 last:border-r-0 ${
-                selectedDay === day ? "bg-blue-600 text-white" : day === todayDayName ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              {day}
-              {day === todayDayName && <span className="block text-[10px] text-gray-400">Today</span>}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Single Day Timetable */}
-      <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 overflow-auto">
+      <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <div className="min-w-[800px]">
           <div className="grid" style={{ gridTemplateColumns: "80px 1fr" }}>
-            {/* Header Row */}
-            <div className="bg-gray-900 border-b border-gray-700 p-2 sticky top-0 z-10"></div>
-            <div className="bg-gray-900 border-b border-l border-gray-700 p-2 text-center font-semibold text-white sticky top-0 z-10">
-              {selectedDay}
-              {selectedDay === todayDayName && <span className="ml-2 text-sm text-blue-400">(Today)</span>}
+            {/* Empty corner for time column */}
+            <div className="bg-gray-900 sticky top-0 z-10"></div>
+
+            {/* Day Navigation Buttons as Header */}
+            <div className="bg-gray-900 sticky top-0 z-10">
+              <div className="grid grid-cols-7 gap-0 h-full">
+                {WEEKDAYS.map((day) => (
+                  <button
+                    key={day}
+                    onClick={() => setSelectedDay(day)}
+                    className={`py-2 px-2 text-sm font-semibold transition-colors border-r border-b border-gray-700 last:border-r-0 ${
+                      selectedDay === day
+                        ? "bg-blue-600 text-white"
+                        : day === todayDayName
+                        ? "bg-gray-700 text-white hover:bg-gray-600"
+                        : "bg-gray-900 text-gray-300 hover:bg-gray-700"
+                    }`}
+                  >
+                    {day}
+                    {day === todayDayName && <span className="block text-[10px] text-gray-400">Today</span>}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Time slots - just the grid structure */}
