@@ -22,6 +22,7 @@ const getGuildColor = (guildId: string): string => {
 export default function TimetablePage() {
   const [schedules, setSchedules] = useState<GuildSchedule[]>([]);
   const [selectedGuild, setSelectedGuild] = useState<string>("all");
+  const [selectedDay, setSelectedDay] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +41,15 @@ export default function TimetablePage() {
 
     fetchSchedules();
   }, []);
+
+  // Initialize selectedDay to today
+  useEffect(() => {
+    if (!selectedDay) {
+      const today = new Date();
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      setSelectedDay(days[today.getDay()]);
+    }
+  }, [selectedDay]);
 
   // Format hour for display (e.g., 18.5 -> "18:30", 19 -> "19:00")
   const formatHour = (hour: number): string => {
@@ -160,25 +170,14 @@ export default function TimetablePage() {
     displayHours.push(h);
   }
 
-  // Get today and tomorrow's day names
-  const getTodayAndTomorrow = () => {
+  // Get today's day name for highlighting
+  const getTodayDayName = () => {
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const getDayName = (date: Date) => {
-      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-      return days[date.getDay()];
-    };
-
-    return {
-      today: getDayName(today),
-      tomorrow: getDayName(tomorrow),
-    };
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[today.getDay()];
   };
 
-  const { today, tomorrow } = getTodayAndTomorrow();
-  const twoDays = [today, tomorrow];
+  const todayDayName = getTodayDayName();
 
   return (
     <div className="w-full px-4 py-8" style={{ maxWidth: "85vw", margin: "0 auto" }}>
@@ -207,17 +206,34 @@ export default function TimetablePage() {
         </div>
       </div>
 
-      {/* Today and Tomorrow Timetable */}
+      {/* Day Navigation Buttons */}
+      <div className="mb-4 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div className="grid grid-cols-7 gap-0">
+          {WEEKDAYS.map((day) => (
+            <button
+              key={day}
+              onClick={() => setSelectedDay(day)}
+              className={`py-2 px-2 text-sm font-semibold transition-colors border-r border-gray-700 last:border-r-0 ${
+                selectedDay === day ? "bg-blue-600 text-white" : day === todayDayName ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+              }`}
+            >
+              {day}
+              {day === todayDayName && <span className="block text-[10px] text-gray-400">Today</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Single Day Timetable */}
       <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 overflow-auto">
         <div className="min-w-[800px]">
-          <div className="grid" style={{ gridTemplateColumns: "80px repeat(2, 1fr)" }}>
+          <div className="grid" style={{ gridTemplateColumns: "80px 1fr" }}>
             {/* Header Row */}
-            <div className="bg-gray-900 border-b border-gray-700 p-4 sticky top-0 z-10"></div>
-            {twoDays.map((day, idx) => (
-              <div key={day} className="bg-gray-900 border-b border-l border-gray-700 p-4 text-center font-semibold text-white sticky top-0 z-10">
-                {day} {idx === 0 ? "(Today)" : "(Tomorrow)"}
-              </div>
-            ))}
+            <div className="bg-gray-900 border-b border-gray-700 p-2 sticky top-0 z-10"></div>
+            <div className="bg-gray-900 border-b border-l border-gray-700 p-2 text-center font-semibold text-white sticky top-0 z-10">
+              {selectedDay}
+              {selectedDay === todayDayName && <span className="ml-2 text-sm text-blue-400">(Today)</span>}
+            </div>
 
             {/* Time slots - just the grid structure */}
             {displayHours.map((hour) => (
@@ -227,66 +243,62 @@ export default function TimetablePage() {
                   {formatHour(hour)}
                 </div>
 
-                {/* Day columns - empty cells for grid */}
-                {twoDays.map((day) => (
-                  <div key={`${day}-${hour}`} className="border-b border-l border-gray-700 bg-gray-850" style={{ height: "60px" }}></div>
-                ))}
+                {/* Day column - empty cell for grid */}
+                <div className="border-b border-l border-gray-700 bg-gray-850" style={{ height: "60px" }}></div>
               </div>
             ))}
           </div>
 
           {/* Event overlays - positioned absolutely over the grid */}
           <div className="relative" style={{ marginTop: `-${displayHours.length * 60}px`, height: `${displayHours.length * 60}px`, pointerEvents: "none" }}>
-            <div className="grid" style={{ gridTemplateColumns: "80px repeat(2, 1fr)", height: "100%" }}>
+            <div className="grid" style={{ gridTemplateColumns: "80px 1fr", height: "100%" }}>
               {/* Empty time label column */}
               <div></div>
 
-              {/* Event columns for each day */}
-              {twoDays.map((day) => {
-                const dayEvents = getEventsForDay(day);
-                const layouts = calculateEventLayout(dayEvents);
+              {/* Event column for the selected day */}
+              <div className="relative" style={{ pointerEvents: "auto" }}>
+                {(() => {
+                  const dayEvents = getEventsForDay(selectedDay);
+                  const layouts = calculateEventLayout(dayEvents);
 
-                return (
-                  <div key={day} className="relative" style={{ pointerEvents: "auto" }}>
-                    {layouts.map(({ event, left, width }, idx) => {
-                      const { guild, day: daySchedule } = event;
-                      const eventStart = daySchedule.startHour;
-                      const eventEnd = daySchedule.endHour;
+                  return layouts.map(({ event, left, width }, idx) => {
+                    const { guild, day: daySchedule } = event;
+                    const eventStart = daySchedule.startHour;
+                    const eventEnd = daySchedule.endHour;
 
-                      // Calculate position in pixels relative to the grid
-                      const hourHeight = 60; // pixels per hour
-                      const topPx = (eventStart - timeRange.start) * hourHeight;
-                      const heightPx = (eventEnd - eventStart) * hourHeight;
-                      const color = getGuildColor(guild._id);
+                    // Calculate position in pixels relative to the grid
+                    const hourHeight = 60; // pixels per hour
+                    const topPx = (eventStart - timeRange.start) * hourHeight;
+                    const heightPx = (eventEnd - eventStart) * hourHeight;
+                    const color = getGuildColor(guild._id);
 
-                      return (
-                        <div
-                          key={`${guild._id}-${idx}`}
-                          className="absolute border border-opacity-50 rounded px-2 py-1 text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
-                          style={{
-                            left: `${left}%`,
-                            width: `${width - 1}%`,
-                            top: `${topPx}px`,
-                            height: `${heightPx}px`,
-                            backgroundColor: color,
-                            borderColor: color,
-                            opacity: 0.9,
-                          }}
-                          title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
-                            daySchedule.endHour
-                          )}`}
-                        >
-                          <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
-                          {guild.parent_guild && <div className="text-[10px] text-white/80 truncate drop-shadow">({guild.parent_guild})</div>}
-                          <div className="text-[10px] text-white/90 drop-shadow">
-                            {formatHour(daySchedule.startHour)} - {formatHour(daySchedule.endHour)}
-                          </div>
+                    return (
+                      <div
+                        key={`${guild._id}-${idx}`}
+                        className="absolute border border-opacity-50 rounded px-2 py-1 text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
+                        style={{
+                          left: `${left}%`,
+                          width: `${width - 1}%`,
+                          top: `${topPx}px`,
+                          height: `${heightPx}px`,
+                          backgroundColor: color,
+                          borderColor: color,
+                          opacity: 0.9,
+                        }}
+                        title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
+                          daySchedule.endHour
+                        )}`}
+                      >
+                        <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
+                        {guild.parent_guild && <div className="text-[10px] text-white/80 truncate drop-shadow">({guild.parent_guild})</div>}
+                        <div className="text-[10px] text-white/90 drop-shadow">
+                          {formatHour(daySchedule.startHour)} - {formatHour(daySchedule.endHour)}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
           </div>
         </div>
@@ -297,9 +309,9 @@ export default function TimetablePage() {
         <div className="min-w-[800px]">
           <div className="grid" style={{ gridTemplateColumns: "80px repeat(7, 1fr)" }}>
             {/* Header Row */}
-            <div className="bg-gray-900 border-b border-gray-700 p-4 sticky top-0 z-10"></div>
+            <div className="bg-gray-900 border-b border-gray-700 p-2 sticky top-0 z-10"></div>
             {WEEKDAYS.map((day) => (
-              <div key={day} className="bg-gray-900 border-b border-l border-gray-700 p-4 text-center font-semibold text-white sticky top-0 z-10">
+              <div key={day} className="bg-gray-900 border-b border-l border-gray-700 p-2 text-center font-semibold text-white sticky top-0 z-10">
                 {day}
               </div>
             ))}
