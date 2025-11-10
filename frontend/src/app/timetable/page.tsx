@@ -75,13 +75,13 @@ export default function TimetablePage() {
     let latest = 0;
 
     events.forEach(({ day }) => {
-      if (day.startHour < earliest) earliest = Math.floor(day.startHour);
-      if (day.endHour > latest) latest = Math.ceil(day.endHour);
+      if (day.startHour < earliest) earliest = day.startHour;
+      if (day.endHour > latest) latest = day.endHour;
     });
 
-    // Add some padding
-    earliest = Math.max(0, earliest - 1);
-    latest = Math.min(24, latest + 1);
+    // Floor and ceil to get hour boundaries, then add padding
+    earliest = Math.max(0, Math.floor(earliest) - 1);
+    latest = Math.min(24, Math.ceil(latest) + 1);
 
     return { start: earliest, end: latest };
   };
@@ -160,6 +160,26 @@ export default function TimetablePage() {
     displayHours.push(h);
   }
 
+  // Get today and tomorrow's day names
+  const getTodayAndTomorrow = () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const getDayName = (date: Date) => {
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      return days[date.getDay()];
+    };
+
+    return {
+      today: getDayName(today),
+      tomorrow: getDayName(tomorrow),
+    };
+  };
+
+  const { today, tomorrow } = getTodayAndTomorrow();
+  const twoDays = [today, tomorrow];
+
   return (
     <div className="w-full px-4 py-8" style={{ maxWidth: "85vw", margin: "0 auto" }}>
       <div className="mb-6">
@@ -187,7 +207,92 @@ export default function TimetablePage() {
         </div>
       </div>
 
-      {/* Timetable */}
+      {/* Today and Tomorrow Timetable */}
+      <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700 overflow-auto">
+        <div className="min-w-[800px]">
+          <div className="grid" style={{ gridTemplateColumns: "80px repeat(2, 1fr)" }}>
+            {/* Header Row */}
+            <div className="bg-gray-900 border-b border-gray-700 p-4 sticky top-0 z-10"></div>
+            {twoDays.map((day, idx) => (
+              <div key={day} className="bg-gray-900 border-b border-l border-gray-700 p-4 text-center font-semibold text-white sticky top-0 z-10">
+                {day} {idx === 0 ? "(Today)" : "(Tomorrow)"}
+              </div>
+            ))}
+
+            {/* Time slots - just the grid structure */}
+            {displayHours.map((hour) => (
+              <div key={hour} className="contents">
+                {/* Time label */}
+                <div className="border-b border-gray-700 p-2 text-right text-sm text-gray-400 bg-gray-800" style={{ height: "60px" }}>
+                  {formatHour(hour)}
+                </div>
+
+                {/* Day columns - empty cells for grid */}
+                {twoDays.map((day) => (
+                  <div key={`${day}-${hour}`} className="border-b border-l border-gray-700 bg-gray-850" style={{ height: "60px" }}></div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Event overlays - positioned absolutely over the grid */}
+          <div className="relative" style={{ marginTop: `-${displayHours.length * 60}px`, height: `${displayHours.length * 60}px`, pointerEvents: "none" }}>
+            <div className="grid" style={{ gridTemplateColumns: "80px repeat(2, 1fr)", height: "100%" }}>
+              {/* Empty time label column */}
+              <div></div>
+
+              {/* Event columns for each day */}
+              {twoDays.map((day) => {
+                const dayEvents = getEventsForDay(day);
+                const layouts = calculateEventLayout(dayEvents);
+
+                return (
+                  <div key={day} className="relative" style={{ pointerEvents: "auto" }}>
+                    {layouts.map(({ event, left, width }, idx) => {
+                      const { guild, day: daySchedule } = event;
+                      const eventStart = daySchedule.startHour;
+                      const eventEnd = daySchedule.endHour;
+
+                      // Calculate position in pixels relative to the grid
+                      const hourHeight = 60; // pixels per hour
+                      const topPx = (eventStart - timeRange.start) * hourHeight;
+                      const heightPx = (eventEnd - eventStart) * hourHeight;
+                      const color = getGuildColor(guild._id);
+
+                      return (
+                        <div
+                          key={`${guild._id}-${idx}`}
+                          className="absolute border border-opacity-50 rounded px-2 py-1 text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
+                          style={{
+                            left: `${left}%`,
+                            width: `${width - 1}%`,
+                            top: `${topPx}px`,
+                            height: `${heightPx}px`,
+                            backgroundColor: color,
+                            borderColor: color,
+                            opacity: 0.9,
+                          }}
+                          title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
+                            daySchedule.endHour
+                          )}`}
+                        >
+                          <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
+                          {guild.parent_guild && <div className="text-[10px] text-white/80 truncate drop-shadow">({guild.parent_guild})</div>}
+                          <div className="text-[10px] text-white/90 drop-shadow">
+                            {formatHour(daySchedule.startHour)} - {formatHour(daySchedule.endHour)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Week Timetable */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-auto">
         <div className="min-w-[800px]">
           <div className="grid" style={{ gridTemplateColumns: "80px repeat(7, 1fr)" }}>
@@ -203,11 +308,13 @@ export default function TimetablePage() {
             {displayHours.map((hour) => (
               <div key={hour} className="contents">
                 {/* Time label */}
-                <div className="border-b border-gray-700 p-2 text-right text-sm text-gray-400 bg-gray-800">{formatHour(hour)}</div>
+                <div className="border-b border-gray-700 p-2 text-right text-sm text-gray-400 bg-gray-800" style={{ height: "60px" }}>
+                  {formatHour(hour)}
+                </div>
 
                 {/* Day columns - empty cells for grid */}
                 {WEEKDAYS.map((day) => (
-                  <div key={`${day}-${hour}`} className="border-b border-l border-gray-700 min-h-[60px] bg-gray-850"></div>
+                  <div key={`${day}-${hour}`} className="border-b border-l border-gray-700 bg-gray-850" style={{ height: "60px" }}></div>
                 ))}
               </div>
             ))}
@@ -223,7 +330,6 @@ export default function TimetablePage() {
               {WEEKDAYS.map((day) => {
                 const dayEvents = getEventsForDay(day);
                 const layouts = calculateEventLayout(dayEvents);
-                const timeRange = getTimeRange();
 
                 return (
                   <div key={day} className="relative" style={{ pointerEvents: "auto" }}>
@@ -232,9 +338,10 @@ export default function TimetablePage() {
                       const eventStart = daySchedule.startHour;
                       const eventEnd = daySchedule.endHour;
 
-                      // Calculate position relative to the time range
-                      const topOffset = ((eventStart - timeRange.start) / (timeRange.end - timeRange.start)) * 100;
-                      const heightPercent = ((eventEnd - eventStart) / (timeRange.end - timeRange.start)) * 100;
+                      // Calculate position in pixels relative to the grid
+                      const hourHeight = 60; // pixels per hour
+                      const topPx = (eventStart - timeRange.start) * hourHeight;
+                      const heightPx = (eventEnd - eventStart) * hourHeight;
                       const color = getGuildColor(guild._id);
 
                       return (
@@ -244,8 +351,8 @@ export default function TimetablePage() {
                           style={{
                             left: `${left}%`,
                             width: `${width - 1}%`,
-                            top: `${topOffset}%`,
-                            height: `${heightPercent}%`,
+                            top: `${topPx}px`,
+                            height: `${heightPx}px`,
                             backgroundColor: color,
                             borderColor: color,
                             opacity: 0.9,
