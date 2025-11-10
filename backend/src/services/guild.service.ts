@@ -1200,10 +1200,44 @@ class GuildService {
 
       console.log(`[${guild.name}] Found ${reportSessions.size} unique raid sessions (reports)`);
 
-      // Helper function to round time to nearest half hour
+      // Helper function to convert UTC Date to Helsinki timezone components
+      // Returns { hours, minutes, day } in Helsinki time
+      const getHelsinkiTimeComponents = (date: Date): { hours: number; minutes: number; day: number } => {
+        // Format the date in Helsinki timezone
+        const helsinkiDateString = date.toLocaleString("en-US", {
+          timeZone: "Europe/Helsinki",
+          hour: "2-digit",
+          minute: "2-digit",
+          weekday: "short",
+          hour12: false,
+        });
+
+        // Parse the formatted string to extract components
+        // Format will be like "Thu, 19:00" or "Mon, 16:30"
+        const parts = helsinkiDateString.split(", ");
+        const dayName = parts[0]; // "Thu", "Mon", etc.
+        const timeParts = parts[1].split(":");
+        const hours = parseInt(timeParts[0], 10);
+        const minutes = parseInt(timeParts[1], 10);
+
+        // Convert day name to day number (0 = Sunday, 1 = Monday, etc.)
+        const dayMap: { [key: string]: number } = {
+          Sun: 0,
+          Mon: 1,
+          Tue: 2,
+          Wed: 3,
+          Thu: 4,
+          Fri: 5,
+          Sat: 6,
+        };
+        const day = dayMap[dayName];
+
+        return { hours, minutes, day };
+      };
+
+      // Helper function to round time to nearest half hour in Helsinki timezone
       const roundToNearestHalfHour = (date: Date): number => {
-        const hours = date.getHours();
-        const minutes = date.getMinutes();
+        const { hours, minutes } = getHelsinkiTimeComponents(date);
 
         // Convert to decimal hours (e.g., 18:45 = 18.75)
         const decimalHours = hours + minutes / 60;
@@ -1245,9 +1279,10 @@ class GuildService {
         const actualStartTime = new Date(session.reportStartTime + earliestFightStart);
         const actualEndTime = new Date(session.reportStartTime + latestFightEnd);
 
-        // Get day of week and round hours to nearest half hour
+        // Get day of week and round hours to nearest half hour (in Helsinki timezone)
         const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const day = dayNames[actualStartTime.getDay()];
+        const { day: dayIndex } = getHelsinkiTimeComponents(actualStartTime);
+        const day = dayNames[dayIndex];
         const startHour = roundToNearestHalfHour(actualStartTime);
         const endHour = roundToNearestHalfHour(actualEndTime);
 
