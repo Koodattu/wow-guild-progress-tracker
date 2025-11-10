@@ -621,8 +621,22 @@ class WarcraftLogsService {
       // "Phase 3" -> "P3"
       phaseDisplay = phaseName.replace(/phase\s*/i, "P");
     } else if (phaseName.toLowerCase().includes("intermission")) {
-      // "Intermission 1" -> "I1"
-      phaseDisplay = phaseName.replace(/intermission\s*/i, "I");
+      // "Intermission 1" -> "I1", "Intermission One" -> "I1", etc.
+      const wordToNumber: { [key: string]: string } = {
+        one: "1",
+        two: "2",
+        three: "3",
+      };
+      const match = phaseName.match(/intermission\s*(\d+|one|two|three)/i);
+      if (match) {
+        let num = match[1];
+        if (isNaN(Number(num))) {
+          num = wordToNumber[num.toLowerCase()] || "?";
+        }
+        phaseDisplay = `I${num}`;
+      } else {
+        phaseDisplay = "I?";
+      }
     }
 
     result.progressDisplay = `${bossHealth}% ${phaseDisplay}`;

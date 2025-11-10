@@ -99,6 +99,8 @@ export function formatPhaseDisplay(displayString: string): string {
     .replace(/Stage Five\b/gi, "P5")
     // Intermission 1 -> I1, Intermission 2 -> I2, etc.
     .replace(/Intermission (\d+)\b/gi, "I$1")
+    .replace(/Intermission One\b/gi, "I1")
+    .replace(/Intermission Two\b/gi, "I2")
     // Intermission (without number) -> I
     .replace(/Intermission\b/gi, "I");
 
