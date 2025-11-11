@@ -35,6 +35,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Näkijän taru", realm: "Bloodfeather", region: "EU" },
   { name: "Forbidden", realm: "Vashj", region: "EU" },
   { name: "Tony Halme Pro Skater", realm: "Stormreaver", region: "EU" },
+  { name: "Slack", realm: "Stormreaver", region: "EU" },
+  { name: "Muisted", realm: "Stormreaver", region: "EU" },
+  { name: "TURBO SAAB", realm: "Stormreaver", region: "EU" },
+  { name: "Rennosti", realm: "Stormreaver", region: "EU" },
+  { name: "Winland", realm: "Silvermoon", region: "EU" },
+  { name: "Kaaos", realm: "Argent-Dawn", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
