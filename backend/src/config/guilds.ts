@@ -36,7 +36,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Forbidden", realm: "Vashj", region: "EU" },
   { name: "Tony Halme Pro Skater", realm: "Stormreaver", region: "EU" },
   { name: "Slack", realm: "Stormreaver", region: "EU" },
-  { name: "Kelacity", realm: "Stormreaver", region: "EU" },
+  { name: "Kelacity", realm: "Stormreaver", region: "EU", parent_guild: "Tony Halme Pro Skater" },
   { name: "Muisted", realm: "Stormreaver", region: "EU" },
   { name: "TURBO SAAB", realm: "Stormreaver", region: "EU" },
   { name: "Rennosti", realm: "Stormreaver", region: "EU" },
