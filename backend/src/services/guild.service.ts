@@ -1214,7 +1214,7 @@ class GuildService {
 
         // Parse the formatted string to extract components
         // Format will be like "Thu, 19:00" or "Mon, 16:30"
-        const parts = helsinkiDateString.split(", ");
+        const parts = helsinkiDateString.split(" ");
         const dayName = parts[0]; // "Thu", "Mon", etc.
         const timeParts = parts[1].split(":");
         const hours = parseInt(timeParts[0], 10);
