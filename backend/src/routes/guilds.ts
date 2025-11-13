@@ -34,7 +34,27 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Get detailed boss progress for a specific guild and raid (returns only progress array)
+// Get detailed boss progress for a specific guild and raid by realm/name (returns only progress array)
+router.get("/:realm/:name/raids/:raidId/bosses", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const raidId = parseInt(req.params.raidId);
+
+    const bossProgress = await guildService.getGuildBossProgressForRaidByRealmName(realm, name, raidId);
+
+    if (!bossProgress) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    res.json(bossProgress);
+  } catch (error) {
+    console.error("Error fetching guild boss progress:", error);
+    res.status(500).json({ error: "Failed to fetch guild boss progress" });
+  }
+});
+
+// DEPRECATED: Get detailed boss progress by ObjectId (kept for backward compatibility)
 router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
   try {
     const guildId = req.params.id;
@@ -53,7 +73,25 @@ router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
   }
 });
 
-// Get single guild by ID with summary progress (without boss details)
+// Get guild summary by realm/name (without boss details)
+router.get("/:realm/:name/summary", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const summary = await guildService.getGuildSummaryByRealmName(realm, name);
+
+    if (!summary) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    res.json(summary);
+  } catch (error) {
+    console.error("Error fetching guild summary:", error);
+    res.status(500).json({ error: "Failed to fetch guild summary" });
+  }
+});
+
+// DEPRECATED: Get single guild by ID with summary progress (kept for backward compatibility)
 router.get("/:id/summary", async (req: Request, res: Response) => {
   try {
     const guildId = req.params.id;

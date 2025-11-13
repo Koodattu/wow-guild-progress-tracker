@@ -129,8 +129,10 @@ function HomeContent() {
   // Handle guild click - navigate to guild profile page
   const handleGuildClick = useCallback(
     async (guild: GuildListItem) => {
-      // Navigate to guild profile page without raid ID
-      router.push(`/guilds/${guild._id}`);
+      // Navigate to guild profile page using realm/name format
+      const encodedRealm = encodeURIComponent(guild.realm);
+      const encodedName = encodeURIComponent(guild.name);
+      router.push(`/guilds/${encodedRealm}/${encodedName}`);
     },
     [router]
   );

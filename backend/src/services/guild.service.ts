@@ -1941,14 +1941,97 @@ class GuildService {
     const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
 
     return raidProgress;
-  } // Get single guild by ID
+  }
+
+  // Get detailed boss progress for a specific raid by realm and name (returns only progress array)
+  async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<any[] | null> {
+    const guild = await Guild.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+    });
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Return only the progress array for the specified raid
+    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+
+    return raidProgress;
+  }
+
+  // Get single guild by ID
   async getGuildById(id: string): Promise<IGuild | null> {
     return await Guild.findById(id);
+  }
+
+  // Get single guild by realm and name
+  async getGuildByRealmName(realm: string, name: string): Promise<IGuild | null> {
+    return await Guild.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+    });
   }
 
   // Get guild summary with progress summaries (without boss arrays)
   async getGuildSummary(guildId: string): Promise<any | null> {
     const guild = await Guild.findById(guildId);
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Transform progress to summary format (without boss arrays)
+    const summaryProgress = guildObj.progress.map((p) => {
+      // Find current boss (first unkilled boss) to get best pull info
+      const currentBoss = p.bosses.find((b) => b.kills === 0);
+
+      // Find the last killed boss to get the most recent kill timestamp
+      const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
+      const lastKilledBoss =
+        killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+
+      return {
+        raidId: p.raidId,
+        raidName: p.raidName,
+        difficulty: p.difficulty,
+        bossesDefeated: p.bossesDefeated,
+        totalBosses: p.totalBosses,
+        totalTimeSpent: p.totalTimeSpent,
+        currentBossPulls: currentBoss?.pullCount || 0,
+        bestPullPercent: currentBoss?.bestPercent || 0,
+        bestPullPhase: currentBoss?.bestPullPhase,
+        lastKillTime: lastKilledBoss?.firstKillTime || null,
+        worldRank: p.worldRank,
+        worldRankColor: p.worldRankColor,
+        guildRank: p.guildRank,
+      };
+    });
+
+    return {
+      _id: guildObj._id,
+      name: guildObj.name,
+      realm: guildObj.realm,
+      region: guildObj.region,
+      faction: guildObj.faction,
+      crest: guildObj.crest,
+      parent_guild: guildObj.parent_guild,
+      isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+      lastFetched: guildObj.lastFetched,
+      progress: summaryProgress,
+    };
+  }
+
+  // Get guild summary by realm and name with progress summaries (without boss arrays)
+  async getGuildSummaryByRealmName(realm: string, name: string): Promise<any | null> {
+    const guild = await Guild.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+    });
 
     if (!guild) {
       return null;

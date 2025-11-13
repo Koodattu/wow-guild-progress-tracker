@@ -28,6 +28,14 @@ export const api = {
     return response.json();
   },
 
+  async getGuildBossProgressByRealmName(realm: string, name: string, raidId: number): Promise<RaidProgress[]> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`);
+    if (!response.ok) throw new Error("Failed to fetch guild boss progress");
+    return response.json();
+  },
+
   async getGuild(id: string): Promise<Guild> {
     const response = await fetch(`${API_URL}/api/guilds/${id}`);
     if (!response.ok) throw new Error("Failed to fetch guild");
@@ -36,6 +44,14 @@ export const api = {
 
   async getGuildSummary(id: string): Promise<GuildSummary> {
     const response = await fetch(`${API_URL}/api/guilds/${id}/summary`);
+    if (!response.ok) throw new Error("Failed to fetch guild summary");
+    return response.json();
+  },
+
+  async getGuildSummaryByRealmName(realm: string, name: string): Promise<GuildSummary> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/summary`);
     if (!response.ok) throw new Error("Failed to fetch guild summary");
     return response.json();
   },

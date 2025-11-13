@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { GuildListItem } from "@/types";
 import { api } from "@/lib/api";
+import { getGuildProfileUrl } from "@/lib/utils";
 
 export default function GuildsPage() {
   const [guilds, setGuilds] = useState<GuildListItem[]>([]);
@@ -107,7 +108,7 @@ export default function GuildsPage() {
                 {groupedGuilds[letter].map((guild) => (
                   <Link
                     key={guild._id}
-                    href={`/guilds/${guild._id}`}
+                    href={getGuildProfileUrl(guild.realm, guild.name)}
                     className={`block text-gray-300 hover:text-white transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}
                   >
                     {guild.parent_guild ? (

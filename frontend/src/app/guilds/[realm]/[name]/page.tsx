@@ -10,7 +10,7 @@ import GuildDetail from "@/components/GuildDetail";
 import GuildCrest from "@/components/GuildCrest";
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ realm: string; name: string }>;
 }
 
 export default function GuildProfilePage({ params }: PageProps) {
@@ -30,6 +30,10 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
 
+  // Decode URL parameters
+  const realm = decodeURIComponent(resolvedParams.realm);
+  const name = decodeURIComponent(resolvedParams.name);
+
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
     (raidId: number | null) => {
@@ -48,7 +52,7 @@ export default function GuildProfilePage({ params }: PageProps) {
     const fetchData = async () => {
       try {
         setError(null);
-        const [summaryData, raidsData] = await Promise.all([api.getGuildSummary(resolvedParams.id), api.getRaids()]);
+        const [summaryData, raidsData] = await Promise.all([api.getGuildSummaryByRealmName(realm, name), api.getRaids()]);
 
         setGuildSummary(summaryData);
         setRaids(raidsData);
@@ -72,7 +76,7 @@ export default function GuildProfilePage({ params }: PageProps) {
     };
 
     fetchData();
-  }, [resolvedParams.id, searchParams]);
+  }, [realm, name, searchParams]);
 
   // Handle raid click - fetch full progress for that raid
   const handleRaidClick = useCallback(
@@ -82,7 +86,7 @@ export default function GuildProfilePage({ params }: PageProps) {
       try {
         setError(null);
         // Fetch boss progress for this specific raid and bosses list
-        const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgress(guildSummary._id, raidId), api.getBosses(raidId)]);
+        const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(realm, name, raidId), api.getBosses(raidId)]);
 
         // Create a detailed guild object for the modal
         const detailedGuild: Guild = {
@@ -105,7 +109,7 @@ export default function GuildProfilePage({ params }: PageProps) {
         setError("Failed to load raid details.");
       }
     },
-    [guildSummary, updateURL]
+    [guildSummary, realm, name, updateURL]
   );
 
   // Handle raid selection from URL parameter after initial load

@@ -143,3 +143,10 @@ export function formatGuildName(guildName: string, realm: string, parentGuild?: 
   }
   return `${guildName} - ${realm}`;
 }
+
+// Generate guild profile URL from realm and name
+export function getGuildProfileUrl(realm: string, name: string): string {
+  const encodedRealm = encodeURIComponent(realm);
+  const encodedName = encodeURIComponent(name);
+  return `/guilds/${encodedRealm}/${encodedName}`;
+}
