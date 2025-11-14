@@ -876,6 +876,144 @@ class GuildService {
     return totalFightsSaved > 0;
   }
 
+  // Thoroughly refetch the 3 newest reports to ensure all fights are captured
+  // This is called when a guild stops raiding to catch any fights that were missed during live polling
+  private async thoroughlyRefetchNewestReports(guild: IGuild): Promise<number> {
+    console.log(`[${guild.name}] THOROUGHLY REFETCHING 3 newest reports to ensure completeness...`);
+
+    // Get valid boss encounter IDs for the current raid only
+    const validBossIds = await this.getValidBossEncounterIdsForRaid(CURRENT_RAID_ID);
+
+    // Check for the 3 most recent reports
+    const checkData = await wclService.checkForNewReports(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), CURRENT_RAID_ID, 3);
+
+    if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
+      console.log(`[${guild.name}] No reports found for thorough refetch`);
+      return 0;
+    }
+
+    const recentReports = checkData.reportData.reports.data;
+    console.log(`[${guild.name}] Thoroughly refetching ${recentReports.length} reports...`);
+
+    let totalNewFights = 0;
+
+    for (const reportSummary of recentReports) {
+      const code = reportSummary.code;
+
+      // Fetch the full report with all fights
+      const reportData = await wclService.getReportByCodeAllDifficulties(code);
+
+      if (!reportData.reportData?.report) {
+        console.log(`[${guild.name}] Failed to fetch report ${code}`);
+        continue;
+      }
+
+      const report = reportData.reportData.report;
+      const currentTime = Date.now();
+      const reportEndTime = report.endTime || 0;
+      const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+      const isLive = reportEndTime && currentTime - reportEndTime < THIRTY_MINUTES_MS;
+
+      // Get existing fights for this report
+      const existingFights = await Fight.find({
+        reportCode: report.code,
+        guildId: guild._id,
+      }).select("fightId");
+
+      const existingFightIds = new Set(existingFights.map((f) => f.fightId));
+      const totalFightsInReport = report.fights?.length || 0;
+
+      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights in DB, ${totalFightsInReport} fights in report`);
+
+      // Update report metadata with accurate fight count
+      await Report.findOneAndUpdate(
+        { code: report.code },
+        {
+          code: report.code,
+          guildId: guild._id,
+          zoneId: CURRENT_RAID_ID,
+          startTime: report.startTime,
+          endTime: reportEndTime,
+          isOngoing: isLive,
+          fightCount: totalFightsInReport,
+          lastProcessed: new Date(),
+        },
+        { upsert: true, new: true }
+      );
+
+      // Process all fights from the report
+      if (report.fights && report.fights.length > 0) {
+        const encounterPhases = report.phases || [];
+        let newFightsInThisReport = 0;
+
+        for (const fight of report.fights) {
+          const encounterId = fight.encounterID;
+
+          // Only save fights for current raid bosses
+          if (!validBossIds.has(encounterId)) {
+            continue;
+          }
+
+          // Skip if we already have this fight
+          if (existingFightIds.has(fight.id)) {
+            continue;
+          }
+
+          const bossPercent = fight.bossPercentage || 0;
+          const fightPercent = fight.fightPercentage || 0;
+          const duration = fight.endTime - fight.startTime;
+          const difficulty = fight.difficulty;
+
+          // Determine phase information
+          const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
+
+          // Save fight to database
+          const fightTimestamp = new Date(report.startTime + fight.startTime);
+          await Fight.findOneAndUpdate(
+            { reportCode: report.code, fightId: fight.id },
+            {
+              reportCode: report.code,
+              guildId: guild._id,
+              fightId: fight.id,
+              zoneId: CURRENT_RAID_ID,
+              encounterID: encounterId,
+              encounterName: fight.name || `Boss ${encounterId}`,
+              difficulty: difficulty,
+              isKill: fight.kill === true,
+              bossPercentage: bossPercent,
+              fightPercentage: fightPercent,
+              lastPhaseId: phaseInfo.lastPhase?.phaseId,
+              lastPhaseName: phaseInfo.lastPhase?.phaseName,
+              phaseTransitions: fight.phaseTransitions?.map((pt: any) => ({
+                id: pt.id,
+                startTime: pt.startTime,
+                name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
+              })),
+              progressDisplay: phaseInfo.progressDisplay,
+              reportStartTime: report.startTime,
+              reportEndTime: reportEndTime,
+              fightStartTime: fight.startTime,
+              fightEndTime: fight.endTime,
+              duration: duration,
+              timestamp: fightTimestamp,
+            },
+            { upsert: true, new: true }
+          );
+
+          newFightsInThisReport++;
+          totalNewFights++;
+        }
+
+        if (newFightsInThisReport > 0) {
+          console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} NEW fights that were previously missing`);
+        }
+      }
+    }
+
+    console.log(`[${guild.name}] Thorough refetch complete: ${totalNewFights} total new fights recovered`);
+    return totalNewFights;
+  }
+
   // Update: Check only the current raid for new reports
   // Returns true if new data was found and saved
   private async performUpdate(guild: IGuild): Promise<boolean> {
@@ -929,14 +1067,37 @@ class GuildService {
         // New report we haven't seen before
         console.log(`[${guild.name}] Report ${reportCode} is NEW (not in database)`);
         reportsToFetch.push(reportCode);
-      } else if (existingReport && existingReport.lastProcessed) {
-        // Check if the report has been updated since we last processed it
-        // We can detect this by comparing the endTime
+      } else if (existingReport) {
+        // For existing reports, check multiple conditions that might indicate new data:
+        let shouldRefetch = false;
+        let reason = "";
+
+        // 1. Check if endTime has changed (report was extended)
         const lastKnownEndTime = existingReport.endTime || 0;
         if (endTime && endTime > lastKnownEndTime) {
-          console.log(
-            `[${guild.name}] Report ${reportCode} has been UPDATED (endTime changed from ${new Date(lastKnownEndTime).toISOString()} to ${new Date(endTime).toISOString()})`
-          );
+          shouldRefetch = true;
+          reason = `endTime changed from ${new Date(lastKnownEndTime).toISOString()} to ${new Date(endTime).toISOString()}`;
+        }
+
+        // 2. Check if we might be missing fights by comparing stored count with actual fights in DB
+        // This catches cases where we fetched a live report before all fights were uploaded
+        if (!shouldRefetch && existingReport.fightCount) {
+          const actualFightsInDb = await Fight.countDocuments({
+            reportCode: reportCode,
+            guildId: guild._id,
+            encounterID: { $in: Array.from(validBossIds) }, // Only count fights for current raid
+          });
+
+          // If we have fewer fights in DB than the report claimed to have, refetch
+          // Allow a small margin (fights from other content might be filtered out)
+          if (actualFightsInDb < existingReport.fightCount - 5) {
+            shouldRefetch = true;
+            reason = `possible missing fights (${actualFightsInDb} in DB vs ${existingReport.fightCount} reported)`;
+          }
+        }
+
+        if (shouldRefetch) {
+          console.log(`[${guild.name}] Report ${reportCode} needs REFETCH: ${reason}`);
           reportsToFetch.push(reportCode);
         }
       }
@@ -947,6 +1108,23 @@ class GuildService {
     guild.isCurrentlyRaiding = hasLiveLog;
     if (wasRaiding !== guild.isCurrentlyRaiding) {
       console.log(`[${guild.name}] Raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
+
+      // CRITICAL FIX: When guild stops raiding, do a thorough refetch of the 3 newest reports
+      // This ensures we catch any fights that were missed during live polling
+      if (!guild.isCurrentlyRaiding && wasRaiding) {
+        console.log(`[${guild.name}] ⚠️  Guild just STOPPED raiding - performing thorough refetch of newest reports...`);
+        const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
+
+        if (recoveredFights > 0) {
+          console.log(`[${guild.name}] ✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
+          // Recalculate statistics to ensure accuracy after recovering missing fights
+          await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+          console.log(`[${guild.name}] Statistics recalculated after fight recovery`);
+          return true; // We found and processed new data
+        } else {
+          console.log(`[${guild.name}] No missing fights found during thorough refetch`);
+        }
+      }
     }
 
     if (reportsToFetch.length === 0) {
@@ -979,9 +1157,10 @@ class GuildService {
 
       const existingFightIds = new Set(existingFights.map((f) => f.fightId));
 
-      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights already in database, ${report.fights?.length || 0} fights in report`);
+      const totalFightsInReport = report.fights?.length || 0;
+      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights already in database, ${totalFightsInReport} fights in report`);
 
-      // Save report metadata
+      // Save report metadata with accurate fight count for later comparison
       await Report.findOneAndUpdate(
         { code: report.code },
         {
@@ -991,7 +1170,7 @@ class GuildService {
           startTime: report.startTime,
           endTime: reportEndTime,
           isOngoing: isLive,
-          fightCount: report.fights?.length || 0,
+          fightCount: totalFightsInReport, // Store total fight count to detect missing fights later
           lastProcessed: new Date(),
         },
         { upsert: true, new: true }
