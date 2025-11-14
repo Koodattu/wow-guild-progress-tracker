@@ -1119,9 +1119,12 @@ class GuildService {
 
     console.log(`[${guild.name}] Statistics calculation complete`);
 
-    // Calculate raiding schedule for current raid only
-    if (raidId === CURRENT_RAID_ID) {
-      await this.calculateRaidingSchedule(guild, raidId);
+    // Calculate raiding schedule only when working with the current raid tier
+    // For initial fetch (raidId === null), we calculate for current raid after all stats
+    // For updates (raidId === CURRENT_RAID_ID), we calculate after current raid stats
+    // This ensures schedules are always updated but only for the current tier
+    if (raidId === null || raidId === CURRENT_RAID_ID) {
+      await this.calculateRaidingSchedule(guild, CURRENT_RAID_ID);
     }
   }
 
@@ -1399,6 +1402,28 @@ class GuildService {
           });
         } else {
           console.log(`[${guild.name}] No outliers detected - all days have similar raid counts`);
+        }
+      }
+
+      // Additional filter: remove days with very low absolute raid counts (< 2)
+      // This helps filter out guilds with irregular schedules that don't have a consistent raiding pattern
+      const beforeAbsoluteFilterCount = filteredDays.length;
+      filteredDays = filteredDays.filter((slot) => slot.count >= 2);
+
+      if (filteredDays.length < beforeAbsoluteFilterCount) {
+        console.log(`[${guild.name}] Filtered out ${beforeAbsoluteFilterCount - filteredDays.length} day(s) with absolute raid count < 2 (irregular schedule)`);
+        if (filteredDays.length === 0) {
+          console.log(`[${guild.name}] No consistent raiding schedule detected - guild raids irregularly`);
+        } else {
+          console.log(`[${guild.name}] Final raiding days after absolute count filtering:`);
+          filteredDays.forEach((slot) => {
+            const formatHour = (hour: number): string => {
+              const h = Math.floor(hour);
+              const m = (hour % 1) * 60;
+              return `${h}:${m.toString().padStart(2, "0")}`;
+            };
+            console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+          });
         }
       }
 
