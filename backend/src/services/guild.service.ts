@@ -2042,6 +2042,24 @@ class GuildService {
     }
   }
 
+  // Helper function to calculate raid schedule summary
+  private calculateScheduleSummary(raidSchedule?: any): { totalDays: number; averageHours: number } | null {
+    if (!raidSchedule || !raidSchedule.days || raidSchedule.days.length === 0) {
+      return null;
+    }
+
+    const totalDays = raidSchedule.days.length;
+    const averageHours =
+      raidSchedule.days.reduce((sum: number, day: any) => {
+        return sum + (day.endHour - day.startHour);
+      }, 0) / totalDays;
+
+    return {
+      totalDays,
+      averageHours: Math.round(averageHours), // Round to nearest hour
+    };
+  }
+
   // Get all guilds with only their raid schedules (for calendar/timetable view)
   async getAllGuildSchedules(): Promise<any[]> {
     const guilds = await Guild.find().select("_id name realm region parent_guild raidSchedule").lean();
@@ -2111,6 +2129,9 @@ class GuildService {
           };
         });
 
+        // Calculate schedule summary
+        const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
+
         // Return minimal guild structure
         return {
           _id: guildObj._id,
@@ -2123,6 +2144,7 @@ class GuildService {
           isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
           lastFetched: guildObj.lastFetched,
           progress: minimalProgress,
+          scheduleDisplay: scheduleSummary,
         };
       })
       .filter((guild) => {
@@ -2216,6 +2238,19 @@ class GuildService {
       };
     });
 
+    // Calculate schedule summary and prepare full schedule data
+    const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
+    const raidSchedule = guildObj.raidSchedule
+      ? {
+          days: guildObj.raidSchedule.days.map((day: any) => ({
+            day: day.day,
+            startHour: day.startHour,
+            endHour: day.endHour,
+          })),
+          lastCalculated: guildObj.raidSchedule.lastCalculated,
+        }
+      : undefined;
+
     return {
       _id: guildObj._id,
       name: guildObj.name,
@@ -2227,6 +2262,8 @@ class GuildService {
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,
+      scheduleDisplay: scheduleSummary,
+      raidSchedule: raidSchedule,
     };
   }
 
@@ -2270,6 +2307,19 @@ class GuildService {
       };
     });
 
+    // Calculate schedule summary and prepare full schedule data
+    const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
+    const raidSchedule = guildObj.raidSchedule
+      ? {
+          days: guildObj.raidSchedule.days.map((day: any) => ({
+            day: day.day,
+            startHour: day.startHour,
+            endHour: day.endHour,
+          })),
+          lastCalculated: guildObj.raidSchedule.lastCalculated,
+        }
+      : undefined;
+
     return {
       _id: guildObj._id,
       name: guildObj.name,
@@ -2281,6 +2331,8 @@ class GuildService {
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,
+      scheduleDisplay: scheduleSummary,
+      raidSchedule: raidSchedule,
     };
   }
 

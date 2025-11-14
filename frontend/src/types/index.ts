@@ -84,6 +84,11 @@ export interface RaidProgress {
   lastUpdated: string;
 }
 
+export interface ScheduleDisplay {
+  totalDays: number;
+  averageHours: number;
+}
+
 // Minimal guild info for leaderboard
 export interface GuildListItem {
   _id: string;
@@ -96,6 +101,7 @@ export interface GuildListItem {
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
+  scheduleDisplay?: ScheduleDisplay | null;
 }
 
 // Guild with summary progress (for guild profile page initial load)
@@ -110,6 +116,8 @@ export interface GuildSummary {
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
+  scheduleDisplay?: ScheduleDisplay | null;
+  raidSchedule?: RaidSchedule;
 }
 
 // Full guild info with detailed boss progress (for detail view)

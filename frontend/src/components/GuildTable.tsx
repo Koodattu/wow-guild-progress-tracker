@@ -94,6 +94,11 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                         </>
                       )}
                     </span>
+                    {guild.scheduleDisplay && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 font-semibold">
+                        {guild.scheduleDisplay.totalDays}D x {guild.scheduleDisplay.averageHours}h
+                      </span>
+                    )}
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>
