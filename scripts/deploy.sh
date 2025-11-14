@@ -36,7 +36,8 @@ warn() {
 check_lock() {
     if [ -f "$LOCKFILE" ]; then
         local lock_pid=$(cat "$LOCKFILE")
-        local lock_age=$(($(date +%s) - $(stat -c %Y "$LOCKFILE" 2>/dev/null || stat -f %m "$LOCKFILE" 2>/dev/null)))
+        local lock_time=$(stat -c %Y "$LOCKFILE" 2>/dev/null || stat -f %m "$LOCKFILE" 2>/dev/null || echo 0)
+        local lock_age=$(($(date +%s) - lock_time))
 
         # Check if the process is still running
         if kill -0 "$lock_pid" 2>/dev/null; then
