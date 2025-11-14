@@ -2120,6 +2120,69 @@ class GuildService {
   getKillLogUrl(reportCode: string, fightId: number): string {
     return `https://www.warcraftlogs.com/reports/${reportCode}#fight=${fightId}`;
   }
+
+  // Update guild crests for all guilds from Blizzard API
+  async updateAllGuildCrests(): Promise<void> {
+    console.log("[Guild Crests] Starting guild crest update for all guilds...");
+
+    try {
+      // Get all guilds from database
+      const guilds = await Guild.find();
+
+      if (guilds.length === 0) {
+        console.log("[Guild Crests] No guilds found in database");
+        return;
+      }
+
+      console.log(`[Guild Crests] Found ${guilds.length} guild(s) to update`);
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      // Update each guild's crest
+      for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
+
+        // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
+        const blizzardGuildName = guild.parent_guild || guild.name;
+        console.log(
+          `[Guild Crests] [${i + 1}/${guilds.length}] Fetching crest for: ${blizzardGuildName} - ${guild.realm}${guild.parent_guild ? ` (parent guild for ${guild.name})` : ""}`
+        );
+
+        try {
+          const guildData = await blizzardService.getGuildData(blizzardGuildName, guild.realm.toLowerCase(), guild.region);
+
+          if (guildData) {
+            // Update the guild's crest and faction in database
+            guild.crest = guildData.crest;
+            if (guildData.faction) {
+              guild.faction = guildData.faction;
+            }
+            await guild.save();
+
+            successCount++;
+            console.log(`[Guild Crests] ✅ Updated crest for: ${blizzardGuildName}`);
+          } else {
+            failureCount++;
+            console.warn(`[Guild Crests] ⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
+          }
+        } catch (error) {
+          failureCount++;
+          console.error(`[Guild Crests] ❌ Error fetching crest for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
+        }
+
+        // Sleep for 1 second between requests to avoid rate limiting
+        if (i < guilds.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
+      console.log(`[Guild Crests] Update complete: ${successCount} successful, ${failureCount} failed`);
+    } catch (error) {
+      console.error("[Guild Crests] Error during guild crest update:", error);
+      throw error;
+    }
+  }
 }
 
 export default new GuildService();

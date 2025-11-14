@@ -14,6 +14,7 @@ class UpdateScheduler {
   private isUpdatingOffActive: boolean = false;
   private isUpdatingOffInactive: boolean = false;
   private isUpdatingNightlyWorldRanks: boolean = false;
+  private isUpdatingGuildCrests: boolean = false;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -101,6 +102,22 @@ class UpdateScheduler {
       }
     );
 
+    // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
+    // Guild crests can be changed by guilds or sometimes fail to fetch initially
+    cron.schedule(
+      "0 4 * * *",
+      async () => {
+        if (this.isUpdatingGuildCrests) {
+          console.log("[Nightly/GuildCrests] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateAllGuildCrests();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      }
+    );
+
     console.log("Background scheduler started:");
     console.log("  - Hot hours (16:00-01:00):");
     console.log("    * Active guilds: every 15 minutes");
@@ -110,6 +127,7 @@ class UpdateScheduler {
     console.log("    * Inactive guilds: once daily at 10:00");
     console.log("  - Nightly jobs:");
     console.log("    * World ranks update: daily at 04:00");
+    console.log("    * Guild crests update: daily at 04:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -364,6 +382,22 @@ class UpdateScheduler {
       console.error("[Nightly/WorldRanks] Error:", error);
     } finally {
       this.isUpdatingNightlyWorldRanks = false;
+    }
+  }
+
+  // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
+  // Guild crests can be changed by guilds or sometimes fail to fetch initially
+  private async updateAllGuildCrests(): Promise<void> {
+    this.isUpdatingGuildCrests = true;
+
+    try {
+      console.log("[Nightly/GuildCrests] Starting guild crest update...");
+      await guildService.updateAllGuildCrests();
+      console.log("[Nightly/GuildCrests] Guild crest update completed");
+    } catch (error) {
+      console.error("[Nightly/GuildCrests] Error:", error);
+    } finally {
+      this.isUpdatingGuildCrests = false;
     }
   }
 }
