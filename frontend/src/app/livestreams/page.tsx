@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { LiveStreamer } from "@/types";
 import { api } from "@/lib/api";
 
@@ -33,38 +33,41 @@ export default function LivestreamsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const toggleStreamer = (streamer: LiveStreamer) => {
-    const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
+  const toggleStreamer = useCallback(
+    (streamer: LiveStreamer) => {
+      const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
-    if (isSelected) {
-      const newSelected = selectedStreamers.filter((s) => s.channelName !== streamer.channelName);
-      setSelectedStreamers(newSelected);
-
-      // Update active chat if removed streamer was active
-      if (activeChat === streamer.channelName) {
-        setActiveChat(newSelected.length > 0 ? newSelected[0].channelName : null);
-      }
-    } else {
-      // Max 6 streams
-      if (selectedStreamers.length < 6) {
-        const newSelected = [...selectedStreamers, streamer];
+      if (isSelected) {
+        const newSelected = selectedStreamers.filter((s) => s.channelName !== streamer.channelName);
         setSelectedStreamers(newSelected);
 
-        // Force iframe reload by updating key
-        setStreamKeys((prev) => ({
-          ...prev,
-          [streamer.channelName]: Date.now(),
-        }));
+        // Update active chat if removed streamer was active
+        if (activeChat === streamer.channelName) {
+          setActiveChat(newSelected.length > 0 ? newSelected[0].channelName : null);
+        }
+      } else {
+        // Max 6 streams
+        if (selectedStreamers.length < 6) {
+          const newSelected = [...selectedStreamers, streamer];
+          setSelectedStreamers(newSelected);
 
-        // Set as active chat if first selection
-        if (!activeChat) {
-          setActiveChat(streamer.channelName);
+          // Force iframe reload by updating key
+          setStreamKeys((prev) => ({
+            ...prev,
+            [streamer.channelName]: Date.now(),
+          }));
+
+          // Set as active chat if first selection
+          if (!activeChat) {
+            setActiveChat(streamer.channelName);
+          }
         }
       }
-    }
-  };
+    },
+    [selectedStreamers, activeChat]
+  );
 
-  const getStreamGridClass = () => {
+  const streamGridClass = useMemo(() => {
     const count = selectedStreamers.length;
 
     switch (count) {
@@ -82,7 +85,7 @@ export default function LivestreamsPage() {
       default:
         return "grid-cols-1 grid-rows-1";
     }
-  };
+  }, [selectedStreamers.length]);
 
   const getStreamItemClass = (index: number) => {
     const count = selectedStreamers.length;
@@ -94,7 +97,7 @@ export default function LivestreamsPage() {
     return "";
   };
 
-  const getChatGridClass = () => {
+  const chatGridClass = useMemo(() => {
     const count = selectedStreamers.length;
 
     if (count <= 2) {
@@ -102,7 +105,7 @@ export default function LivestreamsPage() {
     } else {
       return "grid-cols-3 grid-rows-2";
     }
-  };
+  }, [selectedStreamers.length]);
 
   const getStreamContainerHeight = () => {
     // Fixed height to fit nicely on screen
@@ -191,7 +194,7 @@ export default function LivestreamsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ height: getStreamContainerHeight() }}>
             {/* Streams Grid */}
             <div className="lg:col-span-2 h-full">
-              <div className={`grid ${getStreamGridClass()} gap-2 h-full`}>
+              <div className={`grid ${streamGridClass} gap-2 h-full`}>
                 {selectedStreamers.map((streamer, index) => (
                   <div
                     key={`${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
@@ -205,6 +208,7 @@ export default function LivestreamsPage() {
                       className="w-full h-full"
                       allowFullScreen
                       allow="autoplay"
+                      loading="lazy"
                       title={`${streamer.channelName} Twitch stream`}
                     ></iframe>
                     {/* Stream Label */}
@@ -235,7 +239,7 @@ export default function LivestreamsPage() {
                   </div>
                 ) : (
                   // Grid tabs for 3-6 streams
-                  <div className={`grid ${getChatGridClass()} border-b border-gray-700 bg-gray-800`}>
+                  <div className={`grid ${chatGridClass} border-b border-gray-700 bg-gray-800`}>
                     {selectedStreamers.map((streamer) => (
                       <button
                         key={streamer.channelName}
@@ -250,15 +254,19 @@ export default function LivestreamsPage() {
                   </div>
                 )}
 
-                {/* Active Chat */}
+                {/* All Chats - Load once and keep mounted, toggle visibility */}
                 <div className="flex-1 relative">
-                  {activeChat && (
+                  {selectedStreamers.map((streamer) => (
                     <iframe
-                      src={`https://www.twitch.tv/embed/${activeChat}/chat?parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&darkpopout`}
-                      className="absolute top-0 left-0 w-full h-full"
-                      title={`${activeChat} Twitch chat`}
+                      key={`chat-${streamer.channelName}`}
+                      src={`https://www.twitch.tv/embed/${streamer.channelName}/chat?parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&darkpopout`}
+                      className={`absolute top-0 left-0 w-full h-full transition-opacity ${
+                        activeChat === streamer.channelName ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                      }`}
+                      loading="lazy"
+                      title={`${streamer.channelName} Twitch chat`}
                     ></iframe>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
