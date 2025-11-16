@@ -48,6 +48,14 @@ export default function Navigation() {
                   Raid Timetable
                 </Link>
                 <Link
+                  href="/livestreams"
+                  className={`text-sm font-medium transition-colors ${
+                    isActive("/livestreams") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
+                  } py-5`}
+                >
+                  Livestreams
+                </Link>
+                <Link
                   href="/events"
                   className={`text-sm font-medium transition-colors ${isActive("/events") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >

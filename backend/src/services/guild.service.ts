@@ -372,6 +372,81 @@ class GuildService {
     }
   }
 
+  // Sync guild config data (parent_guild and streamers) from config to database
+  // This runs on startup to ensure config changes are reflected in the database
+  async syncGuildConfigData(): Promise<void> {
+    console.log("Syncing guild config data (parent_guild, streamers)...");
+
+    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+
+    for (const guildConfig of guildsToTrack) {
+      try {
+        const guild = await Guild.findOne({
+          name: guildConfig.name,
+          realm: guildConfig.realm,
+          region: guildConfig.region,
+        });
+
+        if (!guild) {
+          // Guild doesn't exist yet, will be created by initializeGuilds
+          continue;
+        }
+
+        // Check if we need to update parent_guild
+        const needsParentUpdate = guild.parent_guild !== guildConfig.parent_guild;
+
+        // Check if we need to update streamers
+        let needsStreamersUpdate = false;
+        const configStreamers = guildConfig.streamers || [];
+        const existingStreamers = guild.streamers || [];
+
+        // Compare streamer arrays
+        if (configStreamers.length !== existingStreamers.length) {
+          needsStreamersUpdate = true;
+        } else {
+          const existingChannelNames = new Set(existingStreamers.map((s) => s.channelName.toLowerCase()));
+          const configChannelNames = new Set(configStreamers.map((s) => s.toLowerCase()));
+
+          // Check if sets are equal
+          needsStreamersUpdate = configChannelNames.size !== existingChannelNames.size || ![...configChannelNames].every((name) => existingChannelNames.has(name));
+        }
+
+        // Update if needed
+        if (needsParentUpdate || needsStreamersUpdate) {
+          const updates: any = {};
+
+          if (needsParentUpdate) {
+            updates.parent_guild = guildConfig.parent_guild;
+            console.log(`  ${guild.name}: Updating parent_guild to "${guildConfig.parent_guild || "none"}"`);
+          }
+
+          if (needsStreamersUpdate) {
+            // Convert config streamers to streamer objects
+            updates.streamers = configStreamers.map((channelName) => ({
+              channelName: channelName.toLowerCase(),
+              isLive: false,
+              lastChecked: undefined,
+            }));
+            console.log(`  ${guild.name}: Updating streamers to [${configStreamers.join(", ")}]`);
+          }
+
+          await Guild.updateOne(
+            {
+              name: guildConfig.name,
+              realm: guildConfig.realm,
+              region: guildConfig.region,
+            },
+            { $set: updates }
+          );
+        }
+      } catch (error) {
+        console.error(`Error syncing config for ${guildConfig.name}:`, error instanceof Error ? error.message : "Unknown error");
+      }
+    }
+
+    console.log("Guild config sync completed");
+  }
+
   // Recalculate statistics for existing guilds on startup
   // This is used when CALCULATE_GUILD_STATISTICS_ON_STARTUP is set to true
   async recalculateExistingGuildStatistics(currentTierOnly: boolean = true): Promise<void> {
@@ -2278,6 +2353,9 @@ class GuildService {
         // Calculate schedule summary
         const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
 
+        // Check if any streamers are live
+        const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
+
         // Return minimal guild structure
         return {
           _id: guildObj._id,
@@ -2289,6 +2367,7 @@ class GuildService {
           crest: guildObj.crest,
           parent_guild: guildObj.parent_guild,
           isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+          isStreaming: isStreaming,
           lastFetched: guildObj.lastFetched,
           progress: minimalProgress,
           scheduleDisplay: scheduleSummary,
@@ -2467,6 +2546,14 @@ class GuildService {
         }
       : undefined;
 
+    // Include streamer data if available
+    const streamers = guildObj.streamers
+      ? guildObj.streamers.map((s: any) => ({
+          channelName: s.channelName,
+          isLive: s.isLive,
+        }))
+      : undefined;
+
     return {
       _id: guildObj._id,
       name: guildObj.name,
@@ -2481,6 +2568,7 @@ class GuildService {
       progress: summaryProgress,
       scheduleDisplay: scheduleSummary,
       raidSchedule: raidSchedule,
+      streamers: streamers,
     };
   }
 
@@ -2587,6 +2675,44 @@ class GuildService {
     } catch (error) {
       console.error("[Guild Crests] Error during guild crest update:", error);
       throw error;
+    }
+  }
+
+  // Get all live streamers with their guild info
+  async getLiveStreamers(): Promise<any[]> {
+    try {
+      const guilds = await Guild.find({
+        streamers: { $exists: true, $ne: [] },
+      });
+
+      const liveStreamers: any[] = [];
+
+      for (const guild of guilds) {
+        if (!guild.streamers || guild.streamers.length === 0) continue;
+
+        // Filter only live streamers
+        const liveStreamsForGuild = guild.streamers.filter((s) => s.isLive);
+
+        if (liveStreamsForGuild.length > 0) {
+          liveStreamsForGuild.forEach((streamer) => {
+            liveStreamers.push({
+              channelName: streamer.channelName,
+              isLive: streamer.isLive,
+              guild: {
+                name: guild.name,
+                realm: guild.realm,
+                region: guild.region,
+                parent_guild: guild.parent_guild,
+              },
+            });
+          });
+        }
+      }
+
+      return liveStreamers;
+    } catch (error) {
+      console.error("Error fetching live streamers:", error);
+      return [];
     }
   }
 }

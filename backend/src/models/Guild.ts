@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import StreamerSchema, { IStreamer } from "./Streamer";
 
 export interface IBestPullPhase {
   phaseId: number;
@@ -92,6 +93,7 @@ export interface IGuild extends Document {
   iconUrl?: string;
   crest?: IGuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
+  streamers?: IStreamer[]; // Twitch streamers associated with this guild
   progress: IRaidProgress[];
   raidSchedule?: IRaidSchedule; // Calculated raiding schedule for current tier
   isCurrentlyRaiding: boolean;
@@ -185,6 +187,7 @@ const GuildSchema: Schema = new Schema(
       },
     },
     parent_guild: { type: String }, // Parent guild name if this is a team/sub-guild
+    streamers: [StreamerSchema], // Twitch streamers associated with this guild
     progress: [RaidProgressSchema],
     raidSchedule: {
       days: [

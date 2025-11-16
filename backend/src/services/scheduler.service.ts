@@ -2,15 +2,18 @@ import cron from "node-cron";
 import mongoose from "mongoose";
 import Guild from "../models/Guild";
 import guildService from "./guild.service";
+import twitchService from "./twitch.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
   private hotHoursRaidingInterval: NodeJS.Timeout | null = null;
+  private hotHoursTwitchInterval: NodeJS.Timeout | null = null;
   private offHoursActiveInterval: NodeJS.Timeout | null = null;
   private offHoursDailyInterval: NodeJS.Timeout | null = null;
   private isUpdatingHotActive: boolean = false;
   private isUpdatingHotRaiding: boolean = false;
+  private isUpdatingTwitchStreams: boolean = false;
   private isUpdatingOffActive: boolean = false;
   private isUpdatingOffInactive: boolean = false;
   private isUpdatingNightlyWorldRanks: boolean = false;
@@ -59,6 +62,21 @@ class UpdateScheduler {
       }
       await this.updateRaidingGuilds();
     }, 5 * 60 * 1000); // 5 minutes
+
+    // HOT HOURS - Twitch stream status: Check every 15 minutes
+    this.hotHoursTwitchInterval = setInterval(async () => {
+      if (!this.isHotHours()) {
+        // Outside hot hours, set all streams to offline
+        await this.setAllStreamsOffline();
+        return;
+      }
+
+      if (this.isUpdatingTwitchStreams) {
+        console.log("[Hot/Twitch] Previous update still in progress, skipping...");
+        return;
+      }
+      await this.updateTwitchStreamStatus();
+    }, 15 * 60 * 1000); // 15 minutes
 
     // OFF HOURS - Active guilds: Check every hour
     this.offHoursActiveInterval = setInterval(async () => {
@@ -122,9 +140,11 @@ class UpdateScheduler {
     console.log("  - Hot hours (16:00-01:00):");
     console.log("    * Active guilds: every 15 minutes");
     console.log("    * Raiding guilds: every 5 minutes");
+    console.log("    * Twitch streams: every 15 minutes");
     console.log("  - Off hours (01:00-16:00):");
     console.log("    * Active guilds: every 60 minutes");
     console.log("    * Inactive guilds: once daily at 10:00");
+    console.log("    * Twitch streams: all marked offline");
     console.log("  - Nightly jobs:");
     console.log("    * World ranks update: daily at 04:00");
     console.log("    * Guild crests update: daily at 04:00");
@@ -139,6 +159,22 @@ class UpdateScheduler {
     }
   }
 
+  // Check Twitch stream status on startup (if enabled)
+  async checkStreamsOnStartup(): Promise<void> {
+    if (!twitchService.isEnabled()) {
+      console.log("Twitch integration is disabled, skipping startup stream check");
+      return;
+    }
+
+    console.log("Checking Twitch stream status on startup...");
+    if (this.isHotHours()) {
+      await this.updateTwitchStreamStatus();
+    } else {
+      await this.setAllStreamsOffline();
+    }
+    console.log("Startup stream check completed");
+  }
+
   // Stop the background process
   stop(): void {
     if (this.hotHoursActiveInterval) {
@@ -148,6 +184,10 @@ class UpdateScheduler {
     if (this.hotHoursRaidingInterval) {
       clearInterval(this.hotHoursRaidingInterval);
       this.hotHoursRaidingInterval = null;
+    }
+    if (this.hotHoursTwitchInterval) {
+      clearInterval(this.hotHoursTwitchInterval);
+      this.hotHoursTwitchInterval = null;
     }
     if (this.offHoursActiveInterval) {
       clearInterval(this.offHoursActiveInterval);
@@ -400,6 +440,134 @@ class UpdateScheduler {
       console.error("[Nightly/GuildCrests] Error:", error);
     } finally {
       this.isUpdatingGuildCrests = false;
+    }
+  }
+
+  // HOT HOURS: Update Twitch stream status (every 15 minutes during 16:00-01:00)
+  private async updateTwitchStreamStatus(): Promise<void> {
+    this.isUpdatingTwitchStreams = true;
+
+    try {
+      if (!twitchService.isEnabled()) {
+        this.isUpdatingTwitchStreams = false;
+        return;
+      }
+
+      // Get all guilds that have streamers
+      const guilds = await Guild.find({
+        streamers: { $exists: true, $ne: [] },
+      });
+
+      if (guilds.length === 0) {
+        this.isUpdatingTwitchStreams = false;
+        return;
+      }
+
+      // Collect all unique channel names
+      const allChannelNames = new Set<string>();
+      guilds.forEach((guild) => {
+        guild.streamers?.forEach((streamer) => {
+          allChannelNames.add(streamer.channelName.toLowerCase());
+        });
+      });
+
+      if (allChannelNames.size === 0) {
+        this.isUpdatingTwitchStreams = false;
+        return;
+      }
+
+      console.log(`[Hot/Twitch] Checking status for ${allChannelNames.size} streamer(s)...`);
+
+      // Get stream status from Twitch
+      const streamStatus = await twitchService.getStreamStatus(Array.from(allChannelNames));
+
+      // Update each guild's streamers
+      const now = new Date();
+      for (const guild of guilds) {
+        if (!guild.streamers || guild.streamers.length === 0) continue;
+
+        let hasChanges = false;
+        const updatedStreamers = guild.streamers.map((streamer) => {
+          const channelName = streamer.channelName.toLowerCase();
+          const isLive = streamStatus.get(channelName) || false;
+
+          if (streamer.isLive !== isLive) {
+            hasChanges = true;
+            console.log(`  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${isLive ? "live" : "offline"}`);
+          }
+
+          return {
+            channelName: streamer.channelName,
+            isLive,
+            lastChecked: now,
+          };
+        });
+
+        if (hasChanges) {
+          await Guild.updateOne(
+            { _id: guild._id },
+            {
+              $set: { streamers: updatedStreamers },
+            }
+          );
+        }
+      }
+
+      console.log(`[Hot/Twitch] Completed stream status update`);
+    } catch (error) {
+      console.error("[Hot/Twitch] Error:", error);
+    } finally {
+      this.isUpdatingTwitchStreams = false;
+    }
+  }
+
+  // OFF HOURS: Set all streams to offline
+  private async setAllStreamsOffline(): Promise<void> {
+    try {
+      // Get all guilds that have streamers
+      const guilds = await Guild.find({
+        streamers: { $exists: true, $ne: [] },
+      });
+
+      if (guilds.length === 0) {
+        return;
+      }
+
+      // Check if any streams are currently marked as live
+      const hasLiveStreams = guilds.some((guild) => guild.streamers?.some((s) => s.isLive));
+
+      if (!hasLiveStreams) {
+        // All streams already offline, nothing to do
+        return;
+      }
+
+      console.log("[Off/Twitch] Setting all streams to offline (outside hot hours)...");
+
+      // Update all streamers to offline
+      const now = new Date();
+      for (const guild of guilds) {
+        if (!guild.streamers || guild.streamers.length === 0) continue;
+
+        const hasLive = guild.streamers.some((s) => s.isLive);
+        if (!hasLive) continue; // Skip if already all offline
+
+        const updatedStreamers = guild.streamers.map((streamer) => ({
+          channelName: streamer.channelName,
+          isLive: false,
+          lastChecked: now,
+        }));
+
+        await Guild.updateOne(
+          { _id: guild._id },
+          {
+            $set: { streamers: updatedStreamers },
+          }
+        );
+      }
+
+      console.log("[Off/Twitch] All streams marked as offline");
+    } catch (error) {
+      console.error("[Off/Twitch] Error setting streams offline:", error);
     }
   }
 }

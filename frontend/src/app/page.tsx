@@ -187,7 +187,12 @@ function HomeContent() {
   useEffect(() => {
     // Refresh events every 1 minute
     const eventsInterval = setInterval(() => {
-      api.getEvents(5).then(setEvents);
+      api
+        .getEvents(5)
+        .then(setEvents)
+        .catch((err) => {
+          console.error("Error refreshing events:", err);
+        });
     }, 60000);
 
     // Refresh guilds every 5 minutes

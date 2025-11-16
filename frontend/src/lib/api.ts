@@ -1,4 +1,4 @@
-import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress, GuildSchedule } from "@/types";
+import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress, GuildSchedule, LiveStreamer } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
 // For server-side: use API_URL (internal Docker network)
@@ -71,6 +71,12 @@ export const api = {
   async getGuildSchedules(): Promise<GuildSchedule[]> {
     const response = await fetch(`${API_URL}/api/guilds/schedules`);
     if (!response.ok) throw new Error("Failed to fetch guild schedules");
+    return response.json();
+  },
+
+  async getLiveStreamers(): Promise<LiveStreamer[]> {
+    const response = await fetch(`${API_URL}/api/guilds/live-streamers`);
+    if (!response.ok) throw new Error("Failed to fetch live streamers");
     return response.json();
   },
 

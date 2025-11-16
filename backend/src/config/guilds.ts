@@ -3,37 +3,39 @@ export interface TrackedGuild {
   realm: string;
   region: string;
   parent_guild?: string;
+  streamers?: string[]; // Twitch channel names
 }
 
 export const GUILDS: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU" },
+  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu"] },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
-  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
-  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
+  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
+  { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
   { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU" },
+  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu"] },
   { name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
-  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
-  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
-  { name: "Kilta", realm: "Ravencrest", region: "EU" },
-  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
+  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
+  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
+  { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
+  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU", streamers: ["ventrixi", "kermisgg"] },
   { name: "Nave", realm: "Kazzak", region: "EU" },
   { name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   { name: "Marras", realm: "Kazzak", region: "EU" },
-  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU" },
-  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU" },
-  { name: "Beyond Harmless", realm: "Sylvanas", region: "EU" },
-  { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU" },
-  { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU" },
+  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["persecticus"] },
+  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora"] },
+  { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0"] },
+  { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
+  { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
   { name: "Taikaolennot", realm: "Outland", region: "EU" },
   { name: "Hakkapeliitta", realm: "Darkspear", region: "EU" },
   { name: "Urheilujätkät", realm: "Stormreaver", region: "EU" },
-  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU" },
-  { name: "Forbidden", realm: "Vashj", region: "EU" },
+  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["cronic"] },
+  { name: "Forbidden", realm: "Vashj", region: "EU", streamers: ["byrchi"] },
   { name: "Tony Halme Pro Skater", realm: "Stormreaver", region: "EU" },
   { name: "Slack", realm: "Stormreaver", region: "EU" },
   { name: "Kelacity", realm: "Stormreaver", region: "EU", parent_guild: "Tony Halme Pro Skater" },
@@ -42,7 +44,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Rennosti", realm: "Stormreaver", region: "EU" },
   { name: "Winland", realm: "Silvermoon", region: "EU" },
   { name: "Kaaos", realm: "Argent-Dawn", region: "EU" },
-  { name: "Noni", realm: "Stormreaver", region: "EU" },
+  { name: "Noni", realm: "Stormreaver", region: "EU", streamers: ["suomimeme"] },
   { name: "Memento", realm: "Stormreaver", region: "EU" },
   { name: "Memento", realm: "Frostwhisper", region: "EU" },
 ];

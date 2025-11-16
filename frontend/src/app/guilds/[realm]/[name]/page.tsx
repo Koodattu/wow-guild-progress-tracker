@@ -273,8 +273,34 @@ export default function GuildProfilePage({ params }: PageProps) {
                   </a>
                 </div>
               </div>
-              {/* Realm Name */}
-              <div className="text-3xl text-gray-400 mb-3">{guildSummary.realm}</div>
+              {/* Realm Name and Twitch Streamers Row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-3xl text-gray-400">{guildSummary.realm}</div>
+                {guildSummary.streamers && guildSummary.streamers.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {guildSummary.streamers.map((streamer) => (
+                      <a
+                        key={streamer.channelName}
+                        href={`https://www.twitch.tv/${streamer.channelName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all font-medium text-sm ${
+                          streamer.isLive
+                            ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
+                            : "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                        }`}
+                        title={streamer.isLive ? `${streamer.channelName} is live!` : `Visit ${streamer.channelName} on Twitch`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+                        </svg>
+                        <span>{streamer.channelName}</span>
+                        {streamer.isLive && <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* Raid Schedule and Last Updated Row */}
               {guildSummary.raidSchedule && guildSummary.raidSchedule.days && guildSummary.raidSchedule.days.length > 0 && (
                 <div className="flex items-center justify-between">
@@ -290,9 +316,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const m = (hour % 1) * 60;
                           return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
                         };
+                        const dayShort = day.day.substring(0, 3);
                         return (
                           <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700 text-sm">
-                            {day.day} {formatHour(day.startHour)}-{formatHour(day.endHour)}
+                            {dayShort} {formatHour(day.startHour)}-{formatHour(day.endHour)}
                           </span>
                         );
                       })}

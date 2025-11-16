@@ -14,6 +14,17 @@ router.get("/schedules", async (req: Request, res: Response) => {
   }
 });
 
+// Get all live streamers with their guild info
+router.get("/live-streamers", async (req: Request, res: Response) => {
+  try {
+    const liveStreamers = await guildService.getLiveStreamers();
+    res.json(liveStreamers);
+  } catch (error) {
+    console.error("Error fetching live streamers:", error);
+    res.status(500).json({ error: "Failed to fetch live streamers" });
+  }
+});
+
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
 router.get("/", async (req: Request, res: Response) => {

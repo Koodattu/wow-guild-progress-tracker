@@ -139,6 +139,12 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                         {guild.scheduleDisplay.totalDays}D x {guild.scheduleDisplay.averageHours}h
                       </span>
                     )}
+                    {guild.isStreaming && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 font-semibold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+                        Live
+                      </span>
+                    )}
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>

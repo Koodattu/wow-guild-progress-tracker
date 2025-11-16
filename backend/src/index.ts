@@ -49,6 +49,9 @@ const startServer = async () => {
     // Initialize guilds from config
     await guildService.initializeGuilds();
 
+    // Sync guild config data (parent_guild and streamers)
+    await guildService.syncGuildConfigData();
+
     // Recalculate statistics for existing guilds if enabled
     const calculateOnStartup = process.env.CALCULATE_GUILD_STATISTICS_ON_STARTUP !== "false";
     const currentTierOnly = process.env.CURRENT_TIER_ONLY !== "false";
@@ -69,6 +72,15 @@ const startServer = async () => {
 
     // Start background scheduler
     scheduler.start();
+
+    // Check Twitch stream status on startup if enabled
+    const checkStreamsOnStartup = process.env.CHECK_TWITCH_STREAMS_ON_STARTUP === "true";
+    if (checkStreamsOnStartup) {
+      console.log("CHECK_TWITCH_STREAMS_ON_STARTUP is enabled");
+      await scheduler.checkStreamsOnStartup();
+    } else {
+      console.log("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
+    }
 
     // Start express server
     app.listen(PORT, () => {

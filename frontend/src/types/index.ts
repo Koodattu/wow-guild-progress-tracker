@@ -91,6 +91,22 @@ export interface ScheduleDisplay {
   averageHours: number;
 }
 
+export interface Streamer {
+  channelName: string;
+  isLive: boolean;
+}
+
+export interface LiveStreamer {
+  channelName: string;
+  isLive: boolean;
+  guild: {
+    name: string;
+    realm: string;
+    region: string;
+    parent_guild?: string;
+  };
+}
+
 // Minimal guild info for leaderboard
 export interface GuildListItem {
   _id: string;
@@ -102,6 +118,7 @@ export interface GuildListItem {
   crest?: GuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
+  isStreaming?: boolean; // Computed field: true if any streamer is live
   lastFetched?: string;
   progress: RaidProgressSummary[];
   scheduleDisplay?: ScheduleDisplay | null;
@@ -122,6 +139,7 @@ export interface GuildSummary {
   progress: RaidProgressSummary[];
   scheduleDisplay?: ScheduleDisplay | null;
   raidSchedule?: RaidSchedule;
+  streamers?: Streamer[]; // Twitch streamers for this guild
 }
 
 // Full guild info with detailed boss progress (for detail view)
