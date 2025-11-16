@@ -2694,6 +2694,24 @@ class GuildService {
         const liveStreamsForGuild = guild.streamers.filter((s) => s.isLive);
 
         if (liveStreamsForGuild.length > 0) {
+          // Get current raid mythic progress for this guild
+          const currentRaidId = CURRENT_RAID_IDS[0];
+          const mythicProgress = guild.progress.find((p) => p.raidId === currentRaidId && p.difficulty === "mythic");
+
+          // Find current boss (first unkilled boss) to get best pull info
+          let bestPull = null;
+          if (mythicProgress) {
+            const currentBoss = mythicProgress.bosses.find((b) => b.kills === 0);
+            if (currentBoss && currentBoss.pullCount > 0) {
+              bestPull = {
+                bossName: currentBoss.bossName,
+                pullCount: currentBoss.pullCount,
+                bestPercent: currentBoss.bestPercent,
+                bestPullPhase: currentBoss.bestPullPhase,
+              };
+            }
+          }
+
           liveStreamsForGuild.forEach((streamer) => {
             liveStreamers.push({
               channelName: streamer.channelName,
@@ -2704,6 +2722,7 @@ class GuildService {
                 region: guild.region,
                 parent_guild: guild.parent_guild,
               },
+              bestPull: bestPull,
             });
           });
         }

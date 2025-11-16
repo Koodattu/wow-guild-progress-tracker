@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { LiveStreamer } from "@/types";
 import { api } from "@/lib/api";
+import { formatPhaseDisplay, formatPercent } from "@/lib/utils";
 
 export default function LivestreamsPage() {
   const [liveStreamers, setLiveStreamers] = useState<LiveStreamer[]>([]);
@@ -172,10 +173,26 @@ export default function LivestreamsPage() {
                   <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
                   <span className="text-xs text-gray-400 whitespace-nowrap">
-                    {streamer.guild.parent_guild
-                      ? `${streamer.guild.name} (${streamer.guild.parent_guild} - ${streamer.guild.realm})`
-                      : `${streamer.guild.name} - ${streamer.guild.realm}`}
+                    {streamer.guild.parent_guild ? (
+                      <>
+                        <span className="font-bold">{streamer.guild.name}</span>
+                        {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold">{streamer.guild.name}</span>
+                        {`-${streamer.guild.realm}`}
+                      </>
+                    )}
                   </span>
+                  {streamer.bestPull && (
+                    <span className="text-xs text-orange-400 whitespace-nowrap">
+                      {streamer.bestPull.bossName}: {streamer.bestPull.pullCount} pulls,{" "}
+                      {streamer.bestPull.bestPullPhase?.displayString
+                        ? formatPhaseDisplay(streamer.bestPull.bestPullPhase.displayString)
+                        : formatPercent(streamer.bestPull.bestPercent)}
+                    </span>
+                  )}
                   <div
                     className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
                       isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"

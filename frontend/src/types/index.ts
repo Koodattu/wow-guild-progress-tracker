@@ -105,6 +105,12 @@ export interface LiveStreamer {
     region: string;
     parent_guild?: string;
   };
+  bestPull?: {
+    bossName: string;
+    pullCount: number;
+    bestPercent: number;
+    bestPullPhase?: BestPullPhase;
+  };
 }
 
 // Minimal guild info for leaderboard
