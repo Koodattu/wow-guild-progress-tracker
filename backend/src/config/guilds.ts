@@ -34,7 +34,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Taikaolennot", realm: "Outland", region: "EU" },
   { name: "Hakkapeliitta", realm: "Darkspear", region: "EU" },
   { name: "Urheilujätkät", realm: "Stormreaver", region: "EU" },
-  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["cronic"] },
+  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["croukou"] },
   { name: "Forbidden", realm: "Vashj", region: "EU", streamers: ["byrchi"] },
   { name: "Tony Halme Pro Skater", realm: "Stormreaver", region: "EU" },
   { name: "Slack", realm: "Stormreaver", region: "EU" },
