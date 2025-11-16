@@ -6,7 +6,7 @@ import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
-import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_ID, DIFFICULTIES, GUILDS_PROD } from "../config/guilds";
+import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD } from "../config/guilds";
 import mongoose from "mongoose";
 
 class GuildService {
@@ -244,6 +244,22 @@ class GuildService {
     return validBossIds;
   }
 
+  // Get valid boss encounter IDs for all current raids
+  private async getValidBossEncounterIdsForCurrentRaids(): Promise<Set<number>> {
+    const validBossIds = new Set<number>();
+
+    for (const raidId of CURRENT_RAID_IDS) {
+      const raid = await this.getRaidData(raidId);
+      if (raid && raid.bosses) {
+        for (const boss of raid.bosses) {
+          validBossIds.add(boss.id);
+        }
+      }
+    }
+
+    return validBossIds;
+  }
+
   // Check if a fight is a duplicate based on unique characteristics with tolerance
   // A fight is considered duplicate if it has the same:
   // - encounterID (exact match)
@@ -370,8 +386,10 @@ class GuildService {
 
           // Recalculate statistics based on the mode
           if (currentTierOnly) {
-            // Only recalculate for current raid
-            await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+            // Only recalculate for current raids
+            for (const raidId of CURRENT_RAID_IDS) {
+              await this.calculateGuildStatistics(guild, raidId);
+            }
           } else {
             // Recalculate for all tracked raids
             await this.calculateGuildStatistics(guild, null);
@@ -426,9 +444,11 @@ class GuildService {
         await this.updateGuildWorldRankings(guildId);
         await this.calculateGuildRankingsForAllRaids();
       } else if (hasNewData && !isInitialFetch) {
-        // Update: only update rank for current raid if not completed
-        await this.updateCurrentRaidWorldRanking(guildId);
-        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+        // Update: only update rank for current raids if not completed
+        await this.updateCurrentRaidsWorldRanking(guildId);
+        for (const raidId of CURRENT_RAID_IDS) {
+          await this.calculateGuildRankingsForRaid(raidId);
+        }
       }
 
       console.log(`Successfully updated: ${guild.name}`);
@@ -449,8 +469,8 @@ class GuildService {
 
     console.log(`\n========== FETCHING ZONE RANKINGS FOR ${guild.name} ==========`);
 
-    // If no zoneId specified, use the current raid
-    const targetZoneId = zoneId || CURRENT_RAID_ID;
+    // If no zoneId specified, use the first current raid
+    const targetZoneId = zoneId || CURRENT_RAID_IDS[0];
 
     try {
       // Get raid info
@@ -533,60 +553,64 @@ class GuildService {
     console.log(`[${guild.name}] World rankings updated and saved`);
   }
 
-  // Update world ranking for only the current raid
-  // Skip if guild has completed the current raid (all mythic bosses defeated)
-  async updateCurrentRaidWorldRanking(guildId: string): Promise<void> {
+  // Update world rankings for all current raids
+  // Skip if guild has completed the raid (all mythic bosses defeated)
+  async updateCurrentRaidsWorldRanking(guildId: string): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
       console.error(`Guild not found: ${guildId}`);
       return;
     }
 
-    // Find the current raid data to get total boss count
-    const currentRaidData = await this.getRaidData(CURRENT_RAID_ID);
-    if (!currentRaidData) {
-      console.warn(`[${guild.name}] Current raid data not found (ID: ${CURRENT_RAID_ID}), skipping world rank update`);
-      return;
-    }
+    console.log(`[${guild.name}] Updating world ranks for current raids...`);
 
-    // Find mythic progress for current raid
-    const mythicProgress = guild.progress.find((p) => p.raidId === CURRENT_RAID_ID && p.difficulty === "mythic");
-
-    if (!mythicProgress) {
-      console.log(`[${guild.name}] No mythic progress for current raid, skipping world rank update`);
-      return;
-    }
-
-    // Check if guild has completed all mythic bosses
-    const hasCompletedMythic = mythicProgress.bossesDefeated >= currentRaidData.bosses.length;
-
-    if (hasCompletedMythic) {
-      console.log(`[${guild.name}] Has completed current raid mythic (${mythicProgress.bossesDefeated}/${currentRaidData.bosses.length}), world rank is final - skipping update`);
-      return;
-    }
-
-    console.log(`[${guild.name}] Updating world rank for current raid only (${mythicProgress.raidName})...`);
-
-    try {
-      const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), CURRENT_RAID_ID);
-
-      const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
-
-      if (worldRank?.number) {
-        // Update the world rank in mythic progress
-        mythicProgress.worldRank = worldRank.number;
-        mythicProgress.worldRankColor = worldRank.color;
-        console.log(`[${guild.name}] ${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
-
-        // Save the updated guild
-        await guild.save();
-        console.log(`[${guild.name}] Current raid world rank updated`);
-      } else {
-        console.log(`[${guild.name}] ${mythicProgress.raidName}: No world rank data available`);
+    for (const raidId of CURRENT_RAID_IDS) {
+      // Find the raid data to get total boss count
+      const raidData = await this.getRaidData(raidId);
+      if (!raidData) {
+        console.warn(`[${guild.name}] Raid data not found (ID: ${raidId}), skipping world rank update`);
+        continue;
       }
-    } catch (error) {
-      console.error(`[${guild.name}] Error fetching world rank for current raid:`, error);
+
+      // Find mythic progress for this raid
+      const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
+
+      if (!mythicProgress) {
+        console.log(`[${guild.name}] No mythic progress for raid ${raidId}, skipping world rank update`);
+        continue;
+      }
+
+      // Check if guild has completed all mythic bosses
+      const hasCompletedMythic = mythicProgress.bossesDefeated >= raidData.bosses.length;
+
+      if (hasCompletedMythic) {
+        console.log(`[${guild.name}] Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
+        continue;
+      }
+
+      console.log(`[${guild.name}] Updating world rank for raid ${raidId} (${mythicProgress.raidName})...`);
+
+      try {
+        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
+
+        const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
+
+        if (worldRank?.number) {
+          // Update the world rank in mythic progress
+          mythicProgress.worldRank = worldRank.number;
+          mythicProgress.worldRankColor = worldRank.color;
+          console.log(`[${guild.name}] ${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+        } else {
+          console.log(`[${guild.name}] ${mythicProgress.raidName}: No world rank data available`);
+        }
+      } catch (error) {
+        console.error(`[${guild.name}] Error fetching world rank for raid ${raidId}:`, error);
+      }
     }
+
+    // Save the updated guild
+    await guild.save();
+    console.log(`[${guild.name}] Current raids world ranks updated`);
   }
 
   // Calculate guild rankings for all tracked raids
@@ -729,15 +753,17 @@ class GuildService {
       // Calculate statistics from database fights for ALL tracked raids (initial setup)
       await this.calculateGuildStatistics(guild, null);
     } else {
-      // Update: Only check the current raid for new reports
-      console.log(`[${guild.name}] UPDATE - checking only current raid (ID: ${CURRENT_RAID_ID})`);
+      // Update: Only check the current raids for new reports
+      console.log(`[${guild.name}] UPDATE - checking only current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
       hasNewData = await this.performUpdate(guild);
 
-      // Only recalculate statistics for the current raid if we found new data
+      // Only recalculate statistics for the current raids if we found new data
       if (hasNewData) {
-        await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+        for (const raidId of CURRENT_RAID_IDS) {
+          await this.calculateGuildStatistics(guild, raidId);
+        }
       } else {
-        console.log(`[${guild.name}] No new data for current raid, skipping statistics recalculation`);
+        console.log(`[${guild.name}] No new data for current raids, skipping statistics recalculation`);
       }
     }
 
@@ -881,131 +907,136 @@ class GuildService {
   private async thoroughlyRefetchNewestReports(guild: IGuild): Promise<number> {
     console.log(`[${guild.name}] THOROUGHLY REFETCHING 3 newest reports to ensure completeness...`);
 
-    // Get valid boss encounter IDs for the current raid only
-    const validBossIds = await this.getValidBossEncounterIdsForRaid(CURRENT_RAID_ID);
-
-    // Check for the 3 most recent reports
-    const checkData = await wclService.checkForNewReports(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), CURRENT_RAID_ID, 3);
-
-    if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
-      console.log(`[${guild.name}] No reports found for thorough refetch`);
-      return 0;
-    }
-
-    const recentReports = checkData.reportData.reports.data;
-    console.log(`[${guild.name}] Thoroughly refetching ${recentReports.length} reports...`);
-
     let totalNewFights = 0;
 
-    for (const reportSummary of recentReports) {
-      const code = reportSummary.code;
+    // Check each current raid
+    for (const raidId of CURRENT_RAID_IDS) {
+      console.log(`[${guild.name}] Checking raid ${raidId} for missing fights...`);
 
-      // Fetch the full report with all fights
-      const reportData = await wclService.getReportByCodeAllDifficulties(code);
+      // Get valid boss encounter IDs for this raid
+      const validBossIds = await this.getValidBossEncounterIdsForRaid(raidId);
 
-      if (!reportData.reportData?.report) {
-        console.log(`[${guild.name}] Failed to fetch report ${code}`);
+      // Check for the 3 most recent reports
+      const checkData = await wclService.checkForNewReports(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId, 3);
+
+      if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
+        console.log(`[${guild.name}] No reports found for raid ${raidId}`);
         continue;
       }
 
-      const report = reportData.reportData.report;
-      const currentTime = Date.now();
-      const reportEndTime = report.endTime || 0;
-      const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-      const isLive = reportEndTime && currentTime - reportEndTime < THIRTY_MINUTES_MS;
+      const recentReports = checkData.reportData.reports.data;
+      console.log(`[${guild.name}] Thoroughly refetching ${recentReports.length} reports for raid ${raidId}...`);
 
-      // Get existing fights for this report
-      const existingFights = await Fight.find({
-        reportCode: report.code,
-        guildId: guild._id,
-      }).select("fightId");
+      for (const reportSummary of recentReports) {
+        const code = reportSummary.code;
 
-      const existingFightIds = new Set(existingFights.map((f) => f.fightId));
-      const totalFightsInReport = report.fights?.length || 0;
+        // Fetch the full report with all fights
+        const reportData = await wclService.getReportByCodeAllDifficulties(code);
 
-      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights in DB, ${totalFightsInReport} fights in report`);
-
-      // Update report metadata with accurate fight count
-      await Report.findOneAndUpdate(
-        { code: report.code },
-        {
-          code: report.code,
-          guildId: guild._id,
-          zoneId: CURRENT_RAID_ID,
-          startTime: report.startTime,
-          endTime: reportEndTime,
-          isOngoing: isLive,
-          fightCount: totalFightsInReport,
-          lastProcessed: new Date(),
-        },
-        { upsert: true, new: true }
-      );
-
-      // Process all fights from the report
-      if (report.fights && report.fights.length > 0) {
-        const encounterPhases = report.phases || [];
-        let newFightsInThisReport = 0;
-
-        for (const fight of report.fights) {
-          const encounterId = fight.encounterID;
-
-          // Only save fights for current raid bosses
-          if (!validBossIds.has(encounterId)) {
-            continue;
-          }
-
-          // Skip if we already have this fight
-          if (existingFightIds.has(fight.id)) {
-            continue;
-          }
-
-          const bossPercent = fight.bossPercentage || 0;
-          const fightPercent = fight.fightPercentage || 0;
-          const duration = fight.endTime - fight.startTime;
-          const difficulty = fight.difficulty;
-
-          // Determine phase information
-          const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
-
-          // Save fight to database
-          const fightTimestamp = new Date(report.startTime + fight.startTime);
-          await Fight.findOneAndUpdate(
-            { reportCode: report.code, fightId: fight.id },
-            {
-              reportCode: report.code,
-              guildId: guild._id,
-              fightId: fight.id,
-              zoneId: CURRENT_RAID_ID,
-              encounterID: encounterId,
-              encounterName: fight.name || `Boss ${encounterId}`,
-              difficulty: difficulty,
-              isKill: fight.kill === true,
-              bossPercentage: bossPercent,
-              fightPercentage: fightPercent,
-              lastPhaseId: phaseInfo.lastPhase?.phaseId,
-              lastPhaseName: phaseInfo.lastPhase?.phaseName,
-              phaseTransitions: fight.phaseTransitions?.map((pt: any) => ({
-                id: pt.id,
-                startTime: pt.startTime,
-                name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
-              })),
-              progressDisplay: phaseInfo.progressDisplay,
-              reportStartTime: report.startTime,
-              reportEndTime: reportEndTime,
-              fightStartTime: fight.startTime,
-              fightEndTime: fight.endTime,
-              duration: duration,
-              timestamp: fightTimestamp,
-            },
-            { upsert: true, new: true }
-          );
-
-          newFightsInThisReport++;
-          totalNewFights++;
+        if (!reportData.reportData?.report) {
+          console.log(`[${guild.name}] Failed to fetch report ${code}`);
+          continue;
         }
 
-        if (newFightsInThisReport > 0) {
-          console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} NEW fights that were previously missing`);
+        const report = reportData.reportData.report;
+        const currentTime = Date.now();
+        const reportEndTime = report.endTime || 0;
+        const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+        const isLive = reportEndTime && currentTime - reportEndTime < THIRTY_MINUTES_MS;
+
+        // Get existing fights for this report
+        const existingFights = await Fight.find({
+          reportCode: report.code,
+          guildId: guild._id,
+        }).select("fightId");
+
+        const existingFightIds = new Set(existingFights.map((f) => f.fightId));
+        const totalFightsInReport = report.fights?.length || 0;
+
+        console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights in DB, ${totalFightsInReport} fights in report`);
+
+        // Update report metadata with accurate fight count
+        await Report.findOneAndUpdate(
+          { code: report.code },
+          {
+            code: report.code,
+            guildId: guild._id,
+            zoneId: raidId,
+            startTime: report.startTime,
+            endTime: reportEndTime,
+            isOngoing: isLive,
+            fightCount: totalFightsInReport,
+            lastProcessed: new Date(),
+          },
+          { upsert: true, new: true }
+        );
+
+        // Process all fights from the report
+        if (report.fights && report.fights.length > 0) {
+          const encounterPhases = report.phases || [];
+          let newFightsInThisReport = 0;
+
+          for (const fight of report.fights) {
+            const encounterId = fight.encounterID;
+
+            // Only save fights for current raid bosses
+            if (!validBossIds.has(encounterId)) {
+              continue;
+            }
+
+            // Skip if we already have this fight
+            if (existingFightIds.has(fight.id)) {
+              continue;
+            }
+
+            const bossPercent = fight.bossPercentage || 0;
+            const fightPercent = fight.fightPercentage || 0;
+            const duration = fight.endTime - fight.startTime;
+            const difficulty = fight.difficulty;
+
+            // Determine phase information
+            const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
+
+            // Save fight to database
+            const fightTimestamp = new Date(report.startTime + fight.startTime);
+            await Fight.findOneAndUpdate(
+              { reportCode: report.code, fightId: fight.id },
+              {
+                reportCode: report.code,
+                guildId: guild._id,
+                fightId: fight.id,
+                zoneId: raidId,
+                encounterID: encounterId,
+                encounterName: fight.name || `Boss ${encounterId}`,
+                difficulty: difficulty,
+                isKill: fight.kill === true,
+                bossPercentage: bossPercent,
+                fightPercentage: fightPercent,
+                lastPhaseId: phaseInfo.lastPhase?.phaseId,
+                lastPhaseName: phaseInfo.lastPhase?.phaseName,
+                phaseTransitions: fight.phaseTransitions?.map((pt: any) => ({
+                  id: pt.id,
+                  startTime: pt.startTime,
+                  name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
+                })),
+                progressDisplay: phaseInfo.progressDisplay,
+                reportStartTime: report.startTime,
+                reportEndTime: reportEndTime,
+                fightStartTime: fight.startTime,
+                fightEndTime: fight.endTime,
+                duration: duration,
+                timestamp: fightTimestamp,
+              },
+              { upsert: true, new: true }
+            );
+
+            newFightsInThisReport++;
+            totalNewFights++;
+          }
+
+          if (newFightsInThisReport > 0) {
+            console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} NEW fights that were previously missing`);
+          }
         }
       }
     }
@@ -1014,91 +1045,98 @@ class GuildService {
     return totalNewFights;
   }
 
-  // Update: Check only the current raid for new reports
+  // Update: Check only the current raids for new reports
   // Returns true if new data was found and saved
   private async performUpdate(guild: IGuild): Promise<boolean> {
-    console.log(`[${guild.name}] Checking for updates on current raid (ID: ${CURRENT_RAID_ID})`);
+    console.log(`[${guild.name}] Checking for updates on current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
 
-    // Get valid boss encounter IDs for the current raid only
-    const validBossIds = await this.getValidBossEncounterIdsForRaid(CURRENT_RAID_ID);
-    console.log(`[${guild.name}] Current raid has ${validBossIds.size} bosses to track`);
+    // Get valid boss encounter IDs for all current raids
+    const validBossIds = await this.getValidBossEncounterIdsForCurrentRaids();
+    console.log(`[${guild.name}] Current raids have ${validBossIds.size} total bosses to track`);
 
-    // Check for new reports (lightweight check - get last 3 reports)
-    const checkData = await wclService.checkForNewReports(
-      guild.name,
-      guild.realm.toLowerCase().replace(/\s+/g, "-"),
-      guild.region.toLowerCase(),
-      CURRENT_RAID_ID,
-      3 // Check last 3 reports
-    );
-
-    if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
-      console.log(`[${guild.name}] No reports found for current raid`);
-      return false;
-    }
-
-    const recentReports = checkData.reportData.reports.data;
+    let hasLiveLog = false;
+    const allReportsToFetch: Array<{ code: string; raidId: number }> = [];
     const currentTime = Date.now();
     const THIRTY_MINUTES_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
 
-    // Determine which reports are "live" (endTime within 30 minutes) or new
-    const reportsToFetch: string[] = [];
-    let hasLiveLog = false;
+    // Check each current raid for new reports
+    for (const raidId of CURRENT_RAID_IDS) {
+      console.log(`[${guild.name}] Checking raid ${raidId} for updates...`);
 
-    for (const report of recentReports) {
-      const reportCode = report.code;
-      const endTime = report.endTime;
-      const startTime = report.startTime;
+      const raidValidBossIds = await this.getValidBossEncounterIdsForRaid(raidId);
 
-      // Check if we already have this report in our database
-      const existingReport = await Report.findOne({
-        code: reportCode,
-        guildId: guild._id,
-      });
+      // Check for new reports (lightweight check - get last 3 reports)
+      const checkData = await wclService.checkForNewReports(
+        guild.name,
+        guild.realm.toLowerCase().replace(/\s+/g, "-"),
+        guild.region.toLowerCase(),
+        raidId,
+        3 // Check last 3 reports
+      );
 
-      // If endTime is within 30 minutes of now, it's a live log
-      const isLive = endTime && currentTime - endTime < THIRTY_MINUTES_MS;
+      if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
+        console.log(`[${guild.name}] No reports found for raid ${raidId}`);
+        continue;
+      }
 
-      if (isLive) {
-        hasLiveLog = true;
-        console.log(`[${guild.name}] Report ${reportCode} is LIVE (endTime: ${new Date(endTime).toISOString()}, ${Math.round((currentTime - endTime) / 1000)}s ago)`);
-        reportsToFetch.push(reportCode);
-      } else if (!existingReport) {
-        // New report we haven't seen before
-        console.log(`[${guild.name}] Report ${reportCode} is NEW (not in database)`);
-        reportsToFetch.push(reportCode);
-      } else if (existingReport) {
-        // For existing reports, check multiple conditions that might indicate new data:
-        let shouldRefetch = false;
-        let reason = "";
+      const recentReports = checkData.reportData.reports.data;
 
-        // 1. Check if endTime has changed (report was extended)
-        const lastKnownEndTime = existingReport.endTime || 0;
-        if (endTime && endTime > lastKnownEndTime) {
-          shouldRefetch = true;
-          reason = `endTime changed from ${new Date(lastKnownEndTime).toISOString()} to ${new Date(endTime).toISOString()}`;
-        }
+      // Determine which reports are "live" (endTime within 30 minutes) or new
+      for (const report of recentReports) {
+        const reportCode = report.code;
+        const endTime = report.endTime;
+        const startTime = report.startTime;
 
-        // 2. Check if we might be missing fights by comparing stored count with actual fights in DB
-        // This catches cases where we fetched a live report before all fights were uploaded
-        if (!shouldRefetch && existingReport.fightCount) {
-          const actualFightsInDb = await Fight.countDocuments({
-            reportCode: reportCode,
-            guildId: guild._id,
-            encounterID: { $in: Array.from(validBossIds) }, // Only count fights for current raid
-          });
+        // Check if we already have this report in our database
+        const existingReport = await Report.findOne({
+          code: reportCode,
+          guildId: guild._id,
+        });
 
-          // If we have fewer fights in DB than the report claimed to have, refetch
-          // Allow a small margin (fights from other content might be filtered out)
-          if (actualFightsInDb < existingReport.fightCount - 5) {
+        // If endTime is within 30 minutes of now, it's a live log
+        const isLive = endTime && currentTime - endTime < THIRTY_MINUTES_MS;
+
+        if (isLive) {
+          hasLiveLog = true;
+          console.log(`[${guild.name}] Report ${reportCode} is LIVE (endTime: ${new Date(endTime).toISOString()}, ${Math.round((currentTime - endTime) / 1000)}s ago)`);
+          allReportsToFetch.push({ code: reportCode, raidId });
+        } else if (!existingReport) {
+          // New report we haven't seen before
+          console.log(`[${guild.name}] Report ${reportCode} is NEW (not in database)`);
+          allReportsToFetch.push({ code: reportCode, raidId });
+        } else if (existingReport) {
+          // For existing reports, check multiple conditions that might indicate new data:
+          let shouldRefetch = false;
+          let reason = "";
+
+          // 1. Check if endTime has changed (report was extended)
+          const lastKnownEndTime = existingReport.endTime || 0;
+          if (endTime && endTime > lastKnownEndTime) {
             shouldRefetch = true;
-            reason = `possible missing fights (${actualFightsInDb} in DB vs ${existingReport.fightCount} reported)`;
+            reason = `endTime changed from ${new Date(lastKnownEndTime).toISOString()} to ${new Date(endTime).toISOString()}`;
           }
-        }
 
-        if (shouldRefetch) {
-          console.log(`[${guild.name}] Report ${reportCode} needs REFETCH: ${reason}`);
-          reportsToFetch.push(reportCode);
+          // 2. Check if we might be missing fights by comparing stored count with actual fights in DB
+          // This catches cases where we fetched a live report before all fights were uploaded
+          if (!shouldRefetch && existingReport.fightCount) {
+            const actualFightsInDb = await Fight.countDocuments({
+              reportCode: reportCode,
+              guildId: guild._id,
+              encounterID: { $in: Array.from(raidValidBossIds) }, // Only count fights for this raid
+            });
+
+            // If we have fewer fights in DB than the report claimed to have, refetch
+            // Allow a small margin (fights from other content might be filtered out)
+            if (actualFightsInDb < existingReport.fightCount - 5) {
+              shouldRefetch = true;
+              reason = `possible missing fights (${actualFightsInDb} in DB vs ${existingReport.fightCount} reported)`;
+            }
+          }
+
+          if (shouldRefetch) {
+            console.log(`[${guild.name}] Report ${reportCode} needs REFETCH: ${reason}`);
+            allReportsToFetch.push({ code: reportCode, raidId });
+          }
         }
       }
     }
@@ -1118,7 +1156,9 @@ class GuildService {
         if (recoveredFights > 0) {
           console.log(`[${guild.name}] ✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
           // Recalculate statistics to ensure accuracy after recovering missing fights
-          await this.calculateGuildStatistics(guild, CURRENT_RAID_ID);
+          for (const raidId of CURRENT_RAID_IDS) {
+            await this.calculateGuildStatistics(guild, raidId);
+          }
           console.log(`[${guild.name}] Statistics recalculated after fight recovery`);
           return true; // We found and processed new data
         } else {
@@ -1127,17 +1167,17 @@ class GuildService {
       }
     }
 
-    if (reportsToFetch.length === 0) {
-      console.log(`[${guild.name}] No new or live reports to process for current raid`);
+    if (allReportsToFetch.length === 0) {
+      console.log(`[${guild.name}] No new or live reports to process for current raids`);
       return false;
     }
 
-    console.log(`[${guild.name}] Found ${reportsToFetch.length} reports to process`);
+    console.log(`[${guild.name}] Found ${allReportsToFetch.length} reports to process across current raids`);
 
     let totalFightsSaved = 0;
 
     // Fetch and save each report
-    for (const code of reportsToFetch) {
+    for (const { code, raidId } of allReportsToFetch) {
       const reportData = await wclService.getReportByCodeAllDifficulties(code);
 
       if (!reportData.reportData?.report) {
@@ -1149,6 +1189,9 @@ class GuildService {
       const reportEndTime = report.endTime || 0;
       const isLive = reportEndTime && currentTime - reportEndTime < THIRTY_MINUTES_MS;
 
+      // Get valid boss IDs for this specific raid
+      const raidValidBossIds = await this.getValidBossEncounterIdsForRaid(raidId);
+
       // Get existing fights for this report to avoid duplicates
       const existingFights = await Fight.find({
         reportCode: report.code,
@@ -1158,7 +1201,7 @@ class GuildService {
       const existingFightIds = new Set(existingFights.map((f) => f.fightId));
 
       const totalFightsInReport = report.fights?.length || 0;
-      console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights already in database, ${totalFightsInReport} fights in report`);
+      console.log(`[${guild.name}] Report ${code} (raid ${raidId}): ${existingFightIds.size} fights already in database, ${totalFightsInReport} fights in report`);
 
       // Save report metadata with accurate fight count for later comparison
       await Report.findOneAndUpdate(
@@ -1166,7 +1209,7 @@ class GuildService {
         {
           code: report.code,
           guildId: guild._id,
-          zoneId: CURRENT_RAID_ID,
+          zoneId: raidId,
           startTime: report.startTime,
           endTime: reportEndTime,
           isOngoing: isLive,
@@ -1185,7 +1228,7 @@ class GuildService {
           const encounterId = fight.encounterID;
 
           // CRITICAL: Only save fights for current raid bosses
-          if (!validBossIds.has(encounterId)) {
+          if (!raidValidBossIds.has(encounterId)) {
             continue;
           }
 
@@ -1210,7 +1253,7 @@ class GuildService {
               reportCode: report.code,
               guildId: guild._id,
               fightId: fight.id,
-              zoneId: CURRENT_RAID_ID,
+              zoneId: raidId,
               encounterID: encounterId,
               encounterName: fight.name || `Boss ${encounterId}`,
               difficulty: difficulty,
@@ -1243,23 +1286,20 @@ class GuildService {
       }
     }
 
-    // Update the guild's lastLogEndTime with the most recent report's end time
-    if (recentReports.length > 0) {
-      // Find the most recent report end time (reports are sorted by start time descending)
-      const mostRecentEndTime = Math.max(...recentReports.filter((r: any) => r.endTime && r.endTime > 0).map((r: any) => r.endTime));
+    // Update the guild's lastLogEndTime with the most recent report's end time across all raids
+    const mostRecentReport = await Report.findOne({ guildId: guild._id }).sort({ endTime: -1 }).limit(1);
 
-      if (mostRecentEndTime > 0 && mostRecentEndTime !== -Infinity) {
-        const newLastLogEndTime = new Date(mostRecentEndTime);
+    if (mostRecentReport && mostRecentReport.endTime) {
+      const newLastLogEndTime = new Date(mostRecentReport.endTime);
 
-        // Only update if it's newer than what we have
-        if (!guild.lastLogEndTime || newLastLogEndTime > guild.lastLogEndTime) {
-          guild.lastLogEndTime = newLastLogEndTime;
-          console.log(`[${guild.name}] Updated lastLogEndTime to ${newLastLogEndTime.toISOString()}`);
-        }
+      // Only update if it's newer than what we have
+      if (!guild.lastLogEndTime || newLastLogEndTime > guild.lastLogEndTime) {
+        guild.lastLogEndTime = newLastLogEndTime;
+        console.log(`[${guild.name}] Updated lastLogEndTime to ${newLastLogEndTime.toISOString()}`);
       }
     }
 
-    console.log(`[${guild.name}] Update complete: ${reportsToFetch.length} reports processed, ${totalFightsSaved} new fights saved`);
+    console.log(`[${guild.name}] Update complete: ${allReportsToFetch.length} reports processed, ${totalFightsSaved} new fights saved`);
     return totalFightsSaved > 0;
   }
 
@@ -1299,11 +1339,13 @@ class GuildService {
     console.log(`[${guild.name}] Statistics calculation complete`);
 
     // Calculate raiding schedule only when working with the current raid tier
-    // For initial fetch (raidId === null), we calculate for current raid after all stats
-    // For updates (raidId === CURRENT_RAID_ID), we calculate after current raid stats
+    // For initial fetch (raidId === null), we calculate for all current raids after all stats
+    // For updates (raidId in CURRENT_RAID_IDS), we calculate after current raid stats
     // This ensures schedules are always updated but only for the current tier
-    if (raidId === null || raidId === CURRENT_RAID_ID) {
-      await this.calculateRaidingSchedule(guild, CURRENT_RAID_ID);
+    const isCurrentRaid = raidId !== null && CURRENT_RAID_IDS.includes(raidId);
+    if (raidId === null || isCurrentRaid) {
+      // Calculate schedule for the first current raid (most recent)
+      await this.calculateRaidingSchedule(guild, CURRENT_RAID_IDS[0]);
     }
   }
 
@@ -1973,11 +2015,11 @@ class GuildService {
         timestamp: newBoss.firstKillTime || new Date(),
       });
 
-      // Update world rank after boss kill event (only for current raid)
-      if (raidProgress.raidId === CURRENT_RAID_ID && raidProgress.difficulty === "mythic") {
-        console.log(`[${guild.name}] Boss kill event created, updating world rank for current raid...`);
-        await this.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
-        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+      // Update world rank after boss kill event (only for current raids)
+      if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
+        console.log(`[${guild.name}] Boss kill event created, updating world rank for current raids...`);
+        await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+        await this.calculateGuildRankingsForRaid(raidProgress.raidId);
       }
     }
 
@@ -2000,11 +2042,11 @@ class GuildService {
         timestamp: new Date(),
       });
 
-      // Update world rank after significant progress event (only for current raid)
-      if (raidProgress.raidId === CURRENT_RAID_ID && raidProgress.difficulty === "mythic") {
-        console.log(`[${guild.name}] Best pull event created, updating world rank for current raid...`);
-        await this.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
-        await this.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+      // Update world rank after significant progress event (only for current raids)
+      if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
+        console.log(`[${guild.name}] Best pull event created, updating world rank for current raids...`);
+        await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+        await this.calculateGuildRankingsForRaid(raidProgress.raidId);
       }
     }
   }

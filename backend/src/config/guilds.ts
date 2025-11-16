@@ -75,8 +75,9 @@ export const TRACKED_RAIDS = [
   4, // Throne of Thunder
 ];
 
-// Use the first/latest raid as the current one
-export const CURRENT_RAID_ID = TRACKED_RAIDS[0];
+// Current raids that are actively being tracked for updates
+// Multiple raids can be current at the same time during expansion transitions
+export const CURRENT_RAID_IDS = [TRACKED_RAIDS[0]];
 
 export const DIFFICULTIES = {
   MYTHIC: 5,

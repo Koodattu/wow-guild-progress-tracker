@@ -2,7 +2,7 @@ import cron from "node-cron";
 import mongoose from "mongoose";
 import Guild from "../models/Guild";
 import guildService from "./guild.service";
-import { CURRENT_RAID_ID } from "../config/guilds";
+import { CURRENT_RAID_IDS } from "../config/guilds";
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
@@ -361,7 +361,7 @@ class UpdateScheduler {
         console.log(`[Nightly/WorldRanks] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
 
         try {
-          await guildService.updateCurrentRaidWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+          await guildService.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
 
           // Small delay to avoid overwhelming the API (3 seconds between guilds)
           if (i < guilds.length - 1) {
@@ -374,8 +374,10 @@ class UpdateScheduler {
       }
 
       // Recalculate guild rankings after all world ranks are updated
-      console.log(`[Nightly/WorldRanks] Recalculating guild rankings for current raid...`);
-      await guildService.calculateGuildRankingsForRaid(CURRENT_RAID_ID);
+      console.log(`[Nightly/WorldRanks] Recalculating guild rankings for current raids...`);
+      for (const raidId of CURRENT_RAID_IDS) {
+        await guildService.calculateGuildRankingsForRaid(raidId);
+      }
 
       console.log(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);
     } catch (error) {
