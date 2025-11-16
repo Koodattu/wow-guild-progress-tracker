@@ -19,16 +19,26 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   };
 
   const handleBossClick = (boss: BossProgress) => {
-    if (boss.firstKillReportCode && boss.firstKillFightId) {
-      const url = getKillLogUrl(boss.firstKillReportCode, boss.firstKillFightId);
-      window.open(url, "_blank", "noopener,noreferrer");
+    if (boss.kills > 0) {
+      // Boss is killed - use kill log
+      if (boss.firstKillReportCode && boss.firstKillFightId) {
+        const url = getKillLogUrl(boss.firstKillReportCode, boss.firstKillFightId);
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } else {
+      // Boss is not killed - use best pull log
+      if (boss.bestPullReportCode && boss.bestPullFightId) {
+        const url = getKillLogUrl(boss.bestPullReportCode, boss.bestPullFightId);
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
     }
   };
 
   const renderBossRow = (boss: BossProgress, bossNumber: number) => {
     const isDefeated = boss.kills > 0;
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
-    const isClickable = isDefeated && hasKillLog;
+    const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
+    const isClickable = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
     const bossIconFilename = getBossIconUrl(boss.bossName);
 
     return (
@@ -36,7 +46,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         key={boss.bossId}
         onClick={() => isClickable && handleBossClick(boss)}
         className={`border-b border-gray-800 ${isDefeated ? "bg-green-900/10" : ""} ${isClickable ? "cursor-pointer hover:bg-gray-800/50 transition-colors" : ""}`}
-        title={isClickable ? "Click to view kill log on WarcraftLogs" : ""}
+        title={isClickable ? (isDefeated ? "Click to view kill log on WarcraftLogs" : "Click to view best pull log on WarcraftLogs") : ""}
       >
         <td className="px-4 py-3 text-sm text-gray-400">{bossNumber}</td>
         <td className="px-4 py-3">

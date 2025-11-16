@@ -118,6 +118,16 @@ export const api = {
     return Array.isArray(data) ? data : data.events;
   },
 
+  async getGuildEventsByRealmName(realm: string, name: string, limit: number = 50): Promise<Event[]> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/events/guild/${encodedRealm}/${encodedName}?limit=${limit}`);
+    if (!response.ok) throw new Error("Failed to fetch guild events");
+    const data = await response.json();
+    // Support both old (array) and new (paginated) response formats
+    return Array.isArray(data) ? data : data.events;
+  },
+
   // Raid endpoints
   async getRaids(): Promise<RaidInfo[]> {
     const response = await fetch(`${API_URL}/api/raids`);

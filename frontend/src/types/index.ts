@@ -49,6 +49,8 @@ export interface BossProgress {
   firstKillFightId?: number; // Fight ID within the report
   killOrder?: number; // Order in which this boss was first killed (1 = first, 2 = second, etc.)
   bestPullPhase?: BestPullPhase; // Phase context for best pull
+  bestPullReportCode?: string; // WCL report code for best pull (for unkilled bosses)
+  bestPullFightId?: number; // Fight ID within the report for best pull (for unkilled bosses)
   lastUpdated: string;
 }
 

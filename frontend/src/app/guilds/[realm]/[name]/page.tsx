@@ -3,11 +3,12 @@
 import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
-import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
+import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss, Event } from "@/types";
 import { api } from "@/lib/api";
 import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
+import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 
 interface PageProps {
   params: Promise<{ realm: string; name: string }>;
@@ -25,6 +26,7 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [raids, setRaids] = useState<RaidInfo[]>([]);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -56,15 +58,20 @@ export default function GuildProfilePage({ params }: PageProps) {
     [pathname, router]
   );
 
-  // Initial data fetch - guild summary and raids
+  // Initial data fetch - guild summary, raids, and events
   useEffect(() => {
     const fetchData = async () => {
       try {
         setError(null);
-        const [summaryData, raidsData] = await Promise.all([api.getGuildSummaryByRealmName(realm, name), api.getRaids()]);
+        const [summaryData, raidsData, eventsData] = await Promise.all([
+          api.getGuildSummaryByRealmName(realm, name),
+          api.getRaids(),
+          api.getGuildEventsByRealmName(realm, name, 5),
+        ]);
 
         setGuildSummary(summaryData);
         setRaids(raidsData);
+        setEvents(eventsData);
 
         // Check URL for raid ID parameter
         const raidIdParam = searchParams.get("raidid");
@@ -300,6 +307,13 @@ export default function GuildProfilePage({ params }: PageProps) {
             </div>
           </div>
         </div>
+
+        {/* Guild Events Feed */}
+        {events.length > 0 && (
+          <div className="mb-4">
+            <HorizontalEventsFeed events={events} />
+          </div>
+        )}
 
         {/* Progress Table */}
         {guildSummary.progress.length > 0 ? (

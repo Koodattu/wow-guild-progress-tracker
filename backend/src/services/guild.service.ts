@@ -1861,6 +1861,8 @@ class GuildService {
           fightCompletion: number;
           displayString: string;
         };
+        bestPullReportCode?: string;
+        bestPullFightId?: number;
       }
     >();
 
@@ -1927,6 +1929,8 @@ class GuildService {
           firstKillReportCode: undefined,
           firstKillFightId: undefined,
           bestPullPhase: undefined,
+          bestPullReportCode: undefined,
+          bestPullFightId: undefined,
         });
       }
 
@@ -1958,6 +1962,9 @@ class GuildService {
         // Only track best percent for pulls before first kill
         if (shouldCountPull && fightPercent < bossData.bestPercent) {
           bossData.bestPercent = fightPercent;
+          // Store the report code and fight ID for the best pull
+          bossData.bestPullReportCode = fight.reportCode;
+          bossData.bestPullFightId = fight.fightId;
 
           // Store best pull phase info
           if (fight.lastPhaseId && fight.lastPhaseName) {
@@ -2043,6 +2050,8 @@ class GuildService {
         firstKillFightId: bossInfo.firstKillFightId,
         killOrder: killOrderMap.get(encounterId),
         bestPullPhase: bossInfo.kills > 0 ? undefined : bossInfo.bestPullPhase,
+        bestPullReportCode: bossInfo.kills > 0 ? undefined : bossInfo.bestPullReportCode,
+        bestPullFightId: bossInfo.kills > 0 ? undefined : bossInfo.bestPullFightId,
         lastUpdated: new Date(),
       };
 

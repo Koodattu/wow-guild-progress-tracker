@@ -21,6 +21,8 @@ export interface IBossProgress {
   firstKillFightId?: number; // Fight ID within the report for first kill
   killOrder?: number; // Order in which this boss was first killed (1 = first boss killed, 2 = second, etc.)
   bestPullPhase?: IBestPullPhase; // Phase context for best pull
+  bestPullReportCode?: string; // WCL report code for best pull (for unkilled bosses)
+  bestPullFightId?: number; // Fight ID within the report for best pull (for unkilled bosses)
   lastUpdated: Date;
 }
 
@@ -120,6 +122,8 @@ const BossProgressSchema: Schema = new Schema(
       fightCompletion: { type: Number },
       displayString: { type: String },
     },
+    bestPullReportCode: { type: String },
+    bestPullFightId: { type: Number },
     lastUpdated: { type: Date, default: Date.now },
   },
   { _id: false }
