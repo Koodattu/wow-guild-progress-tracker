@@ -18,7 +18,7 @@ export const GUILDS: TrackedGuild[] = [
 export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu"] },
   { name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
-  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA" },
+  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
   { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
   { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
@@ -28,7 +28,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Marras", realm: "Kazzak", region: "EU" },
   { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["persecticus"] },
   { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora"] },
-  { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0"] },
+  { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0", "deeheals"] },
   { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
   { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
   { name: "Taikaolennot", realm: "Outland", region: "EU" },
