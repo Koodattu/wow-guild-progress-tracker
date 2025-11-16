@@ -2453,6 +2453,7 @@ class GuildService {
           if (guildData) {
             // Update the guild's crest and faction in database
             guild.crest = guildData.crest;
+            guild.markModified("crest");
             if (guildData.faction) {
               guild.faction = guildData.faction;
             }
