@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { GuildListItem, Event, RaidInfo, RaidDates } from "@/types";
+import { GuildListItem, Event, RaidInfo, RaidDates, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
 import GuildTable from "@/components/GuildTable";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
+import RaidDetailModal from "@/components/RaidDetailModal";
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -20,6 +21,10 @@ function HomeContent() {
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal state for raid detail
+  const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
+  const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
 
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
@@ -137,6 +142,47 @@ function HomeContent() {
     [router]
   );
 
+  // Handle raid progress click - open raid detail modal
+  const handleRaidProgressClick = useCallback(
+    async (guild: GuildListItem) => {
+      if (!selectedRaidId) return;
+
+      try {
+        setError(null);
+        // Fetch boss progress for this specific raid and bosses list
+        const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(guild.realm, guild.name, selectedRaidId), api.getBosses(selectedRaidId)]);
+
+        // Create a detailed guild object for the modal
+        const detailedGuild: Guild = {
+          _id: guild._id,
+          name: guild.name,
+          realm: guild.realm,
+          region: guild.region,
+          faction: guild.faction,
+          warcraftlogsId: guild.warcraftlogsId,
+          crest: guild.crest,
+          parent_guild: guild.parent_guild,
+          isCurrentlyRaiding: guild.isCurrentlyRaiding,
+          lastFetched: guild.lastFetched,
+          progress: bossProgress,
+        };
+
+        setSelectedGuildDetail(detailedGuild);
+        setBossesForSelectedRaid(bosses);
+      } catch (err) {
+        console.error("Error fetching raid details:", err);
+        setError("Failed to load raid details.");
+      }
+    },
+    [selectedRaidId]
+  );
+
+  // Handle closing raid detail modal
+  const handleCloseModal = useCallback(() => {
+    setSelectedGuildDetail(null);
+    setBossesForSelectedRaid([]);
+  }, []);
+
   // Auto-refresh with different intervals
   useEffect(() => {
     // Refresh events every 1 minute
@@ -191,8 +237,13 @@ function HomeContent() {
         <div>
           {/* Integrated Raid Selector - replaces both the dropdown and the header */}
           {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
-          <GuildTable guilds={guilds} onGuildClick={handleGuildClick} selectedRaidId={selectedRaidId} />
+          <GuildTable guilds={guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={selectedRaidId} />
         </div>
+
+        {/* Raid Detail Modal */}
+        {selectedGuildDetail && selectedRaidId && (
+          <RaidDetailModal guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
+        )}
       </div>
     </main>
   );

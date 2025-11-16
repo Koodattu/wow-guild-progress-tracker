@@ -6,7 +6,7 @@ import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
 import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
-import GuildDetail from "@/components/GuildDetail";
+import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
 
 interface PageProps {
@@ -29,6 +29,10 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
+
+  // Hover state for clickable areas
+  const [hoveredRaidInfoRow, setHoveredRaidInfoRow] = useState<number | null>(null);
+  const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState<number | null>(null);
 
   // Decode URL parameters
   const realm = decodeURIComponent(resolvedParams.realm);
@@ -110,6 +114,14 @@ export default function GuildProfilePage({ params }: PageProps) {
       }
     },
     [guildSummary, realm, name, updateURL]
+  );
+
+  // Handle raid info click - navigate to main page with raid selected
+  const handleRaidInfoClick = useCallback(
+    (raidId: number) => {
+      router.push(`/?raidid=${raidId}`);
+    },
+    [router]
   );
 
   // Handle raid selection from URL parameter after initial load
@@ -357,33 +369,95 @@ export default function GuildProfilePage({ params }: PageProps) {
 
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;
-                          const rowClasses = hasProgress
-                            ? "border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors"
-                            : "border-b border-gray-800 opacity-40 cursor-not-allowed";
 
                           return (
-                            <tr key={raid.id} onClick={() => hasProgress && handleRaidClick(raid.id)} className={rowClasses}>
-                              <td className="px-4 py-3">
+                            <tr key={raid.id} className="border-b border-gray-800">
+                              {/* First clickable area: Raid Name, Rank, World Rank */}
+                              <td
+                                className={`px-4 py-3 cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  !hasProgress ? "opacity-40" : ""
+                                }`}
+                                onClick={() => handleRaidInfoClick(raid.id)}
+                                onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidInfoRow(null)}
+                              >
                                 <div className="flex items-center gap-3">
                                   {iconUrl && <Image src={iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
                                   <span className="font-semibold text-white">{raid.name}</span>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td
+                                className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  !hasProgress ? "opacity-40" : ""
+                                }`}
+                                onClick={() => handleRaidInfoClick(raid.id)}
+                                onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidInfoRow(null)}
+                              >
                                 {guildRank ? <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td
+                                className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  !hasProgress ? "opacity-40" : ""
+                                }`}
+                                onClick={() => handleRaidInfoClick(raid.id)}
+                                onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidInfoRow(null)}
+                              >
                                 {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
-                              <td className="px-4 py-3 text-center">
+
+                              {/* Second clickable area: Raid Progress columns */}
+                              <td
+                                className={`px-4 py-3 text-center transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
                                 <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td
+                                className={`px-4 py-3 text-center transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
                                 <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
                               </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-300">{totalTime > 0 ? formatTime(totalTime) : "-"}</td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-300">{currentBossPulls > 0 ? currentBossPulls : "-"}</td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-300">{bestProgress}</td>
+                              <td
+                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
+                                {totalTime > 0 ? formatTime(totalTime) : "-"}
+                              </td>
+                              <td
+                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
+                                {currentBossPulls > 0 ? currentBossPulls : "-"}
+                              </td>
+                              <td
+                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
+                                {bestProgress}
+                              </td>
                             </tr>
                           );
                         })}
@@ -400,7 +474,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
         {/* Raid Detail Modal */}
         {selectedGuildDetail && selectedRaidId && (
-          <GuildDetail guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
+          <RaidDetailModal guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
         )}
       </div>
     </main>

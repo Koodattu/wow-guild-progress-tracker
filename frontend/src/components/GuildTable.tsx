@@ -4,14 +4,19 @@ import { GuildListItem, RaidProgressSummary } from "@/types";
 import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
+import { useState } from "react";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
   onGuildClick: (guild: GuildListItem) => void;
+  onRaidProgressClick: (guild: GuildListItem) => void;
   selectedRaidId: number | null;
 }
 
-export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: GuildTableProps) {
+export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, selectedRaidId }: GuildTableProps) {
+  const [hoveredGuildInfoRow, setHoveredGuildInfoRow] = useState<string | null>(null);
+  const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState<string | null>(null);
+
   const getLatestProgress = (guild: GuildListItem, difficulty: "mythic" | "heroic"): RaidProgressSummary | null => {
     if (!selectedRaidId) return null;
     return guild.progress.find((p) => p.difficulty === difficulty && p.raidId === selectedRaidId) || null;
@@ -63,18 +68,30 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
             const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
 
             return (
-              <tr
-                key={guild._id}
-                onClick={() => onGuildClick(guild)}
-                className={`border-b border-gray-800 hover:bg-gray-800/30 cursor-pointer transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}
-              >
-                <td className="px-4 py-3 text-center">
+              <tr key={guild._id} className={`border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
+                {/* First clickable area: Rank, World Rank, and Guild Name */}
+                <td
+                  className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredGuildInfoRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onGuildClick(guild)}
+                  onMouseEnter={() => setHoveredGuildInfoRow(guild._id)}
+                  onMouseLeave={() => setHoveredGuildInfoRow(null)}
+                >
                   <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span>
                 </td>
-                <td className="px-4 py-3">
+                <td
+                  className={`px-4 py-3 cursor-pointer transition-colors ${hoveredGuildInfoRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onGuildClick(guild)}
+                  onMouseEnter={() => setHoveredGuildInfoRow(guild._id)}
+                  onMouseLeave={() => setHoveredGuildInfoRow(null)}
+                >
                   {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
                 </td>
-                <td className="px-4 py-3">
+                <td
+                  className={`px-4 py-3 cursor-pointer transition-colors ${hoveredGuildInfoRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onGuildClick(guild)}
+                  onMouseEnter={() => setHoveredGuildInfoRow(guild._id)}
+                  onMouseLeave={() => setHoveredGuildInfoRow(null)}
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 shrink-0">
                       <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] origin-top-left" />
@@ -125,17 +142,48 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-center">
+
+                {/* Second clickable area: Raid Progress columns */}
+                <td
+                  className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onRaidProgressClick(guild)}
+                  onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
+                  onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                >
                   <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td
+                  className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onRaidProgressClick(guild)}
+                  onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
+                  onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                >
                   <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
                 </td>
-                <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicPulls > 0 ? mythicPulls : "-"}</td>
-                <td className="px-4 py-3 text-center text-sm text-gray-300">
+                <td
+                  className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onRaidProgressClick(guild)}
+                  onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
+                  onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                >
+                  {mythicPulls > 0 ? mythicPulls : "-"}
+                </td>
+                <td
+                  className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onRaidProgressClick(guild)}
+                  onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
+                  onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                >
                   {mythicBestPullDisplay ? formatPhaseDisplay(mythicBestPullDisplay) : mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}
                 </td>
-                <td className="px-4 py-3 text-center text-sm text-gray-300">{mythicProgress ? formatTime(mythicProgress.totalTimeSpent) : "-"}</td>
+                <td
+                  className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onRaidProgressClick(guild)}
+                  onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
+                  onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                >
+                  {mythicProgress ? formatTime(mythicProgress.totalTimeSpent) : "-"}
+                </td>
               </tr>
             );
           })}
