@@ -85,3 +85,38 @@ export const DIFFICULTIES = {
   NORMAL: 3,
   LFR: 1,
 };
+
+// Manual raid dates for raids not available in Raider.IO API
+// These are EU region dates only for now
+export const MANUAL_RAID_DATES = [
+  {
+    id: 4,
+    name: "Throne of Thunder",
+    euStartDate: "2013-03-06",
+    euEndDate: "2013-09-11",
+  },
+  {
+    id: 5,
+    name: "Siege of Orgrimmar",
+    euStartDate: "2013-09-11",
+    euEndDate: "2014-12-03",
+  },
+  {
+    id: 6,
+    name: "Highmaul",
+    euStartDate: "2014-12-03",
+    euEndDate: "2015-02-04",
+  },
+  {
+    id: 7,
+    name: "Blackrock Foundry",
+    euStartDate: "2015-02-04",
+    euEndDate: "2015-06-24",
+  },
+  {
+    id: 8,
+    name: "Hellfire Citadel",
+    euStartDate: "2015-06-24",
+    euEndDate: "2016-07-20",
+  },
+];

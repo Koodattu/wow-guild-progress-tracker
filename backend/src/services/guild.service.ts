@@ -6,7 +6,7 @@ import Fight from "../models/Fight";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
-import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD } from "../config/guilds";
+import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
 import mongoose from "mongoose";
 
 class GuildService {
@@ -183,7 +183,23 @@ class GuildService {
                 cn: raiderIOMatch.ends.cn ? new Date(raiderIOMatch.ends.cn) : undefined,
               };
             } else {
-              console.log(`⚠️  No Raider.IO dates found for: ${zoneData.name}`);
+              // Check if we have manual dates for this raid
+              const manualRaidData = MANUAL_RAID_DATES.find((r) => r.id === zoneId);
+
+              if (manualRaidData) {
+                console.log(`✅ Using manual dates for: ${zoneData.name}`);
+
+                // Apply manual EU dates
+                updateData.starts = {
+                  eu: new Date(manualRaidData.euStartDate),
+                };
+
+                updateData.ends = {
+                  eu: new Date(manualRaidData.euEndDate),
+                };
+              } else {
+                console.log(`⚠️  No Raider.IO or manual dates found for: ${zoneData.name}`);
+              }
             }
 
             // Update raid with icons and dates
@@ -194,7 +210,9 @@ class GuildService {
               }
             );
 
-            console.log(`Updated raid: ${zoneData.name} (icon: ${raidIconUrl ? "✅" : "❌"}, dates: ${raiderIOMatch ? "✅" : "❌"})`);
+            const hasManualDates = MANUAL_RAID_DATES.some((r) => r.id === zoneId);
+            const datesSource = raiderIOMatch ? "Raider.IO" : hasManualDates ? "Manual" : "None";
+            console.log(`Updated raid: ${zoneData.name} (icon: ${raidIconUrl ? "✅" : "❌"}, dates: ${datesSource})`);
           } catch (error) {
             console.error(`Error updating raid data for zone ${zoneId}:`, error);
           }
