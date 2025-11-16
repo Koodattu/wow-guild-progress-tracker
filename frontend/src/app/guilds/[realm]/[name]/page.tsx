@@ -38,6 +38,11 @@ export default function GuildProfilePage({ params }: PageProps) {
   const realm = decodeURIComponent(resolvedParams.realm);
   const name = decodeURIComponent(resolvedParams.name);
 
+  // Scroll to top when component mounts (when navigating to a new guild)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [realm, name]);
+
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
     (raidId: number | null) => {
@@ -225,80 +230,75 @@ export default function GuildProfilePage({ params }: PageProps) {
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Guild Header */}
-        <div className={`mb-4 flex items-start justify-between ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
-          <div>
-            <div className="flex items-center gap-3 mb-3">
-              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0" drawFactionCircle={true} />
-              <div className="flex items-center gap-2">
-                <h1 className="text-5xl font-bold text-white">
-                  {guildSummary.parent_guild ? (
-                    <>
-                      {guildSummary.name}
-                      <span className="text-gray-400 font-normal">
-                        {" "}
-                        ({guildSummary.parent_guild}-{guildSummary.realm})
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      {guildSummary.name}
-                      <span className="text-gray-400 font-normal">-{guildSummary.realm}</span>
-                    </>
+        <div className={`mb-4 ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+          <div className="flex items-start gap-3 mb-3">
+            <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0" drawFactionCircle={true} />
+            <div className="flex-1">
+              {/* Guild Name Row with Icons */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-5xl font-bold text-white">
+                    {guildSummary.name}
+                    {guildSummary.parent_guild && <span className="text-gray-400 font-normal"> ({guildSummary.parent_guild})</span>}
+                  </h1>
+                  {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {guildSummary.warcraftlogsId && (
+                    <a
+                      href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-12 h-12 hover:opacity-80 transition-opacity"
+                      title="View on Warcraft Logs"
+                    >
+                      <Image src="/wcl-logo.png" alt="WCL" width={48} height={48} className="w-full h-full object-contain" />
+                    </a>
                   )}
-                </h1>
-                {guildSummary.warcraftlogsId && (
                   <a
-                    href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
+                    href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center w-8 h-8 hover:opacity-80 transition-opacity"
-                    title="View on Warcraft Logs"
+                    className="inline-flex items-center justify-center w-12 h-12 hover:opacity-80 transition-opacity"
+                    title="View on Raider.IO"
                   >
-                    <Image src="/wcl-logo.png" alt="WCL" width={32} height={32} className="w-full h-full object-contain" />
+                    <Image src="/raiderio-logo.png" alt="Raider.IO" width={48} height={48} className="w-full h-full object-contain" />
                   </a>
-                )}
-                <a
-                  href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center w-8 h-8 hover:opacity-80 transition-opacity"
-                  title="View on Raider.IO"
-                >
-                  <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
-                </a>
-              </div>
-              {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
-            </div>
-            {/* Raid Schedule Display */}
-            {guildSummary.raidSchedule && guildSummary.raidSchedule.days && guildSummary.raidSchedule.days.length > 0 && (
-              <div className="mt-3 text-sm text-gray-300">
-                <div className="flex flex-wrap gap-2">
-                  {[...guildSummary.raidSchedule.days]
-                    .sort((a, b) => {
-                      const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-                      return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
-                    })
-                    .map((day, index) => {
-                      const formatHour = (hour: number): string => {
-                        const h = Math.floor(hour);
-                        const m = (hour % 1) * 60;
-                        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-                      };
-                      return (
-                        <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700">
-                          {day.day} {formatHour(day.startHour)}-{formatHour(day.endHour)}
-                        </span>
-                      );
-                    })}
                 </div>
               </div>
-            )}
-          </div>
-          {guildSummary.lastFetched && (
-            <div className="text-right text-sm text-gray-400 self-end">
-              <div className="text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>
+              {/* Realm Name */}
+              <div className="text-3xl text-gray-400 mb-3">{guildSummary.realm}</div>
+              {/* Raid Schedule and Last Updated Row */}
+              {guildSummary.raidSchedule && guildSummary.raidSchedule.days && guildSummary.raidSchedule.days.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    {[...guildSummary.raidSchedule.days]
+                      .sort((a, b) => {
+                        const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                        return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
+                      })
+                      .map((day, index) => {
+                        const formatHour = (hour: number): string => {
+                          const h = Math.floor(hour);
+                          const m = (hour % 1) * 60;
+                          return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+                        };
+                        return (
+                          <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700 text-sm">
+                            {day.day} {formatHour(day.startHour)}-{formatHour(day.endHour)}
+                          </span>
+                        );
+                      })}
+                  </div>
+                  {guildSummary.lastFetched && <div className="text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
+                </div>
+              )}
+              {/* Last Updated if no raid schedule */}
+              {(!guildSummary.raidSchedule || !guildSummary.raidSchedule.days || guildSummary.raidSchedule.days.length === 0) && guildSummary.lastFetched && (
+                <div className="text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* Progress Table */}
