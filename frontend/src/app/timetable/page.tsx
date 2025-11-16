@@ -25,6 +25,7 @@ export default function TimetablePage() {
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -50,6 +51,15 @@ export default function TimetablePage() {
       setSelectedDay(days[today.getDay()]);
     }
   }, [selectedDay]);
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Format hour for display (e.g., 18.5 -> "18:30", 19 -> "19:00")
   const formatHour = (hour: number): string => {
@@ -179,6 +189,18 @@ export default function TimetablePage() {
 
   const todayDayName = getTodayDayName();
 
+  // Get current time as decimal hour (e.g., 14:30 = 14.5)
+  const getCurrentTimeHour = () => {
+    const hours = currentTime.getHours();
+    const minutes = currentTime.getMinutes();
+    return hours + minutes / 60;
+  };
+
+  // Check if current time indicator should be shown for a given day
+  const shouldShowCurrentTime = (dayName: string) => {
+    return dayName === todayDayName;
+  };
+
   return (
     <div className="w-full px-4 py-2" style={{ maxWidth: "85vw", margin: "0 auto" }}>
       <div className="mb-4">
@@ -296,6 +318,26 @@ export default function TimetablePage() {
                     );
                   });
                 })()}
+
+                {/* Current time indicator */}
+                {shouldShowCurrentTime(selectedDay) &&
+                  (() => {
+                    const currentHour = getCurrentTimeHour();
+                    if (currentHour >= timeRange.start && currentHour <= timeRange.end) {
+                      const hourHeight = 60;
+                      const topPx = (currentHour - timeRange.start) * hourHeight;
+
+                      return (
+                        <div className="absolute left-0 right-0 pointer-events-none z-30" style={{ top: `${topPx}px` }}>
+                          <div className="relative">
+                            <div className="absolute w-2 h-2 bg-red-500 rounded-full -left-1 -top-1"></div>
+                            <div className="h-0.5 bg-red-500 shadow-lg"></div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
               </div>
             </div>
           </div>
@@ -383,6 +425,43 @@ export default function TimetablePage() {
                 );
               })}
             </div>
+
+            {/* Current time indicator for week view */}
+            {(() => {
+              const currentHour = getCurrentTimeHour();
+              if (currentHour >= timeRange.start && currentHour <= timeRange.end) {
+                const hourHeight = 60;
+                const topPx = (currentHour - timeRange.start) * hourHeight;
+                const todayIndex = WEEKDAYS.indexOf(todayDayName);
+
+                if (todayIndex !== -1) {
+                  return (
+                    <div
+                      className="absolute pointer-events-none z-30"
+                      style={{
+                        top: `${topPx}px`,
+                        left: "80px",
+                        right: 0,
+                      }}
+                    >
+                      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", height: "2px" }}>
+                        {WEEKDAYS.map((day, idx) => (
+                          <div key={day} className="relative">
+                            {idx === todayIndex && (
+                              <>
+                                <div className="absolute w-2 h-2 bg-red-500 rounded-full -left-1 -top-1"></div>
+                                <div className="h-0.5 bg-red-500 shadow-lg"></div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+              }
+              return null;
+            })()}
           </div>
         </div>
       </div>
