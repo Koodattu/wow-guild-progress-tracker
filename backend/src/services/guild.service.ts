@@ -411,6 +411,60 @@ class GuildService {
     }
   }
 
+  // Migrate existing guilds to add WarcraftLogs guild ID
+  // This checks all guilds and fetches the WCL guild ID for any that are missing it
+  async migrateGuildsWarcraftLogsId(): Promise<void> {
+    console.log("Migrating guilds to add WarcraftLogs guild ID...");
+
+    try {
+      // Find all guilds that don't have a warcraftlogsId
+      const guildsWithoutWclId = await Guild.find({
+        $or: [{ warcraftlogsId: { $exists: false } }, { warcraftlogsId: null }],
+      });
+
+      if (guildsWithoutWclId.length === 0) {
+        console.log("All guilds already have WarcraftLogs guild ID, no migration needed");
+        return;
+      }
+
+      console.log(`Found ${guildsWithoutWclId.length} guilds missing WarcraftLogs guild ID`);
+
+      // Process each guild
+      for (const guild of guildsWithoutWclId) {
+        try {
+          console.log(`[${guild.name}] Fetching WarcraftLogs guild ID...`);
+
+          const guildDetails = await wclService.getGuildDetails(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase());
+
+          if (guildDetails.guildData?.guild?.id) {
+            guild.warcraftlogsId = guildDetails.guildData.guild.id;
+            console.log(`[${guild.name}] ✅ WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
+
+            // Also update faction if available and not already set
+            if (guildDetails.guildData.guild.faction?.name && !guild.faction) {
+              guild.faction = guildDetails.guildData.guild.faction.name;
+              console.log(`[${guild.name}] Updated faction: ${guild.faction}`);
+            }
+
+            // Save the guild with the updated ID
+            await guild.save();
+            console.log(`[${guild.name}] Saved successfully`);
+          } else {
+            console.warn(`[${guild.name}] ⚠️  Could not fetch WarcraftLogs guild ID from API`);
+          }
+        } catch (error) {
+          console.error(`[${guild.name}] Error fetching WarcraftLogs guild ID:`, error instanceof Error ? error.message : "Unknown error");
+          // Continue with next guild even if one fails
+        }
+      }
+
+      console.log("Finished migrating guilds WarcraftLogs guild IDs");
+    } catch (error) {
+      console.error("Error in migrateGuildsWarcraftLogsId:", error);
+      throw error;
+    }
+  }
+
   // Fetch and update a single guild's progress
   async updateGuildProgress(guildId: string): Promise<IGuild | null> {
     const guild = await Guild.findById(guildId);
@@ -774,6 +828,29 @@ class GuildService {
   // Returns true if any data was found and saved
   private async performInitialFetch(guild: IGuild): Promise<boolean> {
     console.log(`[${guild.name}] Performing initial fetch of all reports`);
+
+    // Fetch WarcraftLogs guild ID (only during initial fetch)
+    if (!guild.warcraftlogsId) {
+      console.log(`[${guild.name}] Fetching WarcraftLogs guild ID...`);
+      try {
+        const guildDetails = await wclService.getGuildDetails(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase());
+
+        if (guildDetails.guildData?.guild?.id) {
+          guild.warcraftlogsId = guildDetails.guildData.guild.id;
+          console.log(`[${guild.name}] WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
+
+          // Also update faction if available
+          if (guildDetails.guildData.guild.faction?.name && !guild.faction) {
+            guild.faction = guildDetails.guildData.guild.faction.name;
+            console.log(`[${guild.name}] Updated faction: ${guild.faction}`);
+          }
+        } else {
+          console.warn(`[${guild.name}] Could not fetch WarcraftLogs guild ID`);
+        }
+      } catch (error) {
+        console.error(`[${guild.name}] Error fetching WarcraftLogs guild ID:`, error instanceof Error ? error.message : "Unknown error");
+      }
+    }
 
     // Get valid boss encounter IDs from all tracked raids
     const validBossIds = await this.getValidBossEncounterIds();
@@ -2181,6 +2258,7 @@ class GuildService {
           realm: guildObj.realm,
           region: guildObj.region,
           faction: guildObj.faction,
+          warcraftlogsId: guildObj.warcraftlogsId,
           crest: guildObj.crest,
           parent_guild: guildObj.parent_guild,
           isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
@@ -2368,6 +2446,7 @@ class GuildService {
       realm: guildObj.realm,
       region: guildObj.region,
       faction: guildObj.faction,
+      warcraftlogsId: guildObj.warcraftlogsId,
       crest: guildObj.crest,
       parent_guild: guildObj.parent_guild,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
@@ -2395,6 +2474,7 @@ class GuildService {
       realm: guildObj.realm,
       region: guildObj.region,
       faction: guildObj.faction,
+      warcraftlogsId: guildObj.warcraftlogsId,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: guildObj.progress, // Full progress with boss arrays

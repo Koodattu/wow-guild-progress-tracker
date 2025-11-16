@@ -86,6 +86,7 @@ export interface IGuild extends Document {
   realm: string;
   region: string;
   faction?: string;
+  warcraftlogsId?: number; // WarcraftLogs guild ID
   iconUrl?: string;
   crest?: IGuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
@@ -147,6 +148,7 @@ const GuildSchema: Schema = new Schema(
     realm: { type: String, required: true },
     region: { type: String, required: true, default: "EU" },
     faction: { type: String },
+    warcraftlogsId: { type: Number }, // WarcraftLogs guild ID
     iconUrl: { type: String },
     crest: {
       emblem: {

@@ -96,6 +96,7 @@ export interface GuildListItem {
   realm: string;
   region: string;
   faction?: string;
+  warcraftlogsId?: number;
   crest?: GuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
@@ -111,6 +112,7 @@ export interface GuildSummary {
   realm: string;
   region: string;
   faction?: string;
+  warcraftlogsId?: number;
   crest?: GuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
@@ -127,6 +129,7 @@ export interface Guild {
   realm: string;
   region: string;
   faction?: string;
+  warcraftlogsId?: number;
   crest?: GuildCrest;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;

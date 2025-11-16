@@ -150,3 +150,10 @@ export function getGuildProfileUrl(realm: string, name: string): string {
   const encodedName = encodeURIComponent(name);
   return `/guilds/${encodedRealm}/${encodedName}`;
 }
+
+// Generate Raider.IO guild URL
+export function getRaiderIOGuildUrl(region: string, realm: string, guildName: string): string {
+  const encodedRealm = encodeURIComponent(realm.toLowerCase().replace(/\s+/g, "-"));
+  const encodedGuildName = encodeURIComponent(guildName);
+  return `https://raider.io/guilds/${region.toLowerCase()}/${encodedRealm}/${encodedGuildName}`;
+}

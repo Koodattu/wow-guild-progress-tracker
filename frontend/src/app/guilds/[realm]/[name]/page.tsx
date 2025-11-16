@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
+import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
 import GuildDetail from "@/components/GuildDetail";
 import GuildCrest from "@/components/GuildCrest";
 
@@ -217,22 +217,44 @@ export default function GuildProfilePage({ params }: PageProps) {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0" drawFactionCircle={true} />
-              <h1 className="text-5xl font-bold text-white">
-                {guildSummary.parent_guild ? (
-                  <>
-                    {guildSummary.name}
-                    <span className="text-gray-400 font-normal">
-                      {" "}
-                      ({guildSummary.parent_guild}-{guildSummary.realm})
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    {guildSummary.name}
-                    <span className="text-gray-400 font-normal">-{guildSummary.realm}</span>
-                  </>
+              <div className="flex items-center gap-2">
+                <h1 className="text-5xl font-bold text-white">
+                  {guildSummary.parent_guild ? (
+                    <>
+                      {guildSummary.name}
+                      <span className="text-gray-400 font-normal">
+                        {" "}
+                        ({guildSummary.parent_guild}-{guildSummary.realm})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {guildSummary.name}
+                      <span className="text-gray-400 font-normal">-{guildSummary.realm}</span>
+                    </>
+                  )}
+                </h1>
+                {guildSummary.warcraftlogsId && (
+                  <a
+                    href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center w-8 h-8 hover:opacity-80 transition-opacity"
+                    title="View on Warcraft Logs"
+                  >
+                    <Image src="/wcl-logo.png" alt="WCL" width={32} height={32} className="w-full h-full object-contain" />
+                  </a>
                 )}
-              </h1>
+                <a
+                  href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-8 h-8 hover:opacity-80 transition-opacity"
+                  title="View on Raider.IO"
+                >
+                  <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
+                </a>
+              </div>
               {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
             </div>
             {/* Raid Schedule Display */}

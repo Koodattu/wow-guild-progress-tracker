@@ -1,8 +1,9 @@
 "use client";
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
-import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor } from "@/lib/utils";
+import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
+import Image from "next/image";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
@@ -94,6 +95,28 @@ export default function GuildTable({ guilds, onGuildClick, selectedRaidId }: Gui
                         </>
                       )}
                     </span>
+                    {guild.warcraftlogsId && (
+                      <a
+                        href={`https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center justify-center w-5 h-5 hover:opacity-80 transition-opacity"
+                        title="View on Warcraft Logs"
+                      >
+                        <Image src="/wcl-logo.png" alt="WCL" width={20} height={20} className="w-full h-full object-contain" />
+                      </a>
+                    )}
+                    <a
+                      href={getRaiderIOGuildUrl(guild.region, guild.realm, guild.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center justify-center w-5 h-5 hover:opacity-80 transition-opacity"
+                      title="View on Raider.IO"
+                    >
+                      <Image src="/raiderio-logo.png" alt="Raider.IO" width={20} height={20} className="w-full h-full object-contain" />
+                    </a>
                     {guild.scheduleDisplay && (
                       <span className="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 font-semibold">
                         {guild.scheduleDisplay.totalDays}D x {guild.scheduleDisplay.averageHours}h

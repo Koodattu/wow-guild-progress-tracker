@@ -60,6 +60,13 @@ const startServer = async () => {
       console.log("CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation");
     }
 
+    // Migrate existing guilds to add WarcraftLogs guild ID
+    // This runs on every startup to ensure all guilds have the ID
+    if (calculateOnStartup) {
+      console.log("Migrating guilds to add WarcraftLogs guild ID...");
+      await guildService.migrateGuildsWarcraftLogsId();
+    }
+
     // Start background scheduler
     scheduler.start();
 

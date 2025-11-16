@@ -682,6 +682,39 @@ class WarcraftLogsService {
 
     return this.query<any>(query, variables);
   }
+
+  /**
+   * Fetch guild details including WarcraftLogs guild ID
+   * This should only be called once during initial fetch
+   */
+  async getGuildDetails(guildName: string, serverSlug: string, serverRegion: string) {
+    const query = `
+      query($guildName: String!, $serverSlug: String!, $serverRegion: String!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        guildData {
+          guild(name: $guildName, serverSlug: $serverSlug, serverRegion: $serverRegion) {
+            id
+            name
+            faction {
+              name
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      guildName,
+      serverSlug,
+      serverRegion,
+    };
+
+    return this.query<any>(query, variables);
+  }
 }
 
 export default new WarcraftLogsService();

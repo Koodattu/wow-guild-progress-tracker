@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { GuildListItem } from "@/types";
 import { api } from "@/lib/api";
-import { getGuildProfileUrl } from "@/lib/utils";
+import { getGuildProfileUrl, getRaiderIOGuildUrl } from "@/lib/utils";
 
 export default function GuildsPage() {
   const [guilds, setGuilds] = useState<GuildListItem[]>([]);
@@ -106,27 +107,45 @@ export default function GuildsPage() {
               <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
               <div className="space-y-1">
                 {groupedGuilds[letter].map((guild) => (
-                  <Link
-                    key={guild._id}
-                    href={getGuildProfileUrl(guild.realm, guild.name)}
-                    className={`block text-gray-300 hover:text-white transition-colors ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}
-                  >
-                    {guild.parent_guild ? (
-                      <>
-                        <span className="text-4xl font-semibold">{guild.name}</span>
-                        <span className="text-4xl text-gray-400">
-                          {" "}
-                          ({guild.parent_guild}-{guild.realm})
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-4xl font-semibold">{guild.name}</span>
-                        <span className="text-4xl text-gray-400">-{guild.realm}</span>
-                      </>
+                  <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+                    <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
+                      {guild.parent_guild ? (
+                        <>
+                          <span className="text-4xl font-semibold">{guild.name}</span>
+                          <span className="text-4xl text-gray-400">
+                            {" "}
+                            ({guild.parent_guild}-{guild.realm})
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-4xl font-semibold">{guild.name}</span>
+                          <span className="text-4xl text-gray-400">-{guild.realm}</span>
+                        </>
+                      )}
+                    </Link>
+                    {guild.warcraftlogsId && (
+                      <a
+                        href={`https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                        title="View on Warcraft Logs"
+                      >
+                        <Image src="/wcl-logo.png" alt="WCL" width={24} height={24} className="w-full h-full object-contain" />
+                      </a>
                     )}
-                    {guild.isCurrentlyRaiding && <span className="ml-3 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
-                  </Link>
+                    <a
+                      href={getRaiderIOGuildUrl(guild.region, guild.realm, guild.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                      title="View on Raider.IO"
+                    >
+                      <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
+                    </a>
+                    {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+                  </div>
                 ))}
               </div>
             </div>
