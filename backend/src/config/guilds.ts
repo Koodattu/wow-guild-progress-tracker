@@ -27,7 +27,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   { name: "Marras", realm: "Kazzak", region: "EU" },
   { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["persecticus"] },
-  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora"] },
+  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora", "heiqs"] },
   { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0", "deeheals"] },
   { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
   { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
