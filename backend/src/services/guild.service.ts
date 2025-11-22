@@ -1218,6 +1218,14 @@ class GuildService {
     }
 
     guildLog.info(`Thorough refetch complete: ${totalNewFights} total new fights recovered`);
+
+    // Always recalculate statistics to ensure accuracy, even if no new fights were found
+    guildLog.info("Recalculating statistics for all current raids...");
+    for (const raidId of CURRENT_RAID_IDS) {
+      await this.calculateGuildStatistics(guild, raidId);
+    }
+    guildLog.info("Statistics recalculated");
+
     return totalNewFights;
   }
 
@@ -1248,14 +1256,10 @@ class GuildService {
           const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
 
           if (recoveredFights > 0) {
-            guildLog.info(`✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
+            guildLog.info(`✅ Recovered ${recoveredFights} missing fights`);
             totalRecoveredFights += recoveredFights;
-
-            // Recalculate statistics to ensure accuracy after recovering missing fights
-            for (const raidId of CURRENT_RAID_IDS) {
-              await this.calculateGuildStatistics(guild, raidId);
-            }
-            guildLog.info("Statistics recalculated after fight recovery");
+          } else {
+            guildLog.info("No missing fights found (statistics still recalculated)");
           }
 
           // Small delay to avoid overwhelming the API
@@ -1384,15 +1388,10 @@ class GuildService {
         const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
 
         if (recoveredFights > 0) {
-          guildLog.info(`✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
-          // Recalculate statistics to ensure accuracy after recovering missing fights
-          for (const raidId of CURRENT_RAID_IDS) {
-            await this.calculateGuildStatistics(guild, raidId);
-          }
-          guildLog.info("Statistics recalculated after fight recovery");
+          guildLog.info(`✅ Recovered ${recoveredFights} missing fights (statistics already recalculated)`);
           return true; // We found and processed new data
         } else {
-          guildLog.info("No missing fights found during thorough refetch");
+          guildLog.info("No missing fights found (statistics already recalculated)");
         }
       }
     }
