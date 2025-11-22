@@ -21,6 +21,7 @@ services:
       - NODE_ENV=production
     volumes:
       - ./data/images:/app/data/images
+      - ./backend/logs:/app/logs
     networks:
       - app-network
 

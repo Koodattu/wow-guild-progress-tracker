@@ -8,16 +8,17 @@ import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
 import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
 import mongoose from "mongoose";
+import logger, { getGuildLogger } from "../utils/logger";
 
 class GuildService {
   // Sync raid information from WarcraftLogs to database
   async syncRaidsFromWCL(): Promise<void> {
-    console.log("Syncing raid data from WarcraftLogs...");
+    logger.info("Syncing raid data from WarcraftLogs...");
 
     try {
       // Check if we have any raids in the database
       const existingRaidCount = await Raid.countDocuments();
-      console.log(`Found ${existingRaidCount} raids in database`);
+      logger.info(`Found ${existingRaidCount} raids in database`);
 
       // If we have existing raids, check if all tracked raids are present
       let needsFullFetch = existingRaidCount === 0;
@@ -32,21 +33,21 @@ class GuildService {
         const missingRaidIds = TRACKED_RAIDS.filter((id) => !existingTrackedIds.has(id));
 
         if (missingRaidIds.length > 0) {
-          console.log(`Missing tracked raid IDs in database: ${missingRaidIds.join(", ")}`);
-          console.log("Triggering full zone refetch...");
+          logger.info(`Missing tracked raid IDs in database: ${missingRaidIds.join(", ")}`);
+          logger.info("Triggering full zone refetch...");
           needsFullFetch = true;
         } else {
-          console.log("All tracked raids already exist in database, skipping zone fetch");
+          logger.info("All tracked raids already exist in database, skipping zone fetch");
           return;
         }
       } else {
-        console.log("Database is empty, fetching all zones for initial setup");
+        logger.info("Database is empty, fetching all zones for initial setup");
       }
 
       // Only fetch zones if needed (first time or missing tracked raids)
       if (needsFullFetch) {
         // Fetch achievements from Blizzard API (same trigger as zones)
-        console.log("Fetching achievements from Blizzard API...");
+        logger.info("Fetching achievements from Blizzard API...");
         await blizzardService.updateAchievements();
 
         // Fetch all zones from WarcraftLogs
@@ -54,11 +55,11 @@ class GuildService {
         const zones = result.worldData?.zones;
 
         if (!zones || zones.length === 0) {
-          console.warn("No zones data returned from WarcraftLogs");
+          logger.warn("No zones data returned from WarcraftLogs");
           return;
         }
 
-        console.log(`Found ${zones.length} zones from WarcraftLogs`);
+        logger.info(`Found ${zones.length} zones from WarcraftLogs`);
 
         // Collect all raid and boss names for batch icon fetching
         const allRaidNames: string[] = [];
@@ -73,15 +74,15 @@ class GuildService {
             const zoneData = detailResult.worldData?.zone;
 
             if (!zoneData) {
-              console.warn(`No detailed data found for zone ${zone.id} (${zone.name})`);
+              logger.warn(`No detailed data found for zone ${zone.id} (${zone.name})`);
               continue;
             }
 
-            console.log(`Zone ${zone.id} data:`, JSON.stringify(zoneData, null, 2));
+            logger.info(`Zone ${zone.id} data:`, JSON.stringify(zoneData, null, 2));
 
             // Check if encounters exist
             if (!zoneData.encounters || zoneData.encounters.length === 0) {
-              console.warn(`Zone ${zone.id} (${zoneData.name}) has no encounters, skipping...`);
+              logger.warn(`Zone ${zone.id} (${zoneData.name}) has no encounters, skipping...`);
               continue;
             }
 
@@ -103,7 +104,7 @@ class GuildService {
             const bossNames = bosses.map((b: any) => b.name);
             allBossNames.push(...bossNames);
 
-            console.log(`Syncing zone ${zone.id} (${expansionName}) with ${bosses.length} encounters`);
+            logger.info(`Syncing zone ${zone.id} (${expansionName}) with ${bosses.length} encounters`);
 
             // Update or create raid in database (without icons first)
             await Raid.findOneAndUpdate(
@@ -122,23 +123,23 @@ class GuildService {
               { upsert: true, new: true }
             );
 
-            console.log(`Synced raid: ${zoneData.name} (${expansionName}, ${bosses.length} bosses)`);
+            logger.info(`Synced raid: ${zoneData.name} (${expansionName}, ${bosses.length} bosses)`);
           } catch (error) {
-            console.error(`Error syncing zone ${zone.id}:`, error);
+            logger.error(`Error syncing zone ${zone.id}:`, error);
           }
         }
 
         // Batch fetch all raid and boss icons from Blizzard
-        console.log("Fetching raid and boss icons from Blizzard API...");
+        logger.info("Fetching raid and boss icons from Blizzard API...");
         const raidIconMap = await blizzardService.getRaidIconUrls(allRaidNames);
         const bossIconMap = await blizzardService.getBossIconUrls(allBossNames);
 
         // Fetch raid dates from Raider.IO
-        console.log("Fetching raid start/end dates from Raider.IO API...");
+        logger.info("Fetching raid start/end dates from Raider.IO API...");
         const raidDatesMap = await raiderIOService.fetchAllRaidDates();
 
         // Update raids with icons and dates using cached zone data
-        console.log("Updating raids with icon URLs and start/end dates...");
+        logger.info("Updating raids with icon URLs and start/end dates...");
         for (const [zoneId, zoneData] of zoneDataCache.entries()) {
           try {
             // Get raid icon
@@ -164,7 +165,7 @@ class GuildService {
 
             // Add start/end dates if we found a match
             if (raiderIOMatch) {
-              console.log(`✅ Found Raider.IO dates for: ${zoneData.name}`);
+              logger.info(`✅ Found Raider.IO dates for: ${zoneData.name}`);
 
               // Convert string dates to Date objects
               updateData.starts = {
@@ -187,7 +188,7 @@ class GuildService {
               const manualRaidData = MANUAL_RAID_DATES.find((r) => r.id === zoneId);
 
               if (manualRaidData) {
-                console.log(`✅ Using manual dates for: ${zoneData.name}`);
+                logger.info(`✅ Using manual dates for: ${zoneData.name}`);
 
                 // Apply manual EU dates
                 updateData.starts = {
@@ -198,7 +199,7 @@ class GuildService {
                   eu: new Date(manualRaidData.euEndDate),
                 };
               } else {
-                console.log(`⚠️  No Raider.IO or manual dates found for: ${zoneData.name}`);
+                logger.info(`⚠️  No Raider.IO or manual dates found for: ${zoneData.name}`);
               }
             }
 
@@ -212,16 +213,16 @@ class GuildService {
 
             const hasManualDates = MANUAL_RAID_DATES.some((r) => r.id === zoneId);
             const datesSource = raiderIOMatch ? "Raider.IO" : hasManualDates ? "Manual" : "None";
-            console.log(`Updated raid: ${zoneData.name} (icon: ${raidIconUrl ? "✅" : "❌"}, dates: ${datesSource})`);
+            logger.info(`Updated raid: ${zoneData.name} (icon: ${raidIconUrl ? "✅" : "❌"}, dates: ${datesSource})`);
           } catch (error) {
-            console.error(`Error updating raid data for zone ${zoneId}:`, error);
+            logger.error(`Error updating raid data for zone ${zoneId}:`, error);
           }
         }
 
-        console.log("Raid sync completed");
+        logger.info("Raid sync completed");
       }
     } catch (error) {
-      console.error("Error syncing raids from WarcraftLogs:", error);
+      logger.error("Error syncing raids from WarcraftLogs:", error);
     }
   }
 
@@ -244,7 +245,7 @@ class GuildService {
       }
     }
 
-    console.log(`Loaded ${validBossIds.size} valid boss encounter IDs from ${TRACKED_RAIDS.length} tracked raids`);
+    logger.info(`Loaded ${validBossIds.size} valid boss encounter IDs from ${TRACKED_RAIDS.length} tracked raids`);
     return validBossIds;
   }
 
@@ -316,10 +317,10 @@ class GuildService {
 
   // Initialize all guilds from config
   async initializeGuilds(): Promise<void> {
-    console.log("Initializing guilds from config...");
+    logger.info("Initializing guilds from config...");
 
     const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
-    console.log(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
+    logger.info(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
 
     for (const guildConfig of guildsToTrack) {
       const existing = await Guild.findOne({
@@ -332,7 +333,7 @@ class GuildService {
         // Fetch guild crest data from Blizzard API
         // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
         const blizzardGuildName = guildConfig.parent_guild || guildConfig.name;
-        console.log(`Fetching crest data for: ${blizzardGuildName} - ${guildConfig.realm}${guildConfig.parent_guild ? ` (parent guild for ${guildConfig.name})` : ""}`);
+        logger.info(`Fetching crest data for: ${blizzardGuildName} - ${guildConfig.realm}${guildConfig.parent_guild ? ` (parent guild for ${guildConfig.name})` : ""}`);
         let crestData = null;
         let faction = undefined;
 
@@ -341,12 +342,12 @@ class GuildService {
           if (guildData) {
             crestData = guildData.crest;
             faction = guildData.faction;
-            console.log(`✅ Retrieved crest data for: ${blizzardGuildName}`);
+            logger.info(`✅ Retrieved crest data for: ${blizzardGuildName}`);
           } else {
-            console.warn(`⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
+            logger.warn(`⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
           }
         } catch (error) {
-          console.error(`Error fetching crest data for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
+          logger.error(`Error fetching crest data for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
         }
 
         const newGuild = await Guild.create({
@@ -358,15 +359,15 @@ class GuildService {
           parent_guild: guildConfig.parent_guild,
           progress: [],
         });
-        console.log(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
+        logger.info(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
 
         // Immediately fetch initial data for the newly created guild
-        console.log(`Fetching initial data for: ${guildConfig.name} - ${guildConfig.realm}`);
+        logger.info(`Fetching initial data for: ${guildConfig.name} - ${guildConfig.realm}`);
         try {
           await this.updateGuildProgress(String(newGuild._id));
-          console.log(`Initial fetch completed for: ${guildConfig.name} - ${guildConfig.realm}`);
+          logger.info(`Initial fetch completed for: ${guildConfig.name} - ${guildConfig.realm}`);
         } catch (error) {
-          console.error(`Error during initial fetch for ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
+          logger.error(`Error during initial fetch for ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
         }
       }
     }
@@ -375,7 +376,7 @@ class GuildService {
   // Sync guild config data (parent_guild and streamers) from config to database
   // This runs on startup to ensure config changes are reflected in the database
   async syncGuildConfigData(): Promise<void> {
-    console.log("Syncing guild config data (parent_guild, streamers)...");
+    logger.info("Syncing guild config data (parent_guild, streamers)...");
 
     const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
 
@@ -417,7 +418,7 @@ class GuildService {
 
           if (needsParentUpdate) {
             updates.parent_guild = guildConfig.parent_guild;
-            console.log(`  ${guild.name}: Updating parent_guild to "${guildConfig.parent_guild || "none"}"`);
+            logger.info(`  ${guild.name}: Updating parent_guild to "${guildConfig.parent_guild || "none"}"`);
           }
 
           if (needsStreamersUpdate) {
@@ -427,7 +428,7 @@ class GuildService {
               isLive: false,
               lastChecked: undefined,
             }));
-            console.log(`  ${guild.name}: Updating streamers to [${configStreamers.join(", ")}]`);
+            logger.info(`  ${guild.name}: Updating streamers to [${configStreamers.join(", ")}]`);
           }
 
           await Guild.updateOne(
@@ -440,29 +441,29 @@ class GuildService {
           );
         }
       } catch (error) {
-        console.error(`Error syncing config for ${guildConfig.name}:`, error instanceof Error ? error.message : "Unknown error");
+        logger.error(`Error syncing config for ${guildConfig.name}:`, error instanceof Error ? error.message : "Unknown error");
       }
     }
 
-    console.log("Guild config sync completed");
+    logger.info("Guild config sync completed");
   }
 
   // Recalculate statistics for existing guilds on startup
   // This is used when CALCULATE_GUILD_STATISTICS_ON_STARTUP is set to true
   async recalculateExistingGuildStatistics(currentTierOnly: boolean = true): Promise<void> {
-    console.log("Recalculating statistics for existing guilds...");
-    console.log(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
+    logger.info("Recalculating statistics for existing guilds...");
+    logger.info(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
 
     try {
       // Get all guilds from database
       const guilds = await Guild.find();
 
       if (guilds.length === 0) {
-        console.log("No guilds found in database, skipping statistics recalculation");
+        logger.info("No guilds found in database, skipping statistics recalculation");
         return;
       }
 
-      console.log(`Found ${guilds.length} guilds to recalculate statistics for`);
+      logger.info(`Found ${guilds.length} guilds to recalculate statistics for`);
 
       // Process each guild
       for (const guild of guilds) {
@@ -471,11 +472,11 @@ class GuildService {
           const hasReports = await Report.exists({ guildId: guild._id });
 
           if (!hasReports) {
-            console.log(`[${guild.name}] No reports found, skipping statistics recalculation`);
+            getGuildLogger(guild.name, guild.realm).info("No reports found, skipping statistics recalculation");
             continue;
           }
 
-          console.log(`[${guild.name}] Recalculating statistics...`);
+          getGuildLogger(guild.name, guild.realm).info("Recalculating statistics...");
 
           // Recalculate statistics based on the mode
           if (currentTierOnly) {
@@ -490,16 +491,16 @@ class GuildService {
 
           // Save the guild with updated statistics
           await guild.save();
-          console.log(`[${guild.name}] Statistics recalculation complete and saved`);
+          getGuildLogger(guild.name, guild.realm).info("Statistics recalculation complete and saved");
         } catch (error) {
-          console.error(`[${guild.name}] Error recalculating statistics:`, error instanceof Error ? error.message : "Unknown error");
+          getGuildLogger(guild.name, guild.realm).error("Error recalculating statistics:", error instanceof Error ? error.message : "Unknown error");
           // Continue with next guild even if one fails
         }
       }
 
-      console.log("Finished recalculating statistics for all guilds");
+      logger.info("Finished recalculating statistics for all guilds");
     } catch (error) {
-      console.error("Error in recalculateExistingGuildStatistics:", error);
+      logger.error("Error in recalculateExistingGuildStatistics:", error);
       throw error;
     }
   }
@@ -507,7 +508,7 @@ class GuildService {
   // Migrate existing guilds to add WarcraftLogs guild ID
   // This checks all guilds and fetches the WCL guild ID for any that are missing it
   async migrateGuildsWarcraftLogsId(): Promise<void> {
-    console.log("Migrating guilds to add WarcraftLogs guild ID...");
+    logger.info("Migrating guilds to add WarcraftLogs guild ID...");
 
     try {
       // Find all guilds that don't have a warcraftlogsId
@@ -516,44 +517,44 @@ class GuildService {
       });
 
       if (guildsWithoutWclId.length === 0) {
-        console.log("All guilds already have WarcraftLogs guild ID, no migration needed");
+        logger.info("All guilds already have WarcraftLogs guild ID, no migration needed");
         return;
       }
 
-      console.log(`Found ${guildsWithoutWclId.length} guilds missing WarcraftLogs guild ID`);
+      logger.info(`Found ${guildsWithoutWclId.length} guilds missing WarcraftLogs guild ID`);
 
       // Process each guild
       for (const guild of guildsWithoutWclId) {
         try {
-          console.log(`[${guild.name}] Fetching WarcraftLogs guild ID...`);
+          getGuildLogger(guild.name, guild.realm).info("Fetching WarcraftLogs guild ID...");
 
           const guildDetails = await wclService.getGuildDetails(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase());
 
           if (guildDetails.guildData?.guild?.id) {
             guild.warcraftlogsId = guildDetails.guildData.guild.id;
-            console.log(`[${guild.name}] ✅ WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
+            getGuildLogger(guild.name, guild.realm).info(`✅ WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
 
             // Also update faction if available and not already set
             if (guildDetails.guildData.guild.faction?.name && !guild.faction) {
               guild.faction = guildDetails.guildData.guild.faction.name;
-              console.log(`[${guild.name}] Updated faction: ${guild.faction}`);
+              getGuildLogger(guild.name, guild.realm).info(`Updated faction: ${guild.faction}`);
             }
 
             // Save the guild with the updated ID
             await guild.save();
-            console.log(`[${guild.name}] Saved successfully`);
+            getGuildLogger(guild.name, guild.realm).info("Saved successfully");
           } else {
-            console.warn(`[${guild.name}] ⚠️  Could not fetch WarcraftLogs guild ID from API`);
+            getGuildLogger(guild.name, guild.realm).warn("⚠️  Could not fetch WarcraftLogs guild ID from API");
           }
         } catch (error) {
-          console.error(`[${guild.name}] Error fetching WarcraftLogs guild ID:`, error instanceof Error ? error.message : "Unknown error");
+          getGuildLogger(guild.name, guild.realm).error("Error fetching WarcraftLogs guild ID:", error instanceof Error ? error.message : "Unknown error");
           // Continue with next guild even if one fails
         }
       }
 
-      console.log("Finished migrating guilds WarcraftLogs guild IDs");
+      logger.info("Finished migrating guilds WarcraftLogs guild IDs");
     } catch (error) {
-      console.error("Error in migrateGuildsWarcraftLogsId:", error);
+      logger.error("Error in migrateGuildsWarcraftLogsId:", error);
       throw error;
     }
   }
@@ -562,11 +563,11 @@ class GuildService {
   async updateGuildProgress(guildId: string): Promise<IGuild | null> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
-      console.error(`Guild not found: ${guildId}`);
+      logger.error(`Guild not found: ${guildId}`);
       return null;
     }
 
-    console.log(`Updating guild: ${guild.name} - ${guild.realm}`);
+    getGuildLogger(guild.name, guild.realm).info("Updating guild progress");
 
     try {
       // Determine if this is an initial fetch by checking if guild has any reports at all
@@ -598,10 +599,10 @@ class GuildService {
         }
       }
 
-      console.log(`Successfully updated: ${guild.name}`);
+      getGuildLogger(guild.name, guild.realm).info("Successfully updated guild progress");
       return guild;
     } catch (error) {
-      console.error(`Error updating guild ${guild.name}:`, error);
+      getGuildLogger(guild.name, guild.realm).error("Error updating guild:", error);
       return null;
     }
   }
@@ -610,11 +611,12 @@ class GuildService {
   async fetchGuildZoneRankings(guildId: string, zoneId?: number): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
-      console.error(`Guild not found: ${guildId}`);
+      logger.error(`Guild not found: ${guildId}`);
       return;
     }
 
-    console.log(`\n========== FETCHING ZONE RANKINGS FOR ${guild.name} ==========`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info(`\n========== FETCHING ZONE RANKINGS ==========`);
 
     // If no zoneId specified, use the first current raid
     const targetZoneId = zoneId || CURRENT_RAID_IDS[0];
@@ -623,36 +625,36 @@ class GuildService {
       // Get raid info
       const raid = await this.getRaidData(targetZoneId);
       if (!raid) {
-        console.error(`Raid not found for zone ID: ${targetZoneId}`);
+        logger.error(`Raid not found for zone ID: ${targetZoneId}`);
         return;
       }
 
-      console.log(`Raid: ${raid.name} (Zone ID: ${targetZoneId})`);
-      console.log(`Bosses: ${raid.bosses?.length || 0}\n`);
+      guildLog.info(`Raid: ${raid.name} (Zone ID: ${targetZoneId})`);
+      guildLog.info(`Bosses: ${raid.bosses?.length || 0}\n`);
 
       try {
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), targetZoneId);
 
         // Debug: Log the entire result structure
-        console.log(`Full API Response:`);
-        console.log(JSON.stringify(result, null, 2));
+        guildLog.info(`Full API Response:`);
+        guildLog.info(JSON.stringify(result, null, 2));
 
         // Access the ranking data
         const zoneRanking = result.guildData?.guild?.zoneRanking;
 
         if (zoneRanking?.progress?.worldRank) {
           const worldRank = zoneRanking.progress.worldRank;
-          console.log(`\n✅ World Progress Rank: #${worldRank.number} (${worldRank.color})`);
+          guildLog.info(`\n✅ World Progress Rank: #${worldRank.number} (${worldRank.color})`);
         } else {
-          console.log(`\n⚠️  No world rank data found`);
+          guildLog.info(`\n⚠️  No world rank data found`);
         }
       } catch (error) {
-        console.error(`Error fetching rankings:`, error);
+        guildLog.error(`Error fetching rankings:`, error);
       }
 
-      console.log(`\n========== END ZONE RANKINGS FOR ${guild.name} ==========\n`);
+      guildLog.info(`\n========== END ZONE RANKINGS ==========\n`);
     } catch (error) {
-      console.error(`Error in fetchGuildZoneRankings:`, error);
+      guildLog.error(`Error in fetchGuildZoneRankings:`, error);
     }
   }
 
@@ -660,23 +662,24 @@ class GuildService {
   async updateGuildWorldRankings(guildId: string): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
-      console.error(`Guild not found: ${guildId}`);
+      logger.error(`Guild not found: ${guildId}`);
       return;
     }
 
-    console.log(`[${guild.name}] Updating world rankings...`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Updating world rankings...");
 
     // Only update rankings for raids where the guild has made progress
     const raidsWithProgress = guild.progress.filter((p) => p.bossesDefeated > 0);
 
     if (raidsWithProgress.length === 0) {
-      console.log(`[${guild.name}] No raids with progress, skipping world rank update`);
+      guildLog.info("No raids with progress, skipping world rank update");
       return;
     }
 
     for (const raidProgress of raidsWithProgress) {
       try {
-        console.log(`[${guild.name}] Fetching world rank for ${raidProgress.raidName}...`);
+        guildLog.info(`Fetching world rank for ${raidProgress.raidName}...`);
 
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidProgress.raidId);
 
@@ -686,18 +689,18 @@ class GuildService {
           // Update the world rank in the guild's progress
           raidProgress.worldRank = worldRank.number;
           raidProgress.worldRankColor = worldRank.color;
-          console.log(`[${guild.name}] ${raidProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+          guildLog.info(`${raidProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
         } else {
-          console.log(`[${guild.name}] ${raidProgress.raidName}: No world rank data available`);
+          guildLog.info(`${raidProgress.raidName}: No world rank data available`);
         }
       } catch (error) {
-        console.error(`[${guild.name}] Error fetching world rank for ${raidProgress.raidName}:`, error);
+        guildLog.error(`Error fetching world rank for ${raidProgress.raidName}:`, error);
       }
     }
 
     // Save the updated guild with world rankings
     await guild.save();
-    console.log(`[${guild.name}] World rankings updated and saved`);
+    guildLog.info("World rankings updated and saved");
   }
 
   // Update world rankings for all current raids
@@ -705,17 +708,18 @@ class GuildService {
   async updateCurrentRaidsWorldRanking(guildId: string): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
-      console.error(`Guild not found: ${guildId}`);
+      logger.error(`Guild not found: ${guildId}`);
       return;
     }
 
-    console.log(`[${guild.name}] Updating world ranks for current raids...`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Updating world ranks for current raids...");
 
     for (const raidId of CURRENT_RAID_IDS) {
       // Find the raid data to get total boss count
       const raidData = await this.getRaidData(raidId);
       if (!raidData) {
-        console.warn(`[${guild.name}] Raid data not found (ID: ${raidId}), skipping world rank update`);
+        guildLog.warn(`Raid data not found (ID: ${raidId}), skipping world rank update`);
         continue;
       }
 
@@ -723,7 +727,7 @@ class GuildService {
       const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
 
       if (!mythicProgress) {
-        console.log(`[${guild.name}] No mythic progress for raid ${raidId}, skipping world rank update`);
+        guildLog.info(`No mythic progress for raid ${raidId}, skipping world rank update`);
         continue;
       }
 
@@ -731,11 +735,11 @@ class GuildService {
       const hasCompletedMythic = mythicProgress.bossesDefeated >= raidData.bosses.length;
 
       if (hasCompletedMythic) {
-        console.log(`[${guild.name}] Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
+        guildLog.info(`Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
         continue;
       }
 
-      console.log(`[${guild.name}] Updating world rank for raid ${raidId} (${mythicProgress.raidName})...`);
+      guildLog.info(`Updating world rank for raid ${raidId} (${mythicProgress.raidName})...`);
 
       try {
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
@@ -746,41 +750,41 @@ class GuildService {
           // Update the world rank in mythic progress
           mythicProgress.worldRank = worldRank.number;
           mythicProgress.worldRankColor = worldRank.color;
-          console.log(`[${guild.name}] ${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+          guildLog.info(`${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
         } else {
-          console.log(`[${guild.name}] ${mythicProgress.raidName}: No world rank data available`);
+          guildLog.info(`${mythicProgress.raidName}: No world rank data available`);
         }
       } catch (error) {
-        console.error(`[${guild.name}] Error fetching world rank for raid ${raidId}:`, error);
+        guildLog.error(`Error fetching world rank for raid ${raidId}:`, error);
       }
     }
 
     // Save the updated guild
     await guild.save();
-    console.log(`[${guild.name}] Current raids world ranks updated`);
+    guildLog.info("Current raids world ranks updated");
   }
 
   // Calculate guild rankings for all tracked raids
   async calculateGuildRankingsForAllRaids(): Promise<void> {
-    console.log("Calculating guild rankings for all tracked raids...");
+    logger.info("Calculating guild rankings for all tracked raids...");
 
     for (const raidId of TRACKED_RAIDS) {
       await this.calculateGuildRankingsForRaid(raidId);
     }
 
-    console.log("Guild rankings calculation complete for all raids");
+    logger.info("Guild rankings calculation complete for all raids");
   }
 
   // Calculate guild rankings for a specific raid
   // Rankings are calculated per difficulty (mythic and heroic separately)
   async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
-    console.log(`Calculating guild rankings for raid ${raidId}...`);
+    logger.info(`Calculating guild rankings for raid ${raidId}...`);
 
     // Get all guilds
     const guilds = await Guild.find();
 
     if (guilds.length === 0) {
-      console.log("No guilds found, skipping ranking calculation");
+      logger.info("No guilds found, skipping ranking calculation");
       return;
     }
 
@@ -799,7 +803,7 @@ class GuildService {
         .filter((pair) => pair !== null) as Array<{ guild: IGuild; progress: IRaidProgress }>;
 
       if (guildProgressPairs.length === 0) {
-        console.log(`No guilds with progress for raid ${raidId} ${difficulty}, skipping ranking`);
+        logger.info(`No guilds with progress for raid ${raidId} ${difficulty}, skipping ranking`);
         continue;
       }
 
@@ -883,7 +887,7 @@ class GuildService {
         await pair.guild.save();
       }
 
-      console.log(`Ranked ${sortedPairs.length} guilds for raid ${raidId} ${difficulty}`);
+      logger.info(`Ranked ${sortedPairs.length} guilds for raid ${raidId} ${difficulty}`);
     }
   }
 
@@ -894,14 +898,14 @@ class GuildService {
 
     if (isInitialFetch) {
       // Initial fetch: Get ALL reports across all content, filter by tracked raid bosses
-      console.log(`[${guild.name}] INITIAL FETCH - fetching all historical reports`);
+      getGuildLogger(guild.name, guild.realm).info("INITIAL FETCH - fetching all historical reports");
       hasNewData = await this.performInitialFetch(guild);
 
       // Calculate statistics from database fights for ALL tracked raids (initial setup)
       await this.calculateGuildStatistics(guild, null);
     } else {
       // Update: Only check the current raids for new reports
-      console.log(`[${guild.name}] UPDATE - checking only current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
+      getGuildLogger(guild.name, guild.realm).info(`UPDATE - checking only current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
       hasNewData = await this.performUpdate(guild);
 
       // Only recalculate statistics for the current raids if we found new data
@@ -910,7 +914,7 @@ class GuildService {
           await this.calculateGuildStatistics(guild, raidId);
         }
       } else {
-        console.log(`[${guild.name}] No new data for current raids, skipping statistics recalculation`);
+        getGuildLogger(guild.name, guild.realm).info("No new data for current raids, skipping statistics recalculation");
       }
     }
 
@@ -920,34 +924,35 @@ class GuildService {
   // Initial fetch: Get ALL reports for guild (no zone filter), save to DB
   // Returns true if any data was found and saved
   private async performInitialFetch(guild: IGuild): Promise<boolean> {
-    console.log(`[${guild.name}] Performing initial fetch of all reports`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Performing initial fetch of all reports");
 
     // Fetch WarcraftLogs guild ID (only during initial fetch)
     if (!guild.warcraftlogsId) {
-      console.log(`[${guild.name}] Fetching WarcraftLogs guild ID...`);
+      guildLog.info("Fetching WarcraftLogs guild ID...");
       try {
         const guildDetails = await wclService.getGuildDetails(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase());
 
         if (guildDetails.guildData?.guild?.id) {
           guild.warcraftlogsId = guildDetails.guildData.guild.id;
-          console.log(`[${guild.name}] WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
+          guildLog.info(`WarcraftLogs guild ID: ${guild.warcraftlogsId}`);
 
           // Also update faction if available
           if (guildDetails.guildData.guild.faction?.name && !guild.faction) {
             guild.faction = guildDetails.guildData.guild.faction.name;
-            console.log(`[${guild.name}] Updated faction: ${guild.faction}`);
+            guildLog.info(`Updated faction: ${guild.faction}`);
           }
         } else {
-          console.warn(`[${guild.name}] Could not fetch WarcraftLogs guild ID`);
+          guildLog.warn("Could not fetch WarcraftLogs guild ID");
         }
       } catch (error) {
-        console.error(`[${guild.name}] Error fetching WarcraftLogs guild ID:`, error instanceof Error ? error.message : "Unknown error");
+        guildLog.error("Error fetching WarcraftLogs guild ID:", error instanceof Error ? error.message : "Unknown error");
       }
     }
 
     // Get valid boss encounter IDs from all tracked raids
     const validBossIds = await this.getValidBossEncounterIds();
-    console.log(`[${guild.name}] Tracking ${validBossIds.size} boss encounters across ${TRACKED_RAIDS.length} raids`);
+    guildLog.info(`Tracking ${validBossIds.size} boss encounters across ${TRACKED_RAIDS.length} raids`);
 
     const reportsPerPage = 10;
     let page = 1;
@@ -959,7 +964,7 @@ class GuildService {
       const data = await wclService.getGuildReportsWithFights(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), reportsPerPage, page, true);
 
       if (!data.reportData?.reports?.data || data.reportData.reports.data.length === 0) {
-        console.log(`[${guild.name}] No more reports found at page ${page}`);
+        guildLog.info(`No more reports found at page ${page}`);
         break;
       }
 
@@ -969,7 +974,7 @@ class GuildService {
       }
 
       const pageReports = data.reportData.reports.data;
-      console.log(`[${guild.name}] Page ${page}: fetched ${pageReports.length} reports`);
+      guildLog.info(`Page ${page}: fetched ${pageReports.length} reports`);
 
       // Process each report
       for (const report of pageReports) {
@@ -1053,7 +1058,7 @@ class GuildService {
       }
 
       if (pageReports.length < reportsPerPage) {
-        console.log(`[${guild.name}] Reached last page at page ${page}`);
+        guildLog.info(`Reached last page at page ${page}`);
         break;
       }
 
@@ -1065,23 +1070,24 @@ class GuildService {
 
     if (mostRecentReport && mostRecentReport.endTime) {
       guild.lastLogEndTime = new Date(mostRecentReport.endTime);
-      console.log(`[${guild.name}] Set lastLogEndTime to ${guild.lastLogEndTime.toISOString()}`);
+      guildLog.info(`Set lastLogEndTime to ${guild.lastLogEndTime.toISOString()}`);
     }
 
-    console.log(`[${guild.name}] Initial fetch complete: ${totalReportsFetched} reports, ${totalFightsSaved} fights saved`);
+    guildLog.info(`Initial fetch complete: ${totalReportsFetched} reports, ${totalFightsSaved} fights saved`);
     return totalFightsSaved > 0;
   }
 
   // Thoroughly refetch the 3 newest reports to ensure all fights are captured
   // This is called when a guild stops raiding to catch any fights that were missed during live polling
   private async thoroughlyRefetchNewestReports(guild: IGuild): Promise<number> {
-    console.log(`[${guild.name}] THOROUGHLY REFETCHING 3 newest reports to ensure completeness...`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("⚠️  THOROUGHLY REFETCHING 3 newest reports to ensure completeness...");
 
     let totalNewFights = 0;
 
     // Check each current raid
     for (const raidId of CURRENT_RAID_IDS) {
-      console.log(`[${guild.name}] Checking raid ${raidId} for missing fights...`);
+      guildLog.info(`Checking raid ${raidId} for missing fights...`);
 
       // Get valid boss encounter IDs for this raid
       const validBossIds = await this.getValidBossEncounterIdsForRaid(raidId);
@@ -1090,12 +1096,12 @@ class GuildService {
       const checkData = await wclService.checkForNewReports(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId, 3);
 
       if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
-        console.log(`[${guild.name}] No reports found for raid ${raidId}`);
+        guildLog.info(`No reports found for raid ${raidId}`);
         continue;
       }
 
       const recentReports = checkData.reportData.reports.data;
-      console.log(`[${guild.name}] Thoroughly refetching ${recentReports.length} reports for raid ${raidId}...`);
+      guildLog.info(`Thoroughly refetching ${recentReports.length} reports for raid ${raidId}...`);
 
       for (const reportSummary of recentReports) {
         const code = reportSummary.code;
@@ -1104,7 +1110,7 @@ class GuildService {
         const reportData = await wclService.getReportByCodeAllDifficulties(code);
 
         if (!reportData.reportData?.report) {
-          console.log(`[${guild.name}] Failed to fetch report ${code}`);
+          guildLog.info(`Failed to fetch report ${code}`);
           continue;
         }
 
@@ -1123,7 +1129,7 @@ class GuildService {
         const existingFightIds = new Set(existingFights.map((f) => f.fightId));
         const totalFightsInReport = report.fights?.length || 0;
 
-        console.log(`[${guild.name}] Report ${code}: ${existingFightIds.size} fights in DB, ${totalFightsInReport} fights in report`);
+        guildLog.info(`Report ${code}: ${existingFightIds.size} fights in DB, ${totalFightsInReport} fights in report`);
 
         // Update report metadata with accurate fight count
         await Report.findOneAndUpdate(
@@ -1205,24 +1211,25 @@ class GuildService {
           }
 
           if (newFightsInThisReport > 0) {
-            console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} NEW fights that were previously missing`);
+            guildLog.info(`Report ${code}: saved ${newFightsInThisReport} NEW fights that were previously missing`);
           }
         }
       }
     }
 
-    console.log(`[${guild.name}] Thorough refetch complete: ${totalNewFights} total new fights recovered`);
+    guildLog.info(`Thorough refetch complete: ${totalNewFights} total new fights recovered`);
     return totalNewFights;
   }
 
   // Update: Check only the current raids for new reports
   // Returns true if new data was found and saved
   private async performUpdate(guild: IGuild): Promise<boolean> {
-    console.log(`[${guild.name}] Checking for updates on current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info(`Checking for updates on current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
 
     // Get valid boss encounter IDs for all current raids
     const validBossIds = await this.getValidBossEncounterIdsForCurrentRaids();
-    console.log(`[${guild.name}] Current raids have ${validBossIds.size} total bosses to track`);
+    guildLog.info(`Current raids have ${validBossIds.size} total bosses to track`);
 
     let hasLiveLog = false;
     const allReportsToFetch: Array<{ code: string; raidId: number }> = [];
@@ -1231,7 +1238,7 @@ class GuildService {
 
     // Check each current raid for new reports
     for (const raidId of CURRENT_RAID_IDS) {
-      console.log(`[${guild.name}] Checking raid ${raidId} for updates...`);
+      guildLog.info(`Checking raid ${raidId} for updates...`);
 
       const raidValidBossIds = await this.getValidBossEncounterIdsForRaid(raidId);
 
@@ -1245,7 +1252,7 @@ class GuildService {
       );
 
       if (!checkData.reportData?.reports?.data || checkData.reportData.reports.data.length === 0) {
-        console.log(`[${guild.name}] No reports found for raid ${raidId}`);
+        guildLog.info(`No reports found for raid ${raidId}`);
         continue;
       }
 
@@ -1268,11 +1275,11 @@ class GuildService {
 
         if (isLive) {
           hasLiveLog = true;
-          console.log(`[${guild.name}] Report ${reportCode} is LIVE (endTime: ${new Date(endTime).toISOString()}, ${Math.round((currentTime - endTime) / 1000)}s ago)`);
+          guildLog.info(`Report ${reportCode} is LIVE (endTime: ${new Date(endTime).toISOString()}, ${Math.round((currentTime - endTime) / 1000)}s ago)`);
           allReportsToFetch.push({ code: reportCode, raidId });
         } else if (!existingReport) {
           // New report we haven't seen before
-          console.log(`[${guild.name}] Report ${reportCode} is NEW (not in database)`);
+          guildLog.info(`Report ${reportCode} is NEW (not in database)`);
           allReportsToFetch.push({ code: reportCode, raidId });
         } else if (existingReport) {
           // For existing reports, check multiple conditions that might indicate new data:
@@ -1304,7 +1311,7 @@ class GuildService {
           }
 
           if (shouldRefetch) {
-            console.log(`[${guild.name}] Report ${reportCode} needs REFETCH: ${reason}`);
+            guildLog.info(`Report ${reportCode} needs REFETCH: ${reason}`);
             allReportsToFetch.push({ code: reportCode, raidId });
           }
         }
@@ -1315,34 +1322,34 @@ class GuildService {
     const wasRaiding = guild.isCurrentlyRaiding;
     guild.isCurrentlyRaiding = hasLiveLog;
     if (wasRaiding !== guild.isCurrentlyRaiding) {
-      console.log(`[${guild.name}] Raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
+      guildLog.info(`Raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
 
       // CRITICAL FIX: When guild stops raiding, do a thorough refetch of the 3 newest reports
       // This ensures we catch any fights that were missed during live polling
       if (!guild.isCurrentlyRaiding && wasRaiding) {
-        console.log(`[${guild.name}] ⚠️  Guild just STOPPED raiding - performing thorough refetch of newest reports...`);
+        guildLog.info("⚠️  Guild just STOPPED raiding - performing thorough refetch of newest reports...");
         const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
 
         if (recoveredFights > 0) {
-          console.log(`[${guild.name}] ✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
+          guildLog.info(`✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
           // Recalculate statistics to ensure accuracy after recovering missing fights
           for (const raidId of CURRENT_RAID_IDS) {
             await this.calculateGuildStatistics(guild, raidId);
           }
-          console.log(`[${guild.name}] Statistics recalculated after fight recovery`);
+          guildLog.info("Statistics recalculated after fight recovery");
           return true; // We found and processed new data
         } else {
-          console.log(`[${guild.name}] No missing fights found during thorough refetch`);
+          guildLog.info("No missing fights found during thorough refetch");
         }
       }
     }
 
     if (allReportsToFetch.length === 0) {
-      console.log(`[${guild.name}] No new or live reports to process for current raids`);
+      guildLog.info("No new or live reports to process for current raids");
       return false;
     }
 
-    console.log(`[${guild.name}] Found ${allReportsToFetch.length} reports to process across current raids`);
+    guildLog.info(`Found ${allReportsToFetch.length} reports to process across current raids`);
 
     let totalFightsSaved = 0;
 
@@ -1351,7 +1358,7 @@ class GuildService {
       const reportData = await wclService.getReportByCodeAllDifficulties(code);
 
       if (!reportData.reportData?.report) {
-        console.log(`[${guild.name}] Failed to fetch report ${code}`);
+        guildLog.info(`Failed to fetch report ${code}`);
         continue;
       }
 
@@ -1371,7 +1378,7 @@ class GuildService {
       const existingFightIds = new Set(existingFights.map((f) => f.fightId));
 
       const totalFightsInReport = report.fights?.length || 0;
-      console.log(`[${guild.name}] Report ${code} (raid ${raidId}): ${existingFightIds.size} fights already in database, ${totalFightsInReport} fights in report`);
+      guildLog.info(`Report ${code} (raid ${raidId}): ${existingFightIds.size} fights already in database, ${totalFightsInReport} fights in report`);
 
       // Save report metadata with accurate fight count for later comparison
       await Report.findOneAndUpdate(
@@ -1452,7 +1459,7 @@ class GuildService {
           totalFightsSaved++;
         }
 
-        console.log(`[${guild.name}] Report ${code}: saved ${newFightsInThisReport} new fights`);
+        guildLog.info(`Report ${code}: saved ${newFightsInThisReport} new fights`);
       }
     }
 
@@ -1465,11 +1472,11 @@ class GuildService {
       // Only update if it's newer than what we have
       if (!guild.lastLogEndTime || newLastLogEndTime > guild.lastLogEndTime) {
         guild.lastLogEndTime = newLastLogEndTime;
-        console.log(`[${guild.name}] Updated lastLogEndTime to ${newLastLogEndTime.toISOString()}`);
+        guildLog.info(`Updated lastLogEndTime to ${newLastLogEndTime.toISOString()}`);
       }
     }
 
-    console.log(`[${guild.name}] Update complete: ${allReportsToFetch.length} reports processed, ${totalFightsSaved} new fights saved`);
+    guildLog.info(`Update complete: ${allReportsToFetch.length} reports processed, ${totalFightsSaved} new fights saved`);
     return totalFightsSaved > 0;
   }
 
@@ -1477,12 +1484,13 @@ class GuildService {
   // If raidId is provided, only calculate for that raid (used during updates)
   // If raidId is null, calculate for all tracked raids (used during initial fetch)
   private async calculateGuildStatistics(guild: IGuild, raidId: number | null): Promise<void> {
+    const guildLog = getGuildLogger(guild.name, guild.realm);
     if (raidId !== null) {
-      console.log(`[${guild.name}] Calculating statistics for current raid only (ID: ${raidId})`);
+      guildLog.info(`Calculating statistics for current raid only (ID: ${raidId})`);
 
       const raidData = await this.getRaidData(raidId);
       if (!raidData) {
-        console.warn(`[${guild.name}] Raid data not found for zone ${raidId}, skipping`);
+        guildLog.warn(`Raid data not found for zone ${raidId}, skipping`);
         return;
       }
 
@@ -1490,13 +1498,13 @@ class GuildService {
       await this.calculateRaidStatistics(guild, raidData, "mythic");
       await this.calculateRaidStatistics(guild, raidData, "heroic");
     } else {
-      console.log(`[${guild.name}] Calculating statistics from database fights for all tracked raids`);
+      guildLog.info("Calculating statistics from database fights for all tracked raids");
 
       // Process each tracked raid
       for (const trackedRaidId of TRACKED_RAIDS) {
         const raidData = await this.getRaidData(trackedRaidId);
         if (!raidData) {
-          console.warn(`[${guild.name}] Raid data not found for zone ${trackedRaidId}, skipping`);
+          guildLog.warn(`Raid data not found for zone ${trackedRaidId}, skipping`);
           continue;
         }
 
@@ -1506,7 +1514,7 @@ class GuildService {
       }
     }
 
-    console.log(`[${guild.name}] Statistics calculation complete`);
+    guildLog.info("Statistics calculation complete");
 
     // Calculate raiding schedule only when working with the current raid tier
     // For initial fetch (raidId === null), we calculate for all current raids after all stats
@@ -1521,13 +1529,14 @@ class GuildService {
 
   // Calculate the guild's raiding schedule (days and hours) for the current raid tier
   private async calculateRaidingSchedule(guild: IGuild, raidId: number): Promise<void> {
-    console.log(`[${guild.name}] Calculating raiding schedule for raid ID: ${raidId}`);
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info(`Calculating raiding schedule for raid ID: ${raidId}`);
 
     try {
       // Get raid data to get the boss encounter IDs and date range
       const raidData = await this.getRaidData(raidId);
       if (!raidData) {
-        console.warn(`[${guild.name}] Raid data not found for zone ${raidId}, skipping schedule calculation`);
+        guildLog.warn(`Raid data not found for zone ${raidId}, skipping schedule calculation`);
         return;
       }
 
@@ -1540,7 +1549,7 @@ class GuildService {
       const raidEndDate = raidData.ends?.[guildRegion as keyof typeof raidData.ends];
 
       if (!raidStartDate && !raidEndDate) {
-        console.log(`[${guild.name}] No date range available for ${raidData.name}, skipping schedule calculation`);
+        guildLog.info(`No date range available for ${raidData.name}, skipping schedule calculation`);
         return;
       }
 
@@ -1552,7 +1561,7 @@ class GuildService {
       }).sort({ timestamp: 1 });
 
       if (fights.length === 0) {
-        console.log(`[${guild.name}] No fights found for ${raidData.name}, skipping schedule calculation`);
+        guildLog.info(`No fights found for ${raidData.name}, skipping schedule calculation`);
         return;
       }
 
@@ -1565,11 +1574,11 @@ class GuildService {
       });
 
       if (filteredFights.length === 0) {
-        console.log(`[${guild.name}] No fights in date range for ${raidData.name}, skipping schedule calculation`);
+        guildLog.info(`No fights in date range for ${raidData.name}, skipping schedule calculation`);
         return;
       }
 
-      console.log(`[${guild.name}] Processing ${filteredFights.length} fights for schedule calculation`);
+      guildLog.info(`Processing ${filteredFights.length} fights for schedule calculation`);
 
       // Group fights by report to calculate accurate raid session times
       const reportSessions = new Map<
@@ -1592,7 +1601,7 @@ class GuildService {
         reportSessions.get(fight.reportCode)!.fights.push(fight);
       }
 
-      console.log(`[${guild.name}] Found ${reportSessions.size} unique raid sessions (reports)`);
+      guildLog.info(`Found ${reportSessions.size} unique raid sessions (reports)`);
 
       // Helper function to convert UTC Date to Helsinki timezone components
       // Returns { hours, minutes, day } in Helsinki time
@@ -1695,9 +1704,7 @@ class GuildService {
           return `${h}:${m.toString().padStart(2, "0")}`;
         };
 
-        console.log(
-          `[${guild.name}] Report ${reportCode}: ${day} ${formatHour(startHour)}-${formatHour(endHour)} (${actualStartTime.toISOString()} to ${actualEndTime.toISOString()})`
-        );
+        guildLog.info(`Report ${reportCode}: ${day} ${formatHour(startHour)}-${formatHour(endHour)} (${actualStartTime.toISOString()} to ${actualEndTime.toISOString()})`);
       }
 
       // Analyze raiding patterns - find most common day/time combinations
@@ -1729,14 +1736,14 @@ class GuildService {
       // Convert to array and sort by count (most common first)
       const allDayTimeSlots = Array.from(dayTimeMap.values()).sort((a, b) => b.count - a.count);
 
-      console.log(`[${guild.name}] Found ${allDayTimeSlots.length} unique day/time patterns:`);
+      guildLog.info(`Found ${allDayTimeSlots.length} unique day/time patterns:`);
       allDayTimeSlots.forEach((slot) => {
         const formatHour = (hour: number): string => {
           const h = Math.floor(hour);
           const m = (hour % 1) * 60;
           return `${h}:${m.toString().padStart(2, "0")}`;
         };
-        console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+        guildLog.info(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
       });
 
       // Filter to get only the most likely days (no duplicates)
@@ -1751,14 +1758,14 @@ class GuildService {
         }
       }
 
-      console.log(`[${guild.name}] Most likely raiding days (${mostLikelyDays.length} unique days):`);
+      guildLog.info(`Most likely raiding days (${mostLikelyDays.length} unique days):`);
       mostLikelyDays.forEach((slot) => {
         const formatHour = (hour: number): string => {
           const h = Math.floor(hour);
           const m = (hour % 1) * 60;
           return `${h}:${m.toString().padStart(2, "0")}`;
         };
-        console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+        guildLog.info(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
       });
 
       // Filter out outliers based on relative raid count
@@ -1776,23 +1783,22 @@ class GuildService {
         filteredDays = mostLikelyDays.filter((slot) => slot.count >= threshold);
 
         if (filteredDays.length < beforeFilterCount) {
-          console.log(
-            `[${guild.name}] Filtered out ${beforeFilterCount - filteredDays.length} outlier day(s) with raid count < ${threshold.toFixed(1)} (${(
-              (threshold / maxRaidCount) *
-              100
-            ).toFixed(0)}% of max ${maxRaidCount})`
+          guildLog.info(
+            `Filtered out ${beforeFilterCount - filteredDays.length} outlier day(s) with raid count < ${threshold.toFixed(1)} (${((threshold / maxRaidCount) * 100).toFixed(
+              0
+            )}% of max ${maxRaidCount})`
           );
-          console.log(`[${guild.name}] Final raiding days after outlier filtering:`);
+          guildLog.info("Final raiding days after outlier filtering:");
           filteredDays.forEach((slot) => {
             const formatHour = (hour: number): string => {
               const h = Math.floor(hour);
               const m = (hour % 1) * 60;
               return `${h}:${m.toString().padStart(2, "0")}`;
             };
-            console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+            guildLog.info(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
           });
         } else {
-          console.log(`[${guild.name}] No outliers detected - all days have similar raid counts`);
+          guildLog.info("No outliers detected - all days have similar raid counts");
         }
       }
 
@@ -1802,18 +1808,18 @@ class GuildService {
       filteredDays = filteredDays.filter((slot) => slot.count >= 2);
 
       if (filteredDays.length < beforeAbsoluteFilterCount) {
-        console.log(`[${guild.name}] Filtered out ${beforeAbsoluteFilterCount - filteredDays.length} day(s) with absolute raid count < 2 (irregular schedule)`);
+        guildLog.info(`Filtered out ${beforeAbsoluteFilterCount - filteredDays.length} day(s) with absolute raid count < 2 (irregular schedule)`);
         if (filteredDays.length === 0) {
-          console.log(`[${guild.name}] No consistent raiding schedule detected - guild raids irregularly`);
+          guildLog.info("No consistent raiding schedule detected - guild raids irregularly");
         } else {
-          console.log(`[${guild.name}] Final raiding days after absolute count filtering:`);
+          guildLog.info("Final raiding days after absolute count filtering:");
           filteredDays.forEach((slot) => {
             const formatHour = (hour: number): string => {
               const h = Math.floor(hour);
               const m = (hour % 1) * 60;
               return `${h}:${m.toString().padStart(2, "0")}`;
             };
-            console.log(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
+            guildLog.info(`  ${slot.day} ${formatHour(slot.startHour)}-${formatHour(slot.endHour)} (${slot.count} occurrences)`);
           });
         }
       }
@@ -1831,9 +1837,9 @@ class GuildService {
 
       guild.markModified("raidSchedule");
 
-      console.log(`[${guild.name}] Raiding schedule calculated: ${filteredDays.length} unique days from ${raidSessions.length} raid sessions`);
+      guildLog.info(`Raiding schedule calculated: ${filteredDays.length} unique days from ${raidSessions.length} raid sessions`);
     } catch (error) {
-      console.error(`[${guild.name}] Error calculating raiding schedule:`, error);
+      guildLog.error("Error calculating raiding schedule:", error);
     }
   }
 
@@ -1841,11 +1847,12 @@ class GuildService {
   // IMPORTANT: This method now properly filters fights by the raid's boss encounter IDs
   // to prevent unrelated bosses from being included in the statistics
   private async calculateRaidStatistics(guild: IGuild, raidData: IRaid, difficulty: "mythic" | "heroic"): Promise<void> {
+    const guildLog = getGuildLogger(guild.name, guild.realm);
     const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
 
     // Get valid boss encounter IDs for this specific raid
     const validBossIds = await this.getValidBossEncounterIdsForRaid(raidData.id);
-    console.log(`[${guild.name}] Valid boss IDs for ${raidData.name}: ${Array.from(validBossIds).join(", ")}`);
+    guildLog.info(`Valid boss IDs for ${raidData.name}: ${Array.from(validBossIds).join(", ")}`);
 
     // Get all fights from database for this guild, raid, and difficulty
     // IMPORTANT: Also filter by encounterID to ensure we only get bosses that belong to this raid
@@ -1857,11 +1864,11 @@ class GuildService {
     }).sort({ timestamp: 1 }); // Sort by timestamp (oldest first) for proper kill order tracking
 
     if (fights.length === 0) {
-      console.log(`[${guild.name}] No ${difficulty} fights found for ${raidData.name}`);
+      guildLog.info(`No ${difficulty} fights found for ${raidData.name}`);
       return;
     }
 
-    console.log(`[${guild.name}] Calculating ${difficulty} statistics from ${fights.length} fights for ${raidData.name}`);
+    guildLog.info(`Calculating ${difficulty} statistics from ${fights.length} fights for ${raidData.name}`);
 
     // Filter fights by raid's "current content" date range for the guild's region
     const guildRegion = guild.region.toLowerCase();
@@ -1873,7 +1880,7 @@ class GuildService {
     if (!raidStartDate && !raidEndDate) {
       raidStartDate = new Date("1970-01-01T00:00:00Z"); // Very old date
       raidEndDate = new Date("2100-12-31T23:59:59Z"); // Very far future date
-      console.log(`[${guild.name}] No dates available for ${raidData.name} - using permissive date range (all fights included)`);
+      guildLog.info(`No dates available for ${raidData.name} - using permissive date range (all fights included)`);
     }
 
     let filteredFights = fights;
@@ -1901,8 +1908,8 @@ class GuildService {
       dateFilteredCount = beforeFilterCount - filteredFights.length;
 
       if (dateFilteredCount > 0) {
-        console.log(
-          `[${guild.name}] Filtered out ${dateFilteredCount} ${difficulty} fights outside raid's current content window (${raidStartDate?.toISOString() || "no start"} to ${
+        guildLog.info(
+          `Filtered out ${dateFilteredCount} ${difficulty} fights outside raid's current content window (${raidStartDate?.toISOString() || "no start"} to ${
             raidEndDate?.toISOString() || "no end"
           }) for region ${guildRegion}`
         );
@@ -1910,11 +1917,11 @@ class GuildService {
     }
 
     if (filteredFights.length === 0) {
-      console.log(`[${guild.name}] No ${difficulty} fights remaining after date filtering for ${raidData.name}`);
+      guildLog.info(`No ${difficulty} fights remaining after date filtering for ${raidData.name}`);
       return;
     }
 
-    console.log(`[${guild.name}] Processing ${filteredFights.length} ${difficulty} fights (after date filtering) for ${raidData.name}`);
+    guildLog.info(`Processing ${filteredFights.length} ${difficulty} fights (after date filtering) for ${raidData.name}`);
 
     // Aggregate boss data from database fights
     const bossDataMap = new Map<
@@ -1955,8 +1962,8 @@ class GuildService {
 
       if (duplicateCheck.isDuplicate) {
         duplicateCount++;
-        console.log(
-          `[${guild.name}] Skipping duplicate ${difficulty} fight: ${fight.encounterName} (${fight.reportCode}#${fight.fightId}) - duplicate of (${duplicateCheck.canonical.reportCode}#${duplicateCheck.canonical.fightId})`
+        guildLog.info(
+          `Skipping duplicate ${difficulty} fight: ${fight.encounterName} (${fight.reportCode}#${fight.fightId}) - duplicate of (${duplicateCheck.canonical.reportCode}#${duplicateCheck.canonical.fightId})`
         );
         continue;
       }
@@ -1965,10 +1972,10 @@ class GuildService {
     }
 
     if (duplicateCount > 0) {
-      console.log(`[${guild.name}] Filtered out ${duplicateCount} duplicate ${difficulty} fights for ${raidData.name}`);
+      guildLog.info(`Filtered out ${duplicateCount} duplicate ${difficulty} fights for ${raidData.name}`);
     }
 
-    console.log(`[${guild.name}] Processing ${uniqueFights.length} unique ${difficulty} fights for ${raidData.name}`);
+    guildLog.info(`Processing ${uniqueFights.length} unique ${difficulty} fights for ${raidData.name}`);
 
     // SECOND PASS: Identify first kill times for each boss
     const firstKillTimes = new Map<number, Date>();
@@ -1979,8 +1986,8 @@ class GuildService {
       }
     }
 
-    console.log(
-      `[${guild.name}] First kill times identified for ${difficulty}:`,
+    guildLog.info(
+      `First kill times identified for ${difficulty}:`,
       Array.from(firstKillTimes.entries()).map(([id, time]) => `Boss ${id}: ${time.toISOString()}`)
     );
 
@@ -2064,12 +2071,12 @@ class GuildService {
 
     // If no boss data found for this difficulty, skip
     if (bossDataMap.size === 0) {
-      console.log(`[${guild.name}] No ${difficulty} encounters found - bossDataMap is empty`);
+      guildLog.info(`No ${difficulty} encounters found - bossDataMap is empty`);
       return;
     }
 
-    console.log(
-      `[${guild.name}] Found ${bossDataMap.size} unique bosses for ${difficulty}:`,
+    guildLog.info(
+      `Found ${bossDataMap.size} unique bosses for ${difficulty}:`,
       Array.from(bossDataMap.keys()).map((id) => {
         const boss = bossDataMap.get(id)!;
         return `${boss.name} (${boss.kills} kills, ${boss.pulls} pulls)`;
@@ -2093,21 +2100,21 @@ class GuildService {
       } as IRaidProgress);
 
       raidProgress = guild.progress[guild.progress.length - 1];
-      console.log(`[${guild.name}] Created new ${difficulty} progress entry for ${raidData.name}`);
+      guildLog.info(`Created new ${difficulty} progress entry for ${raidData.name}`);
     }
 
     // First, remove any bosses that don't belong to this raid (cleanup old invalid data)
     const initialBossCount = raidProgress.bosses.length;
     raidProgress.bosses = raidProgress.bosses.filter((b) => validBossIds.has(b.bossId));
     if (raidProgress.bosses.length < initialBossCount) {
-      console.log(`[${guild.name}] Removed ${initialBossCount - raidProgress.bosses.length} invalid boss(es) that don't belong to ${raidData.name} (${difficulty})`);
+      guildLog.info(`Removed ${initialBossCount - raidProgress.bosses.length} invalid boss(es) that don't belong to ${raidData.name} (${difficulty})`);
     }
 
     // Process each boss from our calculated data
     for (const [encounterId, bossInfo] of bossDataMap.entries()) {
       // Double-check this boss belongs to the raid (should always be true due to earlier filtering)
       if (!validBossIds.has(encounterId)) {
-        console.warn(`[${guild.name}] Skipping boss ${bossInfo.name} (ID: ${encounterId}) - not in raid ${raidData.name}'s boss list`);
+        guildLog.warn(`Skipping boss ${bossInfo.name} (ID: ${encounterId}) - not in raid ${raidData.name}'s boss list`);
         continue;
       }
 
@@ -2138,7 +2145,7 @@ class GuildService {
         Object.assign(bossProgress, bossData);
       } else {
         // New boss progress
-        console.log(`[${guild.name}] Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
+        guildLog.info(`Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
         raidProgress.bosses.push(bossData);
       }
     }
@@ -2159,7 +2166,7 @@ class GuildService {
     raidProgress.totalTimeSpent = totalTime;
     raidProgress.lastUpdated = new Date();
 
-    console.log(`[${guild.name}] Before markModified - ${difficulty} progress has ${raidProgress.bosses.length} bosses in array`);
+    guildLog.info(`Before markModified - ${difficulty} progress has ${raidProgress.bosses.length} bosses in array`);
 
     // Mark the specific progress subdocument as modified
     const progressIndex = guild.progress.findIndex((p) => p.raidId === raidData.id && p.difficulty === difficulty);
@@ -2172,7 +2179,7 @@ class GuildService {
     // Also mark the entire progress array as modified
     guild.markModified("progress");
 
-    console.log(`[${guild.name}] Processed ${difficulty} progress: ${defeatedCount}/${raidData.bosses.length} bosses defeated, ${raidProgress.bosses.length} bosses tracked`);
+    guildLog.info(`Processed ${difficulty} progress: ${defeatedCount}/${raidData.bosses.length} bosses defeated, ${raidProgress.bosses.length} bosses tracked`);
   }
 
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
@@ -2196,7 +2203,7 @@ class GuildService {
 
       // Update world rank after boss kill event (only for current raids)
       if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
-        console.log(`[${guild.name}] Boss kill event created, updating world rank for current raids...`);
+        getGuildLogger(guild.name, guild.realm).info("Boss kill event created, updating world rank for current raids...");
         await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
         await this.calculateGuildRankingsForRaid(raidProgress.raidId);
       }
@@ -2223,7 +2230,7 @@ class GuildService {
 
       // Update world rank after significant progress event (only for current raids)
       if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
-        console.log(`[${guild.name}] Best pull event created, updating world rank for current raids...`);
+        getGuildLogger(guild.name, guild.realm).info("Best pull event created, updating world rank for current raids...");
         await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
         await this.calculateGuildRankingsForRaid(raidProgress.raidId);
       }
@@ -2258,7 +2265,7 @@ class GuildService {
     guild.isCurrentlyRaiding = hasLiveLog;
 
     if (wasRaiding !== guild.isCurrentlyRaiding) {
-      console.log(`${guild.name} raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
+      getGuildLogger(guild.name, guild.realm).info(`Raiding status changed: ${guild.isCurrentlyRaiding ? "STARTED" : "STOPPED"} raiding`);
       // Don't save here - let the caller save to avoid overwriting changes
     }
   }
@@ -2616,18 +2623,18 @@ class GuildService {
 
   // Update guild crests for all guilds from Blizzard API
   async updateAllGuildCrests(): Promise<void> {
-    console.log("[Guild Crests] Starting guild crest update for all guilds...");
+    logger.info("[Guild Crests] Starting guild crest update for all guilds...");
 
     try {
       // Get all guilds from database
       const guilds = await Guild.find();
 
       if (guilds.length === 0) {
-        console.log("[Guild Crests] No guilds found in database");
+        logger.info("[Guild Crests] No guilds found in database");
         return;
       }
 
-      console.log(`[Guild Crests] Found ${guilds.length} guild(s) to update`);
+      logger.info(`[Guild Crests] Found ${guilds.length} guild(s) to update`);
 
       let successCount = 0;
       let failureCount = 0;
@@ -2638,7 +2645,7 @@ class GuildService {
 
         // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
         const blizzardGuildName = guild.parent_guild || guild.name;
-        console.log(
+        logger.info(
           `[Guild Crests] [${i + 1}/${guilds.length}] Fetching crest for: ${blizzardGuildName} - ${guild.realm}${guild.parent_guild ? ` (parent guild for ${guild.name})` : ""}`
         );
 
@@ -2655,14 +2662,14 @@ class GuildService {
             await guild.save();
 
             successCount++;
-            console.log(`[Guild Crests] ✅ Updated crest for: ${blizzardGuildName}`);
+            logger.info(`[Guild Crests] ✅ Updated crest for: ${blizzardGuildName}`);
           } else {
             failureCount++;
-            console.warn(`[Guild Crests] ⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
+            logger.warn(`[Guild Crests] ⚠️  Could not fetch crest data for: ${blizzardGuildName}`);
           }
         } catch (error) {
           failureCount++;
-          console.error(`[Guild Crests] ❌ Error fetching crest for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
+          logger.error(`[Guild Crests] ❌ Error fetching crest for ${blizzardGuildName}:`, error instanceof Error ? error.message : "Unknown error");
         }
 
         // Sleep for 1 second between requests to avoid rate limiting
@@ -2671,9 +2678,9 @@ class GuildService {
         }
       }
 
-      console.log(`[Guild Crests] Update complete: ${successCount} successful, ${failureCount} failed`);
+      logger.info(`[Guild Crests] Update complete: ${successCount} successful, ${failureCount} failed`);
     } catch (error) {
-      console.error("[Guild Crests] Error during guild crest update:", error);
+      logger.error("[Guild Crests] Error during guild crest update:", error);
       throw error;
     }
   }
@@ -2730,7 +2737,7 @@ class GuildService {
 
       return liveStreamers;
     } catch (error) {
-      console.error("Error fetching live streamers:", error);
+      logger.error("Error fetching live streamers:", error);
       return [];
     }
   }

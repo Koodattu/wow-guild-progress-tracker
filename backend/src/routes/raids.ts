@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import Raid from "../models/Raid";
 import { TRACKED_RAIDS } from "../config/guilds";
+import logger from "../utils/logger";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.get("/", async (req: Request, res: Response) => {
       .sort({ id: -1 });
     res.json(raids);
   } catch (error) {
-    console.error("Error fetching raids:", error);
+    logger.error("Error fetching raids:", error);
     res.status(500).json({ error: "Failed to fetch raids" });
   }
 });
@@ -30,7 +31,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
     res.json(raid);
   } catch (error) {
-    console.error("Error fetching raid:", error);
+    logger.error("Error fetching raid:", error);
     res.status(500).json({ error: "Failed to fetch raid" });
   }
 });
@@ -55,7 +56,7 @@ router.get("/:id/bosses", async (req: Request, res: Response) => {
 
     res.json(bosses);
   } catch (error) {
-    console.error("Error fetching raid bosses:", error);
+    logger.error("Error fetching raid bosses:", error);
     res.status(500).json({ error: "Failed to fetch raid bosses" });
   }
 });
@@ -76,7 +77,7 @@ router.get("/:id/dates", async (req: Request, res: Response) => {
       ends: raid.ends,
     });
   } catch (error) {
-    console.error("Error fetching raid dates:", error);
+    logger.error("Error fetching raid dates:", error);
     res.status(500).json({ error: "Failed to fetch raid dates" });
   }
 });

@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { Achievement, BossIcon, RaidIcon, AuthToken, AchievementUpdateLog, GuildCrestEmblem, GuildCrestBorder } from "../models/Achievement";
 import iconCacheService from "./icon-cache.service";
+import logger from "../utils/logger";
 
 interface BlizzardTokenResponse {
   access_token: string;
@@ -201,7 +202,7 @@ export class BlizzardApiClient {
       }
 
       // Fetch a new token
-      console.log("Fetching new Blizzard OAuth token...");
+      logger.info("Fetching new Blizzard OAuth token...");
 
       const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
 
@@ -236,10 +237,10 @@ export class BlizzardApiClient {
         { upsert: true, new: true }
       );
 
-      console.log(`✅ New Blizzard token acquired, expires at: ${expiresAt.toISOString()}`);
+      logger.info(`✅ New Blizzard token acquired, expires at: ${expiresAt.toISOString()}`);
       return access_token;
     } catch (error: any) {
-      console.error("Error fetching Blizzard access token:", error.message);
+      logger.error("Error fetching Blizzard access token:", error.message);
       throw new Error("Failed to obtain Blizzard API access token");
     }
   }
@@ -265,7 +266,7 @@ export class BlizzardApiClient {
 
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s
         const waitTime = Math.pow(2, retryCount) * 1000;
-        console.log(`⏳ Rate limited (429). Retrying in ${waitTime / 1000}s... (attempt ${retryCount + 1}/${maxRetries})`);
+        logger.info(`⏳ Rate limited (429). Retrying in ${waitTime / 1000}s... (attempt ${retryCount + 1}/${maxRetries})`);
 
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         return this.makeAuthenticatedRequest<T>(url, retryCount + 1, maxRetries);
@@ -281,7 +282,7 @@ export class BlizzardApiClient {
       if (error.message.includes("Max retries")) {
         throw error;
       }
-      console.error(`Error making authenticated request to ${url}:`, error.message);
+      logger.error(`Error making authenticated request to ${url}:`, error.message);
       throw new Error(`Blizzard API request failed: ${error.message}`);
     }
   }
@@ -291,11 +292,11 @@ export class BlizzardApiClient {
    */
   public async updateAchievements(): Promise<void> {
     try {
-      console.log("📋 Fetching achievements from Blizzard API...");
+      logger.info("📋 Fetching achievements from Blizzard API...");
       const url = `${this.apiBaseUrl}/data/wow/achievement/index?namespace=${this.namespace}&locale=${this.locale}`;
       const achievementIndex = await this.makeAuthenticatedRequest<BlizzardAchievementIndex>(url);
 
-      console.log(`📋 Found ${achievementIndex.achievements.length} achievements to process`);
+      logger.info(`📋 Found ${achievementIndex.achievements.length} achievements to process`);
 
       // Use bulk operations for better performance
       const bulkOps = achievementIndex.achievements.map((achievement) => ({
@@ -315,7 +316,7 @@ export class BlizzardApiClient {
 
       if (bulkOps.length > 0) {
         await Achievement.bulkWrite(bulkOps);
-        console.log(`✅ Successfully updated ${bulkOps.length} achievements`);
+        logger.info(`✅ Successfully updated ${bulkOps.length} achievements`);
       }
 
       // Update the log
@@ -328,9 +329,9 @@ export class BlizzardApiClient {
         { upsert: true }
       );
 
-      console.log("✅ Achievement update completed successfully");
+      logger.info("✅ Achievement update completed successfully");
     } catch (error: any) {
-      console.error("Error updating achievements:", error.message);
+      logger.error("Error updating achievements:", error.message);
       throw new Error(`Failed to update achievements: ${error.message}`);
     }
   }
@@ -373,7 +374,7 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
 
@@ -382,7 +383,7 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
       }
@@ -400,7 +401,7 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
 
@@ -409,15 +410,15 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
       }
 
-      console.log(`⚠️  No achievement found for boss: "${bossName}"`);
+      logger.info(`⚠️  No achievement found for boss: "${bossName}"`);
       return null;
     } catch (error: any) {
-      console.error(`Error finding achievement for boss "${bossName}":`, error.message);
+      logger.error(`Error finding achievement for boss "${bossName}":`, error.message);
       return null;
     }
   }
@@ -462,7 +463,7 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
 
@@ -471,15 +472,15 @@ export class BlizzardApiClient {
         });
 
         if (achievement) {
-          console.log(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
+          logger.info(`✅ Found achievement using raider pattern: "${raidName}" -> "${achievement.name}"`);
           return { id: achievement.id, name: achievement.name };
         }
       }
 
-      console.log(`⚠️  No achievement found for raid: "${raidName}"`);
+      logger.info(`⚠️  No achievement found for raid: "${raidName}"`);
       return null;
     } catch (error: any) {
-      console.error(`Error finding achievement for raid "${raidName}":`, error.message);
+      logger.error(`Error finding achievement for raid "${raidName}":`, error.message);
       return null;
     }
   }
@@ -494,13 +495,13 @@ export class BlizzardApiClient {
 
       const iconAsset = media.assets.find((asset) => asset.key === "icon");
       if (!iconAsset) {
-        console.log(`⚠️  No icon found for achievement ${achievementId}`);
+        logger.info(`⚠️  No icon found for achievement ${achievementId}`);
         return null;
       }
 
       return iconAsset.value;
     } catch (error: any) {
-      console.error(`Error fetching media for achievement ${achievementId}:`, error.message);
+      logger.error(`Error fetching media for achievement ${achievementId}:`, error.message);
       return null;
     }
   }
@@ -511,7 +512,7 @@ export class BlizzardApiClient {
   public async getBossIconUrl(bossName: string): Promise<string | null> {
     // Check if there's already a pending request for this boss name
     if (this.pendingBossIconRequests.has(bossName)) {
-      console.log(`⏳ Waiting for existing request for boss: ${bossName}`);
+      logger.info(`⏳ Waiting for existing request for boss: ${bossName}`);
       return this.pendingBossIconRequests.get(bossName)!;
     }
 
@@ -536,7 +537,7 @@ export class BlizzardApiClient {
       // Check if we already have the icon cached
       const cachedIcon = await BossIcon.findOne({ bossName });
       if (cachedIcon) {
-        console.log(`✅ Found cached icon for boss: ${bossName}`);
+        logger.info(`✅ Found cached icon for boss: ${bossName}`);
         return cachedIcon.iconUrl;
       }
 
@@ -568,10 +569,10 @@ export class BlizzardApiClient {
         { upsert: true, new: true }
       );
 
-      console.log(`✅ Cached new icon for boss: ${bossName} -> ${iconFilename}`);
+      logger.info(`✅ Cached new icon for boss: ${bossName} -> ${iconFilename}`);
       return iconFilename;
     } catch (error: any) {
-      console.error(`Error getting boss icon for "${bossName}":`, error.message);
+      logger.error(`Error getting boss icon for "${bossName}":`, error.message);
       return null;
     }
   }
@@ -582,7 +583,7 @@ export class BlizzardApiClient {
   public async getRaidIconUrl(raidName: string): Promise<string | null> {
     // Check if there's already a pending request for this raid name
     if (this.pendingRaidIconRequests.has(raidName)) {
-      console.log(`⏳ Waiting for existing request for raid: ${raidName}`);
+      logger.info(`⏳ Waiting for existing request for raid: ${raidName}`);
       return this.pendingRaidIconRequests.get(raidName)!;
     }
 
@@ -607,7 +608,7 @@ export class BlizzardApiClient {
       // Check if we already have the icon cached
       const cachedIcon = await RaidIcon.findOne({ raidName });
       if (cachedIcon) {
-        console.log(`✅ Found cached icon for raid: ${raidName}`);
+        logger.info(`✅ Found cached icon for raid: ${raidName}`);
         return cachedIcon.iconUrl;
       }
 
@@ -639,10 +640,10 @@ export class BlizzardApiClient {
         { upsert: true, new: true }
       );
 
-      console.log(`✅ Cached new icon for raid: ${raidName} -> ${iconFilename}`);
+      logger.info(`✅ Cached new icon for raid: ${raidName} -> ${iconFilename}`);
       return iconFilename;
     } catch (error: any) {
-      console.error(`Error getting raid icon for "${raidName}":`, error.message);
+      logger.error(`Error getting raid icon for "${raidName}":`, error.message);
       return null;
     }
   }
@@ -656,7 +657,7 @@ export class BlizzardApiClient {
     const uniqueBossNames = [...new Set(bossNames)];
 
     if (uniqueBossNames.length < bossNames.length) {
-      console.log(`🔄 Deduplicated ${bossNames.length} boss names to ${uniqueBossNames.length} unique names`);
+      logger.info(`🔄 Deduplicated ${bossNames.length} boss names to ${uniqueBossNames.length} unique names`);
     }
 
     const results = new Map<string, string | null>();
@@ -685,7 +686,7 @@ export class BlizzardApiClient {
     const uniqueRaidNames = [...new Set(raidNames)];
 
     if (uniqueRaidNames.length < raidNames.length) {
-      console.log(`🔄 Deduplicated ${raidNames.length} raid names to ${uniqueRaidNames.length} unique names`);
+      logger.info(`🔄 Deduplicated ${raidNames.length} raid names to ${uniqueRaidNames.length} unique names`);
     }
 
     const results = new Map<string, string | null>();
@@ -712,23 +713,23 @@ export class BlizzardApiClient {
     try {
       const count = await Achievement.countDocuments();
       if (count === 0) {
-        console.log("🚀 No achievements found, performing initial fetch...");
+        logger.info("🚀 No achievements found, performing initial fetch...");
         await this.updateAchievements();
       } else {
-        console.log(`✅ Found ${count} achievements in database`);
+        logger.info(`✅ Found ${count} achievements in database`);
       }
 
       // Also initialize guild crest components
       const emblemCount = await GuildCrestEmblem.countDocuments();
       const borderCount = await GuildCrestBorder.countDocuments();
       if (emblemCount === 0 || borderCount === 0) {
-        console.log("🚀 Guild crest components not cached, performing initial fetch...");
+        logger.info("🚀 Guild crest components not cached, performing initial fetch...");
         await this.cacheGuildCrestComponents();
       } else {
-        console.log(`✅ Found ${emblemCount} emblems and ${borderCount} borders in database`);
+        logger.info(`✅ Found ${emblemCount} emblems and ${borderCount} borders in database`);
       }
     } catch (error: any) {
-      console.error("Error during Blizzard API initialization:", error.message);
+      logger.error("Error during Blizzard API initialization:", error.message);
       // Don't throw here, as this is initialization and shouldn't block startup
     }
   }
@@ -739,7 +740,7 @@ export class BlizzardApiClient {
    */
   public async cacheGuildCrestComponents(): Promise<void> {
     try {
-      console.log("🎨 Fetching guild crest index from Blizzard API...");
+      logger.info("🎨 Fetching guild crest index from Blizzard API...");
 
       // We'll use EU region for the crest index (crests are the same across regions)
       const region = "eu";
@@ -749,7 +750,7 @@ export class BlizzardApiClient {
 
       const crestIndex = await this.makeAuthenticatedRequest<BlizzardGuildCrestIndex>(url);
 
-      console.log(`🎨 Found ${crestIndex.emblems.length} emblems and ${crestIndex.borders.length} borders`);
+      logger.info(`🎨 Found ${crestIndex.emblems.length} emblems and ${crestIndex.borders.length} borders`);
 
       // Process emblems
       let emblemsFetched = 0;
@@ -757,7 +758,7 @@ export class BlizzardApiClient {
         // Check if we already have this emblem cached
         const existing = await GuildCrestEmblem.findOne({ id: emblem.id });
         if (existing) {
-          console.log(`✅ Emblem ${emblem.id} already cached, skipping...`);
+          logger.info(`✅ Emblem ${emblem.id} already cached, skipping...`);
           continue;
         }
 
@@ -767,7 +768,7 @@ export class BlizzardApiClient {
 
         const imageAsset = media.assets.find((asset) => asset.key === "image");
         if (!imageAsset) {
-          console.warn(`⚠️  No image found for emblem ${emblem.id}`);
+          logger.warn(`⚠️  No image found for emblem ${emblem.id}`);
           continue;
         }
 
@@ -783,7 +784,7 @@ export class BlizzardApiClient {
         });
 
         emblemsFetched++;
-        console.log(`✅ Cached emblem ${emblem.id} -> ${imageName}`);
+        logger.info(`✅ Cached emblem ${emblem.id} -> ${imageName}`);
 
         // Small delay to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -795,7 +796,7 @@ export class BlizzardApiClient {
         // Check if we already have this border cached
         const existing = await GuildCrestBorder.findOne({ id: border.id });
         if (existing) {
-          console.log(`✅ Border ${border.id} already cached, skipping...`);
+          logger.info(`✅ Border ${border.id} already cached, skipping...`);
           continue;
         }
 
@@ -805,7 +806,7 @@ export class BlizzardApiClient {
 
         const imageAsset = media.assets.find((asset) => asset.key === "image");
         if (!imageAsset) {
-          console.warn(`⚠️  No image found for border ${border.id}`);
+          logger.warn(`⚠️  No image found for border ${border.id}`);
           continue;
         }
 
@@ -821,15 +822,15 @@ export class BlizzardApiClient {
         });
 
         bordersFetched++;
-        console.log(`✅ Cached border ${border.id} -> ${imageName}`);
+        logger.info(`✅ Cached border ${border.id} -> ${imageName}`);
 
         // Small delay to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      console.log(`✅ Guild crest caching completed: ${emblemsFetched} new emblems, ${bordersFetched} new borders`);
+      logger.info(`✅ Guild crest caching completed: ${emblemsFetched} new emblems, ${bordersFetched} new borders`);
     } catch (error: any) {
-      console.error("Error caching guild crest components:", error.message);
+      logger.error("Error caching guild crest components:", error.message);
       throw new Error(`Failed to cache guild crest components: ${error.message}`);
     }
   }
@@ -839,7 +840,7 @@ export class BlizzardApiClient {
    */
   private async fetchMissingCrestComponent(type: "emblem" | "border", id: number): Promise<string | null> {
     try {
-      console.log(`🔍 Fetching missing ${type} ${id}...`);
+      logger.info(`🔍 Fetching missing ${type} ${id}...`);
 
       const region = "eu";
       const namespace = `static-${region}`;
@@ -850,7 +851,7 @@ export class BlizzardApiClient {
 
       const imageAsset = media.assets.find((asset) => asset.key === "image");
       if (!imageAsset) {
-        console.warn(`⚠️  No image found for ${type} ${id}`);
+        logger.warn(`⚠️  No image found for ${type} ${id}`);
         return null;
       }
 
@@ -874,10 +875,10 @@ export class BlizzardApiClient {
         });
       }
 
-      console.log(`✅ Cached ${type} ${id} -> ${imageName}`);
+      logger.info(`✅ Cached ${type} ${id} -> ${imageName}`);
       return imageName;
     } catch (error: any) {
-      console.error(`Error fetching ${type} ${id}:`, error.message);
+      logger.error(`Error fetching ${type} ${id}:`, error.message);
       return null;
     }
   }
@@ -909,7 +910,7 @@ export class BlizzardApiClient {
       const apiUrl = this.regionApiUrls[regionLower] || this.apiBaseUrl;
       const url = `${apiUrl}/data/wow/guild/${realmSlug}/${encodeURIComponent(guildSlug)}?namespace=${namespace}&locale=${this.locale}`;
 
-      console.log(`🔍 Fetching guild data for ${guildName} - ${realmSlug} (${regionLower})...`);
+      logger.info(`🔍 Fetching guild data for ${guildName} - ${realmSlug} (${regionLower})...`);
       const guildData = await this.makeAuthenticatedRequest<BlizzardGuildData>(url);
 
       // Get emblem image name (check cache or fetch if missing)
@@ -931,7 +932,7 @@ export class BlizzardApiClient {
       }
 
       if (!emblemImageName || !borderImageName) {
-        console.error(`⚠️  Failed to get crest images for guild ${guildName}`);
+        logger.error(`⚠️  Failed to get crest images for guild ${guildName}`);
         return null;
       }
 
@@ -954,7 +955,7 @@ export class BlizzardApiClient {
         faction: guildData.faction.type,
       };
     } catch (error: any) {
-      console.error(`Error fetching guild data for ${guildName} - ${realmSlug}:`, error.message);
+      logger.error(`Error fetching guild data for ${guildName} - ${realmSlug}:`, error.message);
       return null;
     }
   }

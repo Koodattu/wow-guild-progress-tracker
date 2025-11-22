@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import logger from "../utils/logger";
 
 interface TwitchTokenResponse {
   access_token: string;
@@ -36,7 +37,7 @@ class TwitchService {
     this.clientSecret = process.env.TWITCH_CLIENT_SECRET || "";
 
     if (!this.clientId || !this.clientSecret) {
-      console.warn("⚠️  Twitch API credentials not configured. Streamer status updates will be disabled.");
+      logger.warn("⚠️  Twitch API credentials not configured. Streamer status updates will be disabled.");
     }
   }
 
@@ -76,10 +77,10 @@ class TwitchService {
       this.accessToken = data.access_token;
       this.tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
 
-      console.log(`✅ Twitch access token obtained (expires in ${data.expires_in}s)`);
+      logger.info(`✅ Twitch access token obtained (expires in ${data.expires_in}s)`);
       return this.accessToken;
     } catch (error) {
-      console.error("Error getting Twitch access token:", error instanceof Error ? error.message : "Unknown error");
+      logger.error("Error getting Twitch access token:", error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   }
@@ -90,7 +91,7 @@ class TwitchService {
     const statusMap = new Map<string, boolean>();
 
     if (!this.isEnabled()) {
-      console.log("Twitch integration is disabled, returning all streams as offline");
+      logger.info("Twitch integration is disabled, returning all streams as offline");
       channelNames.forEach((name) => statusMap.set(name.toLowerCase(), false));
       return statusMap;
     }
@@ -130,11 +131,11 @@ class TwitchService {
       });
 
       const liveCount = data.data.filter((s) => s.type === "live").length;
-      console.log(`Twitch: Checked ${channelNames.length} channel(s), ${liveCount} live`);
+      logger.info(`Twitch: Checked ${channelNames.length} channel(s), ${liveCount} live`);
 
       return statusMap;
     } catch (error) {
-      console.error("Error checking Twitch stream status:", error instanceof Error ? error.message : "Unknown error");
+      logger.error("Error checking Twitch stream status:", error instanceof Error ? error.message : "Unknown error");
 
       // On error, return all channels as offline
       channelNames.forEach((name) => statusMap.set(name.toLowerCase(), false));

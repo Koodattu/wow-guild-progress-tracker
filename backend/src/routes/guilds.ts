@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
+import logger from "../utils/logger";
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.get("/schedules", async (req: Request, res: Response) => {
     const schedules = await guildService.getAllGuildSchedules();
     res.json(schedules);
   } catch (error) {
-    console.error("Error fetching guild schedules:", error);
+    logger.error("Error fetching guild schedules:", error);
     res.status(500).json({ error: "Failed to fetch guild schedules" });
   }
 });
@@ -20,7 +21,7 @@ router.get("/live-streamers", async (req: Request, res: Response) => {
     const liveStreamers = await guildService.getLiveStreamers();
     res.json(liveStreamers);
   } catch (error) {
-    console.error("Error fetching live streamers:", error);
+    logger.error("Error fetching live streamers:", error);
     res.status(500).json({ error: "Failed to fetch live streamers" });
   }
 });
@@ -40,7 +41,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.json(guilds);
   } catch (error) {
-    console.error("Error fetching guilds:", error);
+    logger.error("Error fetching guilds:", error);
     res.status(500).json({ error: "Failed to fetch guilds" });
   }
 });
@@ -60,7 +61,7 @@ router.get("/:realm/:name/raids/:raidId/bosses", async (req: Request, res: Respo
 
     res.json(bossProgress);
   } catch (error) {
-    console.error("Error fetching guild boss progress:", error);
+    logger.error("Error fetching guild boss progress:", error);
     res.status(500).json({ error: "Failed to fetch guild boss progress" });
   }
 });
@@ -79,7 +80,7 @@ router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
 
     res.json(bossProgress);
   } catch (error) {
-    console.error("Error fetching guild boss progress:", error);
+    logger.error("Error fetching guild boss progress:", error);
     res.status(500).json({ error: "Failed to fetch guild boss progress" });
   }
 });
@@ -97,7 +98,7 @@ router.get("/:realm/:name/summary", async (req: Request, res: Response) => {
 
     res.json(summary);
   } catch (error) {
-    console.error("Error fetching guild summary:", error);
+    logger.error("Error fetching guild summary:", error);
     res.status(500).json({ error: "Failed to fetch guild summary" });
   }
 });
@@ -114,7 +115,7 @@ router.get("/:id/summary", async (req: Request, res: Response) => {
 
     res.json(summary);
   } catch (error) {
-    console.error("Error fetching guild summary:", error);
+    logger.error("Error fetching guild summary:", error);
     res.status(500).json({ error: "Failed to fetch guild summary" });
   }
 });
@@ -130,7 +131,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
     res.json(guild);
   } catch (error) {
-    console.error("Error fetching guild:", error);
+    logger.error("Error fetching guild:", error);
     res.status(500).json({ error: "Failed to fetch guild" });
   }
 });
@@ -147,7 +148,7 @@ router.get("/:id/profile", async (req: Request, res: Response) => {
 
     res.json(fullProfile);
   } catch (error) {
-    console.error("Error fetching guild profile:", error);
+    logger.error("Error fetching guild profile:", error);
     res.status(500).json({ error: "Failed to fetch guild profile" });
   }
 });
@@ -158,7 +159,7 @@ router.get("/:id/debug/rankings/:zoneId", async (req: Request, res: Response) =>
     const guildId = req.params.id;
     const zoneId = parseInt(req.params.zoneId);
 
-    console.log(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId}, zone ${zoneId}`);
+    logger.info(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId}, zone ${zoneId}`);
 
     await guildService.fetchGuildZoneRankings(guildId, zoneId);
 
@@ -167,7 +168,7 @@ router.get("/:id/debug/rankings/:zoneId", async (req: Request, res: Response) =>
       message: "Zone rankings fetched. Check server console logs for detailed output.",
     });
   } catch (error) {
-    console.error("Error fetching guild zone rankings:", error);
+    logger.error("Error fetching guild zone rankings:", error);
     res.status(500).json({ error: "Failed to fetch guild zone rankings" });
   }
 });
@@ -177,7 +178,7 @@ router.get("/:id/debug/rankings", async (req: Request, res: Response) => {
   try {
     const guildId = req.params.id;
 
-    console.log(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId} (current raid)`);
+    logger.info(`\n[DEBUG ENDPOINT] Fetching zone rankings for guild ${guildId} (current raid)`);
 
     await guildService.fetchGuildZoneRankings(guildId);
 
@@ -186,7 +187,7 @@ router.get("/:id/debug/rankings", async (req: Request, res: Response) => {
       message: "Zone rankings fetched. Check server console logs for detailed output.",
     });
   } catch (error) {
-    console.error("Error fetching guild zone rankings:", error);
+    logger.error("Error fetching guild zone rankings:", error);
     res.status(500).json({ error: "Failed to fetch guild zone rankings" });
   }
 });

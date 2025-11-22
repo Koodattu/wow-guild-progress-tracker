@@ -21,6 +21,7 @@ services:
       - mongodb
     volumes:
       - ./backend/public/icons:/app/public/icons
+      - ./backend/logs:/app/logs
 
   frontend:
     build: ./frontend

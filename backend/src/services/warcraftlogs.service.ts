@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import logger from "../utils/logger";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -48,7 +49,7 @@ class WarcraftLogsService {
     this.accessToken = data.access_token;
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min early
 
-    console.log("WCL authenticated successfully");
+    logger.info("WCL authenticated successfully");
     return this.accessToken;
   }
 
@@ -65,7 +66,7 @@ class WarcraftLogsService {
     // If we're approaching the limit, wait
     if (this.requestCount >= this.MAX_REQUESTS_PER_HOUR - 10) {
       const waitTime = oneHour - (now - this.requestWindow);
-      console.log(`Rate limit approaching, waiting ${waitTime}ms`);
+      logger.info(`Rate limit approaching, waiting ${waitTime}ms`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
       this.requestCount = 0;
       this.requestWindow = Date.now();
@@ -95,14 +96,14 @@ class WarcraftLogsService {
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default to 60s if not specified
-      console.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
+      logger.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
       return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
     }
 
     // Handle gateway timeouts with infinite retry (only for initial fetch)
     if (retryOnGatewayTimeout && (response.status === 504 || response.statusText === "Gateway Time-out")) {
-      console.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
+      logger.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
       await new Promise((resolve) => setTimeout(resolve, 15000)); // Wait 15 seconds
       return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
     }
@@ -121,7 +122,7 @@ class WarcraftLogsService {
     if (result.data?.rateLimitData) {
       const rateLimit = result.data.rateLimitData;
       const percentUsed = ((rateLimit.pointsSpentThisHour / rateLimit.limitPerHour) * 100).toFixed(1);
-      console.log(
+      logger.info(
         `[WCL Rate Limit] ${rateLimit.pointsSpentThisHour.toFixed(0)}/${rateLimit.limitPerHour} points used (${percentUsed}%), resets in ${Math.floor(
           rateLimit.pointsResetIn / 60
         )}m ${rateLimit.pointsResetIn % 60}s`
@@ -129,7 +130,7 @@ class WarcraftLogsService {
 
       // Warn if we're getting close to the limit
       if (rateLimit.pointsSpentThisHour / rateLimit.limitPerHour > 0.8) {
-        console.warn(`⚠️  WARNING: Approaching rate limit! Consider slowing down requests.`);
+        logger.warn(`⚠️  WARNING: Approaching rate limit! Consider slowing down requests.`);
       }
     }
 
@@ -509,11 +510,11 @@ class WarcraftLogsService {
     // Check cache first
     const now = Date.now();
     if (this.zonesCache && now - this.zonesCacheTime < this.ZONES_CACHE_TTL) {
-      console.log("Using cached zones data");
+      logger.info("Using cached zones data");
       return { worldData: { zones: this.zonesCache } };
     }
 
-    console.log("Fetching fresh zones data...");
+    logger.info("Fetching fresh zones data...");
     const query = `
       query {
         rateLimitData {
@@ -536,7 +537,7 @@ class WarcraftLogsService {
     if (result.worldData?.zones) {
       this.zonesCache = result.worldData.zones;
       this.zonesCacheTime = now;
-      console.log(`Cached ${this.zonesCache.length} zones`);
+      logger.info(`Cached ${this.zonesCache.length} zones`);
     }
 
     return result;

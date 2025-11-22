@@ -4,6 +4,7 @@ import Guild from "../models/Guild";
 import guildService from "./guild.service";
 import twitchService from "./twitch.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
+import logger, { getGuildLogger } from "../utils/logger";
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
@@ -37,16 +38,16 @@ class UpdateScheduler {
 
   // Start the background update process
   start(): void {
-    console.log("Starting intelligent background update scheduler...");
-    console.log("Finnish time hot hours: 16:00 - 01:00 (4 PM - 1 AM)");
-    console.log("Off hours: 01:00 - 16:00 (1 AM - 4 PM)");
+    logger.info("Starting intelligent background update scheduler...");
+    logger.info("Finnish time hot hours: 16:00 - 01:00 (4 PM - 1 AM)");
+    logger.info("Off hours: 01:00 - 16:00 (1 AM - 4 PM)");
 
     // HOT HOURS - Active guilds: Check every 15 minutes
     this.hotHoursActiveInterval = setInterval(async () => {
       if (!this.isHotHours()) return; // Skip if not hot hours
 
       if (this.isUpdatingHotActive) {
-        console.log("[Hot/Active] Previous update still in progress, skipping...");
+        logger.info("[Hot/Active] Previous update still in progress, skipping...");
         return;
       }
       await this.updateActiveGuilds();
@@ -57,7 +58,7 @@ class UpdateScheduler {
       if (!this.isHotHours()) return; // Skip if not hot hours
 
       if (this.isUpdatingHotRaiding) {
-        console.log("[Hot/Raiding] Previous update still in progress, skipping...");
+        logger.info("[Hot/Raiding] Previous update still in progress, skipping...");
         return;
       }
       await this.updateRaidingGuilds();
@@ -72,7 +73,7 @@ class UpdateScheduler {
       }
 
       if (this.isUpdatingTwitchStreams) {
-        console.log("[Hot/Twitch] Previous update still in progress, skipping...");
+        logger.info("[Hot/Twitch] Previous update still in progress, skipping...");
         return;
       }
       await this.updateTwitchStreamStatus();
@@ -83,7 +84,7 @@ class UpdateScheduler {
       if (this.isHotHours()) return; // Skip if hot hours
 
       if (this.isUpdatingOffActive) {
-        console.log("[Off/Active] Previous update still in progress, skipping...");
+        logger.info("[Off/Active] Previous update still in progress, skipping...");
         return;
       }
       await this.updateActiveGuildsOffHours();
@@ -94,7 +95,7 @@ class UpdateScheduler {
       "0 10 * * *",
       async () => {
         if (this.isUpdatingOffInactive) {
-          console.log("[Daily/Inactive] Previous update still in progress, skipping...");
+          logger.info("[Daily/Inactive] Previous update still in progress, skipping...");
           return;
         }
         await this.updateInactiveGuilds();
@@ -110,7 +111,7 @@ class UpdateScheduler {
       "0 4 * * *",
       async () => {
         if (this.isUpdatingNightlyWorldRanks) {
-          console.log("[Nightly/WorldRanks] Previous update still in progress, skipping...");
+          logger.info("[Nightly/WorldRanks] Previous update still in progress, skipping...");
           return;
         }
         await this.updateAllGuildsWorldRanks();
@@ -126,7 +127,7 @@ class UpdateScheduler {
       "0 4 * * *",
       async () => {
         if (this.isUpdatingGuildCrests) {
-          console.log("[Nightly/GuildCrests] Previous update still in progress, skipping...");
+          logger.info("[Nightly/GuildCrests] Previous update still in progress, skipping...");
           return;
         }
         await this.updateAllGuildCrests();
@@ -136,25 +137,25 @@ class UpdateScheduler {
       }
     );
 
-    console.log("Background scheduler started:");
-    console.log("  - Hot hours (16:00-01:00):");
-    console.log("    * Active guilds: every 15 minutes");
-    console.log("    * Raiding guilds: every 5 minutes");
-    console.log("    * Twitch streams: every 15 minutes");
-    console.log("  - Off hours (01:00-16:00):");
-    console.log("    * Active guilds: every 60 minutes");
-    console.log("    * Inactive guilds: once daily at 10:00");
-    console.log("    * Twitch streams: all marked offline");
-    console.log("  - Nightly jobs:");
-    console.log("    * World ranks update: daily at 04:00");
-    console.log("    * Guild crests update: daily at 04:00");
+    logger.info("Background scheduler started:");
+    logger.info("  - Hot hours (16:00-01:00):");
+    logger.info("    * Active guilds: every 15 minutes");
+    logger.info("    * Raiding guilds: every 5 minutes");
+    logger.info("    * Twitch streams: every 15 minutes");
+    logger.info("  - Off hours (01:00-16:00):");
+    logger.info("    * Active guilds: every 60 minutes");
+    logger.info("    * Inactive guilds: once daily at 10:00");
+    logger.info("    * Twitch streams: all marked offline");
+    logger.info("  - Nightly jobs:");
+    logger.info("    * World ranks update: daily at 04:00");
+    logger.info("    * Guild crests update: daily at 04:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
-      console.log("Currently HOT HOURS - starting initial active guild check");
+      logger.info("Currently HOT HOURS - starting initial active guild check");
       this.updateActiveGuilds();
     } else {
-      console.log("Currently OFF HOURS - starting initial active guild check");
+      logger.info("Currently OFF HOURS - starting initial active guild check");
       this.updateActiveGuildsOffHours();
     }
   }
@@ -162,17 +163,17 @@ class UpdateScheduler {
   // Check Twitch stream status on startup (if enabled)
   async checkStreamsOnStartup(): Promise<void> {
     if (!twitchService.isEnabled()) {
-      console.log("Twitch integration is disabled, skipping startup stream check");
+      logger.info("Twitch integration is disabled, skipping startup stream check");
       return;
     }
 
-    console.log("Checking Twitch stream status on startup...");
+    logger.info("Checking Twitch stream status on startup...");
     if (this.isHotHours()) {
       await this.updateTwitchStreamStatus();
     } else {
       await this.setAllStreamsOffline();
     }
-    console.log("Startup stream check completed");
+    logger.info("Startup stream check completed");
   }
 
   // Stop the background process
@@ -193,7 +194,7 @@ class UpdateScheduler {
       clearInterval(this.offHoursActiveInterval);
       this.offHoursActiveInterval = null;
     }
-    console.log("Background scheduler stopped");
+    logger.info("Background scheduler stopped");
   }
 
   // Update activity status for all guilds based on their last log time
@@ -213,7 +214,7 @@ class UpdateScheduler {
       // Mark guilds as active if they have logs within 30 days
       await Guild.updateMany({ lastLogEndTime: { $gte: thirtyDaysAgo } }, { $set: { activityStatus: "active" } });
     } catch (error) {
-      console.error("[Activity Status] Error updating guild activity status:", error);
+      logger.error("[Activity Status] Error updating guild activity status:", error);
     }
   }
 
@@ -232,22 +233,22 @@ class UpdateScheduler {
       });
 
       if (guilds.length === 0) {
-        console.log("[Hot/Active] No active guilds to update");
+        logger.info("[Hot/Active] No active guilds to update");
         this.isUpdatingHotActive = false;
         return;
       }
 
-      console.log(`[Hot/Active] Updating ${guilds.length} active guild(s)...`);
+      logger.info(`[Hot/Active] Updating ${guilds.length} active guild(s)...`);
 
       // Update all active guilds sequentially
       for (let i = 0; i < guilds.length; i++) {
-        console.log(`[Hot/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
+        logger.info(`[Hot/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
       }
 
-      console.log(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
+      logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
     } catch (error) {
-      console.error("[Hot/Active] Error:", error);
+      logger.error("[Hot/Active] Error:", error);
     } finally {
       this.isUpdatingHotActive = false;
     }
@@ -267,17 +268,17 @@ class UpdateScheduler {
         return;
       }
 
-      console.log(`[Hot/Raiding] Updating ${raidingGuilds.length} actively raiding guild(s)...`);
+      logger.info(`[Hot/Raiding] Updating ${raidingGuilds.length} actively raiding guild(s)...`);
 
       // Update all raiding guilds sequentially
       for (let i = 0; i < raidingGuilds.length; i++) {
-        console.log(`[Hot/Raiding] Guild ${i + 1}/${raidingGuilds.length}: ${raidingGuilds[i].name}`);
+        logger.info(`[Hot/Raiding] Guild ${i + 1}/${raidingGuilds.length}: ${raidingGuilds[i].name}`);
         await guildService.updateGuildProgress((raidingGuilds[i]._id as mongoose.Types.ObjectId).toString());
       }
 
-      console.log(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
+      logger.info(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
     } catch (error) {
-      console.error("[Hot/Raiding] Error:", error);
+      logger.error("[Hot/Raiding] Error:", error);
     } finally {
       this.isUpdatingHotRaiding = false;
     }
@@ -298,22 +299,22 @@ class UpdateScheduler {
       });
 
       if (guilds.length === 0) {
-        console.log("[Off/Active] No active guilds to update");
+        logger.info("[Off/Active] No active guilds to update");
         this.isUpdatingOffActive = false;
         return;
       }
 
-      console.log(`[Off/Active] Updating ${guilds.length} active guild(s)...`);
+      logger.info(`[Off/Active] Updating ${guilds.length} active guild(s)...`);
 
       // Update all active guilds sequentially
       for (let i = 0; i < guilds.length; i++) {
-        console.log(`[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
+        logger.info(`[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
       }
 
-      console.log(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
+      logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
     } catch (error) {
-      console.error("[Off/Active] Error:", error);
+      logger.error("[Off/Active] Error:", error);
     } finally {
       this.isUpdatingOffActive = false;
     }
@@ -331,16 +332,16 @@ class UpdateScheduler {
       const guilds = await Guild.find({ activityStatus: "inactive" });
 
       if (guilds.length === 0) {
-        console.log("[Daily/Inactive] No inactive guilds to update");
+        logger.info("[Daily/Inactive] No inactive guilds to update");
         this.isUpdatingOffInactive = false;
         return;
       }
 
-      console.log(`[Daily/Inactive] Updating ${guilds.length} inactive guild(s)...`);
+      logger.info(`[Daily/Inactive] Updating ${guilds.length} inactive guild(s)...`);
 
       // Update all inactive guilds sequentially with a small delay between each
       for (let i = 0; i < guilds.length; i++) {
-        console.log(`[Daily/Inactive] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
+        logger.info(`[Daily/Inactive] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
 
         // Small delay to avoid overwhelming the API
@@ -349,9 +350,9 @@ class UpdateScheduler {
         }
       }
 
-      console.log(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
+      logger.info(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
     } catch (error) {
-      console.error("[Daily/Inactive] Error:", error);
+      logger.error("[Daily/Inactive] Error:", error);
     } finally {
       this.isUpdatingOffInactive = false;
     }
@@ -359,23 +360,23 @@ class UpdateScheduler {
 
   // Manually trigger update of all guilds
   async updateAllGuilds(): Promise<void> {
-    console.log("Starting full update of all guilds...");
+    logger.info("Starting full update of all guilds...");
     const guilds = await Guild.find();
 
     for (let i = 0; i < guilds.length; i++) {
       const guild = guilds[i];
-      console.log(`Updating ${i + 1}/${guilds.length}: ${guild.name}`);
+      logger.info(`Updating ${i + 1}/${guilds.length}: ${guild.name}`);
 
       try {
         await guildService.updateGuildProgress((guild._id as mongoose.Types.ObjectId).toString());
         // Small delay between guilds to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (error) {
-        console.error(`Failed to update ${guild.name}:`, error);
+        logger.error(`Failed to update ${guild.name}:`, error);
       }
     }
 
-    console.log("Full update completed");
+    logger.info("Full update completed");
   }
 
   // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)
@@ -388,17 +389,17 @@ class UpdateScheduler {
       const guilds = await Guild.find();
 
       if (guilds.length === 0) {
-        console.log("[Nightly/WorldRanks] No guilds to update");
+        logger.info("[Nightly/WorldRanks] No guilds to update");
         this.isUpdatingNightlyWorldRanks = false;
         return;
       }
 
-      console.log(`[Nightly/WorldRanks] Updating world ranks for current raid for ${guilds.length} guild(s)...`);
+      logger.info(`[Nightly/WorldRanks] Updating world ranks for current raid for ${guilds.length} guild(s)...`);
 
       // Update world ranks for all guilds sequentially with a small delay between each
       for (let i = 0; i < guilds.length; i++) {
         const guild = guilds[i];
-        console.log(`[Nightly/WorldRanks] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
+        logger.info(`[Nightly/WorldRanks] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
 
         try {
           await guildService.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
@@ -408,20 +409,20 @@ class UpdateScheduler {
             await new Promise((resolve) => setTimeout(resolve, 3000));
           }
         } catch (error) {
-          console.error(`[Nightly/WorldRanks] Failed to update world rank for ${guild.name}:`, error);
+          logger.error(`[Nightly/WorldRanks] Failed to update world rank for ${guild.name}:`, error);
           // Continue with next guild even if one fails
         }
       }
 
       // Recalculate guild rankings after all world ranks are updated
-      console.log(`[Nightly/WorldRanks] Recalculating guild rankings for current raids...`);
+      logger.info(`[Nightly/WorldRanks] Recalculating guild rankings for current raids...`);
       for (const raidId of CURRENT_RAID_IDS) {
         await guildService.calculateGuildRankingsForRaid(raidId);
       }
 
-      console.log(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);
+      logger.info(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);
     } catch (error) {
-      console.error("[Nightly/WorldRanks] Error:", error);
+      logger.error("[Nightly/WorldRanks] Error:", error);
     } finally {
       this.isUpdatingNightlyWorldRanks = false;
     }
@@ -433,11 +434,11 @@ class UpdateScheduler {
     this.isUpdatingGuildCrests = true;
 
     try {
-      console.log("[Nightly/GuildCrests] Starting guild crest update...");
+      logger.info("[Nightly/GuildCrests] Starting guild crest update...");
       await guildService.updateAllGuildCrests();
-      console.log("[Nightly/GuildCrests] Guild crest update completed");
+      logger.info("[Nightly/GuildCrests] Guild crest update completed");
     } catch (error) {
-      console.error("[Nightly/GuildCrests] Error:", error);
+      logger.error("[Nightly/GuildCrests] Error:", error);
     } finally {
       this.isUpdatingGuildCrests = false;
     }
@@ -476,7 +477,7 @@ class UpdateScheduler {
         return;
       }
 
-      console.log(`[Hot/Twitch] Checking status for ${allChannelNames.size} streamer(s)...`);
+      logger.info(`[Hot/Twitch] Checking status for ${allChannelNames.size} streamer(s)...`);
 
       // Get stream status from Twitch
       const streamStatus = await twitchService.getStreamStatus(Array.from(allChannelNames));
@@ -493,7 +494,7 @@ class UpdateScheduler {
 
           if (streamer.isLive !== isLive) {
             hasChanges = true;
-            console.log(`  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${isLive ? "live" : "offline"}`);
+            logger.info(`  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${isLive ? "live" : "offline"}`);
           }
 
           return {
@@ -513,9 +514,9 @@ class UpdateScheduler {
         }
       }
 
-      console.log(`[Hot/Twitch] Completed stream status update`);
+      logger.info(`[Hot/Twitch] Completed stream status update`);
     } catch (error) {
-      console.error("[Hot/Twitch] Error:", error);
+      logger.error("[Hot/Twitch] Error:", error);
     } finally {
       this.isUpdatingTwitchStreams = false;
     }
@@ -541,7 +542,7 @@ class UpdateScheduler {
         return;
       }
 
-      console.log("[Off/Twitch] Setting all streams to offline (outside hot hours)...");
+      logger.info("[Off/Twitch] Setting all streams to offline (outside hot hours)...");
 
       // Update all streamers to offline
       const now = new Date();
@@ -565,9 +566,9 @@ class UpdateScheduler {
         );
       }
 
-      console.log("[Off/Twitch] All streams marked as offline");
+      logger.info("[Off/Twitch] All streams marked as offline");
     } catch (error) {
-      console.error("[Off/Twitch] Error setting streams offline:", error);
+      logger.error("[Off/Twitch] Error setting streams offline:", error);
     }
   }
 }

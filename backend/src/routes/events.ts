@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import Event from "../models/Event";
 import Guild from "../models/Guild";
+import logger from "../utils/logger";
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.get("/", async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching events:", error);
+    logger.error("Error fetching events:", error);
     res.status(500).json({ error: "Failed to fetch events" });
   }
 });
@@ -59,7 +60,7 @@ router.get("/guild/:realm/:name", async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching guild events:", error);
+    logger.error("Error fetching guild events:", error);
     res.status(500).json({ error: "Failed to fetch events" });
   }
 });
@@ -86,7 +87,7 @@ router.get("/guild/:guildId", async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching guild events:", error);
+    logger.error("Error fetching guild events:", error);
     res.status(500).json({ error: "Failed to fetch events" });
   }
 });

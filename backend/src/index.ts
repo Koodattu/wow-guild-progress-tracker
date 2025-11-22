@@ -5,6 +5,7 @@ dotenv.config();
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import path from "path";
+import logger from "./utils/logger";
 import connectDB from "./config/database";
 import guildService from "./services/guild.service";
 import blizzardService from "./services/blizzard.service";
@@ -57,16 +58,16 @@ const startServer = async () => {
     const currentTierOnly = process.env.CURRENT_TIER_ONLY !== "false";
 
     if (calculateOnStartup) {
-      console.log("CALCULATE_GUILD_STATISTICS_ON_STARTUP is enabled");
+      logger.info("CALCULATE_GUILD_STATISTICS_ON_STARTUP is enabled");
       await guildService.recalculateExistingGuildStatistics(currentTierOnly);
     } else {
-      console.log("CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation");
+      logger.info("CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation");
     }
 
     // Migrate existing guilds to add WarcraftLogs guild ID
     // This runs on every startup to ensure all guilds have the ID
     if (calculateOnStartup) {
-      console.log("Migrating guilds to add WarcraftLogs guild ID...");
+      logger.info("Migrating guilds to add WarcraftLogs guild ID...");
       await guildService.migrateGuildsWarcraftLogsId();
     }
 
@@ -76,32 +77,32 @@ const startServer = async () => {
     // Check Twitch stream status on startup if enabled
     const checkStreamsOnStartup = process.env.CHECK_TWITCH_STREAMS_ON_STARTUP === "true";
     if (checkStreamsOnStartup) {
-      console.log("CHECK_TWITCH_STREAMS_ON_STARTUP is enabled");
+      logger.info("CHECK_TWITCH_STREAMS_ON_STARTUP is enabled");
       await scheduler.checkStreamsOnStartup();
     } else {
-      console.log("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
+      logger.info("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
     }
 
     // Start express server
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`API available at http://localhost:${PORT}/api`);
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`API available at http://localhost:${PORT}/api`);
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.error("Failed to start server:", error);
     process.exit(1);
   }
 };
 
 // Handle shutdown gracefully
 process.on("SIGINT", () => {
-  console.log("Shutting down gracefully...");
+  logger.info("Shutting down gracefully...");
   scheduler.stop();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
-  console.log("Shutting down gracefully...");
+  logger.info("Shutting down gracefully...");
   scheduler.stop();
   process.exit(0);
 });

@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
+import logger from "../utils/logger";
 
 export class IconCacheService {
   private readonly iconsDir: string;
@@ -19,7 +20,7 @@ export class IconCacheService {
   private ensureIconsDirectory(): void {
     if (!fs.existsSync(this.iconsDir)) {
       fs.mkdirSync(this.iconsDir, { recursive: true });
-      console.log(`📁 Created icons directory: ${this.iconsDir}`);
+      logger.info(`📁 Created icons directory: ${this.iconsDir}`);
     }
   }
 
@@ -51,12 +52,12 @@ export class IconCacheService {
 
     // If icon already exists, return just the filename
     if (this.iconExists(filename)) {
-      console.log(`✅ Icon already cached: ${filename}`);
+      logger.info(`✅ Icon already cached: ${filename}`);
       return filename;
     }
 
     try {
-      console.log(`📥 Downloading icon: ${filename}`);
+      logger.info(`📥 Downloading icon: ${filename}`);
 
       // Download the icon from Blizzard
       const response = await fetch(blizzardIconUrl);
@@ -72,10 +73,10 @@ export class IconCacheService {
       const filePath = path.join(this.iconsDir, filename);
       fs.writeFileSync(filePath, buffer);
 
-      console.log(`✅ Icon downloaded and cached: ${filename}`);
+      logger.info(`✅ Icon downloaded and cached: ${filename}`);
       return filename;
     } catch (error: any) {
-      console.error(`Error downloading icon ${filename}:`, error.message);
+      logger.error(`Error downloading icon ${filename}:`, error.message);
       // Return empty string on failure - frontend can handle fallback
       return "";
     }

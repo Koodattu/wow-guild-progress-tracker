@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import logger from "../utils/logger";
 
 interface RaiderIORegionDates {
   us: string;
@@ -50,7 +51,7 @@ export class RaiderIOApiClient {
     try {
       const url = `${this.apiBaseUrl}/raiding/static-data?access_key=${this.apiKey}&expansion_id=${expansionId}`;
 
-      console.log(`📅 Fetching raid dates for expansion ${expansionId}...`);
+      logger.info(`📅 Fetching raid dates for expansion ${expansionId}...`);
 
       const response = await fetch(url);
 
@@ -60,11 +61,11 @@ export class RaiderIOApiClient {
 
       const data = (await response.json()) as RaiderIOStaticDataResponse;
 
-      console.log(`✅ Found ${data.raids.length} raids for expansion ${expansionId}`);
+      logger.info(`✅ Found ${data.raids.length} raids for expansion ${expansionId}`);
 
       return data.raids;
     } catch (error: any) {
-      console.error(`Error fetching Raider.IO data for expansion ${expansionId}:`, error.message);
+      logger.error(`Error fetching Raider.IO data for expansion ${expansionId}:`, error.message);
       throw new Error(`Raider.IO API request failed: ${error.message}`);
     }
   }
@@ -74,7 +75,7 @@ export class RaiderIOApiClient {
    * Returns a Map with raid slug/name as key and raid data as value
    */
   public async fetchAllRaidDates(): Promise<Map<string, RaiderIORaid>> {
-    console.log("📅 Fetching raid dates from Raider.IO...");
+    logger.info("📅 Fetching raid dates from Raider.IO...");
 
     const allRaids = new Map<string, RaiderIORaid>();
 
@@ -91,11 +92,11 @@ export class RaiderIOApiClient {
         // Small delay between expansion requests to be nice to the API
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
-        console.error(`Failed to fetch raids for expansion ${expansionId}, continuing...`);
+        logger.error(`Failed to fetch raids for expansion ${expansionId}, continuing...`);
       }
     }
 
-    console.log(`✅ Total raids fetched from Raider.IO: ${allRaids.size / 2} (stored by slug and name)`);
+    logger.info(`✅ Total raids fetched from Raider.IO: ${allRaids.size / 2} (stored by slug and name)`);
 
     return allRaids;
   }
@@ -119,11 +120,11 @@ export class RaiderIOApiClient {
     // Try partial matches (in case of slight differences)
     for (const [key, raid] of raidMap.entries()) {
       if (key.includes(raidSlug.toLowerCase()) || raidSlug.toLowerCase().includes(key)) {
-        console.log(`⚠️  Partial match found: "${raidSlug}" matched with "${key}"`);
+        logger.info(`⚠️  Partial match found: "${raidSlug}" matched with "${key}"`);
         return raid;
       }
       if (key.includes(raidName.toLowerCase()) || raidName.toLowerCase().includes(key)) {
-        console.log(`⚠️  Partial match found: "${raidName}" matched with "${key}"`);
+        logger.info(`⚠️  Partial match found: "${raidName}" matched with "${key}"`);
         return raid;
       }
     }
