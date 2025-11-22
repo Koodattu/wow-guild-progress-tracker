@@ -19,6 +19,7 @@ class UpdateScheduler {
   private isUpdatingOffInactive: boolean = false;
   private isUpdatingNightlyWorldRanks: boolean = false;
   private isUpdatingGuildCrests: boolean = false;
+  private isUpdatingRefetchRecentReports: boolean = false;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -137,6 +138,22 @@ class UpdateScheduler {
       }
     );
 
+    // NIGHTLY: Refetch 3 most recent reports for all active guilds (at 3 AM Finnish time)
+    // This catches any fights that might have been missed during live polling or uploaded late
+    cron.schedule(
+      "0 3 * * *",
+      async () => {
+        if (this.isUpdatingRefetchRecentReports) {
+          logger.info("[Nightly/RefetchReports] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.refetchRecentReportsForAllActiveGuilds();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      }
+    );
+
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info("    * Active guilds: every 15 minutes");
@@ -147,6 +164,7 @@ class UpdateScheduler {
     logger.info("    * Inactive guilds: once daily at 10:00");
     logger.info("    * Twitch streams: all marked offline");
     logger.info("  - Nightly jobs:");
+    logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Guild crests update: daily at 04:00");
 
@@ -174,6 +192,34 @@ class UpdateScheduler {
       await this.setAllStreamsOffline();
     }
     logger.info("Startup stream check completed");
+  }
+
+  // Update inactive guilds on startup (if enabled)
+  async updateInactiveGuildsOnStartup(): Promise<void> {
+    logger.info("Updating inactive guilds on startup...");
+    await this.updateInactiveGuilds();
+    logger.info("Startup inactive guilds update completed");
+  }
+
+  // Update world ranks on startup (if enabled)
+  async updateWorldRanksOnStartup(): Promise<void> {
+    logger.info("Updating world ranks on startup...");
+    await this.updateAllGuildsWorldRanks();
+    logger.info("Startup world ranks update completed");
+  }
+
+  // Update guild crests on startup (if enabled)
+  async updateGuildCrestsOnStartup(): Promise<void> {
+    logger.info("Updating guild crests on startup...");
+    await this.updateAllGuildCrests();
+    logger.info("Startup guild crests update completed");
+  }
+
+  // Refetch recent reports on startup (if enabled)
+  async refetchRecentReportsOnStartup(): Promise<void> {
+    logger.info("Refetching recent reports on startup...");
+    await this.refetchRecentReportsForAllActiveGuilds();
+    logger.info("Startup recent reports refetch completed");
   }
 
   // Stop the background process
@@ -441,6 +487,20 @@ class UpdateScheduler {
       logger.error("[Nightly/GuildCrests] Error:", error);
     } finally {
       this.isUpdatingGuildCrests = false;
+    }
+  }
+
+  // NIGHTLY: Refetch 3 most recent reports for all active guilds (at 3 AM Finnish time)
+  // This catches any fights that might have been missed during live polling or uploaded late
+  private async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
+    this.isUpdatingRefetchRecentReports = true;
+
+    try {
+      await guildService.refetchRecentReportsForAllActiveGuilds();
+    } catch (error) {
+      logger.error("[Nightly/RefetchReports] Error:", error);
+    } finally {
+      this.isUpdatingRefetchRecentReports = false;
     }
   }
 

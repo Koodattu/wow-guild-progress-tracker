@@ -1221,6 +1221,59 @@ class GuildService {
     return totalNewFights;
   }
 
+  // Refetch recent reports for all active guilds in current raid tiers
+  // This is useful to catch any fights that might have been missed during live polling
+  async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
+    logger.info("[Refetch/Recent] Starting refetch of recent reports for all active guilds...");
+
+    try {
+      // Get all active guilds
+      const guilds = await Guild.find({ activityStatus: "active" });
+
+      if (guilds.length === 0) {
+        logger.info("[Refetch/Recent] No active guilds found");
+        return;
+      }
+
+      logger.info(`[Refetch/Recent] Refetching recent reports for ${guilds.length} active guild(s)...`);
+
+      let totalRecoveredFights = 0;
+
+      for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
+        const guildLog = getGuildLogger(guild.name, guild.realm);
+        logger.info(`[Refetch/Recent] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
+
+        try {
+          const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
+
+          if (recoveredFights > 0) {
+            guildLog.info(`✅ Recovered ${recoveredFights} missing fights - recalculating statistics...`);
+            totalRecoveredFights += recoveredFights;
+
+            // Recalculate statistics to ensure accuracy after recovering missing fights
+            for (const raidId of CURRENT_RAID_IDS) {
+              await this.calculateGuildStatistics(guild, raidId);
+            }
+            guildLog.info("Statistics recalculated after fight recovery");
+          }
+
+          // Small delay to avoid overwhelming the API
+          if (i < guilds.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+        } catch (error) {
+          guildLog.error(`Failed to refetch recent reports:`, error);
+          // Continue with next guild even if one fails
+        }
+      }
+
+      logger.info(`[Refetch/Recent] Completed: ${totalRecoveredFights} total fights recovered across all guilds`);
+    } catch (error) {
+      logger.error("[Refetch/Recent] Error:", error);
+    }
+  }
+
   // Update: Check only the current raids for new reports
   // Returns true if new data was found and saved
   private async performUpdate(guild: IGuild): Promise<boolean> {

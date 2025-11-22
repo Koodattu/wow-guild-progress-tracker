@@ -83,6 +83,42 @@ const startServer = async () => {
       logger.info("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
     }
 
+    // Update inactive guilds on startup if enabled
+    const updateInactiveGuildsOnStartup = process.env.UPDATE_INACTIVE_GUILDS_ON_STARTUP === "true";
+    if (updateInactiveGuildsOnStartup) {
+      logger.info("UPDATE_INACTIVE_GUILDS_ON_STARTUP is enabled");
+      await scheduler.updateInactiveGuildsOnStartup();
+    } else {
+      logger.info("UPDATE_INACTIVE_GUILDS_ON_STARTUP is disabled, skipping startup inactive guilds update");
+    }
+
+    // Update world ranks on startup if enabled
+    const updateWorldRanksOnStartup = process.env.UPDATE_WORLD_RANKS_ON_STARTUP === "true";
+    if (updateWorldRanksOnStartup) {
+      logger.info("UPDATE_WORLD_RANKS_ON_STARTUP is enabled");
+      await scheduler.updateWorldRanksOnStartup();
+    } else {
+      logger.info("UPDATE_WORLD_RANKS_ON_STARTUP is disabled, skipping startup world ranks update");
+    }
+
+    // Update guild crests on startup if enabled
+    const updateGuildCrestsOnStartup = process.env.UPDATE_GUILD_CRESTS_ON_STARTUP === "true";
+    if (updateGuildCrestsOnStartup) {
+      logger.info("UPDATE_GUILD_CRESTS_ON_STARTUP is enabled");
+      await scheduler.updateGuildCrestsOnStartup();
+    } else {
+      logger.info("UPDATE_GUILD_CRESTS_ON_STARTUP is disabled, skipping startup guild crests update");
+    }
+
+    // Refetch recent reports on startup if enabled
+    const refetchRecentReportsOnStartup = process.env.REFETCH_RECENT_REPORTS_ON_STARTUP === "true";
+    if (refetchRecentReportsOnStartup) {
+      logger.info("REFETCH_RECENT_REPORTS_ON_STARTUP is enabled");
+      await scheduler.refetchRecentReportsOnStartup();
+    } else {
+      logger.info("REFETCH_RECENT_REPORTS_ON_STARTUP is disabled, skipping startup recent reports refetch");
+    }
+
     // Start express server
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
