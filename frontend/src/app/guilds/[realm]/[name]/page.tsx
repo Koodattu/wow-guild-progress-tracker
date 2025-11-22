@@ -367,7 +367,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                     </th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Rank</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500">Mythic</th>
+                    <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">Mythic</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Time</th>
                     <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Pulls</th>
@@ -382,12 +382,13 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <Fragment key={`expansion-${expansion}`}>
                         {/* Expansion Separator Row */}
                         <tr className="bg-gray-800/70 border-b border-gray-700">
-                          <td colSpan={8} className="px-4 py-2">
+                          <td colSpan={3} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold text-gray-300">{expansion}</span>
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
                             </div>
                           </td>
+                          <td colSpan={5} className="px-4 py-2 border-l-2 border-gray-700"></td>
                         </tr>
 
                         {/* Raid Rows */}
@@ -450,7 +451,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
                               {/* Second clickable area: Raid Progress columns */}
                               <td
-                                className={`px-4 py-3 text-center transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                className={`px-4 py-3 text-center transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
                                   hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
                                 }`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}

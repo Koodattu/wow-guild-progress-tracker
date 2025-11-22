@@ -45,7 +45,8 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Rank</th>
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">World</th>
             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Guild</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">Mythic</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Schedule</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">Mythic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Pulls</th>
             <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Progress</th>
@@ -134,11 +135,6 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                     >
                       <Image src="/raiderio-logo.png" alt="Raider.IO" width={20} height={20} className="w-full h-full object-contain" />
                     </a>
-                    {guild.scheduleDisplay && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 font-semibold">
-                        {guild.scheduleDisplay.totalDays}D x {guild.scheduleDisplay.averageHours}h
-                      </span>
-                    )}
                     {guild.isStreaming && (
                       <span className="text-xs px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 font-semibold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
@@ -148,10 +144,18 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                     {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
                   </div>
                 </td>
+                <td
+                  className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredGuildInfoRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  onClick={() => onGuildClick(guild)}
+                  onMouseEnter={() => setHoveredGuildInfoRow(guild._id)}
+                  onMouseLeave={() => setHoveredGuildInfoRow(null)}
+                >
+                  {guild.scheduleDisplay ? `${guild.scheduleDisplay.totalDays}D x ${guild.scheduleDisplay.averageHours}h` : "-"}
+                </td>
 
                 {/* Second clickable area: Raid Progress columns */}
                 <td
-                  className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
+                  className={`px-4 py-3 text-center cursor-pointer transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow === guild._id ? "bg-gray-800/30" : ""}`}
                   onClick={() => onRaidProgressClick(guild)}
                   onMouseEnter={() => setHoveredRaidProgressRow(guild._id)}
                   onMouseLeave={() => setHoveredRaidProgressRow(null)}
