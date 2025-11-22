@@ -81,14 +81,14 @@ export default function GuildsPage() {
     }, 0);
 
     const targetFirstColumnRows = Math.ceil(totalRows / 2);
-    
+
     let currentRows = 0;
     let splitIndex = 0;
 
     for (let i = 0; i < sortedLetters.length; i++) {
       const letter = sortedLetters[i];
       const rowsForThisLetter = groupedGuilds[letter].length + 1; // +1 for header
-      
+
       if (currentRows + rowsForThisLetter <= targetFirstColumnRows) {
         currentRows += rowsForThisLetter;
         splitIndex = i + 1;
@@ -96,7 +96,7 @@ export default function GuildsPage() {
         // Check if adding this letter makes it closer to the target
         const diffWithout = Math.abs(targetFirstColumnRows - currentRows);
         const diffWith = Math.abs(targetFirstColumnRows - (currentRows + rowsForThisLetter));
-        
+
         if (diffWith < diffWithout) {
           splitIndex = i + 1;
         }
@@ -123,7 +123,7 @@ export default function GuildsPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4" style={{ maxWidth: '85%' }}>
+      <div className="container mx-auto px-4" style={{ maxWidth: "85%" }}>
         <div className="mb-8">
           {/* Search box */}
           <input
