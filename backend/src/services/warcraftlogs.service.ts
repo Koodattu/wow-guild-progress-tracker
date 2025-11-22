@@ -269,6 +269,38 @@ class WarcraftLogsService {
     return this.query<any>(query, variables);
   }
 
+  // Get recent reports for a guild WITHOUT filtering by zone
+  // This ensures we catch all reports even if WCL tags them with a different zone
+  async getRecentReports(guildName: string, serverSlug: string, serverRegion: string, limit: number = 3) {
+    const query = `
+      query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          reports(guildName: $guildName, guildServerSlug: $serverSlug, guildServerRegion: $serverRegion, limit: $limit) {
+            data {
+              code
+              startTime
+              endTime
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      guildName,
+      serverSlug,
+      serverRegion,
+      limit,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
   // Get a single report by code with all fight details
   async getReportByCode(reportCode: string, difficultyId: number) {
     const query = `
