@@ -69,6 +69,47 @@ export default function GuildsPage() {
     return Object.keys(groupedGuilds).sort();
   }, [groupedGuilds]);
 
+  // Calculate split point for two columns
+  const { firstColumnLetters, secondColumnLetters } = useMemo(() => {
+    if (sortedLetters.length === 0) {
+      return { firstColumnLetters: [], secondColumnLetters: [] };
+    }
+
+    // Count total rows (including letter headers)
+    const totalRows = sortedLetters.reduce((sum, letter) => {
+      return sum + groupedGuilds[letter].length + 1; // +1 for the letter header
+    }, 0);
+
+    const targetFirstColumnRows = Math.ceil(totalRows / 2);
+    
+    let currentRows = 0;
+    let splitIndex = 0;
+
+    for (let i = 0; i < sortedLetters.length; i++) {
+      const letter = sortedLetters[i];
+      const rowsForThisLetter = groupedGuilds[letter].length + 1; // +1 for header
+      
+      if (currentRows + rowsForThisLetter <= targetFirstColumnRows) {
+        currentRows += rowsForThisLetter;
+        splitIndex = i + 1;
+      } else {
+        // Check if adding this letter makes it closer to the target
+        const diffWithout = Math.abs(targetFirstColumnRows - currentRows);
+        const diffWith = Math.abs(targetFirstColumnRows - (currentRows + rowsForThisLetter));
+        
+        if (diffWith < diffWithout) {
+          splitIndex = i + 1;
+        }
+        break;
+      }
+    }
+
+    return {
+      firstColumnLetters: sortedLetters.slice(0, splitIndex),
+      secondColumnLetters: sortedLetters.slice(splitIndex),
+    };
+  }, [sortedLetters, groupedGuilds]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -82,7 +123,7 @@ export default function GuildsPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4 max-w-5xl">
+      <div className="container mx-auto px-4" style={{ maxWidth: '85%' }}>
         <div className="mb-8">
           {/* Search box */}
           <input
@@ -100,57 +141,114 @@ export default function GuildsPage() {
 
         {sortedLetters.length === 0 && searchQuery && <div className="text-center py-12 text-gray-500">No guilds found matching &quot;{searchQuery}&quot;</div>}
 
-        {/* Guild list grouped by letter */}
-        <div className="space-y-6">
-          {sortedLetters.map((letter) => (
-            <div key={letter}>
-              <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
-              <div className="space-y-1">
-                {groupedGuilds[letter].map((guild) => (
-                  <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
-                    <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
-                      {guild.parent_guild ? (
-                        <>
-                          <span className="text-4xl font-semibold">{guild.name}</span>
-                          <span className="text-4xl text-gray-400">
-                            {" "}
-                            ({guild.parent_guild}-{guild.realm})
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-4xl font-semibold">{guild.name}</span>
-                          <span className="text-4xl text-gray-400">-{guild.realm}</span>
-                        </>
-                      )}
-                    </Link>
-                    {guild.warcraftlogsId && (
-                      <a
-                        href={`https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
-                        title="View on Warcraft Logs"
-                      >
-                        <Image src="/wcl-logo.png" alt="WCL" width={24} height={24} className="w-full h-full object-contain" />
-                      </a>
-                    )}
-                    <a
-                      href={getRaiderIOGuildUrl(guild.region, guild.realm, guild.name)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
-                      title="View on Raider.IO"
-                    >
-                      <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
-                    </a>
-                    {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+        {/* Guild list in two columns */}
+        {sortedLetters.length > 0 && (
+          <div className="grid grid-cols-2 gap-8">
+            {/* First Column */}
+            <div className="space-y-6">
+              {firstColumnLetters.map((letter) => (
+                <div key={letter}>
+                  <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
+                  <div className="space-y-1">
+                    {groupedGuilds[letter].map((guild) => (
+                      <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+                        <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
+                          {guild.parent_guild ? (
+                            <>
+                              <span className="text-4xl font-semibold">{guild.name}</span>
+                              <span className="text-4xl text-gray-400">
+                                {" "}
+                                ({guild.parent_guild}-{guild.realm})
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-4xl font-semibold">{guild.name}</span>
+                              <span className="text-4xl text-gray-400">-{guild.realm}</span>
+                            </>
+                          )}
+                        </Link>
+                        {guild.warcraftlogsId && (
+                          <a
+                            href={`https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                            title="View on Warcraft Logs"
+                          >
+                            <Image src="/wcl-logo.png" alt="WCL" width={24} height={24} className="w-full h-full object-contain" />
+                          </a>
+                        )}
+                        <a
+                          href={getRaiderIOGuildUrl(guild.region, guild.realm, guild.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                          title="View on Raider.IO"
+                        >
+                          <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
+                        </a>
+                        {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Second Column */}
+            <div className="space-y-6">
+              {secondColumnLetters.map((letter) => (
+                <div key={letter}>
+                  <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
+                  <div className="space-y-1">
+                    {groupedGuilds[letter].map((guild) => (
+                      <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+                        <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
+                          {guild.parent_guild ? (
+                            <>
+                              <span className="text-4xl font-semibold">{guild.name}</span>
+                              <span className="text-4xl text-gray-400">
+                                {" "}
+                                ({guild.parent_guild}-{guild.realm})
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-4xl font-semibold">{guild.name}</span>
+                              <span className="text-4xl text-gray-400">-{guild.realm}</span>
+                            </>
+                          )}
+                        </Link>
+                        {guild.warcraftlogsId && (
+                          <a
+                            href={`https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                            title="View on Warcraft Logs"
+                          >
+                            <Image src="/wcl-logo.png" alt="WCL" width={24} height={24} className="w-full h-full object-contain" />
+                          </a>
+                        )}
+                        <a
+                          href={getRaiderIOGuildUrl(guild.region, guild.realm, guild.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center w-6 h-6 hover:opacity-80 transition-opacity"
+                          title="View on Raider.IO"
+                        >
+                          <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
+                        </a>
+                        {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
