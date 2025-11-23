@@ -11,7 +11,10 @@ export const GUILDS: TrackedGuild[] = [
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
   { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
+  { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
+  { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
   { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
+  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["croukou"] },
   { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
 ];
 

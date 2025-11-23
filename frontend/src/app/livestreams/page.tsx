@@ -111,7 +111,7 @@ export default function LivestreamsPage() {
   const getStreamContainerHeight = () => {
     // Fixed height to fit nicely on screen
     // Using viewport height minus selection boxes and minimal padding
-    return "calc(100vh - 200px)";
+    return "calc(100vh - 20px)";
   };
 
   if (loading) {
@@ -151,7 +151,7 @@ export default function LivestreamsPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="w-full px-4 py-2">
+      <div className="w-full px-2 py-2">
         {/* Stream Selection Boxes */}
         <div className="mb-4 flex flex-wrap gap-2">
           {liveStreamers.map((streamer) => {
@@ -208,9 +208,9 @@ export default function LivestreamsPage() {
 
         {/* Viewer Area */}
         {selectedStreamers.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ height: getStreamContainerHeight() }}>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-2" style={{ height: getStreamContainerHeight() }}>
             {/* Streams Grid */}
-            <div className="lg:col-span-2 h-full">
+            <div className="lg:col-span-4 h-full">
               <div className={`grid ${streamGridClass} gap-2 h-full`}>
                 {selectedStreamers.map((streamer, index) => (
                   <div
@@ -228,8 +228,8 @@ export default function LivestreamsPage() {
                       loading="lazy"
                       title={`${streamer.channelName} Twitch stream`}
                     ></iframe>
-                    {/* Stream Label */}
-                    <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-sm font-bold text-white z-10">{streamer.channelName}</div>
+                    {/* Stream Label
+                    <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-sm font-bold text-white z-10">{streamer.channelName}</div>*/}
                   </div>
                 ))}
               </div>
@@ -246,7 +246,7 @@ export default function LivestreamsPage() {
                       <button
                         key={streamer.channelName}
                         onClick={() => setActiveChat(streamer.channelName)}
-                        className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        className={`flex-1 px-2 py-2 text-sm font-medium transition-colors ${
                           activeChat === streamer.channelName ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
                         }`}
                       >
