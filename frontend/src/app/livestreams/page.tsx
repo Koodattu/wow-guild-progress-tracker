@@ -296,9 +296,9 @@ export default function LivestreamsPage() {
                       {/* The iframe - rendered once per stream, never recreated */}
                       <iframe
                         key={`iframe-${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
-                        src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&muted=${
-                          isSpotlit || index === 0 ? "false" : "true"
-                        }&autoplay=true`}
+                        src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${
+                          typeof window !== "undefined" ? window.location.hostname : "localhost"
+                        }&muted=false&autoplay=true`}
                         className={`w-full h-full ${inSpotlightMode && !isSpotlit ? "pointer-events-none" : ""}`}
                         allowFullScreen
                         allow="autoplay"
