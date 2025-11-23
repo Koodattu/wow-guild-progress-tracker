@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { LiveStreamer } from "@/types";
 import { api } from "@/lib/api";
 import { formatPhaseDisplay, formatPercent } from "@/lib/utils";
+
+// Extend Window interface to include Twitch
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Twitch: any;
+  }
+}
 
 export default function LivestreamsPage() {
   const [liveStreamers, setLiveStreamers] = useState<LiveStreamer[]>([]);
@@ -11,9 +19,26 @@ export default function LivestreamsPage() {
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [streamKeys, setStreamKeys] = useState<Record<string, number>>({});
   const [chatVisible, setChatVisible] = useState(true);
   const [spotlightStream, setSpotlightStream] = useState<string | null>(null);
+  const [twitchScriptLoaded, setTwitchScriptLoaded] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const playerRefs = useRef<Record<string, any>>({});
+
+  // Load Twitch Player script
+  useEffect(() => {
+    if (typeof window !== "undefined" && !window.Twitch) {
+      const script = document.createElement("script");
+      script.src = "https://player.twitch.tv/js/embed/v1.js";
+      script.async = true;
+      script.onload = () => {
+        setTwitchScriptLoaded(true);
+      };
+      document.head.appendChild(script);
+    } else if (window.Twitch) {
+      setTwitchScriptLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchLiveStreamers = async () => {
@@ -35,6 +60,68 @@ export default function LivestreamsPage() {
     const interval = setInterval(fetchLiveStreamers, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Control player volume and quality based on spotlight state
+  useEffect(() => {
+    if (!twitchScriptLoaded) return;
+
+    const inSpotlightMode = spotlightStream && selectedStreamers.length >= 2;
+
+    selectedStreamers.forEach((streamer) => {
+      const player = playerRefs.current[streamer.channelName];
+      if (!player) return;
+
+      try {
+        const isSpotlit = streamer.channelName === spotlightStream;
+
+        if (inSpotlightMode) {
+          if (isSpotlit) {
+            // Spotlight stream: unmute, set best quality
+            player.setMuted(false);
+            player.setVolume(1.0);
+            const qualities = player.getQualities();
+            if (qualities && qualities.length > 0) {
+              player.setQuality(qualities[0]); // Best quality is first
+            }
+          } else {
+            // Small streams: mute, set 480p
+            player.setMuted(true);
+            player.setVolume(0);
+            const qualities = player.getQualities();
+            if (qualities && qualities.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const lowQuality = qualities.find((q: any) => String(q).includes("480")) || qualities[qualities.length - 1];
+              player.setQuality(lowQuality);
+            }
+          }
+        } else {
+          // Normal grid: unmute first stream, mute others, best quality for all
+          const isFirst = selectedStreamers.indexOf(streamer) === 0;
+          player.setMuted(!isFirst);
+          player.setVolume(isFirst ? 1.0 : 0);
+          const qualities = player.getQualities();
+          if (qualities && qualities.length > 0) {
+            player.setQuality(qualities[0]);
+          }
+        }
+      } catch (err) {
+        console.error(`Error controlling player for ${streamer.channelName}:`, err);
+      }
+    });
+  }, [spotlightStream, selectedStreamers, twitchScriptLoaded]);
+
+  // Cleanup players when streamers are removed
+  useEffect(() => {
+    const currentChannels = new Set(selectedStreamers.map((s) => s.channelName));
+    const playerChannels = Object.keys(playerRefs.current);
+
+    playerChannels.forEach((channel) => {
+      if (!currentChannels.has(channel)) {
+        // Clean up removed player
+        delete playerRefs.current[channel];
+      }
+    });
+  }, [selectedStreamers]);
 
   const toggleStreamer = useCallback(
     (streamer: LiveStreamer) => {
@@ -58,12 +145,6 @@ export default function LivestreamsPage() {
         if (selectedStreamers.length < 6) {
           const newSelected = [...selectedStreamers, streamer];
           setSelectedStreamers(newSelected);
-
-          // Force iframe reload by updating key
-          setStreamKeys((prev) => ({
-            ...prev,
-            [streamer.channelName]: Date.now(),
-          }));
 
           // Set as active chat if first selection
           if (!activeChat) {
@@ -140,7 +221,7 @@ export default function LivestreamsPage() {
 
   // Calculate stream positions and sizes for smooth transitions
   const getStreamStyle = useCallback(
-    (streamer: LiveStreamer, index: number) => {
+    (streamer: LiveStreamer) => {
       const isSpotlit = spotlightStream === streamer.channelName;
       const inSpotlightMode = spotlightStream && isSpotlightEnabled;
 
@@ -286,7 +367,7 @@ export default function LivestreamsPage() {
                 {selectedStreamers.map((streamer, index) => {
                   const isSpotlit = spotlightStream === streamer.channelName;
                   const inSpotlightMode = spotlightStream && isSpotlightEnabled;
-                  const streamStyle = getStreamStyle(streamer, index);
+                  const streamStyle = getStreamStyle(streamer);
 
                   return (
                     <div
@@ -297,18 +378,36 @@ export default function LivestreamsPage() {
                       }`}
                       onClick={inSpotlightMode && !isSpotlit ? () => toggleSpotlight(streamer.channelName) : undefined}
                     >
-                      {/* The iframe - rendered once per stream, never recreated */}
-                      <iframe
-                        key={`iframe-${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
-                        src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${
-                          typeof window !== "undefined" ? window.location.hostname : "localhost"
-                        }&muted=false&autoplay=true`}
+                      {/* Twitch Player div - Twitch.Player will be instantiated here */}
+                      <div
+                        id={`twitch-player-${streamer.channelName}`}
                         className={`w-full h-full ${inSpotlightMode && !isSpotlit ? "pointer-events-none" : ""}`}
-                        allowFullScreen
-                        allow="autoplay"
-                        loading="lazy"
-                        title={`${streamer.channelName} Twitch stream`}
-                      ></iframe>
+                        ref={(el) => {
+                          if (el && twitchScriptLoaded && typeof window !== "undefined" && window.Twitch && !playerRefs.current[streamer.channelName]) {
+                            try {
+                              const player = new window.Twitch.Player(`twitch-player-${streamer.channelName}`, {
+                                channel: streamer.channelName,
+                                parent: [window.location.hostname],
+                                autoplay: true,
+                                muted: false,
+                                width: "100%",
+                                height: "100%",
+                              });
+
+                              // Store player reference
+                              playerRefs.current[streamer.channelName] = player;
+
+                              // Set initial state when player is ready
+                              player.addEventListener(window.Twitch.Player.READY, () => {
+                                player.setVolume(0);
+                                player.setMuted(true);
+                              });
+                            } catch (err) {
+                              console.error(`Error creating player for ${streamer.channelName}:`, err);
+                            }
+                          }
+                        }}
+                      ></div>
 
                       {/* Spotlight button - shown in normal grid mode */}
                       {!inSpotlightMode && isSpotlightEnabled && (
