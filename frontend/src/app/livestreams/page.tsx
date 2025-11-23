@@ -138,6 +138,49 @@ export default function LivestreamsPage() {
 
   const isSpotlightEnabled = selectedStreamers.length >= 2;
 
+  // Calculate stream positions and sizes for smooth transitions
+  const getStreamStyle = useCallback(
+    (streamer: LiveStreamer, index: number) => {
+      const isSpotlit = spotlightStream === streamer.channelName;
+      const inSpotlightMode = spotlightStream && isSpotlightEnabled;
+
+      if (inSpotlightMode) {
+        if (isSpotlit) {
+          // Big spotlight stream - takes most of the height
+          return {
+            position: "absolute" as const,
+            top: "0",
+            left: "0",
+            right: "0",
+            height: "calc(100% - 144px)", // Leave room for small streams (128px + 16px gap)
+            zIndex: 1,
+          };
+        } else {
+          // Small stream below spotlight
+          const smallStreamIndex = selectedStreamers.filter((s) => s.channelName !== spotlightStream).findIndex((s) => s.channelName === streamer.channelName);
+          const totalSmallStreams = selectedStreamers.length - 1;
+          const widthPercent = 100 / totalSmallStreams;
+
+          return {
+            position: "absolute" as const,
+            bottom: "0",
+            left: `${smallStreamIndex * widthPercent}%`,
+            width: `calc(${widthPercent}% - ${smallStreamIndex === totalSmallStreams - 1 ? 0 : 8}px)`,
+            height: "128px",
+            zIndex: 1,
+          };
+        }
+      } else {
+        // Normal grid layout - let CSS grid handle it naturally
+        return {
+          position: "relative" as const,
+          zIndex: 1,
+        };
+      }
+    },
+    [spotlightStream, isSpotlightEnabled, selectedStreamers]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -233,105 +276,38 @@ export default function LivestreamsPage() {
         {/* Viewer Area */}
         {selectedStreamers.length > 0 ? (
           <div className="flex flex-col lg:flex-row gap-0" style={{ height: getStreamContainerHeight() }}>
-            {/* Streams Container - All streams rendered once and repositioned */}
+            {/* Streams Container - Single render with dynamic positioning */}
             <div className="flex-1 h-full relative">
-              {spotlightStream && isSpotlightEnabled ? (
-                // Spotlight Mode Layout
-                <div className="flex flex-col gap-2 h-full">
-                  {/* Big Spotlight Stream Area */}
-                  <div className="flex-1 relative">
-                    {selectedStreamers.map((streamer) => {
-                      const isSpotlit = streamer.channelName === spotlightStream;
-                      if (!isSpotlit) return null;
+              <div className={`${spotlightStream && isSpotlightEnabled ? "relative h-full" : `grid ${streamGridClass} gap-2 h-full`}`}>
+                {selectedStreamers.map((streamer, index) => {
+                  const isSpotlit = spotlightStream === streamer.channelName;
+                  const inSpotlightMode = spotlightStream && isSpotlightEnabled;
+                  const streamStyle = getStreamStyle(streamer, index);
 
-                      return (
-                        <div key={`stream-container-${streamer.channelName}`} className="absolute inset-0 bg-gray-900 rounded-lg overflow-hidden group transition-all duration-300">
-                          <iframe
-                            key={`iframe-${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
-                            src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${
-                              typeof window !== "undefined" ? window.location.hostname : "localhost"
-                            }&muted=false&autoplay=true`}
-                            className="w-full h-full"
-                            allowFullScreen
-                            allow="autoplay"
-                            loading="lazy"
-                            title={`${streamer.channelName} Twitch stream`}
-                          ></iframe>
-
-                          {/* Hover area for spotlight button - doesn't block clicks to iframe */}
-                          <div className="absolute top-0 right-0 w-48 h-20 pointer-events-none z-10">
-                            <button
-                              onClick={() => toggleSpotlight(spotlightStream)}
-                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg flex items-center gap-1 pointer-events-auto"
-                              title="Exit spotlight mode"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              Exit
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Small Streams Below */}
-                  <div className="h-32 flex gap-2">
-                    {selectedStreamers.map((streamer) => {
-                      const isSpotlit = streamer.channelName === spotlightStream;
-                      if (isSpotlit) return null;
-
-                      return (
-                        <div
-                          key={`stream-container-${streamer.channelName}`}
-                          className="flex-1 relative bg-gray-900 rounded-lg overflow-hidden cursor-pointer group transition-all duration-300"
-                          onClick={() => toggleSpotlight(streamer.channelName)}
-                        >
-                          <iframe
-                            key={`iframe-${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
-                            src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${
-                              typeof window !== "undefined" ? window.location.hostname : "localhost"
-                            }&muted=true&autoplay=true`}
-                            className="w-full h-full pointer-events-none"
-                            allowFullScreen
-                            allow="autoplay"
-                            loading="lazy"
-                            title={`${streamer.channelName} Twitch stream`}
-                          ></iframe>
-
-                          {/* Overlay with channel name and click area */}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors z-10 flex items-center justify-center">
-                            <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs font-bold text-white">{streamer.channelName}</div>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white font-bold text-sm bg-purple-600 px-3 py-1.5 rounded-lg">Spotlight</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                // Normal Grid Layout
-                <div className={`grid ${streamGridClass} gap-2 h-full`}>
-                  {selectedStreamers.map((streamer, index) => (
+                  return (
                     <div
                       key={`stream-container-${streamer.channelName}`}
-                      className={`relative bg-gray-900 rounded-lg overflow-hidden group transition-all duration-300 ${getStreamItemClass(index)}`}
+                      style={streamStyle}
+                      className={`bg-gray-900 rounded-lg overflow-hidden group transition-all duration-300 ${!inSpotlightMode ? getStreamItemClass(index) : ""} ${
+                        inSpotlightMode && !isSpotlit ? "cursor-pointer" : ""
+                      }`}
+                      onClick={inSpotlightMode && !isSpotlit ? () => toggleSpotlight(streamer.channelName) : undefined}
                     >
+                      {/* The iframe - rendered once per stream, never recreated */}
                       <iframe
                         key={`iframe-${streamer.channelName}-${streamKeys[streamer.channelName] || 0}`}
                         src={`https://player.twitch.tv/?channel=${streamer.channelName}&parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&muted=${
-                          index > 0
+                          isSpotlit || index === 0 ? "false" : "true"
                         }&autoplay=true`}
-                        className="w-full h-full"
+                        className={`w-full h-full ${inSpotlightMode && !isSpotlit ? "pointer-events-none" : ""}`}
                         allowFullScreen
                         allow="autoplay"
                         loading="lazy"
                         title={`${streamer.channelName} Twitch stream`}
                       ></iframe>
 
-                      {/* Hover area for spotlight button - doesn't block clicks to iframe */}
-                      {isSpotlightEnabled && (
+                      {/* Spotlight button - shown in normal grid mode */}
+                      {!inSpotlightMode && isSpotlightEnabled && (
                         <div className="absolute top-0 right-0 w-40 h-16 pointer-events-none z-10">
                           <button
                             onClick={() => toggleSpotlight(streamer.channelName)}
@@ -342,10 +318,34 @@ export default function LivestreamsPage() {
                           </button>
                         </div>
                       )}
+
+                      {/* Exit spotlight button - shown on spotlit stream */}
+                      {inSpotlightMode && isSpotlit && (
+                        <div className="absolute top-0 right-0 w-48 h-20 pointer-events-none z-10">
+                          <button
+                            onClick={() => toggleSpotlight(spotlightStream)}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg flex items-center gap-1 pointer-events-auto"
+                            title="Exit spotlight mode"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            Exit
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Small stream overlay - shown on non-spotlit streams in spotlight mode */}
+                      {inSpotlightMode && !isSpotlit && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors z-10 flex items-center justify-center">
+                          <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-xs font-bold text-white">{streamer.channelName}</div>
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white font-bold text-sm bg-purple-600 px-3 py-1.5 rounded-lg">Spotlight</div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
 
             {/* Toggle Button */}
