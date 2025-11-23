@@ -77,6 +77,7 @@ export default function LivestreamsPage() {
         if (inSpotlightMode) {
           if (isSpotlit) {
             // Spotlight stream: unmute, set best quality
+            player.play();
             player.setMuted(false);
             player.setVolume(1.0);
             const qualities = player.getQualities();
@@ -85,18 +86,18 @@ export default function LivestreamsPage() {
             }
           } else {
             // Small streams: mute, set 480p
+            player.play();
             player.setMuted(true);
             player.setVolume(0);
             const qualities = player.getQualities();
             if (qualities && qualities.length > 0) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const lowQuality = qualities.find((q: any) => String(q).includes("480")) || qualities[qualities.length - 1];
-              player.setQuality(lowQuality);
+              player.setQuality(qualities[qualities.length - 1]);
             }
           }
         } else {
           // Normal grid: unmute first stream, mute others, best quality for all
           const isFirst = selectedStreamers.indexOf(streamer) === 0;
+          player.play();
           player.setMuted(!isFirst);
           player.setVolume(isFirst ? 1.0 : 0);
           const qualities = player.getQualities();
