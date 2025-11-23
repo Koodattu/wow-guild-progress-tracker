@@ -12,6 +12,7 @@ export default function LivestreamsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streamKeys, setStreamKeys] = useState<Record<string, number>>({});
+  const [chatVisible, setChatVisible] = useState(true);
 
   useEffect(() => {
     const fetchLiveStreamers = async () => {
@@ -208,9 +209,9 @@ export default function LivestreamsPage() {
 
         {/* Viewer Area */}
         {selectedStreamers.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-2" style={{ height: getStreamContainerHeight() }}>
+          <div className="flex flex-col lg:flex-row gap-0" style={{ height: getStreamContainerHeight() }}>
             {/* Streams Grid */}
-            <div className="lg:col-span-4 h-full">
+            <div className="flex-1 h-full">
               <div className={`grid ${streamGridClass} gap-2 h-full`}>
                 {selectedStreamers.map((streamer, index) => (
                   <div
@@ -235,9 +236,18 @@ export default function LivestreamsPage() {
               </div>
             </div>
 
+            {/* Toggle Button */}
+            <button
+              onClick={() => setChatVisible(!chatVisible)}
+              className="hidden lg:flex items-center justify-center w-3 bg-gray-800 hover:bg-gray-700 transition-colors group"
+              aria-label={chatVisible ? "Hide chat" : "Show chat"}
+            >
+              <div className="text-gray-400 group-hover:text-white text-2xl font-bold">{chatVisible ? "›" : "‹"}</div>
+            </button>
+
             {/* Chat Area */}
-            <div className="lg:col-span-1">
-              <div className="bg-gray-900 rounded-lg overflow-hidden h-full flex flex-col">
+            <div className={`transition-all duration-300 overflow-hidden ${chatVisible ? "w-full lg:w-80" : "w-0"}`}>
+              <div className="bg-gray-900 rounded-lg overflow-hidden h-full flex flex-col" style={{ width: "20rem" }}>
                 {/* Chat Tabs */}
                 {selectedStreamers.length <= 2 ? (
                   // Simple tabs for 1-2 streams

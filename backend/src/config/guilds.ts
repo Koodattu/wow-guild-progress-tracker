@@ -15,7 +15,7 @@ export const GUILDS: TrackedGuild[] = [
   { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
   { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
   { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["croukou"] },
-  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU" },
+  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU", streamers: ["ventrixi", "kermisgg", "apepforever"] },
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [
