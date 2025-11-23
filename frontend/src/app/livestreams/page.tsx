@@ -156,17 +156,21 @@ export default function LivestreamsPage() {
             zIndex: 1,
           };
         } else {
-          // Small stream below spotlight
+          // Small stream below spotlight - maintain 16:9 aspect ratio
           const smallStreamIndex = selectedStreamers.filter((s) => s.channelName !== spotlightStream).findIndex((s) => s.channelName === streamer.channelName);
           const totalSmallStreams = selectedStreamers.length - 1;
-          const widthPercent = 100 / totalSmallStreams;
+          const streamHeight = 128; // Fixed height in pixels
+          const streamWidth = streamHeight * (16 / 9); // Calculate width based on 16:9 aspect ratio (227.56px)
+          const gapSize = 12; // Gap between streams
+          const totalWidth = totalSmallStreams * streamWidth + (totalSmallStreams - 1) * gapSize;
+          const startOffset = `calc(50% - ${totalWidth / 2}px)`; // Center the group of streams
 
           return {
             position: "absolute" as const,
             bottom: "0",
-            left: `${smallStreamIndex * widthPercent}%`,
-            width: `calc(${widthPercent}% - ${smallStreamIndex === totalSmallStreams - 1 ? 0 : 8}px)`,
-            height: "128px",
+            left: `calc(${startOffset} + ${smallStreamIndex * (streamWidth + gapSize)}px)`,
+            width: `${streamWidth}px`,
+            height: `${streamHeight}px`,
             zIndex: 1,
           };
         }
