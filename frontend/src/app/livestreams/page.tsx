@@ -22,6 +22,7 @@ export default function LivestreamsPage() {
   const [chatVisible, setChatVisible] = useState(true);
   const [spotlightStream, setSpotlightStream] = useState<string | null>(null);
   const [twitchScriptLoaded, setTwitchScriptLoaded] = useState(false);
+  const [urlInitialized, setUrlInitialized] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRefs = useRef<Record<string, any>>({});
   const previousSpotlightRef = useRef<string | null>(null);
@@ -41,6 +42,50 @@ export default function LivestreamsPage() {
       setTwitchScriptLoaded(true);
     }
   }, []);
+
+  // Initialize from URL on first load
+  useEffect(() => {
+    if (typeof window !== "undefined" && !urlInitialized && liveStreamers.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const streamsParam = params.get("streams");
+
+      if (streamsParam) {
+        const channelNames = streamsParam.split(",").filter(Boolean);
+        const streamersToSelect = liveStreamers.filter((s) => channelNames.includes(s.channelName));
+
+        if (streamersToSelect.length > 0) {
+          setSelectedStreamers(streamersToSelect);
+
+          // Set active chat based on number of streams
+          if (streamersToSelect.length === 1) {
+            setActiveChat(streamersToSelect[0].channelName);
+          } else if (streamersToSelect.length > 1) {
+            setActiveChat("all");
+          }
+        }
+      }
+
+      setUrlInitialized(true);
+    }
+  }, [liveStreamers, urlInitialized]);
+
+  // Update URL when selected streamers change
+  useEffect(() => {
+    if (typeof window !== "undefined" && urlInitialized) {
+      const params = new URLSearchParams(window.location.search);
+
+      if (selectedStreamers.length > 0) {
+        const channelNames = selectedStreamers.map((s) => s.channelName).join(",");
+        params.set("streams", channelNames);
+      } else {
+        params.delete("streams");
+      }
+
+      const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, [selectedStreamers, urlInitialized]);
 
   useEffect(() => {
     const fetchLiveStreamers = async () => {
@@ -79,6 +124,13 @@ export default function LivestreamsPage() {
     const interval = setInterval(fetchLiveStreamers, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Mark URL as initialized after first fetch completes
+  useEffect(() => {
+    if (!loading && liveStreamers.length >= 0 && !urlInitialized) {
+      setUrlInitialized(true);
+    }
+  }, [loading, liveStreamers.length, urlInitialized]);
 
   // Control player volume and quality based on spotlight state
   useEffect(() => {
