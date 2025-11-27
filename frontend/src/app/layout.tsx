@@ -26,7 +26,7 @@ export default function RootLayout({
   const pathname = usePathname();
   const isLivestreamsPage = pathname === "/livestreams";
   const [locale, setLocale] = useState<"en" | "fi">("en");
-  const [messages, setMessages] = useState<any>(null);
+  const [messages, setMessages] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
     // Get locale from cookie
