@@ -99,6 +99,8 @@ export interface Streamer {
 export interface LiveStreamer {
   channelName: string;
   isLive: boolean;
+  isPlayingWoW: boolean;
+  gameName?: string;
   guild: {
     name: string;
     realm: string;

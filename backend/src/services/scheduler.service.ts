@@ -550,16 +550,22 @@ class UpdateScheduler {
         let hasChanges = false;
         const updatedStreamers = guild.streamers.map((streamer) => {
           const channelName = streamer.channelName.toLowerCase();
-          const isLive = streamStatus.get(channelName) || false;
+          const status = streamStatus.get(channelName) || { isLive: false, isPlayingWoW: false };
 
-          if (streamer.isLive !== isLive) {
+          if (streamer.isLive !== status.isLive || streamer.isPlayingWoW !== status.isPlayingWoW) {
             hasChanges = true;
-            logger.info(`  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${isLive ? "live" : "offline"}`);
+            logger.info(
+              `  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${status.isLive ? "live" : "offline"}${
+                status.isLive ? ` (${status.gameName || "unknown game"})` : ""
+              }`
+            );
           }
 
           return {
             channelName: streamer.channelName,
-            isLive,
+            isLive: status.isLive,
+            isPlayingWoW: status.isPlayingWoW,
+            gameName: status.gameName,
             lastChecked: now,
           };
         });
@@ -615,6 +621,8 @@ class UpdateScheduler {
         const updatedStreamers = guild.streamers.map((streamer) => ({
           channelName: streamer.channelName,
           isLive: false,
+          isPlayingWoW: false,
+          gameName: undefined,
           lastChecked: now,
         }));
 

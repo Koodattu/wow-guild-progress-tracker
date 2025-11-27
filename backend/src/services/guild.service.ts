@@ -2821,6 +2821,8 @@ class GuildService {
             liveStreamers.push({
               channelName: streamer.channelName,
               isLive: streamer.isLive,
+              isPlayingWoW: streamer.isPlayingWoW,
+              gameName: streamer.gameName,
               guild: {
                 name: guild.name,
                 realm: guild.realm,

@@ -26,6 +26,12 @@ interface TwitchStreamsResponse {
   data: TwitchStreamData[];
 }
 
+export interface StreamStatus {
+  isLive: boolean;
+  isPlayingWoW: boolean;
+  gameName?: string;
+}
+
 class TwitchService {
   private clientId: string;
   private clientSecret: string;
@@ -85,14 +91,14 @@ class TwitchService {
     }
   }
 
-  // Check if channels are live
-  // Returns a Map of channel name (lowercase) to boolean (true = live, false = offline)
-  async getStreamStatus(channelNames: string[]): Promise<Map<string, boolean>> {
-    const statusMap = new Map<string, boolean>();
+  // Check if channels are live and what game they're playing
+  // Returns a Map of channel name (lowercase) to StreamStatus
+  async getStreamStatus(channelNames: string[]): Promise<Map<string, StreamStatus>> {
+    const statusMap = new Map<string, StreamStatus>();
 
     if (!this.isEnabled()) {
       logger.info("Twitch integration is disabled, returning all streams as offline");
-      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), false));
+      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), { isLive: false, isPlayingWoW: false }));
       return statusMap;
     }
 
@@ -121,24 +127,30 @@ class TwitchService {
       const data = (await response.json()) as TwitchStreamsResponse;
 
       // Initialize all channels as offline
-      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), false));
+      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), { isLive: false, isPlayingWoW: false }));
 
-      // Mark live channels as online
+      // Update status for live channels with game information
       data.data.forEach((stream) => {
         if (stream.type === "live") {
-          statusMap.set(stream.user_login.toLowerCase(), true);
+          const isPlayingWoW = stream.game_name.toLowerCase() === "world of warcraft";
+          statusMap.set(stream.user_login.toLowerCase(), {
+            isLive: true,
+            isPlayingWoW: isPlayingWoW,
+            gameName: stream.game_name,
+          });
         }
       });
 
       const liveCount = data.data.filter((s) => s.type === "live").length;
-      logger.info(`Twitch: Checked ${channelNames.length} channel(s), ${liveCount} live`);
+      const wowCount = data.data.filter((s) => s.type === "live" && s.game_name.toLowerCase() === "world of warcraft").length;
+      logger.info(`Twitch: Checked ${channelNames.length} channel(s), ${liveCount} live (${wowCount} playing WoW)`);
 
       return statusMap;
     } catch (error) {
       logger.error("Error checking Twitch stream status:", error instanceof Error ? error.message : "Unknown error");
 
       // On error, return all channels as offline
-      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), false));
+      channelNames.forEach((name) => statusMap.set(name.toLowerCase(), { isLive: false, isPlayingWoW: false }));
       return statusMap;
     }
   }

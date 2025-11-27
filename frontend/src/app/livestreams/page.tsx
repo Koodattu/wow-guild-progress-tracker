@@ -372,6 +372,36 @@ export default function LivestreamsPage() {
 
   const isSpotlightEnabled = selectedStreamers.length >= 2;
 
+  // Group streamers by boss or non-WoW
+  const groupedStreamers = useMemo(() => {
+    const groups: { [key: string]: LiveStreamer[] } = {};
+
+    liveStreamers.forEach((streamer) => {
+      if (!streamer.isPlayingWoW) {
+        // Non-WoW streams group
+        if (!groups["non-wow"]) {
+          groups["non-wow"] = [];
+        }
+        groups["non-wow"].push(streamer);
+      } else if (streamer.bestPull?.bossName) {
+        // Group by boss name
+        const bossKey = streamer.bestPull.bossName;
+        if (!groups[bossKey]) {
+          groups[bossKey] = [];
+        }
+        groups[bossKey].push(streamer);
+      } else {
+        // WoW but no boss info (e.g., not raiding)
+        if (!groups["other-wow"]) {
+          groups["other-wow"] = [];
+        }
+        groups["other-wow"].push(streamer);
+      }
+    });
+
+    return groups;
+  }, [liveStreamers]);
+
   // Calculate stream positions and sizes for smooth transitions
   const getStreamStyle = useCallback(
     (streamer: LiveStreamer) => {
@@ -457,65 +487,194 @@ export default function LivestreamsPage() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="w-full px-2 py-2">
-        {/* Stream Selection Boxes */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {liveStreamers.map((streamer) => {
-            const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
+        {/* Stream Selection Boxes - Grouped by Boss and Non-WoW */}
+        <div className="mb-4 space-y-2">
+          {/* Non-WoW Streams */}
+          {groupedStreamers["non-wow"] && groupedStreamers["non-wow"].length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5 px-1">Not Playing WoW ({groupedStreamers["non-wow"].length})</div>
+              <div className="flex flex-wrap gap-2">
+                {groupedStreamers["non-wow"].map((streamer) => {
+                  const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
-            return (
-              <button
-                key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
-                onClick={() => toggleStreamer(streamer)}
-                onMouseDown={(e) => {
-                  // Middle click to open in new tab
-                  if (e.button === 1) {
-                    e.preventDefault();
-                    window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
-                  }
-                }}
-                className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
-                  isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                }`}
-                disabled={!isSelected && selectedStreamers.length >= 6}
-              >
-                <div className="flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
-                  </svg>
-                  <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                  <span className="text-xs text-gray-400 whitespace-nowrap">
-                    {streamer.guild.parent_guild ? (
-                      <>
-                        <span className="font-bold">{streamer.guild.name}</span>
-                        {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
-                      </>
-                    ) : (
-                      <>
-                        <span className="font-bold">{streamer.guild.name}</span>
-                        {`-${streamer.guild.realm}`}
-                      </>
-                    )}
-                  </span>
-                  {streamer.bestPull && (
-                    <span className="text-xs text-orange-400 whitespace-nowrap">
-                      {streamer.bestPull.bossName}: {streamer.bestPull.pullCount} pulls,{" "}
-                      {streamer.bestPull.bestPullPhase?.displayString
-                        ? formatPhaseDisplay(streamer.bestPull.bestPullPhase.displayString)
-                        : formatPercent(streamer.bestPull.bestPercent)}
-                    </span>
-                  )}
-                  <div
-                    className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
-                      isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
-                    }`}
-                  >
-                    {isSelected ? "−" : "+"}
-                  </div>
+                  return (
+                    <button
+                      key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
+                      onClick={() => toggleStreamer(streamer)}
+                      onMouseDown={(e) => {
+                        // Middle click to open in new tab
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                        isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
+                      }`}
+                      disabled={!isSelected && selectedStreamers.length >= 6}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+                        </svg>
+                        <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {streamer.guild.parent_guild ? (
+                            <>
+                              <span className="font-bold">{streamer.guild.name}</span>
+                              {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-bold">{streamer.guild.name}</span>
+                              {`-${streamer.guild.realm}`}
+                            </>
+                          )}
+                        </span>
+                        {streamer.gameName && <span className="text-xs text-blue-400 whitespace-nowrap">{streamer.gameName}</span>}
+                        <div
+                          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                            isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
+                          }`}
+                        >
+                          {isSelected ? "−" : "+"}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Boss-grouped WoW Streams */}
+          {Object.keys(groupedStreamers)
+            .filter((key) => key !== "non-wow" && key !== "other-wow")
+            .map((bossName) => (
+              <div key={bossName}>
+                <div className="text-xs font-bold text-orange-400 uppercase tracking-wide mb-1.5 px-1">
+                  {bossName} ({groupedStreamers[bossName].length})
                 </div>
-              </button>
-            );
-          })}
+                <div className="flex flex-wrap gap-2">
+                  {groupedStreamers[bossName].map((streamer) => {
+                    const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
+
+                    return (
+                      <button
+                        key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
+                        onClick={() => toggleStreamer(streamer)}
+                        onMouseDown={(e) => {
+                          // Middle click to open in new tab
+                          if (e.button === 1) {
+                            e.preventDefault();
+                            window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                          isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
+                        }`}
+                        disabled={!isSelected && selectedStreamers.length >= 6}
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+                          </svg>
+                          <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                          <span className="text-xs text-gray-400 whitespace-nowrap">
+                            {streamer.guild.parent_guild ? (
+                              <>
+                                <span className="font-bold">{streamer.guild.name}</span>
+                                {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-bold">{streamer.guild.name}</span>
+                                {`-${streamer.guild.realm}`}
+                              </>
+                            )}
+                          </span>
+                          {streamer.bestPull && (
+                            <span className="text-xs text-orange-400 whitespace-nowrap">
+                              {streamer.bestPull.pullCount} pulls,{" "}
+                              {streamer.bestPull.bestPullPhase?.displayString
+                                ? formatPhaseDisplay(streamer.bestPull.bestPullPhase.displayString)
+                                : formatPercent(streamer.bestPull.bestPercent)}
+                            </span>
+                          )}
+                          <div
+                            className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                              isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
+                            }`}
+                          >
+                            {isSelected ? "−" : "+"}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+          {/* Other WoW Streams (no boss info) */}
+          {groupedStreamers["other-wow"] && groupedStreamers["other-wow"].length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-green-400 uppercase tracking-wide mb-1.5 px-1">World of Warcraft - Other ({groupedStreamers["other-wow"].length})</div>
+              <div className="flex flex-wrap gap-2">
+                {groupedStreamers["other-wow"].map((streamer) => {
+                  const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
+
+                  return (
+                    <button
+                      key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
+                      onClick={() => toggleStreamer(streamer)}
+                      onMouseDown={(e) => {
+                        // Middle click to open in new tab
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                        isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
+                      }`}
+                      disabled={!isSelected && selectedStreamers.length >= 6}
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+                        </svg>
+                        <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {streamer.guild.parent_guild ? (
+                            <>
+                              <span className="font-bold">{streamer.guild.name}</span>
+                              {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-bold">{streamer.guild.name}</span>
+                              {`-${streamer.guild.realm}`}
+                            </>
+                          )}
+                        </span>
+                        <div
+                          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                            isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
+                          }`}
+                        >
+                          {isSelected ? "−" : "+"}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Viewer Area */}

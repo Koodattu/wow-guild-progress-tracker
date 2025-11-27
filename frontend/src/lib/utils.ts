@@ -68,12 +68,18 @@ export function getTimeAgo(dateString: string): string {
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (seconds < 60) return "just now";
+  // Format full date as dd.mm.yyyy
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear();
+  const fullDate = `${day}.${month}.${year}`;
+
+  if (seconds < 60) return `just now (${fullDate})`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
 
-  return date.toLocaleDateString();
+  return fullDate;
 }
 
 // Generate WarcraftLogs URL for a kill
