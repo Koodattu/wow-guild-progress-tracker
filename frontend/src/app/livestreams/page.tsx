@@ -172,7 +172,7 @@ export default function LivestreamsPage() {
       // Update ref to null
       previousSpotlightRef.current = null;
     }
-  }, [spotlightStream, twitchScriptLoaded]); // REMOVED selectedStreamers dependency
+  }, [spotlightStream, twitchScriptLoaded, selectedStreamers]);
 
   // Cleanup players when streamers are removed
   useEffect(() => {
@@ -268,6 +268,8 @@ export default function LivestreamsPage() {
 
     if (count <= 2) {
       return "grid-cols-1 grid-rows-1";
+    } else if (count === 3) {
+      return "grid-cols-3 grid-rows-1";
     } else {
       return "grid-cols-3 grid-rows-2";
     }
@@ -495,7 +497,7 @@ export default function LivestreamsPage() {
                                       console.log(`Player ${streamer.channelName} is paused, calling play()`);
                                       player.play();
                                     }
-                                  } catch (err) {
+                                  } catch {
                                     // Player might be destroyed, clear interval
                                     clearInterval(playCheckInterval);
                                   }
@@ -555,7 +557,7 @@ export default function LivestreamsPage() {
                         <div className="absolute top-0 right-0 w-40 h-16 pointer-events-none z-10">
                           <button
                             onClick={() => toggleSpotlight(streamer.channelName)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600/90 hover:bg-purple-600 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg pointer-events-auto"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600/90 hover:bg-purple-600 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg pointer-events-auto cursor-pointer"
                             title="Spotlight this stream"
                           >
                             ⭐ Spotlight
@@ -568,7 +570,7 @@ export default function LivestreamsPage() {
                         <div className="absolute top-0 right-0 w-48 h-20 pointer-events-none z-10">
                           <button
                             onClick={() => toggleSpotlight(spotlightStream)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg flex items-center gap-1 pointer-events-auto"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-white font-bold text-xs transition-all shadow-lg flex items-center gap-1 pointer-events-auto cursor-pointer"
                             title="Exit spotlight mode"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -595,10 +597,10 @@ export default function LivestreamsPage() {
             {/* Toggle Button */}
             <button
               onClick={() => setChatVisible(!chatVisible)}
-              className="hidden lg:flex items-center justify-center w-3 bg-gray-800 hover:bg-gray-700 transition-colors group"
+              className="hidden lg:flex items-center justify-center w-3 bg-purple-600 hover:bg-purple-500 transition-colors group cursor-pointer"
               aria-label={chatVisible ? "Hide chat" : "Show chat"}
             >
-              <div className="text-gray-400 group-hover:text-white text-2xl font-bold">{chatVisible ? "›" : "‹"}</div>
+              <div className="text-white text-2xl font-bold">{chatVisible ? "›" : "‹"}</div>
             </button>
 
             {/* Chat Area */}
@@ -612,7 +614,7 @@ export default function LivestreamsPage() {
                       <button
                         key={streamer.channelName}
                         onClick={() => setActiveChat(streamer.channelName)}
-                        className={`flex-1 px-2 py-2 text-sm font-medium transition-colors ${
+                        className={`flex-1 px-2 py-2 text-sm font-medium transition-colors cursor-pointer ${
                           activeChat === streamer.channelName ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
                         }`}
                       >
@@ -627,7 +629,7 @@ export default function LivestreamsPage() {
                       <button
                         key={streamer.channelName}
                         onClick={() => setActiveChat(streamer.channelName)}
-                        className={`px-2 py-2 text-xs font-medium transition-colors border-r border-b border-gray-700 truncate ${
+                        className={`px-2 py-2 text-xs font-medium transition-colors border-r border-b border-gray-700 truncate cursor-pointer ${
                           activeChat === streamer.channelName ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
                         }`}
                       >
