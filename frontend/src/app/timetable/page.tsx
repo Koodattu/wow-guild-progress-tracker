@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { GuildSchedule, RaidScheduleDay } from "@/types";
-
-const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+import { useTranslations } from "next-intl";
 
 // Generate a color from guild ID (darker tones for better readability)
 const getGuildColor = (guildId: string): string => {
@@ -20,6 +19,16 @@ const getGuildColor = (guildId: string): string => {
 };
 
 export default function TimetablePage() {
+  const t = useTranslations("timetablePage");
+  const WEEKDAYS = [
+    t("weekdays.monday"),
+    t("weekdays.tuesday"),
+    t("weekdays.wednesday"),
+    t("weekdays.thursday"),
+    t("weekdays.friday"),
+    t("weekdays.saturday"),
+    t("weekdays.sunday"),
+  ];
   const [schedules, setSchedules] = useState<GuildSchedule[]>([]);
   const [selectedGuild, setSelectedGuild] = useState<string>("all");
   const [selectedDay, setSelectedDay] = useState<string>("");
@@ -207,7 +216,7 @@ export default function TimetablePage() {
         {/* Guild Filter */}
         <div className="flex items-center gap-4">
           <label htmlFor="guild-filter" className="text-gray-400">
-            Filter by Guild:
+            {t("selectGuild")}:
           </label>
           <select
             id="guild-filter"
@@ -215,7 +224,7 @@ export default function TimetablePage() {
             onChange={(e) => setSelectedGuild(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="all">All Guilds</option>
+            <option value="all">{t("allGuilds")}</option>
             {schedules.map((guild) => (
               <option key={guild._id} value={guild._id}>
                 {guild.name} - {guild.realm}

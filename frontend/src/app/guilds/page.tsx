@@ -6,8 +6,11 @@ import Image from "next/image";
 import { GuildListItem } from "@/types";
 import { api } from "@/lib/api";
 import { getGuildProfileUrl, getRaiderIOGuildUrl } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 export default function GuildsPage() {
+  const t = useTranslations("guildsPage");
+  const tTable = useTranslations("guildTable");
   const [guilds, setGuilds] = useState<GuildListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +118,7 @@ export default function GuildsPage() {
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
-          <div className="text-white text-xl">Loading guilds...</div>
+          <div className="text-white text-xl">{t("loading")}</div>
         </div>
       </div>
     );
@@ -128,7 +131,7 @@ export default function GuildsPage() {
           {/* Search box */}
           <input
             type="text"
-            placeholder="Search guilds..."
+            placeholder={t("search")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full max-w-md px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
@@ -137,9 +140,9 @@ export default function GuildsPage() {
 
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 
-        {guilds.length === 0 && !loading && !error && <div className="text-center py-12 text-gray-500">No guilds found in the system.</div>}
+        {guilds.length === 0 && !loading && !error && <div className="text-center py-12 text-gray-500">{t("noGuilds")}</div>}
 
-        {sortedLetters.length === 0 && searchQuery && <div className="text-center py-12 text-gray-500">No guilds found matching &quot;{searchQuery}&quot;</div>}
+        {sortedLetters.length === 0 && searchQuery && <div className="text-center py-12 text-gray-500">{t("noGuilds")}</div>}
 
         {/* Guild list in two columns */}
         {sortedLetters.length > 0 && (
@@ -188,7 +191,9 @@ export default function GuildsPage() {
                         >
                           <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
                         </a>
-                        {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+                        {guild.isCurrentlyRaiding && (
+                          <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">{tTable("raiding")}</span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -240,7 +245,9 @@ export default function GuildsPage() {
                         >
                           <Image src="/raiderio-logo.png" alt="Raider.IO" width={24} height={24} className="w-full h-full object-contain" />
                         </a>
-                        {guild.isCurrentlyRaiding && <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">Raiding</span>}
+                        {guild.isCurrentlyRaiding && (
+                          <span className="ml-1 text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300 align-middle">{tTable("raiding")}</span>
+                        )}
                       </div>
                     ))}
                   </div>

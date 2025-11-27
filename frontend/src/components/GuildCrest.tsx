@@ -208,9 +208,7 @@ export default function GuildCrest({ crest, faction, size = 48, className = "", 
     return () => {
       isMounted = false;
     };
-  }, [crest, faction, size, apiUrl]);
-
-  // If no crest data, show placeholder
+  }, [crest, faction, size, apiUrl, drawFactionCircle]); // If no crest data, show placeholder
   if (!crest) {
     return <div className={`bg-gray-700 rounded ${className}`} style={{ width: size, height: size }} />;
   }

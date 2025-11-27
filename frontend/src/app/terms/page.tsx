@@ -16,15 +16,15 @@ export default function TermsOfService() {
           <h2 className="text-2xl font-semibold mb-3 text-white">2. Service Description</h2>
           <p>
             WoW Guild Progress Tracker is a fan-made tool that aggregates publicly available data about World of Warcraft guilds from various third-party sources including
-            Blizzard's official API, Warcraft Logs, Raider.IO, and similar services. This project is not affiliated with or endorsed by Blizzard Entertainment.
+            Blizzard&apos;s official API, Warcraft Logs, Raider.IO, and similar services. This project is not affiliated with or endorsed by Blizzard Entertainment.
           </p>
         </section>
 
         <section>
           <h2 className="text-2xl font-semibold mb-3 text-white">3. No Warranty</h2>
           <p>
-            This service is provided "AS IS" without any warranties, express or implied. We make no guarantees about the accuracy, reliability, or availability of the service. The
-            service may be modified, suspended, or discontinued at any time without notice.
+            This service is provided &quot;AS IS&quot; without any warranties, express or implied. We make no guarantees about the accuracy, reliability, or availability of the
+            service. The service may be modified, suspended, or discontinued at any time without notice.
           </p>
         </section>
 

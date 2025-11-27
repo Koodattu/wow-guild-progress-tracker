@@ -5,6 +5,7 @@ import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLe
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
@@ -14,6 +15,7 @@ interface GuildTableProps {
 }
 
 export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, selectedRaidId }: GuildTableProps) {
+  const t = useTranslations("guildTable");
   const [hoveredGuildInfoRow, setHoveredGuildInfoRow] = useState<string | null>(null);
   const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState<string | null>(null);
 
@@ -42,15 +44,15 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-700 bg-gray-800/50">
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Rank</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">World</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Guild</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Schedule</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">Mythic</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">Heroic</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Pulls</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Progress</th>
-            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">Time</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("rank")}</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">{t("world")}</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">{t("guild")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("schedule")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">{t("mythic")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">{t("heroic")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("pulls")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("progress")}</th>
+            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("time")}</th>
           </tr>
         </thead>
         <tbody>
@@ -120,7 +122,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center justify-center w-5 h-5 hover:opacity-80 transition-opacity"
-                        title="View on Warcraft Logs"
+                        title={t("viewOnWarcraftLogs")}
                       >
                         <Image src="/wcl-logo.png" alt="WCL" width={20} height={20} className="w-full h-full object-contain" />
                       </a>
@@ -131,17 +133,17 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="inline-flex items-center justify-center w-5 h-5 hover:opacity-80 transition-opacity"
-                      title="View on Raider.IO"
+                      title={t("viewOnRaiderIO")}
                     >
                       <Image src="/raiderio-logo.png" alt="Raider.IO" width={20} height={20} className="w-full h-full object-contain" />
                     </a>
                     {guild.isStreaming && (
                       <span className="text-xs px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 font-semibold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-                        Live
+                        {t("live")}
                       </span>
                     )}
-                    {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">Raiding</span>}
+                    {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">{t("raiding")}</span>}
                   </div>
                 </td>
                 <td

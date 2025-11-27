@@ -5,11 +5,13 @@ import { EventsResponse } from "@/types";
 import { api } from "@/lib/api";
 import EventCard from "@/components/EventCard";
 import Cookies from "js-cookie";
+import { useTranslations } from "next-intl";
 
 const EVENT_TYPES = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"] as const;
 const DIFFICULTIES = ["mythic", "heroic"] as const;
 
 export default function EventsPage() {
+  const t = useTranslations("eventsPage");
   const [eventsData, setEventsData] = useState<EventsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,15 +105,15 @@ export default function EventsPage() {
   const getEventTypeLabel = (type: string): string => {
     switch (type) {
       case "boss_kill":
-        return "Boss Kill";
+        return t("bossKill");
       case "best_pull":
-        return "Progress";
+        return t("bestPull");
       case "hiatus":
-        return "Hiatus";
+        return t("hiatus");
       case "regress":
-        return "Regress";
+        return t("regress");
       case "reproge":
-        return "Re-kill";
+        return t("reproge");
       default:
         return type;
     }
@@ -122,7 +124,7 @@ export default function EventsPage() {
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
-          <div className="text-white text-xl">Loading events...</div>
+          <div className="text-white text-xl">{t("loading")}</div>
         </div>
       </div>
     );
@@ -138,7 +140,7 @@ export default function EventsPage() {
           <div className="flex flex-wrap gap-x-8 gap-y-4">
             {/* Event Type Filter */}
             <div className="flex-1 min-w-[300px]">
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">Event Type</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-2">{t("eventTypes")}</h3>
               <div className="flex flex-wrap gap-3">
                 {EVENT_TYPES.map((type) => (
                   <label key={type} className="flex items-center gap-2 cursor-pointer group">
@@ -156,7 +158,7 @@ export default function EventsPage() {
 
             {/* Difficulty Filter */}
             <div className="flex-1 min-w-[200px]">
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">Difficulty</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-2">{t("difficulties")}</h3>
               <div className="flex flex-wrap gap-3">
                 {DIFFICULTIES.map((difficulty) => (
                   <label key={difficulty} className="flex items-center gap-2 cursor-pointer group">
@@ -166,7 +168,7 @@ export default function EventsPage() {
                       onChange={() => toggleDifficulty(difficulty)}
                       className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-950 cursor-pointer"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors capitalize">{difficulty}</span>
+                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors capitalize">{difficulty === "mythic" ? t("mythic") : t("heroic")}</span>
                   </label>
                 ))}
               </div>
@@ -176,11 +178,7 @@ export default function EventsPage() {
 
         {/* Event count */}
         <div className="flex justify-end mb-4">
-          {eventsData && (
-            <div className="text-sm text-gray-400">
-              Showing {filteredEvents?.length || 0} of {eventsData.pagination.totalCount} events
-            </div>
-          )}
+          {eventsData && <div className="text-sm text-gray-400">{t("showingEvents", { start: 1, end: filteredEvents?.length || 0, total: eventsData.pagination.totalCount })}</div>}
         </div>
 
         {filteredEvents && filteredEvents.length > 0 ? (
@@ -201,7 +199,7 @@ export default function EventsPage() {
                     currentPage === 1 ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
                   }`}
                 >
-                  Previous
+                  {t("previous")}
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -254,7 +252,7 @@ export default function EventsPage() {
                     eventsData && currentPage === eventsData.pagination.totalPages ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
                   }`}
                 >
-                  Next
+                  {t("next")}
                 </button>
               </div>
             )}
@@ -262,7 +260,7 @@ export default function EventsPage() {
         ) : (
           <div className="text-center py-12 text-gray-500">
             <div className="text-4xl mb-4">📊</div>
-            <p>No events match the selected filters.</p>
+            <p>{t("noEvents")}</p>
           </div>
         )}
       </div>

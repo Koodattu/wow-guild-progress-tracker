@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { RaidInfo } from "@/types";
 import IconImage from "./IconImage";
+import { useTranslations } from "next-intl";
 
 interface RaidSelectorProps {
   raids: RaidInfo[];
@@ -18,6 +19,7 @@ function getExpansionIconPath(expansionName: string): string {
 }
 
 export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: RaidSelectorProps) {
+  const t = useTranslations("raidSelector");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +52,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
   return (
     <div className="relative" ref={dropdownRef}>
       <label htmlFor="raid-select" className="text-xs text-gray-400 mb-1 block">
-        Select Raid
+        {t("selectRaid")}
       </label>
       <button
         id="raid-select"
@@ -59,7 +61,7 @@ export default function RaidSelector({ raids, selectedRaidId, onRaidSelect }: Ra
       >
         <div className="flex items-center gap-2">
           {selectedRaid?.iconUrl && <IconImage iconFilename={selectedRaid.iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
-          <span>{selectedRaid?.name || "Select a raid"}</span>
+          <span>{selectedRaid?.name || t("selectRaid")}</span>
         </div>
         <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
