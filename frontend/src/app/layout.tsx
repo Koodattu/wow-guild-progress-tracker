@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "WoW Guild Progress Tracker",
   description: "Track World of Warcraft raid progression for guilds",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 
@@ -39,8 +40,8 @@ export default function Navigation() {
         <div className="w-full px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
-              <Link href="/" className="text-xl font-bold text-white hover:text-gray-300 transition-colors">
-                WoW Guild Progress
+              <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                <Image src="/logo.png" alt="WoW Guild Progress" width={160} height={30} priority />
               </Link>
               <div className="flex gap-6">
                 <Link
