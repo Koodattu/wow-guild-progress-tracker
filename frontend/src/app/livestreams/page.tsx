@@ -16,7 +16,7 @@ declare global {
 export default function LivestreamsPage() {
   const [liveStreamers, setLiveStreamers] = useState<LiveStreamer[]>([]);
   const [selectedStreamers, setSelectedStreamers] = useState<LiveStreamer[]>([]);
-  const [activeChat, setActiveChat] = useState<string | null>(null);
+  const [activeChat, setActiveChat] = useState<string | "all" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chatVisible, setChatVisible] = useState(true);
@@ -221,6 +221,9 @@ export default function LivestreamsPage() {
           // Set as active chat if first selection
           if (!activeChat) {
             setActiveChat(streamer.channelName);
+          } else if (selectedStreamers.length === 1) {
+            // When adding second stream, switch to 'all' view
+            setActiveChat("all");
           }
         }
       }
@@ -269,9 +272,11 @@ export default function LivestreamsPage() {
     if (count <= 2) {
       return "grid-cols-1 grid-rows-1";
     } else if (count === 3) {
-      return "grid-cols-3 grid-rows-1";
+      // All tab on row 1 (full width), 3 streams on row 2
+      return "grid-cols-3";
     } else {
-      return "grid-cols-3 grid-rows-2";
+      // All tab on row 1 (full width), remaining streams on subsequent rows
+      return "grid-cols-3";
     }
   }, [selectedStreamers.length]);
 
@@ -283,8 +288,11 @@ export default function LivestreamsPage() {
 
   const toggleSpotlight = (channelName: string) => {
     if (spotlightStream === channelName) {
-      // Turn off spotlight
+      // Turn off spotlight - switch to 'all' if we have multiple streams
       setSpotlightStream(null);
+      if (selectedStreamers.length > 1) {
+        setActiveChat("all");
+      }
     } else {
       // Turn on spotlight for this stream
       setSpotlightStream(channelName);
@@ -610,6 +618,16 @@ export default function LivestreamsPage() {
                 {selectedStreamers.length <= 2 ? (
                   // Simple tabs for 1-2 streams
                   <div className="flex border-b border-gray-700 bg-gray-800">
+                    {selectedStreamers.length > 1 && (
+                      <button
+                        onClick={() => setActiveChat("all")}
+                        className={`flex-1 px-2 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                          activeChat === "all" ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                        }`}
+                      >
+                        All
+                      </button>
+                    )}
                     {selectedStreamers.map((streamer) => (
                       <button
                         key={streamer.channelName}
@@ -623,13 +641,21 @@ export default function LivestreamsPage() {
                     ))}
                   </div>
                 ) : (
-                  // Grid tabs for 3-6 streams
+                  // Grid tabs for 3-6 streams - All tab on first row (full width)
                   <div className={`grid ${chatGridClass} border-b border-gray-700 bg-gray-800`}>
+                    <button
+                      onClick={() => setActiveChat("all")}
+                      className={`col-span-3 px-2 py-2 text-xs font-medium transition-colors border-b border-gray-700 cursor-pointer ${
+                        activeChat === "all" ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                      }`}
+                    >
+                      All
+                    </button>
                     {selectedStreamers.map((streamer) => (
                       <button
                         key={streamer.channelName}
                         onClick={() => setActiveChat(streamer.channelName)}
-                        className={`px-2 py-2 text-xs font-medium transition-colors border-r border-b border-gray-700 truncate cursor-pointer ${
+                        className={`px-2 py-2 text-xs font-medium transition-colors border-r border-gray-700 truncate cursor-pointer ${
                           activeChat === streamer.channelName ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
                         }`}
                       >
@@ -639,19 +665,33 @@ export default function LivestreamsPage() {
                   </div>
                 )}
 
-                {/* All Chats - Load once and keep mounted, toggle visibility */}
-                <div className="flex-1 relative">
-                  {selectedStreamers.map((streamer) => (
-                    <iframe
-                      key={`chat-${streamer.channelName}`}
-                      src={`https://www.twitch.tv/embed/${streamer.channelName}/chat?parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&darkpopout`}
-                      className={`absolute top-0 left-0 w-full h-full transition-opacity ${
-                        activeChat === streamer.channelName ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
-                      }`}
-                      loading="lazy"
-                      title={`${streamer.channelName} Twitch chat`}
-                    ></iframe>
-                  ))}
+                {/* All Chats - Render once, control visibility and layout with CSS */}
+                <div className={`flex-1 relative ${activeChat === "all" ? "flex flex-col" : ""}`}>
+                  {selectedStreamers.map((streamer) => {
+                    const isActive = activeChat === streamer.channelName;
+                    const isAllMode = activeChat === "all";
+
+                    return (
+                      <div
+                        key={`chat-container-${streamer.channelName}`}
+                        className={`
+                          ${isAllMode ? "relative flex-1 border-b border-gray-700 last:border-b-0" : "absolute top-0 left-0 w-full h-full"}
+                          ${!isAllMode && !isActive ? "opacity-0 pointer-events-none" : "opacity-100"}
+                          ${!isAllMode && isActive ? "z-10" : "z-0"}
+                          transition-opacity
+                        `}
+                      >
+                        <iframe
+                          src={`https://www.twitch.tv/embed/${streamer.channelName}/chat?parent=${
+                            typeof window !== "undefined" ? window.location.hostname : "localhost"
+                          }&darkpopout`}
+                          className="w-full h-full"
+                          loading="lazy"
+                          title={`${streamer.channelName} Twitch chat`}
+                        ></iframe>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
