@@ -48,6 +48,23 @@ export default function LivestreamsPage() {
         setError(null);
         const streamers = await api.getLiveStreamers();
         setLiveStreamers(streamers);
+
+        // Remove offline streams from selected streamers
+        setSelectedStreamers((prev) => {
+          const liveChannelNames = new Set(streamers.map((s) => s.channelName));
+          const stillLive = prev.filter((s) => liveChannelNames.has(s.channelName));
+
+          // If we removed any streams, log it
+          if (stillLive.length < prev.length) {
+            const removed = prev.filter((s) => !liveChannelNames.has(s.channelName));
+            console.log(
+              "Removed offline streams:",
+              removed.map((s) => s.channelName)
+            );
+          }
+
+          return stillLive;
+        });
       } catch (err) {
         console.error("Error fetching live streamers:", err);
         setError("Failed to load live streamers. Make sure the backend server is running.");
