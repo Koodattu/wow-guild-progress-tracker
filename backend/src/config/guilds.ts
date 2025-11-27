@@ -7,7 +7,7 @@ export interface TrackedGuild {
 }
 
 export const GUILDS: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu"] },
+  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen", "b0aty", "wiba"] },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
   { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
@@ -19,7 +19,7 @@ export const GUILDS: TrackedGuild[] = [
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu"] },
+  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen"] },
   { name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },

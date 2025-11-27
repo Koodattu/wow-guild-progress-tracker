@@ -24,6 +24,8 @@ export default function LivestreamsPage() {
   const [twitchScriptLoaded, setTwitchScriptLoaded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRefs = useRef<Record<string, any>>({});
+  const previousSpotlightRef = useRef<string | null>(null);
+  const qualityInitializedRef = useRef<Record<string, boolean>>({});
 
   // Load Twitch Player script
   useEffect(() => {
@@ -66,50 +68,111 @@ export default function LivestreamsPage() {
     if (!twitchScriptLoaded) return;
 
     const inSpotlightMode = spotlightStream && selectedStreamers.length >= 2;
+    const currentSpotlightPlayer = spotlightStream ? playerRefs.current[spotlightStream] : null;
+    const previousSpotlightChannel = previousSpotlightRef.current;
+    const previousSpotlightPlayer = previousSpotlightChannel ? playerRefs.current[previousSpotlightChannel] : null;
 
-    selectedStreamers.forEach((streamer) => {
-      const player = playerRefs.current[streamer.channelName];
-      if (!player) return;
+    // Handle spotlight switching (when spotlight changes from one stream to another)
+    if (spotlightStream && previousSpotlightChannel && spotlightStream !== previousSpotlightChannel) {
+      console.log(`Switching spotlight from ${previousSpotlightChannel} to ${spotlightStream}`);
 
-      try {
-        const isSpotlit = streamer.channelName === spotlightStream;
+      // Transfer volume from old spotlight to new spotlight
+      if (previousSpotlightPlayer && currentSpotlightPlayer) {
+        try {
+          const previousVolume = previousSpotlightPlayer.getVolume();
+          console.log(`Transferring volume ${previousVolume} from ${previousSpotlightChannel} to ${spotlightStream}`);
+          currentSpotlightPlayer.setVolume(previousVolume);
 
-        if (inSpotlightMode) {
+          // Set the old spotlight stream to volume 0 and lowest quality
+          previousSpotlightPlayer.setVolume(0);
+          const prevQualities = previousSpotlightPlayer.getQualities();
+          if (prevQualities && prevQualities.length > 0) {
+            console.log(`Demoting ${previousSpotlightChannel} to lowest quality`);
+            previousSpotlightPlayer.setQuality(prevQualities[prevQualities.length - 1].group);
+          }
+        } catch (err) {
+          console.error("Error transferring volume between spotlight streams:", err);
+        }
+      }
+
+      // Set new spotlight to best quality
+      if (currentSpotlightPlayer) {
+        try {
+          const qualities = currentSpotlightPlayer.getQualities();
+          if (qualities && qualities.length > 1) {
+            console.log(`Promoting ${spotlightStream} to best quality`);
+            currentSpotlightPlayer.setQuality(qualities[1].group);
+          }
+        } catch (err) {
+          console.error("Error setting quality for new spotlight:", err);
+        }
+      }
+
+      // Update ref AFTER handling the switch
+      previousSpotlightRef.current = spotlightStream;
+      return; // Exit early to avoid running other blocks
+    }
+
+    // Handle entering spotlight mode for the first time (previousSpotlightChannel is null)
+    if (inSpotlightMode && !previousSpotlightChannel && spotlightStream) {
+      console.log(`Entering spotlight mode with ${spotlightStream}`);
+
+      selectedStreamers.forEach((streamer) => {
+        const player = playerRefs.current[streamer.channelName];
+        if (!player) return;
+
+        try {
+          const isSpotlit = streamer.channelName === spotlightStream;
+          const qualities = player.getQualities();
+
           if (isSpotlit) {
-            // Spotlight stream: unmute, set best quality
-            player.play();
-            player.setMuted(false);
-            player.setVolume(1.0);
-            const qualities = player.getQualities();
-            if (qualities && qualities.length > 0) {
-              player.setQuality(qualities[0]); // Best quality is first
+            // Set spotlight to best quality (volume already set)
+            if (qualities && qualities.length > 1) {
+              console.log(`Setting initial spotlight ${streamer.channelName} to best quality`);
+              player.setQuality(qualities[1].group);
             }
           } else {
-            // Small streams: mute, set 480p
-            player.play();
-            player.setMuted(true);
+            // Set non-spotlight streams to volume 0 and lowest quality
             player.setVolume(0);
-            const qualities = player.getQualities();
             if (qualities && qualities.length > 0) {
-              player.setQuality(qualities[qualities.length - 1]);
+              console.log(`Setting ${streamer.channelName} to lowest quality for spotlight mode`);
+              player.setQuality(qualities[qualities.length - 1].group);
             }
           }
-        } else {
-          // Normal grid: unmute first stream, mute others, best quality for all
-          const isFirst = selectedStreamers.indexOf(streamer) === 0;
-          player.play();
-          player.setMuted(!isFirst);
-          player.setVolume(isFirst ? 1.0 : 0);
-          const qualities = player.getQualities();
-          if (qualities && qualities.length > 0) {
-            player.setQuality(qualities[0]);
-          }
+        } catch (err) {
+          console.error(`Error in initial spotlight setup for ${streamer.channelName}:`, err);
         }
-      } catch (err) {
-        console.error(`Error controlling player for ${streamer.channelName}:`, err);
-      }
-    });
-  }, [spotlightStream, selectedStreamers, twitchScriptLoaded]);
+      });
+
+      // Update ref AFTER setting up
+      previousSpotlightRef.current = spotlightStream;
+      return; // Exit early
+    }
+
+    // Handle exiting spotlight mode (spotlightStream becomes null)
+    if (!spotlightStream && previousSpotlightChannel) {
+      console.log(`Exiting spotlight mode from ${previousSpotlightChannel}`);
+
+      // Don't touch volumes, just set all to best quality
+      selectedStreamers.forEach((streamer) => {
+        const player = playerRefs.current[streamer.channelName];
+        if (!player) return;
+
+        try {
+          const qualities = player.getQualities();
+          if (qualities && qualities.length > 1) {
+            console.log(`Restoring ${streamer.channelName} to best quality (exiting spotlight)`);
+            player.setQuality(qualities[1].group);
+          }
+        } catch (err) {
+          console.error(`Error restoring quality for ${streamer.channelName}:`, err);
+        }
+      });
+
+      // Update ref to null
+      previousSpotlightRef.current = null;
+    }
+  }, [spotlightStream, twitchScriptLoaded]); // REMOVED selectedStreamers dependency
 
   // Cleanup players when streamers are removed
   useEffect(() => {
@@ -117,9 +180,17 @@ export default function LivestreamsPage() {
     const playerChannels = Object.keys(playerRefs.current);
 
     playerChannels.forEach((channel) => {
-      if (!currentChannels.has(channel)) {
+      if (!currentChannels.has(channel) && !channel.endsWith("_interval")) {
+        // Clean up play check interval
+        const intervalKey = `${channel}_interval`;
+        if (playerRefs.current[intervalKey]) {
+          clearInterval(playerRefs.current[intervalKey]);
+          delete playerRefs.current[intervalKey];
+        }
+
         // Clean up removed player
         delete playerRefs.current[channel];
+        delete qualityInitializedRef.current[channel];
       }
     });
   }, [selectedStreamers]);
@@ -215,6 +286,8 @@ export default function LivestreamsPage() {
     } else {
       // Turn on spotlight for this stream
       setSpotlightStream(channelName);
+      // Auto-select the spotlight stream's chat
+      setActiveChat(channelName);
     }
   };
 
@@ -314,7 +387,14 @@ export default function LivestreamsPage() {
               <button
                 key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
                 onClick={() => toggleStreamer(streamer)}
-                className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 ${
+                onMouseDown={(e) => {
+                  // Middle click to open in new tab
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
+                  }
+                }}
+                className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
                   isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
                 }`}
                 disabled={!isSelected && selectedStreamers.length >= 6}
@@ -390,18 +470,78 @@ export default function LivestreamsPage() {
                                 channel: streamer.channelName,
                                 parent: [window.location.hostname],
                                 autoplay: true,
-                                muted: false,
+                                muted: true, // Required for autoplay to work
                                 width: "100%",
                                 height: "100%",
                               });
 
-                              // Store player reference
+                              // Store player reference immediately
                               playerRefs.current[streamer.channelName] = player;
 
-                              // Set initial state when player is ready
+                              // Wait for player to be ready before calling any methods
                               player.addEventListener(window.Twitch.Player.READY, () => {
+                                console.log(`Player ready: ${streamer.channelName}`);
+
+                                // Set initial volume to 0 for all new streams
                                 player.setVolume(0);
-                                player.setMuted(true);
+
+                                // Start playing
+                                player.play();
+
+                                // Poll to ensure player stays playing
+                                const playCheckInterval = setInterval(() => {
+                                  try {
+                                    if (player.isPaused && player.isPaused()) {
+                                      console.log(`Player ${streamer.channelName} is paused, calling play()`);
+                                      player.play();
+                                    }
+                                  } catch (err) {
+                                    // Player might be destroyed, clear interval
+                                    clearInterval(playCheckInterval);
+                                  }
+                                }, 2000); // Check every 2 seconds
+
+                                // Store interval ID for cleanup
+                                if (!playerRefs.current[`${streamer.channelName}_interval`]) {
+                                  playerRefs.current[`${streamer.channelName}_interval`] = playCheckInterval;
+                                }
+                              });
+
+                              // Listen for when playback actually starts to set quality
+                              player.addEventListener(window.Twitch.Player.PLAYING, () => {
+                                // Only set quality once on initial load
+                                if (qualityInitializedRef.current[streamer.channelName]) {
+                                  return; // Quality already set, don't set it again
+                                }
+
+                                console.log(`Player playing (first time): ${streamer.channelName}`);
+
+                                // Determine initial quality based on current mode
+                                try {
+                                  const qualities = player.getQualities();
+                                  if (qualities && qualities.length > 1) {
+                                    console.log(`Available qualities for ${streamer.channelName}:`, qualities);
+
+                                    // Check if we're in spotlight mode and this isn't the spotlight stream
+                                    const inSpotlightMode = spotlightStream && selectedStreamers.length >= 2;
+                                    const isSpotlit = streamer.channelName === spotlightStream;
+
+                                    if (inSpotlightMode && !isSpotlit) {
+                                      // New stream in spotlight mode but not spotlight: set to lowest quality
+                                      player.setQuality(qualities[qualities.length - 1].group);
+                                      console.log(`Setting new small stream ${streamer.channelName} to lowest quality`);
+                                    } else {
+                                      // Default: set to best quality (skip auto at [0], use [1])
+                                      player.setQuality(qualities[1].group);
+                                      console.log(`Setting new stream ${streamer.channelName} to best quality`);
+                                    }
+
+                                    // Mark as initialized
+                                    qualityInitializedRef.current[streamer.channelName] = true;
+                                  }
+                                } catch (err) {
+                                  console.error(`Error setting quality for ${streamer.channelName}:`, err);
+                                }
                               });
                             } catch (err) {
                               console.error(`Error creating player for ${streamer.channelName}:`, err);
