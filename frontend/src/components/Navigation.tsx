@@ -60,7 +60,7 @@ export default function Navigation() {
                 <Link
                   href="/"
                   className={`text-sm font-medium transition-colors ${
-                    isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") && !pathname.startsWith("/timetable")
+                    isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") && !pathname.startsWith("/timetable") && !pathname.startsWith("/tierlists")
                       ? "text-blue-400 border-b-2 border-blue-400"
                       : "text-gray-400 hover:text-white"
                   } py-5`}
@@ -86,6 +86,12 @@ export default function Navigation() {
                   } py-5`}
                 >
                   {t("livestreams")}
+                </Link>
+                <Link
+                  href="/tierlists"
+                  className={`text-sm font-medium transition-colors ${isActive("/tierlists") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                >
+                  {t("tierLists")}
                 </Link>
                 <Link
                   href="/events"

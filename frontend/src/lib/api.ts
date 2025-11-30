@@ -1,4 +1,4 @@
-import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress, GuildSchedule, LiveStreamer } from "@/types";
+import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress, GuildSchedule, LiveStreamer, TierList, RaidTierList } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
 // For server-side: use API_URL (internal Docker network)
@@ -150,6 +150,19 @@ export const api = {
   async getRaidDates(raidId: number): Promise<RaidDates> {
     const response = await fetch(`${API_URL}/api/raids/${raidId}/dates`);
     if (!response.ok) throw new Error("Failed to fetch raid dates");
+    return response.json();
+  },
+
+  // Tier list endpoints
+  async getTierList(): Promise<TierList> {
+    const response = await fetch(`${API_URL}/api/tierlists`);
+    if (!response.ok) throw new Error("Failed to fetch tier list");
+    return response.json();
+  },
+
+  async getTierListForRaid(raidId: number): Promise<RaidTierList> {
+    const response = await fetch(`${API_URL}/api/tierlists?raidId=${raidId}`);
+    if (!response.ok) throw new Error("Failed to fetch tier list for raid");
     return response.json();
   },
 };

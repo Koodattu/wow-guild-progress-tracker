@@ -13,6 +13,7 @@ import scheduler from "./services/scheduler.service";
 import guildsRouter from "./routes/guilds";
 import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
+import tierlistsRouter from "./routes/tierlists";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.use("/icons", express.static(path.join(__dirname, "../public/icons")));
 app.use("/api/guilds", guildsRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/raids", raidsRouter);
+app.use("/api/tierlists", tierlistsRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
@@ -117,6 +119,15 @@ const startServer = async () => {
       await scheduler.refetchRecentReportsOnStartup();
     } else {
       logger.info("REFETCH_RECENT_REPORTS_ON_STARTUP is disabled, skipping startup recent reports refetch");
+    }
+
+    // Calculate tier lists on startup if enabled
+    const calculateTierListsOnStartup = process.env.CALCULATE_TIER_LISTS_ON_STARTUP === "true";
+    if (calculateTierListsOnStartup) {
+      logger.info("CALCULATE_TIER_LISTS_ON_STARTUP is enabled");
+      await scheduler.calculateTierListsOnStartup();
+    } else {
+      logger.info("CALCULATE_TIER_LISTS_ON_STARTUP is disabled, skipping startup tier list calculation");
     }
 
     // Start express server

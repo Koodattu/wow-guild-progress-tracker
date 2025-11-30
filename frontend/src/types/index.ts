@@ -255,3 +255,27 @@ export interface GuildSchedule {
   parent_guild?: string;
   raidSchedule: RaidSchedule;
 }
+
+// Tier List types
+export interface GuildTierScore {
+  guildId: string;
+  guildName: string;
+  realm: string;
+  faction?: string;
+  crest?: GuildCrest;
+  overallScore: number;
+  speedScore: number;
+  efficiencyScore: number;
+}
+
+export interface RaidTierList {
+  raidId: number;
+  raidName: string;
+  guilds: GuildTierScore[];
+}
+
+export interface TierList {
+  calculatedAt: string;
+  overall: GuildTierScore[];
+  raids: RaidTierList[];
+}

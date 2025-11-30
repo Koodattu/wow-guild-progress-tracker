@@ -4,6 +4,7 @@
     "allGuilds": "All Guilds",
     "raidTimetable": "Raid Timetable",
     "livestreams": "Livestreams",
+    "tierLists": "Tier Lists",
     "latestEvents": "Latest Events",
     "info": "Info",
     "contact": "Contact",
@@ -159,6 +160,18 @@
   "raidSelector": {
     "selectRaid": "Select Raid",
     "allRaids": "All Raids"
+  },
+  "tierListsPage": {
+    "title": "Guild Tier Lists",
+    "selectRaid": "Select Raid",
+    "overallAllRaids": "Overall (All Raids)",
+    "lastCalculated": "Last calculated",
+    "overall": "Overall",
+    "speed": "Speed",
+    "efficiency": "Efficiency",
+    "error": "Failed to load tier lists. Make sure the backend server is running.",
+    "noData": "No tier list data available.",
+    "noDataForRaid": "No tier list data available for this raid."
   },
   "common": {
     "loading": "Loading...",

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Guild from "../models/Guild";
 import guildService from "./guild.service";
 import twitchService from "./twitch.service";
+import tierListService from "./tierlist.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger, { getGuildLogger } from "../utils/logger";
 
@@ -20,6 +21,7 @@ class UpdateScheduler {
   private isUpdatingNightlyWorldRanks: boolean = false;
   private isUpdatingGuildCrests: boolean = false;
   private isUpdatingRefetchRecentReports: boolean = false;
+  private isUpdatingTierLists: boolean = false;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -154,6 +156,22 @@ class UpdateScheduler {
       }
     );
 
+    // NIGHTLY: Calculate tier lists (at 5 AM Finnish time, after all other nightly jobs)
+    // This ensures tier lists are calculated with the most up-to-date data
+    cron.schedule(
+      "0 5 * * *",
+      async () => {
+        if (this.isUpdatingTierLists) {
+          logger.info("[Nightly/TierLists] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.calculateTierLists();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      }
+    );
+
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info("    * Active guilds: every 15 minutes");
@@ -167,6 +185,7 @@ class UpdateScheduler {
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Guild crests update: daily at 04:00");
+    logger.info("    * Tier lists calculation: daily at 05:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -220,6 +239,28 @@ class UpdateScheduler {
     logger.info("Refetching recent reports on startup...");
     await this.refetchRecentReportsForAllActiveGuilds();
     logger.info("Startup recent reports refetch completed");
+  }
+
+  // Calculate tier lists on startup (if enabled)
+  async calculateTierListsOnStartup(): Promise<void> {
+    logger.info("Calculating tier lists on startup...");
+    await this.calculateTierLists();
+    logger.info("Startup tier lists calculation completed");
+  }
+
+  // NIGHTLY: Calculate tier lists
+  private async calculateTierLists(): Promise<void> {
+    this.isUpdatingTierLists = true;
+
+    try {
+      logger.info("[Nightly/TierLists] Starting tier list calculation...");
+      await tierListService.calculateTierLists();
+      logger.info("[Nightly/TierLists] Tier list calculation completed");
+    } catch (error) {
+      logger.error("[Nightly/TierLists] Error:", error);
+    } finally {
+      this.isUpdatingTierLists = false;
+    }
   }
 
   // Stop the background process

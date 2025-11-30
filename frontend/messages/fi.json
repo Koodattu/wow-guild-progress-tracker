@@ -4,6 +4,7 @@
     "allGuilds": "Kaikki Kiltat",
     "raidTimetable": "Raidi-aikataulu",
     "livestreams": "Suoratoistot",
+    "tierLists": "Tier Listat",
     "latestEvents": "Viimeisimmät Tapahtumat",
     "info": "Tietoa",
     "contact": "Yhteystiedot",
@@ -159,6 +160,18 @@
   "raidSelector": {
     "selectRaid": "Valitse Raidi",
     "allRaids": "Kaikki Raidit"
+  },
+  "tierListsPage": {
+    "title": "Kiltojen Tier Listat",
+    "selectRaid": "Valitse Raidi",
+    "overallAllRaids": "Kokonaisarvio (Kaikki Raidit)",
+    "lastCalculated": "Viimeksi laskettu",
+    "overall": "Kokonaisarvio",
+    "speed": "Nopeus",
+    "efficiency": "Tehokkuus",
+    "error": "Tier listojen lataaminen epäonnistui. Varmista että backend-palvelin on käynnissä.",
+    "noData": "Tier lista tietoja ei ole saatavilla.",
+    "noDataForRaid": "Tier lista tietoja ei ole saatavilla tälle raidille."
   },
   "common": {
     "loading": "Ladataan...",
