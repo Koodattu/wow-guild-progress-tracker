@@ -6,15 +6,52 @@ import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import GuildCrest from "@/components/GuildCrest";
 
-// Calculate tier based on score (0-100)
-function getTier(score: number): { tier: string; color: string } {
-  if (score >= 90) return { tier: "S", color: "bg-red-400" };
-  if (score >= 75) return { tier: "A", color: "bg-orange-300" };
-  if (score >= 60) return { tier: "B", color: "bg-yellow-300" };
-  if (score >= 45) return { tier: "C", color: "bg-yellow-200" };
-  if (score >= 30) return { tier: "D", color: "bg-lime-300" };
-  if (score >= 15) return { tier: "E", color: "bg-green-300" };
-  return { tier: "F", color: "bg-cyan-300" };
+const TIERS = ["S", "A", "B", "C", "D", "E", "F"] as const;
+type TierName = (typeof TIERS)[number];
+
+const TIER_COLORS: Record<TierName, string> = {
+  S: "bg-red-400",
+  A: "bg-orange-300",
+  B: "bg-yellow-300",
+  C: "bg-yellow-200",
+  D: "bg-lime-300",
+  E: "bg-green-300",
+  F: "bg-cyan-300",
+};
+
+// Dynamically assign tiers based on score distribution
+// Spreads guilds evenly across tiers based on their relative ranking
+function assignTiers(guilds: GuildTierScore[], scoreKey: "overallScore" | "speedScore" | "efficiencyScore"): Map<string, TierName> {
+  const tierAssignments = new Map<string, TierName>();
+
+  if (guilds.length === 0) return tierAssignments;
+
+  // Sort guilds by score descending
+  const sortedGuilds = [...guilds].sort((a, b) => b[scoreKey] - a[scoreKey]);
+
+  // Calculate how many guilds per tier (approximately even distribution)
+  const totalGuilds = sortedGuilds.length;
+  const tiersCount = TIERS.length;
+
+  // Calculate base size and remainder for distribution
+  const baseSize = Math.floor(totalGuilds / tiersCount);
+  const remainder = totalGuilds % tiersCount;
+
+  // Distribute guilds across tiers
+  let currentIndex = 0;
+  for (let tierIndex = 0; tierIndex < tiersCount; tierIndex++) {
+    // Higher tiers (S, A, B) get the extra guilds from remainder
+    const tierSize = baseSize + (tierIndex < remainder ? 1 : 0);
+    const tierName = TIERS[tierIndex];
+
+    for (let i = 0; i < tierSize && currentIndex < totalGuilds; i++) {
+      const guild = sortedGuilds[currentIndex];
+      tierAssignments.set(`${guild.guildId}-${scoreKey}`, tierName);
+      currentIndex++;
+    }
+  }
+
+  return tierAssignments;
 }
 
 interface TierListDisplayProps {
@@ -24,8 +61,11 @@ interface TierListDisplayProps {
 }
 
 function TierListDisplay({ title, guilds, scoreKey }: TierListDisplayProps) {
-  // Group guilds by tier
-  const tierGroups: { [key: string]: GuildTierScore[] } = {
+  // Get dynamic tier assignments for this score type
+  const tierAssignments = assignTiers(guilds, scoreKey);
+
+  // Group guilds by their assigned tier
+  const tierGroups: Record<TierName, GuildTierScore[]> = {
     S: [],
     A: [],
     B: [],
@@ -36,31 +76,24 @@ function TierListDisplay({ title, guilds, scoreKey }: TierListDisplayProps) {
   };
 
   guilds.forEach((guild) => {
-    const { tier } = getTier(guild[scoreKey]);
+    const tier = tierAssignments.get(`${guild.guildId}-${scoreKey}`) || "F";
     tierGroups[tier].push(guild);
   });
 
-  const tierColors: { [key: string]: string } = {
-    S: "bg-red-400",
-    A: "bg-orange-300",
-    B: "bg-yellow-300",
-    C: "bg-yellow-200",
-    D: "bg-lime-300",
-    E: "bg-green-300",
-    F: "bg-cyan-300",
-  };
-
-  const tiers = ["S", "A", "B", "C", "D", "E", "F"];
+  // Sort guilds within each tier by score (highest first)
+  TIERS.forEach((tier) => {
+    tierGroups[tier].sort((a, b) => b[scoreKey] - a[scoreKey]);
+  });
 
   return (
     <div className="flex-1">
       <h3 className="text-lg font-bold text-white mb-3 text-center">{title}</h3>
       <div className="border border-gray-700 rounded-lg overflow-hidden">
-        {tiers.map((tier) => {
+        {TIERS.map((tier) => {
           const tierGuilds = tierGroups[tier];
           return (
             <div key={tier} className="flex border-b border-gray-700 last:border-b-0">
-              <div className={`w-20 min-h-20 flex items-center justify-center font-bold text-2xl text-gray-900 ${tierColors[tier]}`}>{tier}</div>
+              <div className={`w-20 min-h-20 flex items-center justify-center font-bold text-2xl text-gray-900 ${TIER_COLORS[tier]}`}>{tier}</div>
               <div className="flex-1 bg-gray-800 p-2 flex flex-wrap items-center gap-2 min-h-20">
                 {tierGuilds.map((guild, idx) => (
                   <div key={idx} className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm text-gray-200 flex items-center gap-2 transition-colors">

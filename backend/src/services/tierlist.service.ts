@@ -274,11 +274,11 @@ class TierListService {
     // Higher efficiency = fewer pulls and less time per boss
     let efficiencyScore = 0;
 
-    // Calculate efficiency based on pulls per boss killed
+    // Calculate efficiency based on pulls per boss killed and time per boss
     const heroicBossesDefeated = guildData.heroicBossesDefeated || 0;
     const mythicBossesDefeated = guildData.mythicBossesDefeated || 0;
 
-    // Find average pulls in the raid for normalization
+    // Find average pulls per boss in the raid for normalization
     const avgHeroicPulls =
       allGuildsData.filter((g) => g.heroicBossesDefeated > 0).reduce((sum, g) => sum + g.heroicTotalPulls / g.heroicBossesDefeated, 0) /
         Math.max(1, allGuildsData.filter((g) => g.heroicBossesDefeated > 0).length) || 50;
@@ -287,18 +287,47 @@ class TierListService {
       allGuildsData.filter((g) => g.mythicBossesDefeated > 0).reduce((sum, g) => sum + g.mythicTotalPulls / g.mythicBossesDefeated, 0) /
         Math.max(1, allGuildsData.filter((g) => g.mythicBossesDefeated > 0).length) || 100;
 
-    // Heroic efficiency
+    // Find average time per boss in the raid for normalization
+    const avgHeroicTime =
+      allGuildsData.filter((g) => g.heroicBossesDefeated > 0 && g.heroicTimeSpent > 0).reduce((sum, g) => sum + g.heroicTimeSpent / g.heroicBossesDefeated, 0) /
+        Math.max(1, allGuildsData.filter((g) => g.heroicBossesDefeated > 0 && g.heroicTimeSpent > 0).length) || 1800000; // Default 30 min per boss
+
+    const avgMythicTime =
+      allGuildsData.filter((g) => g.mythicBossesDefeated > 0 && g.mythicTimeSpent > 0).reduce((sum, g) => sum + g.mythicTimeSpent / g.mythicBossesDefeated, 0) /
+        Math.max(1, allGuildsData.filter((g) => g.mythicBossesDefeated > 0 && g.mythicTimeSpent > 0).length) || 3600000; // Default 60 min per boss
+
+    // Heroic efficiency (pulls + time)
     if (heroicBossesDefeated > 0) {
       const pullsPerBoss = guildData.heroicTotalPulls / heroicBossesDefeated;
       // Score: if pulls per boss is lower than average, score > 50, otherwise < 50
-      const heroicEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgHeroicPulls) / avgHeroicPulls) * 50 + 50));
+      const heroicPullEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgHeroicPulls) / avgHeroicPulls) * 50 + 50));
+
+      // Time efficiency: less time per boss = better score
+      let heroicTimeEfficiency = 50; // Default if no time data
+      if (guildData.heroicTimeSpent > 0) {
+        const timePerBoss = guildData.heroicTimeSpent / heroicBossesDefeated;
+        heroicTimeEfficiency = Math.max(0, Math.min(100, 100 - ((timePerBoss - avgHeroicTime) / avgHeroicTime) * 50 + 50));
+      }
+
+      // Combine pull and time efficiency (60% pulls, 40% time)
+      const heroicEfficiency = heroicPullEfficiency * 0.6 + heroicTimeEfficiency * 0.4;
       efficiencyScore += heroicEfficiency * this.HEROIC_WEIGHT;
     }
 
-    // Mythic efficiency (weighted more)
+    // Mythic efficiency (pulls + time, weighted more)
     if (mythicBossesDefeated > 0) {
       const pullsPerBoss = guildData.mythicTotalPulls / mythicBossesDefeated;
-      const mythicEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgMythicPulls) / avgMythicPulls) * 50 + 50));
+      const mythicPullEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgMythicPulls) / avgMythicPulls) * 50 + 50));
+
+      // Time efficiency: less time per boss = better score
+      let mythicTimeEfficiency = 50; // Default if no time data
+      if (guildData.mythicTimeSpent > 0) {
+        const timePerBoss = guildData.mythicTimeSpent / mythicBossesDefeated;
+        mythicTimeEfficiency = Math.max(0, Math.min(100, 100 - ((timePerBoss - avgMythicTime) / avgMythicTime) * 50 + 50));
+      }
+
+      // Combine pull and time efficiency (60% pulls, 40% time)
+      const mythicEfficiency = mythicPullEfficiency * 0.6 + mythicTimeEfficiency * 0.4;
       efficiencyScore += mythicEfficiency * this.MYTHIC_WEIGHT;
     }
 
