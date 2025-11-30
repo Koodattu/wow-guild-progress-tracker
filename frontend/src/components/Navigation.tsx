@@ -54,7 +54,7 @@ export default function Navigation() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
               <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-                <Image src="/logo.png" alt="WoW Guild Progress" width={160} height={30} priority />
+                <Image src="/logo.png" alt="WoW Guild Progress" width={120} height={20} priority />
               </Link>
               <div className="flex gap-6">
                 <Link
