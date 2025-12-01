@@ -132,6 +132,25 @@ export interface GuildListItem {
   scheduleDisplay?: ScheduleDisplay | null;
 }
 
+// Tier score for a single category
+export interface TierScoreEntry {
+  overallScore: number;
+  speedScore: number;
+  efficiencyScore: number;
+}
+
+// Tier score for a specific raid
+export interface RaidTierScoreEntry extends TierScoreEntry {
+  raidId: number;
+  raidName: string;
+}
+
+// Guild tier scores (overall + current raids)
+export interface GuildTierScores {
+  overall: TierScoreEntry | null;
+  raids: RaidTierScoreEntry[];
+}
+
 // Guild with summary progress (for guild profile page initial load)
 export interface GuildSummary {
   _id: string;
@@ -148,6 +167,7 @@ export interface GuildSummary {
   scheduleDisplay?: ScheduleDisplay | null;
   raidSchedule?: RaidSchedule;
   streamers?: Streamer[]; // Twitch streamers for this guild
+  tierScores?: GuildTierScores | null; // Tier list scores for this guild
 }
 
 // Full guild info with detailed boss progress (for detail view)

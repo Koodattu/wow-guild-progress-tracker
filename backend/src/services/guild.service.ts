@@ -3,6 +3,7 @@ import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
+import TierList from "../models/TierList";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
@@ -2609,7 +2610,7 @@ class GuildService {
       return null;
     }
 
-    const guildObj = guild.toObject();
+    const guildObj = guild.toObject() as IGuild & { _id: mongoose.Types.ObjectId };
 
     // Transform progress to summary format (without boss arrays)
     const summaryProgress = guildObj.progress.map((p) => {
@@ -2659,6 +2660,9 @@ class GuildService {
         }))
       : undefined;
 
+    // Get tier list scores for this guild (overall + current raids only)
+    const tierScores = await this.getGuildTierScores(guildObj._id.toString());
+
     return {
       _id: guildObj._id,
       name: guildObj.name,
@@ -2674,6 +2678,7 @@ class GuildService {
       scheduleDisplay: scheduleSummary,
       raidSchedule: raidSchedule,
       streamers: streamers,
+      tierScores: tierScores,
     };
   }
 
@@ -2839,6 +2844,51 @@ class GuildService {
     } catch (error) {
       logger.error("Error fetching live streamers:", error);
       return [];
+    }
+  }
+
+  // Get tier list scores for a specific guild (overall + current raids)
+  async getGuildTierScores(guildId: string): Promise<{
+    overall: { overallScore: number; speedScore: number; efficiencyScore: number } | null;
+    raids: { raidId: number; raidName: string; overallScore: number; speedScore: number; efficiencyScore: number }[];
+  } | null> {
+    try {
+      const tierList = await TierList.findOne().sort({ calculatedAt: -1 });
+      if (!tierList) return null;
+
+      // Find this guild's overall scores
+      const overallEntry = tierList.overall.find((g) => g.guildId.toString() === guildId);
+      const overall = overallEntry
+        ? {
+            overallScore: overallEntry.overallScore,
+            speedScore: overallEntry.speedScore,
+            efficiencyScore: overallEntry.efficiencyScore,
+          }
+        : null;
+
+      // Find this guild's scores for current raids only
+      const raidScores: { raidId: number; raidName: string; overallScore: number; speedScore: number; efficiencyScore: number }[] = [];
+
+      for (const raidId of CURRENT_RAID_IDS) {
+        const raidTierList = tierList.raids.find((r) => r.raidId === raidId);
+        if (raidTierList) {
+          const guildEntry = raidTierList.guilds.find((g) => g.guildId.toString() === guildId);
+          if (guildEntry) {
+            raidScores.push({
+              raidId: raidTierList.raidId,
+              raidName: raidTierList.raidName,
+              overallScore: guildEntry.overallScore,
+              speedScore: guildEntry.speedScore,
+              efficiencyScore: guildEntry.efficiencyScore,
+            });
+          }
+        }
+      }
+
+      return { overall, raids: raidScores };
+    } catch (error) {
+      logger.error("Error fetching guild tier scores:", error);
+      return null;
     }
   }
 }

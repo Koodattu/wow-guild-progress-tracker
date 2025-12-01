@@ -163,3 +163,49 @@ export function getRaiderIOGuildUrl(region: string, realm: string, guildName: st
   const encodedGuildName = encodeURIComponent(guildName);
   return `https://raider.io/guilds/${region.toLowerCase()}/${encodedRealm}/${encodedGuildName}`;
 }
+
+// Tier score thresholds (matching tierlists page)
+const TIER_THRESHOLDS = {
+  S: { min: 900, max: 1000 },
+  A: { min: 740, max: 899 },
+  B: { min: 580, max: 739 },
+  C: { min: 420, max: 579 },
+  D: { min: 260, max: 419 },
+  E: { min: 100, max: 259 },
+  F: { min: 0, max: 99 },
+} as const;
+
+export type TierLetter = "S" | "A" | "B" | "C" | "D" | "E" | "F";
+
+// Get tier letter based on score (0-1000 scale)
+export function getTierLetter(score: number): TierLetter {
+  if (score >= TIER_THRESHOLDS.S.min) return "S";
+  if (score >= TIER_THRESHOLDS.A.min) return "A";
+  if (score >= TIER_THRESHOLDS.B.min) return "B";
+  if (score >= TIER_THRESHOLDS.C.min) return "C";
+  if (score >= TIER_THRESHOLDS.D.min) return "D";
+  if (score >= TIER_THRESHOLDS.E.min) return "E";
+  return "F";
+}
+
+// Get tier color class based on tier letter
+export function getTierColor(tier: TierLetter): string {
+  switch (tier) {
+    case "S":
+      return "text-red-400";
+    case "A":
+      return "text-orange-300";
+    case "B":
+      return "text-yellow-300";
+    case "C":
+      return "text-yellow-200";
+    case "D":
+      return "text-lime-300";
+    case "E":
+      return "text-green-300";
+    case "F":
+      return "text-cyan-300";
+    default:
+      return "text-gray-400";
+  }
+}

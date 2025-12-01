@@ -5,7 +5,17 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss, Event } from "@/types";
 import { api } from "@/lib/api";
-import { formatTime, formatPercent, getIconUrl, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
+import {
+  formatTime,
+  formatPercent,
+  getIconUrl,
+  formatPhaseDisplay,
+  getWorldRankColor,
+  getLeaderboardRankColor,
+  getRaiderIOGuildUrl,
+  getTierLetter,
+  getTierColor,
+} from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
@@ -272,9 +282,59 @@ export default function GuildProfilePage({ params }: PageProps) {
                 </div>
                 {guildSummary.lastFetched && <div className="text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
               </div>
-              {/* Realm Name Row */}
+              {/* Realm Name Row with Tier Scores */}
               <div className="flex items-center justify-between mb-3">
                 <div className="text-3xl text-gray-400">{guildSummary.realm}</div>
+                {/* Tier Scores Display */}
+                {guildSummary.tierScores && guildSummary.tierScores.overall && (
+                  <div className="flex items-center gap-4 text-sm">
+                    {/* Overall Score */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400">Overall:</span>
+                      <span className={`font-bold ${getTierColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
+                        {getTierLetter(guildSummary.tierScores.overall.overallScore)}
+                      </span>
+                      {guildSummary.tierScores.raids.map((raid) => (
+                        <Fragment key={raid.raidId}>
+                          <span className="text-gray-500">/</span>
+                          <span className={`font-bold ${getTierColor(getTierLetter(raid.overallScore))}`} title={raid.raidName}>
+                            {getTierLetter(raid.overallScore)}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </div>
+                    {/* Speed Score */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400">Speed:</span>
+                      <span className={`font-bold ${getTierColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
+                        {getTierLetter(guildSummary.tierScores.overall.speedScore)}
+                      </span>
+                      {guildSummary.tierScores.raids.map((raid) => (
+                        <Fragment key={raid.raidId}>
+                          <span className="text-gray-500">/</span>
+                          <span className={`font-bold ${getTierColor(getTierLetter(raid.speedScore))}`} title={raid.raidName}>
+                            {getTierLetter(raid.speedScore)}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </div>
+                    {/* Efficiency Score */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400">Efficiency:</span>
+                      <span className={`font-bold ${getTierColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
+                        {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
+                      </span>
+                      {guildSummary.tierScores.raids.map((raid) => (
+                        <Fragment key={raid.raidId}>
+                          <span className="text-gray-500">/</span>
+                          <span className={`font-bold ${getTierColor(getTierLetter(raid.efficiencyScore))}`} title={raid.raidName}>
+                            {getTierLetter(raid.efficiencyScore)}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               {/* Raid Schedule and Twitch Streamers Row */}
               <div className="flex items-center justify-between mb-2">
