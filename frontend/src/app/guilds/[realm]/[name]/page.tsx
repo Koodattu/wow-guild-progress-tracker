@@ -294,15 +294,6 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
                         {getTierLetter(guildSummary.tierScores.overall.overallScore)}
                       </span>
-                      {guildSummary.tierScores.raids.map((raid) => (
-                        <span
-                          key={raid.raidId}
-                          className={`px-2 py-1 font-bold text-gray-900 border-l border-gray-600 ${getTierBgColor(getTierLetter(raid.overallScore))}`}
-                          title={raid.raidName}
-                        >
-                          {getTierLetter(raid.overallScore)}
-                        </span>
-                      ))}
                     </div>
                     {/* Speed Score */}
                     <div className="flex items-center border border-gray-600 rounded overflow-hidden">
@@ -310,15 +301,6 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
                         {getTierLetter(guildSummary.tierScores.overall.speedScore)}
                       </span>
-                      {guildSummary.tierScores.raids.map((raid) => (
-                        <span
-                          key={raid.raidId}
-                          className={`px-2 py-1 font-bold text-gray-900 border-l border-gray-600 ${getTierBgColor(getTierLetter(raid.speedScore))}`}
-                          title={raid.raidName}
-                        >
-                          {getTierLetter(raid.speedScore)}
-                        </span>
-                      ))}
                     </div>
                     {/* Efficiency Score */}
                     <div className="flex items-center border border-gray-600 rounded overflow-hidden">
@@ -326,15 +308,6 @@ export default function GuildProfilePage({ params }: PageProps) {
                       <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
                         {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
                       </span>
-                      {guildSummary.tierScores.raids.map((raid) => (
-                        <span
-                          key={raid.raidId}
-                          className={`px-2 py-1 font-bold text-gray-900 border-l border-gray-600 ${getTierBgColor(getTierLetter(raid.efficiencyScore))}`}
-                          title={raid.raidName}
-                        >
-                          {getTierLetter(raid.efficiencyScore)}
-                        </span>
-                      ))}
                     </div>
                   </div>
                 )}
