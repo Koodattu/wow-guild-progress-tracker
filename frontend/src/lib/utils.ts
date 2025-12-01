@@ -209,3 +209,25 @@ export function getTierColor(tier: TierLetter): string {
       return "text-gray-400";
   }
 }
+
+// Get tier background color class based on tier letter (for blocky tier display)
+export function getTierBgColor(tier: TierLetter): string {
+  switch (tier) {
+    case "S":
+      return "bg-red-400";
+    case "A":
+      return "bg-orange-300";
+    case "B":
+      return "bg-yellow-300";
+    case "C":
+      return "bg-yellow-200";
+    case "D":
+      return "bg-lime-300";
+    case "E":
+      return "bg-green-300";
+    case "F":
+      return "bg-cyan-300";
+    default:
+      return "bg-gray-400";
+  }
+}
