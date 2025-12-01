@@ -13,7 +13,7 @@ const TIERS = ["Crown", "S", "A", "B", "C", "D", "E", "F"] as const;
 type TierName = (typeof TIERS)[number];
 
 const TIER_COLORS: Record<TierName, string> = {
-  Crown: "bg-amber-400",
+  Crown: "bg-purple-400",
   S: "bg-red-400",
   A: "bg-orange-300",
   B: "bg-yellow-300",
@@ -177,8 +177,6 @@ export default function TierListsPage() {
   return (
     <div className="w-full px-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-4">{t("title")}</h1>
-
         {/* Raid Selector */}
         <div className="flex items-center gap-4 mb-4">
           <label className="text-gray-300">{t("selectRaid")}:</label>
