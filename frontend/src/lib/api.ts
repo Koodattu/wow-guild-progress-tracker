@@ -1,4 +1,29 @@
-import { GuildListItem, Guild, GuildSummary, Event, EventsResponse, RaidInfo, Boss, RaidDates, RaidProgress, GuildSchedule, LiveStreamer, TierList, RaidTierList } from "@/types";
+import {
+  GuildListItem,
+  Guild,
+  GuildSummary,
+  Event,
+  EventsResponse,
+  RaidInfo,
+  Boss,
+  RaidDates,
+  RaidProgress,
+  GuildSchedule,
+  LiveStreamer,
+  TierList,
+  RaidTierList,
+  AnalyticsOverview,
+  AnalyticsHourly,
+  AnalyticsDaily,
+  AnalyticsEndpoint,
+  AnalyticsStatusCode,
+  AnalyticsRecent,
+  AnalyticsRealtime,
+  AnalyticsPeakHours,
+  AnalyticsTrends,
+  AnalyticsSlowEndpoint,
+  AnalyticsErrors,
+} from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
 // For server-side: use API_URL (internal Docker network)
@@ -163,6 +188,73 @@ export const api = {
   async getTierListForRaid(raidId: number): Promise<RaidTierList> {
     const response = await fetch(`${API_URL}/api/tierlists?raidId=${raidId}`);
     if (!response.ok) throw new Error("Failed to fetch tier list for raid");
+    return response.json();
+  },
+
+  // Analytics endpoints
+  async getAnalyticsOverview(): Promise<AnalyticsOverview> {
+    const response = await fetch(`${API_URL}/api/analytics/overview`);
+    if (!response.ok) throw new Error("Failed to fetch analytics overview");
+    return response.json();
+  },
+
+  async getAnalyticsHourly(days: number = 7): Promise<AnalyticsHourly[]> {
+    const response = await fetch(`${API_URL}/api/analytics/hourly?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch hourly analytics");
+    return response.json();
+  },
+
+  async getAnalyticsDaily(days: number = 30): Promise<AnalyticsDaily[]> {
+    const response = await fetch(`${API_URL}/api/analytics/daily?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch daily analytics");
+    return response.json();
+  },
+
+  async getAnalyticsEndpoints(days: number = 7): Promise<AnalyticsEndpoint[]> {
+    const response = await fetch(`${API_URL}/api/analytics/endpoints?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch endpoint analytics");
+    return response.json();
+  },
+
+  async getAnalyticsStatusCodes(days: number = 7): Promise<AnalyticsStatusCode[]> {
+    const response = await fetch(`${API_URL}/api/analytics/status-codes?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch status code analytics");
+    return response.json();
+  },
+
+  async getAnalyticsRecent(limit: number = 100): Promise<AnalyticsRecent[]> {
+    const response = await fetch(`${API_URL}/api/analytics/recent?limit=${limit}`);
+    if (!response.ok) throw new Error("Failed to fetch recent requests");
+    return response.json();
+  },
+
+  async getAnalyticsRealtime(): Promise<AnalyticsRealtime> {
+    const response = await fetch(`${API_URL}/api/analytics/realtime`);
+    if (!response.ok) throw new Error("Failed to fetch realtime analytics");
+    return response.json();
+  },
+
+  async getAnalyticsPeakHours(days: number = 7): Promise<AnalyticsPeakHours> {
+    const response = await fetch(`${API_URL}/api/analytics/peak-hours?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch peak hours analytics");
+    return response.json();
+  },
+
+  async getAnalyticsTrends(): Promise<AnalyticsTrends> {
+    const response = await fetch(`${API_URL}/api/analytics/trends`);
+    if (!response.ok) throw new Error("Failed to fetch analytics trends");
+    return response.json();
+  },
+
+  async getAnalyticsSlowEndpoints(days: number = 7): Promise<AnalyticsSlowEndpoint[]> {
+    const response = await fetch(`${API_URL}/api/analytics/slow-endpoints?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch slow endpoints");
+    return response.json();
+  },
+
+  async getAnalyticsErrors(days: number = 7): Promise<AnalyticsErrors> {
+    const response = await fetch(`${API_URL}/api/analytics/errors?days=${days}`);
+    if (!response.ok) throw new Error("Failed to fetch error analytics");
     return response.json();
   },
 };

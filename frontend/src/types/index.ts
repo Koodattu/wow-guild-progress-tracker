@@ -300,3 +300,124 @@ export interface TierList {
   overall: GuildTierScore[];
   raids: RaidTierList[];
 }
+
+// Analytics types
+export interface AnalyticsPeriodStats {
+  totalRequests: number;
+  avgResponseTime: number;
+  totalDataTransferred: number;
+  formattedData: string;
+}
+
+export interface AnalyticsOverview {
+  last24Hours: AnalyticsPeriodStats;
+  last7Days: AnalyticsPeriodStats;
+  last30Days: AnalyticsPeriodStats;
+}
+
+export interface AnalyticsHourly {
+  hour: string;
+  requests: number;
+  avgResponseTime: number;
+  dataTransferred: number;
+  formattedData: string;
+}
+
+export interface AnalyticsDaily {
+  date: string;
+  requests: number;
+  avgResponseTime: number;
+  dataTransferred: number;
+  formattedData: string;
+}
+
+export interface AnalyticsEndpoint {
+  endpoint: string;
+  count: number;
+  avgResponseTime: number;
+  totalSize: number;
+  formattedSize: string;
+  successRate: number;
+  errorCount: number;
+  methods?: string[];
+  lastCalled?: string;
+}
+
+export interface AnalyticsStatusCode {
+  statusCode: number;
+  count: number;
+}
+
+export interface AnalyticsRecent {
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  responseTime: number;
+  responseSize: number;
+  formattedSize: string;
+  timestamp: string;
+}
+
+export interface AnalyticsRealtime {
+  currentHour: {
+    requests: number;
+    avgResponseTime: number;
+    dataTransferred: string;
+  };
+  requestsPerMinute: number;
+}
+
+export interface AnalyticsPeakHour {
+  hour: number;
+  hourLabel: string;
+  totalRequests: number;
+  avgRequests: number;
+  avgResponseTime: number;
+}
+
+export interface AnalyticsPeakHours {
+  hours: AnalyticsPeakHour[];
+  peakHour: AnalyticsPeakHour;
+}
+
+export interface AnalyticsTrends {
+  weekOverWeek: {
+    current: number;
+    previous: number;
+    change: number;
+    dataChange: number;
+  };
+  dayOverDay: {
+    current: number;
+    previous: number;
+    change: number;
+    dataChange: number;
+  };
+}
+
+export interface AnalyticsSlowEndpoint {
+  endpoint: string;
+  count: number;
+  avgResponseTime: number;
+  maxResponseTime: number;
+  minResponseTime: number;
+  p95ResponseTime: number;
+}
+
+export interface AnalyticsErrorDetail {
+  endpoint: string;
+  statusCode: number;
+  count: number;
+  lastOccurred: string;
+}
+
+export interface AnalyticsErrorSummary {
+  endpoint: string;
+  totalErrors: number;
+  statusCodes: Record<number, number>;
+}
+
+export interface AnalyticsErrors {
+  details: AnalyticsErrorDetail[];
+  summary: AnalyticsErrorSummary[];
+}

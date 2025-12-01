@@ -14,6 +14,8 @@ import guildsRouter from "./routes/guilds";
 import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
 import tierlistsRouter from "./routes/tierlists";
+import analyticsRouter from "./routes/analytics";
+import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +23,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Analytics middleware - tracks all requests automatically
+app.use(analyticsMiddleware);
 
 // Serve static icons
 app.use("/icons", express.static(path.join(__dirname, "../public/icons")));
@@ -30,6 +35,7 @@ app.use("/api/guilds", guildsRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/raids", raidsRouter);
 app.use("/api/tierlists", tierlistsRouter);
+app.use("/api/analytics", analyticsRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
@@ -142,15 +148,17 @@ const startServer = async () => {
 };
 
 // Handle shutdown gracefully
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
 
