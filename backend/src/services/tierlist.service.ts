@@ -441,9 +441,9 @@ class TierListService {
     if (hasHeroicSpeed && hasMythicSpeed) {
       speedScore = heroicSpeedScore * this.HEROIC_WEIGHT + mythicSpeedScore * this.MYTHIC_WEIGHT;
     } else if (hasHeroicSpeed) {
-      speedScore = heroicSpeedScore;
+      speedScore = heroicSpeedScore * this.HEROIC_WEIGHT;
     } else if (hasMythicSpeed) {
-      speedScore = mythicSpeedScore;
+      speedScore = mythicSpeedScore * this.MYTHIC_WEIGHT;
     }
 
     // === CALCULATE WEIGHTED EFFICIENCY SCORE ===
@@ -452,9 +452,9 @@ class TierListService {
     if (hasHeroicEfficiency && hasMythicEfficiency) {
       efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT + mythicEfficiencyScore * this.MYTHIC_WEIGHT;
     } else if (hasHeroicEfficiency) {
-      efficiencyScore = heroicEfficiencyScore;
+      efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT;
     } else if (hasMythicEfficiency) {
-      efficiencyScore = mythicEfficiencyScore;
+      efficiencyScore = mythicEfficiencyScore * this.MYTHIC_WEIGHT;
     }
 
     // === OVERALL SCORE ===
