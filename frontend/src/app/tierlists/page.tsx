@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { TierList, GuildTierScore, RaidInfo } from "@/types";
 import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
@@ -53,9 +54,10 @@ interface TierListDisplayProps {
   title: string;
   guilds: GuildTierScore[];
   scoreKey: "overallScore" | "speedScore" | "efficiencyScore";
+  onGuildClick: (realm: string, name: string) => void;
 }
 
-function TierListDisplay({ title, guilds, scoreKey }: TierListDisplayProps) {
+function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisplayProps) {
   // Group guilds by their tier based on score thresholds
   const tierGroups: Record<TierName, GuildTierScore[]> = {
     Crown: [],
@@ -95,14 +97,21 @@ function TierListDisplay({ title, guilds, scoreKey }: TierListDisplayProps) {
               <div className={`w-20 min-h-20 flex items-center justify-center font-bold text-2xl text-gray-900 ${TIER_COLORS[tier]}`}>{tier === "Crown" ? "👑" : tier}</div>
               <div className="flex-1 bg-gray-800 p-2 flex flex-wrap items-center gap-2 min-h-20">
                 {tierGuilds.map((guild, idx) => (
-                  <div key={idx} className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm text-gray-200 flex items-center gap-2 transition-colors">
+                  <div
+                    key={idx}
+                    className="bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-sm text-gray-200 flex items-center gap-2 transition-colors cursor-pointer"
+                    onClick={() => onGuildClick(guild.realm, guild.guildName)}
+                  >
                     {guild.crest && (
                       <div className="w-8 h-8 shrink-0">
                         <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
                       </div>
                     )}
                     <div className="flex flex-col">
-                      <span className="font-bold">{guild.guildName}</span>
+                      <span>
+                        <span className="font-bold">{guild.guildName}</span>
+                        {guild.parent_guild && <span className="text-gray-400"> ({guild.parent_guild})</span>}
+                      </span>
                       <span className="text-xs text-gray-400">{guild.realm}</span>
                     </div>
                   </div>
@@ -118,9 +127,10 @@ function TierListDisplay({ title, guilds, scoreKey }: TierListDisplayProps) {
 
 export default function TierListsPage() {
   const t = useTranslations("tierListsPage");
+  const router = useRouter();
   const [tierList, setTierList] = useState<TierList | null>(null);
   const [raids, setRaids] = useState<RaidInfo[]>([]);
-  const [selectedRaidId, setSelectedRaidId] = useState<number | "overall">("overall");
+  const [selectedRaidId, setSelectedRaidId] = useState<number | "overall" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +141,12 @@ export default function TierListsPage() {
         const [tierListData, raidsData] = await Promise.all([api.getTierList(), api.getRaids()]);
         setTierList(tierListData);
         setRaids(raidsData);
+        // Default to first raid if available, otherwise overall
+        if (raidsData.length > 0) {
+          setSelectedRaidId(raidsData[0].id);
+        } else {
+          setSelectedRaidId("overall");
+        }
       } catch (err) {
         console.error("Error fetching tier list:", err);
         setError(t("error"));
@@ -167,45 +183,52 @@ export default function TierListsPage() {
 
   if (selectedRaidId === "overall") {
     currentGuilds = tierList.overall;
-  } else {
+  } else if (selectedRaidId !== null) {
     const raidTierList = tierList.raids.find((r) => r.raidId === selectedRaidId);
     if (raidTierList) {
       currentGuilds = raidTierList.guilds;
     }
   }
 
+  // Handle guild click to navigate to profile
+  const handleGuildClick = (realm: string, name: string) => {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    router.push(`/guilds/${encodedRealm}/${encodedName}`);
+  };
+
   return (
     <div className="w-full px-6">
       <div className="mb-6">
-        {/* Raid Selector */}
-        <div className="flex items-center gap-4 mb-4">
-          <label className="text-gray-300">{t("selectRaid")}:</label>
-          <select
-            value={selectedRaidId}
-            onChange={(e) => setSelectedRaidId(e.target.value === "overall" ? "overall" : parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="overall">{t("overallAllRaids")}</option>
-            {raids.map((raid) => (
-              <option key={raid.id} value={raid.id}>
-                {raid.name}
-              </option>
-            ))}
-          </select>
+        {/* Raid Selector and Last Calculated */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <label className="text-gray-300">{t("selectRaid")}:</label>
+            <select
+              value={selectedRaidId ?? ""}
+              onChange={(e) => setSelectedRaidId(e.target.value === "overall" ? "overall" : parseInt(e.target.value))}
+              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="overall">{t("overallAllRaids")}</option>
+              {raids.map((raid) => (
+                <option key={raid.id} value={raid.id}>
+                  {raid.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-gray-400 text-sm">
+            {t("lastCalculated")}: {new Date(tierList.calculatedAt).toLocaleString()}
+          </p>
         </div>
-
-        {/* Last calculated info */}
-        <p className="text-gray-400 text-sm">
-          {t("lastCalculated")}: {new Date(tierList.calculatedAt).toLocaleString()}
-        </p>
       </div>
 
       {/* Tier Lists Grid */}
       {currentGuilds.length > 0 ? (
         <div className="flex gap-4">
-          <TierListDisplay title={t("overall")} guilds={currentGuilds} scoreKey="overallScore" />
-          <TierListDisplay title={t("speed")} guilds={currentGuilds} scoreKey="speedScore" />
-          <TierListDisplay title={t("efficiency")} guilds={currentGuilds} scoreKey="efficiencyScore" />
+          <TierListDisplay title={t("overall")} guilds={currentGuilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
+          <TierListDisplay title={t("speed")} guilds={currentGuilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
+          <TierListDisplay title={t("efficiency")} guilds={currentGuilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
         </div>
       ) : (
         <div className="bg-gray-800 rounded-lg p-8 text-center">

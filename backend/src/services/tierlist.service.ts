@@ -9,6 +9,7 @@ interface GuildRaidData {
   realm: string;
   faction?: string;
   crest?: IGuildCrest;
+  parent_guild?: string;
   raidId: number;
   raidName: string;
   // Heroic data
@@ -84,6 +85,7 @@ class TierListService {
             realm: guild.realm,
             faction: guild.faction,
             crest: guild.crest,
+            parent_guild: guild.parent_guild,
             raidId,
             raidName,
             heroicBossesDefeated: heroicProgress?.bossesDefeated || 0,
@@ -138,6 +140,7 @@ class TierListService {
             realm: data.realm,
             faction: data.faction,
             crest: data.crest,
+            parent_guild: data.parent_guild,
             overallScore: Math.round(overallScore),
             speedScore: Math.round(speedScore),
             efficiencyScore: Math.round(efficiencyScore),
@@ -160,7 +163,7 @@ class TierListService {
       // Calculate overall tier list (combined scores across all raids)
       const overallScores: Map<
         string,
-        { guildName: string; realm: string; faction?: string; crest?: IGuildCrest; totalSpeed: number; totalEfficiency: number; raidCount: number }
+        { guildName: string; realm: string; faction?: string; crest?: IGuildCrest; parent_guild?: string; totalSpeed: number; totalEfficiency: number; raidCount: number }
       > = new Map();
 
       for (const [guildId, raidDataList] of guildRaidDataMap) {
@@ -187,6 +190,7 @@ class TierListService {
             realm: guildInfo.realm,
             faction: guildInfo.faction,
             crest: guildInfo.crest,
+            parent_guild: guildInfo.parent_guild,
             totalSpeed,
             totalEfficiency,
             raidCount,
@@ -208,6 +212,7 @@ class TierListService {
           realm: data.realm,
           faction: data.faction,
           crest: data.crest,
+          parent_guild: data.parent_guild,
           overallScore: Math.round(overallScore),
           speedScore: Math.round(avgSpeed),
           efficiencyScore: Math.round(avgEfficiency),

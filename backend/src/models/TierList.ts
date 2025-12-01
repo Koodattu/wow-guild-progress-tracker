@@ -7,6 +7,7 @@ export interface IGuildTierScore {
   realm: string;
   faction?: string;
   crest?: IGuildCrest;
+  parent_guild?: string;
   overallScore: number;
   speedScore: number;
   efficiencyScore: number;
@@ -31,6 +32,7 @@ const GuildTierScoreSchema = new Schema<IGuildTierScore>(
     realm: { type: String, required: true },
     faction: { type: String },
     crest: { type: Schema.Types.Mixed },
+    parent_guild: { type: String },
     overallScore: { type: Number, required: true },
     speedScore: { type: Number, required: true },
     efficiencyScore: { type: Number, required: true },

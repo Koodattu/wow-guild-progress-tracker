@@ -263,6 +263,7 @@ export interface GuildTierScore {
   realm: string;
   faction?: string;
   crest?: GuildCrest;
+  parent_guild?: string;
   overallScore: number;
   speedScore: number;
   efficiencyScore: number;
