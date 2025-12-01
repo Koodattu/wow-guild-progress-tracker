@@ -28,13 +28,16 @@ interface GuildRaidData {
 }
 
 class TierListService {
-  // Weight constants for scoring
-  private readonly MYTHIC_WEIGHT = 3; // Mythic is weighted 3x more than heroic
-  private readonly HEROIC_WEIGHT = 1;
+  // Weight constants for scoring (heroic 20%, mythic 80%)
+  private readonly HEROIC_WEIGHT = 0.2;
+  private readonly MYTHIC_WEIGHT = 0.8;
 
-  // Score normalization constants
-  private readonly MAX_WORLD_RANK = 10000; // Assume max world rank for normalization
-  private readonly MAX_GUILD_RANK = 100; // Assume max guild rank for normalization
+  // Score range constants
+  private readonly MAX_SCORE = 1000;
+  private readonly MIN_SCORE = 0;
+
+  // Cap for world rank (ranks above this are treated as this value)
+  private readonly MAX_WORLD_RANK_CAP = 10000;
 
   /**
    * Calculate tier list scores for all guilds
@@ -233,121 +236,213 @@ class TierListService {
   }
 
   /**
-   * Calculate speed, efficiency, and overall scores for a guild in a specific raid
+   * Linear interpolation helper: maps a value from [min, max] range to [1000, 0] score
+   * Lower values get higher scores (closer to 1000)
    */
-  private calculateGuildRaidScores(guildData: GuildRaidData, allGuildsData: GuildRaidData[]): { speedScore: number; efficiencyScore: number; overallScore: number } {
-    // === SPEED SCORE ===
-    // Based on world rank and guild rank (lower rank = better)
-    // Score = 100 - normalized_rank
-    let speedScore = 0;
+  private interpolateScore(value: number, minValue: number, maxValue: number): number {
+    if (minValue === maxValue) return this.MAX_SCORE; // All same value, give max score
+    const normalized = (value - minValue) / (maxValue - minValue);
+    return Math.round(this.MAX_SCORE * (1 - normalized));
+  }
 
-    // Calculate heroic speed component
-    if (guildData.heroicWorldRank || guildData.heroicGuildRank) {
-      const heroicWorldRankScore = guildData.heroicWorldRank ? Math.max(0, 100 - (guildData.heroicWorldRank / this.MAX_WORLD_RANK) * 100) : 0;
-      const heroicGuildRankScore = guildData.heroicGuildRank ? Math.max(0, 100 - (guildData.heroicGuildRank / this.MAX_GUILD_RANK) * 100) : 0;
-      const heroicSpeedScore = (heroicWorldRankScore * 0.7 + heroicGuildRankScore * 0.3) * this.HEROIC_WEIGHT;
-      speedScore += heroicSpeedScore;
+  /**
+   * Calculate speed, efficiency, and overall scores for a guild in a specific raid
+   * All scores are on a 0-1000 scale where 1000 is best
+   */
+  private calculateGuildRaidScores(
+    guildData: GuildRaidData,
+    allGuildsData: GuildRaidData[]
+  ): {
+    speedScore: number;
+    efficiencyScore: number;
+    overallScore: number;
+    heroicSpeedScore: number;
+    mythicSpeedScore: number;
+    heroicEfficiencyScore: number;
+    mythicEfficiencyScore: number;
+  } {
+    // === FIND MIN/MAX VALUES FOR DYNAMIC SCORING ===
+
+    // Guild ranks (min is always 1, find max)
+    const heroicGuildRanks = allGuildsData.filter((g) => g.heroicGuildRank !== null).map((g) => g.heroicGuildRank!);
+    const mythicGuildRanks = allGuildsData.filter((g) => g.mythicGuildRank !== null).map((g) => g.mythicGuildRank!);
+    const minHeroicGuildRank = 1;
+    const maxHeroicGuildRank = heroicGuildRanks.length > 0 ? Math.max(...heroicGuildRanks) : 1;
+    const minMythicGuildRank = 1;
+    const maxMythicGuildRank = mythicGuildRanks.length > 0 ? Math.max(...mythicGuildRanks) : 1;
+
+    // World ranks (find actual min, cap max at MAX_WORLD_RANK_CAP)
+    const heroicWorldRanks = allGuildsData.filter((g) => g.heroicWorldRank !== null).map((g) => g.heroicWorldRank!);
+    const mythicWorldRanks = allGuildsData.filter((g) => g.mythicWorldRank !== null).map((g) => g.mythicWorldRank!);
+    const minHeroicWorldRank = heroicWorldRanks.length > 0 ? Math.min(...heroicWorldRanks) : 1;
+    const maxHeroicWorldRank = heroicWorldRanks.length > 0 ? Math.min(Math.max(...heroicWorldRanks), this.MAX_WORLD_RANK_CAP) : this.MAX_WORLD_RANK_CAP;
+    const minMythicWorldRank = mythicWorldRanks.length > 0 ? Math.min(...mythicWorldRanks) : 1;
+    const maxMythicWorldRank = mythicWorldRanks.length > 0 ? Math.min(Math.max(...mythicWorldRanks), this.MAX_WORLD_RANK_CAP) : this.MAX_WORLD_RANK_CAP;
+
+    // Total bosses (for progress calculation)
+    const heroicTotalBosses = guildData.heroicTotalBosses || allGuildsData.find((g) => g.heroicTotalBosses > 0)?.heroicTotalBosses || 0;
+    const mythicTotalBosses = guildData.mythicTotalBosses || allGuildsData.find((g) => g.mythicTotalBosses > 0)?.mythicTotalBosses || 0;
+
+    // Pull counts (find min/max across all guilds)
+    const heroicPullCounts = allGuildsData.filter((g) => g.heroicTotalPulls > 0).map((g) => g.heroicTotalPulls);
+    const mythicPullCounts = allGuildsData.filter((g) => g.mythicTotalPulls > 0).map((g) => g.mythicTotalPulls);
+    const minHeroicPulls = heroicPullCounts.length > 0 ? Math.min(...heroicPullCounts) : 0;
+    const maxHeroicPulls = heroicPullCounts.length > 0 ? Math.max(...heroicPullCounts) : 1;
+    const minMythicPulls = mythicPullCounts.length > 0 ? Math.min(...mythicPullCounts) : 0;
+    const maxMythicPulls = mythicPullCounts.length > 0 ? Math.max(...mythicPullCounts) : 1;
+
+    // Time spent (find min/max across all guilds)
+    const heroicTimes = allGuildsData.filter((g) => g.heroicTimeSpent > 0).map((g) => g.heroicTimeSpent);
+    const mythicTimes = allGuildsData.filter((g) => g.mythicTimeSpent > 0).map((g) => g.mythicTimeSpent);
+    const minHeroicTime = heroicTimes.length > 0 ? Math.min(...heroicTimes) : 0;
+    const maxHeroicTime = heroicTimes.length > 0 ? Math.max(...heroicTimes) : 1;
+    const minMythicTime = mythicTimes.length > 0 ? Math.min(...mythicTimes) : 0;
+    const maxMythicTime = mythicTimes.length > 0 ? Math.max(...mythicTimes) : 1;
+
+    // === CALCULATE HEROIC SPEED SCORE ===
+    let heroicSpeedScore = 0;
+    let hasHeroicSpeed = false;
+    if (guildData.heroicGuildRank !== null || guildData.heroicWorldRank !== null || guildData.heroicBossesDefeated > 0) {
+      hasHeroicSpeed = true;
+      const scores: number[] = [];
+
+      // Guild rank score (rank 1 = 1000, highest rank = 0)
+      if (guildData.heroicGuildRank !== null) {
+        scores.push(this.interpolateScore(guildData.heroicGuildRank, minHeroicGuildRank, maxHeroicGuildRank));
+      }
+
+      // World rank score (lowest = 1000, highest/cap = 0)
+      if (guildData.heroicWorldRank !== null) {
+        const cappedRank = Math.min(guildData.heroicWorldRank, this.MAX_WORLD_RANK_CAP);
+        scores.push(this.interpolateScore(cappedRank, minHeroicWorldRank, maxHeroicWorldRank));
+      }
+
+      // Bosses defeated score (0 = 0, all = 1000)
+      if (heroicTotalBosses > 0) {
+        const progressScore = Math.round((guildData.heroicBossesDefeated / heroicTotalBosses) * this.MAX_SCORE);
+        scores.push(progressScore);
+      }
+
+      // Average of available scores
+      heroicSpeedScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     }
 
-    // Calculate mythic speed component (weighted more heavily)
-    if (guildData.mythicWorldRank || guildData.mythicGuildRank) {
-      const mythicWorldRankScore = guildData.mythicWorldRank ? Math.max(0, 100 - (guildData.mythicWorldRank / this.MAX_WORLD_RANK) * 100) : 0;
-      const mythicGuildRankScore = guildData.mythicGuildRank ? Math.max(0, 100 - (guildData.mythicGuildRank / this.MAX_GUILD_RANK) * 100) : 0;
-      const mythicSpeedScore = (mythicWorldRankScore * 0.7 + mythicGuildRankScore * 0.3) * this.MYTHIC_WEIGHT;
-      speedScore += mythicSpeedScore;
+    // === CALCULATE MYTHIC SPEED SCORE ===
+    let mythicSpeedScore = 0;
+    let hasMythicSpeed = false;
+    if (guildData.mythicGuildRank !== null || guildData.mythicWorldRank !== null || guildData.mythicBossesDefeated > 0) {
+      hasMythicSpeed = true;
+      const scores: number[] = [];
+
+      // Guild rank score (rank 1 = 1000, highest rank = 0)
+      if (guildData.mythicGuildRank !== null) {
+        scores.push(this.interpolateScore(guildData.mythicGuildRank, minMythicGuildRank, maxMythicGuildRank));
+      }
+
+      // World rank score (lowest = 1000, highest/cap = 0)
+      if (guildData.mythicWorldRank !== null) {
+        const cappedRank = Math.min(guildData.mythicWorldRank, this.MAX_WORLD_RANK_CAP);
+        scores.push(this.interpolateScore(cappedRank, minMythicWorldRank, maxMythicWorldRank));
+      }
+
+      // Bosses defeated score (0 = 0, all = 1000)
+      if (mythicTotalBosses > 0) {
+        const progressScore = Math.round((guildData.mythicBossesDefeated / mythicTotalBosses) * this.MAX_SCORE);
+        scores.push(progressScore);
+      }
+
+      // Average of available scores
+      mythicSpeedScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     }
 
-    // Normalize speed score to 0-100
-    const maxSpeedWeight = this.HEROIC_WEIGHT + this.MYTHIC_WEIGHT;
-    speedScore = (speedScore / maxSpeedWeight) * (100 / 100); // Normalize
+    // === CALCULATE HEROIC EFFICIENCY SCORE ===
+    let heroicEfficiencyScore = 0;
+    let hasHeroicEfficiency = false;
+    if (guildData.heroicTotalPulls > 0 || guildData.heroicTimeSpent > 0 || guildData.heroicBossesDefeated > 0) {
+      hasHeroicEfficiency = true;
+      const scores: number[] = [];
 
-    // Also factor in progress (bosses killed)
-    const heroicProgress = guildData.heroicTotalBosses > 0 ? (guildData.heroicBossesDefeated / guildData.heroicTotalBosses) * 100 : 0;
-    const mythicProgress = guildData.mythicTotalBosses > 0 ? (guildData.mythicBossesDefeated / guildData.mythicTotalBosses) * 100 : 0;
-    const weightedProgress = (heroicProgress * this.HEROIC_WEIGHT + mythicProgress * this.MYTHIC_WEIGHT) / maxSpeedWeight;
+      // Pull count score (lowest = 1000, highest = 0)
+      if (guildData.heroicTotalPulls > 0) {
+        scores.push(this.interpolateScore(guildData.heroicTotalPulls, minHeroicPulls, maxHeroicPulls));
+      }
 
-    // Combine rank-based speed with progress
-    speedScore = speedScore * 0.6 + weightedProgress * 0.4;
-
-    // === EFFICIENCY SCORE ===
-    // Based on kills per pull ratio and time per boss
-    // Higher efficiency = fewer pulls and less time per boss
-    let efficiencyScore = 0;
-
-    // Calculate efficiency based on pulls per boss killed and time per boss
-    const heroicBossesDefeated = guildData.heroicBossesDefeated || 0;
-    const mythicBossesDefeated = guildData.mythicBossesDefeated || 0;
-
-    // Find average pulls per boss in the raid for normalization
-    const avgHeroicPulls =
-      allGuildsData.filter((g) => g.heroicBossesDefeated > 0).reduce((sum, g) => sum + g.heroicTotalPulls / g.heroicBossesDefeated, 0) /
-        Math.max(1, allGuildsData.filter((g) => g.heroicBossesDefeated > 0).length) || 50;
-
-    const avgMythicPulls =
-      allGuildsData.filter((g) => g.mythicBossesDefeated > 0).reduce((sum, g) => sum + g.mythicTotalPulls / g.mythicBossesDefeated, 0) /
-        Math.max(1, allGuildsData.filter((g) => g.mythicBossesDefeated > 0).length) || 100;
-
-    // Find average time per boss in the raid for normalization
-    const avgHeroicTime =
-      allGuildsData.filter((g) => g.heroicBossesDefeated > 0 && g.heroicTimeSpent > 0).reduce((sum, g) => sum + g.heroicTimeSpent / g.heroicBossesDefeated, 0) /
-        Math.max(1, allGuildsData.filter((g) => g.heroicBossesDefeated > 0 && g.heroicTimeSpent > 0).length) || 1800000; // Default 30 min per boss
-
-    const avgMythicTime =
-      allGuildsData.filter((g) => g.mythicBossesDefeated > 0 && g.mythicTimeSpent > 0).reduce((sum, g) => sum + g.mythicTimeSpent / g.mythicBossesDefeated, 0) /
-        Math.max(1, allGuildsData.filter((g) => g.mythicBossesDefeated > 0 && g.mythicTimeSpent > 0).length) || 3600000; // Default 60 min per boss
-
-    // Heroic efficiency (pulls + time)
-    if (heroicBossesDefeated > 0) {
-      const pullsPerBoss = guildData.heroicTotalPulls / heroicBossesDefeated;
-      // Score: if pulls per boss is lower than average, score > 50, otherwise < 50
-      const heroicPullEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgHeroicPulls) / avgHeroicPulls) * 50 + 50));
-
-      // Time efficiency: less time per boss = better score
-      let heroicTimeEfficiency = 50; // Default if no time data
+      // Time spent score (lowest = 1000, highest = 0)
       if (guildData.heroicTimeSpent > 0) {
-        const timePerBoss = guildData.heroicTimeSpent / heroicBossesDefeated;
-        heroicTimeEfficiency = Math.max(0, Math.min(100, 100 - ((timePerBoss - avgHeroicTime) / avgHeroicTime) * 50 + 50));
+        scores.push(this.interpolateScore(guildData.heroicTimeSpent, minHeroicTime, maxHeroicTime));
       }
 
-      // Combine pull and time efficiency (60% pulls, 40% time)
-      const heroicEfficiency = heroicPullEfficiency * 0.6 + heroicTimeEfficiency * 0.4;
-      efficiencyScore += heroicEfficiency * this.HEROIC_WEIGHT;
+      // Bosses defeated score (0 = 0, all = 1000)
+      if (heroicTotalBosses > 0) {
+        const progressScore = Math.round((guildData.heroicBossesDefeated / heroicTotalBosses) * this.MAX_SCORE);
+        scores.push(progressScore);
+      }
+
+      // Average of available scores
+      heroicEfficiencyScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     }
 
-    // Mythic efficiency (pulls + time, weighted more)
-    if (mythicBossesDefeated > 0) {
-      const pullsPerBoss = guildData.mythicTotalPulls / mythicBossesDefeated;
-      const mythicPullEfficiency = Math.max(0, Math.min(100, 100 - ((pullsPerBoss - avgMythicPulls) / avgMythicPulls) * 50 + 50));
+    // === CALCULATE MYTHIC EFFICIENCY SCORE ===
+    let mythicEfficiencyScore = 0;
+    let hasMythicEfficiency = false;
+    if (guildData.mythicTotalPulls > 0 || guildData.mythicTimeSpent > 0 || guildData.mythicBossesDefeated > 0) {
+      hasMythicEfficiency = true;
+      const scores: number[] = [];
 
-      // Time efficiency: less time per boss = better score
-      let mythicTimeEfficiency = 50; // Default if no time data
+      // Pull count score (lowest = 1000, highest = 0)
+      if (guildData.mythicTotalPulls > 0) {
+        scores.push(this.interpolateScore(guildData.mythicTotalPulls, minMythicPulls, maxMythicPulls));
+      }
+
+      // Time spent score (lowest = 1000, highest = 0)
       if (guildData.mythicTimeSpent > 0) {
-        const timePerBoss = guildData.mythicTimeSpent / mythicBossesDefeated;
-        mythicTimeEfficiency = Math.max(0, Math.min(100, 100 - ((timePerBoss - avgMythicTime) / avgMythicTime) * 50 + 50));
+        scores.push(this.interpolateScore(guildData.mythicTimeSpent, minMythicTime, maxMythicTime));
       }
 
-      // Combine pull and time efficiency (60% pulls, 40% time)
-      const mythicEfficiency = mythicPullEfficiency * 0.6 + mythicTimeEfficiency * 0.4;
-      efficiencyScore += mythicEfficiency * this.MYTHIC_WEIGHT;
+      // Bosses defeated score (0 = 0, all = 1000)
+      if (mythicTotalBosses > 0) {
+        const progressScore = Math.round((guildData.mythicBossesDefeated / mythicTotalBosses) * this.MAX_SCORE);
+        scores.push(progressScore);
+      }
+
+      // Average of available scores
+      mythicEfficiencyScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     }
 
-    // Normalize efficiency score
-    const totalWeight = (heroicBossesDefeated > 0 ? this.HEROIC_WEIGHT : 0) + (mythicBossesDefeated > 0 ? this.MYTHIC_WEIGHT : 0);
-    if (totalWeight > 0) {
-      efficiencyScore = efficiencyScore / totalWeight;
+    // === CALCULATE WEIGHTED SPEED SCORE ===
+    // Heroic 20%, Mythic 80%
+    let speedScore = 0;
+    if (hasHeroicSpeed && hasMythicSpeed) {
+      speedScore = heroicSpeedScore * this.HEROIC_WEIGHT + mythicSpeedScore * this.MYTHIC_WEIGHT;
+    } else if (hasHeroicSpeed) {
+      speedScore = heroicSpeedScore;
+    } else if (hasMythicSpeed) {
+      speedScore = mythicSpeedScore;
     }
 
-    // Factor in progress for efficiency too (can't be efficient if you haven't killed bosses)
-    efficiencyScore = efficiencyScore * 0.7 + weightedProgress * 0.3;
+    // === CALCULATE WEIGHTED EFFICIENCY SCORE ===
+    // Heroic 20%, Mythic 80%
+    let efficiencyScore = 0;
+    if (hasHeroicEfficiency && hasMythicEfficiency) {
+      efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT + mythicEfficiencyScore * this.MYTHIC_WEIGHT;
+    } else if (hasHeroicEfficiency) {
+      efficiencyScore = heroicEfficiencyScore;
+    } else if (hasMythicEfficiency) {
+      efficiencyScore = mythicEfficiencyScore;
+    }
 
     // === OVERALL SCORE ===
-    // Equal weight of speed and efficiency
+    // Average of speed and efficiency
     const overallScore = (speedScore + efficiencyScore) / 2;
 
     return {
-      speedScore: Math.max(0, Math.min(100, speedScore)),
-      efficiencyScore: Math.max(0, Math.min(100, efficiencyScore)),
-      overallScore: Math.max(0, Math.min(100, overallScore)),
+      speedScore: Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, Math.round(speedScore))),
+      efficiencyScore: Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, Math.round(efficiencyScore))),
+      overallScore: Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, Math.round(overallScore))),
+      heroicSpeedScore: Math.round(heroicSpeedScore),
+      mythicSpeedScore: Math.round(mythicSpeedScore),
+      heroicEfficiencyScore: Math.round(heroicEfficiencyScore),
+      mythicEfficiencyScore: Math.round(mythicEfficiencyScore),
     };
   }
 
