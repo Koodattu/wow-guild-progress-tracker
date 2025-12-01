@@ -126,7 +126,7 @@ export default function GuildsPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4" style={{ maxWidth: "85%" }}>
+      <div className="container mx-auto px-4" style={{ maxWidth: "90%" }}>
         <div className="mb-8">
           {/* Search box */}
           <input
