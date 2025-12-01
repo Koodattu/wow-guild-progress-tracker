@@ -246,6 +246,27 @@ class TierListService {
   }
 
   /**
+   * Calculate exponential progress score for bosses defeated
+   * Later bosses are worth more than earlier bosses (exponential growth)
+   * 0 bosses = 0 score, all bosses = 1000 score
+   * Uses exponential curve where each boss is worth more than the previous
+   */
+  private calculateExponentialProgressScore(bossesDefeated: number, totalBosses: number): number {
+    if (totalBosses === 0 || bossesDefeated === 0) return 0;
+    if (bossesDefeated >= totalBosses) return this.MAX_SCORE;
+
+    // Use exponential formula: score = (e^(k * progress) - 1) / (e^k - 1) * 1000
+    // where k controls the steepness of the curve (higher = more emphasis on later bosses)
+    const k = 10; // Steepness factor - adjustable
+    const progress = bossesDefeated / totalBosses;
+
+    // Exponential interpolation: early bosses worth less, later bosses worth more
+    const exponentialProgress = (Math.exp(k * progress) - 1) / (Math.exp(k) - 1);
+
+    return Math.round(exponentialProgress * this.MAX_SCORE);
+  }
+
+  /**
    * Calculate speed, efficiency, and overall scores for a guild in a specific raid
    * All scores are on a 0-1000 scale where 1000 is best
    */
@@ -317,9 +338,9 @@ class TierListService {
         scores.push(this.interpolateScore(cappedRank, minHeroicWorldRank, maxHeroicWorldRank));
       }
 
-      // Bosses defeated score (0 = 0, all = 1000)
+      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
       if (heroicTotalBosses > 0) {
-        const progressScore = Math.round((guildData.heroicBossesDefeated / heroicTotalBosses) * this.MAX_SCORE);
+        const progressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses);
         scores.push(progressScore);
       }
 
@@ -345,9 +366,9 @@ class TierListService {
         scores.push(this.interpolateScore(cappedRank, minMythicWorldRank, maxMythicWorldRank));
       }
 
-      // Bosses defeated score (0 = 0, all = 1000)
+      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
       if (mythicTotalBosses > 0) {
-        const progressScore = Math.round((guildData.mythicBossesDefeated / mythicTotalBosses) * this.MAX_SCORE);
+        const progressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses);
         scores.push(progressScore);
       }
 
@@ -372,9 +393,9 @@ class TierListService {
         scores.push(this.interpolateScore(guildData.heroicTimeSpent, minHeroicTime, maxHeroicTime));
       }
 
-      // Bosses defeated score (0 = 0, all = 1000)
+      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
       if (heroicTotalBosses > 0) {
-        const progressScore = Math.round((guildData.heroicBossesDefeated / heroicTotalBosses) * this.MAX_SCORE);
+        const progressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses);
         scores.push(progressScore);
       }
 
@@ -399,9 +420,9 @@ class TierListService {
         scores.push(this.interpolateScore(guildData.mythicTimeSpent, minMythicTime, maxMythicTime));
       }
 
-      // Bosses defeated score (0 = 0, all = 1000)
+      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
       if (mythicTotalBosses > 0) {
-        const progressScore = Math.round((guildData.mythicBossesDefeated / mythicTotalBosses) * this.MAX_SCORE);
+        const progressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses);
         scores.push(progressScore);
       }
 
