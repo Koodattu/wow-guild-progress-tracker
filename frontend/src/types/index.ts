@@ -311,6 +311,26 @@ export interface TierList {
   raids: RaidTierList[];
 }
 
+// Response for overall tier list only (without per-raid data)
+export interface OverallTierListResponse {
+  calculatedAt: string;
+  guilds: GuildTierScore[];
+}
+
+// Response for a specific raid tier list
+export interface RaidTierListResponse {
+  calculatedAt: string;
+  raidId: number;
+  raidName: string;
+  guilds: GuildTierScore[];
+}
+
+// Available raid info from tier list
+export interface TierListRaidInfo {
+  raidId: number;
+  raidName: string;
+}
+
 // Analytics types
 export interface AnalyticsPeriodStats {
   totalRequests: number;

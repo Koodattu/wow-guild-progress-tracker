@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { TierList, GuildTierScore, RaidInfo } from "@/types";
+import { GuildTierScore, TierListRaidInfo } from "@/types";
 import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import GuildCrest from "@/components/GuildCrest";
@@ -128,35 +128,70 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
 export default function TierListsPage() {
   const t = useTranslations("tierListsPage");
   const router = useRouter();
-  const [tierList, setTierList] = useState<TierList | null>(null);
-  const [raids, setRaids] = useState<RaidInfo[]>([]);
+  const [guilds, setGuilds] = useState<GuildTierScore[]>([]);
+  const [raids, setRaids] = useState<TierListRaidInfo[]>([]);
   const [selectedRaidId, setSelectedRaidId] = useState<number | "overall" | null>(null);
+  const [calculatedAt, setCalculatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
+  // Fetch tier list data for a specific raid or overall
+  const fetchTierListData = useCallback(
+    async (raidId: number | "overall") => {
       try {
-        setLoading(true);
-        const [tierListData, raidsData] = await Promise.all([api.getTierList(), api.getRaids()]);
-        setTierList(tierListData);
-        setRaids(raidsData);
-        // Default to first raid if available, otherwise overall
-        if (raidsData.length > 0) {
-          setSelectedRaidId(raidsData[0].id);
+        setDataLoading(true);
+        if (raidId === "overall") {
+          const data = await api.getOverallTierList();
+          setGuilds(data.guilds);
+          setCalculatedAt(data.calculatedAt);
         } else {
-          setSelectedRaidId("overall");
+          const data = await api.getTierListForRaid(raidId);
+          setGuilds(data.guilds);
+          setCalculatedAt(data.calculatedAt);
         }
       } catch (err) {
-        console.error("Error fetching tier list:", err);
+        console.error("Error fetching tier list data:", err);
+        setError(t("error"));
+      } finally {
+        setDataLoading(false);
+      }
+    },
+    [t]
+  );
+
+  // Initial load - fetch available raids and default to first raid
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        // Fetch available raids from tier list
+        const raidsData = await api.getTierListRaids();
+        setRaids(raidsData);
+
+        // Default to first raid if available, otherwise overall
+        const defaultSelection = raidsData.length > 0 ? raidsData[0].raidId : "overall";
+        setSelectedRaidId(defaultSelection);
+
+        // Fetch data for the default selection
+        await fetchTierListData(defaultSelection);
+      } catch (err) {
+        console.error("Error fetching initial data:", err);
         setError(t("error"));
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [t]);
+    fetchInitialData();
+  }, [t, fetchTierListData]);
+
+  // Handle dropdown change
+  const handleRaidChange = async (value: string) => {
+    const newSelection = value === "overall" ? "overall" : parseInt(value);
+    setSelectedRaidId(newSelection);
+    await fetchTierListData(newSelection);
+  };
 
   if (loading) {
     return (
@@ -168,26 +203,14 @@ export default function TierListsPage() {
     );
   }
 
-  if (error || !tierList) {
+  if (error) {
     return (
       <div className="w-full px-6">
         <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 text-center">
-          <p className="text-red-300">{error || t("noData")}</p>
+          <p className="text-red-300">{error}</p>
         </div>
       </div>
     );
-  }
-
-  // Get current guild scores based on selection
-  let currentGuilds: GuildTierScore[] = [];
-
-  if (selectedRaidId === "overall") {
-    currentGuilds = tierList.overall;
-  } else if (selectedRaidId !== null) {
-    const raidTierList = tierList.raids.find((r) => r.raidId === selectedRaidId);
-    if (raidTierList) {
-      currentGuilds = raidTierList.guilds;
-    }
   }
 
   // Handle guild click to navigate to profile
@@ -206,29 +229,33 @@ export default function TierListsPage() {
             <label className="text-gray-300">{t("selectRaid")}:</label>
             <select
               value={selectedRaidId ?? ""}
-              onChange={(e) => setSelectedRaidId(e.target.value === "overall" ? "overall" : parseInt(e.target.value))}
-              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => handleRaidChange(e.target.value)}
+              disabled={dataLoading}
+              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value="overall">{t("overallAllRaids")}</option>
               {raids.map((raid) => (
-                <option key={raid.id} value={raid.id}>
-                  {raid.name}
+                <option key={raid.raidId} value={raid.raidId}>
+                  {raid.raidName}
                 </option>
               ))}
             </select>
+            {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>}
           </div>
-          <p className="text-gray-400 text-sm">
-            {t("lastCalculated")}: {new Date(tierList.calculatedAt).toLocaleString()}
-          </p>
+          {calculatedAt && (
+            <p className="text-gray-400 text-sm">
+              {t("lastCalculated")}: {new Date(calculatedAt).toLocaleString()}
+            </p>
+          )}
         </div>
       </div>
 
       {/* Tier Lists Grid */}
-      {currentGuilds.length > 0 ? (
+      {guilds.length > 0 ? (
         <div className="flex gap-4">
-          <TierListDisplay title={t("overall")} guilds={currentGuilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
-          <TierListDisplay title={t("speed")} guilds={currentGuilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
-          <TierListDisplay title={t("efficiency")} guilds={currentGuilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
+          <TierListDisplay title={t("overall")} guilds={guilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
+          <TierListDisplay title={t("speed")} guilds={guilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
+          <TierListDisplay title={t("efficiency")} guilds={guilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
         </div>
       ) : (
         <div className="bg-gray-800 rounded-lg p-8 text-center">

@@ -473,21 +473,74 @@ class TierListService {
   }
 
   /**
-   * Get the latest tier list
+   * Get the latest tier list (full data - all raids + overall)
    */
   async getTierList(): Promise<any> {
-    const tierList = await TierList.findOne().sort({ calculatedAt: -1 });
-    return tierList;
+    const tierList = await TierList.findOne().sort({ calculatedAt: -1 }).lean();
+    if (!tierList) return null;
+
+    // Remove guildId from response as frontend doesn't need it
+    return {
+      calculatedAt: tierList.calculatedAt,
+      overall: tierList.overall.map(this.stripGuildId),
+      raids: tierList.raids.map((raid) => ({
+        raidId: raid.raidId,
+        raidName: raid.raidName,
+        guilds: raid.guilds.map(this.stripGuildId),
+      })),
+    };
+  }
+
+  /**
+   * Get overall tier list only (without per-raid data)
+   */
+  async getOverallTierList(): Promise<{ calculatedAt: Date; guilds: Omit<IGuildTierScore, "guildId">[] } | null> {
+    const tierList = await TierList.findOne().sort({ calculatedAt: -1 }).lean();
+    if (!tierList) return null;
+
+    return {
+      calculatedAt: tierList.calculatedAt,
+      guilds: tierList.overall.map(this.stripGuildId),
+    };
   }
 
   /**
    * Get tier list for a specific raid
    */
-  async getTierListForRaid(raidId: number): Promise<IRaidTierList | null> {
-    const tierList = await TierList.findOne().sort({ calculatedAt: -1 });
+  async getTierListForRaid(raidId: number): Promise<{ calculatedAt: Date; raidId: number; raidName: string; guilds: Omit<IGuildTierScore, "guildId">[] } | null> {
+    const tierList = await TierList.findOne().sort({ calculatedAt: -1 }).lean();
     if (!tierList) return null;
 
-    return tierList.raids.find((r) => r.raidId === raidId) || null;
+    const raidTierList = tierList.raids.find((r) => r.raidId === raidId);
+    if (!raidTierList) return null;
+
+    return {
+      calculatedAt: tierList.calculatedAt,
+      raidId: raidTierList.raidId,
+      raidName: raidTierList.raidName,
+      guilds: raidTierList.guilds.map(this.stripGuildId),
+    };
+  }
+
+  /**
+   * Get available raids from tier list (just raid IDs and names)
+   */
+  async getAvailableRaids(): Promise<{ raidId: number; raidName: string }[]> {
+    const tierList = await TierList.findOne().sort({ calculatedAt: -1 }).lean();
+    if (!tierList) return [];
+
+    return tierList.raids.map((raid) => ({
+      raidId: raid.raidId,
+      raidName: raid.raidName,
+    }));
+  }
+
+  /**
+   * Strip guildId from guild tier score (not needed by frontend)
+   */
+  private stripGuildId(guild: IGuildTierScore): Omit<IGuildTierScore, "guildId"> {
+    const { guildId, ...rest } = guild as any;
+    return rest;
   }
 }
 

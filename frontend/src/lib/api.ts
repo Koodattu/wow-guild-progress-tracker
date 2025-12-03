@@ -13,6 +13,9 @@ import {
   LiveStreamer,
   TierList,
   RaidTierList,
+  OverallTierListResponse,
+  RaidTierListResponse,
+  TierListRaidInfo,
   AnalyticsOverview,
   AnalyticsHourly,
   AnalyticsDaily,
@@ -186,15 +189,32 @@ export const api = {
   },
 
   // Tier list endpoints
+
+  // Get full tier list (overall + all raids) - use sparingly, prefer specific endpoints
   async getTierList(): Promise<TierList> {
     const response = await fetch(`${API_URL}/api/tierlists`);
     if (!response.ok) throw new Error("Failed to fetch tier list");
     return response.json();
   },
 
-  async getTierListForRaid(raidId: number): Promise<RaidTierList> {
+  // Get overall tier list only (without per-raid data)
+  async getOverallTierList(): Promise<OverallTierListResponse> {
+    const response = await fetch(`${API_URL}/api/tierlists?type=overall`);
+    if (!response.ok) throw new Error("Failed to fetch overall tier list");
+    return response.json();
+  },
+
+  // Get tier list for a specific raid
+  async getTierListForRaid(raidId: number): Promise<RaidTierListResponse> {
     const response = await fetch(`${API_URL}/api/tierlists?raidId=${raidId}`);
     if (!response.ok) throw new Error("Failed to fetch tier list for raid");
+    return response.json();
+  },
+
+  // Get available raids that have tier list data
+  async getTierListRaids(): Promise<TierListRaidInfo[]> {
+    const response = await fetch(`${API_URL}/api/tierlists/raids`);
+    if (!response.ok) throw new Error("Failed to fetch tier list raids");
     return response.json();
   },
 
