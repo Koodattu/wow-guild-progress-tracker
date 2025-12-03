@@ -42,7 +42,7 @@ export default function GuildsPage() {
         guild.realm.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const grouped: Record<string, GuildListItem[]> = {};
+    const grouped: Record<string, GuildDirectoryItem[]> = {};
 
     filtered.forEach((guild) => {
       // Use parent_guild for grouping if it exists, otherwise use guild name
@@ -115,7 +115,7 @@ export default function GuildsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-scree flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
           <div className="text-white text-xl">{t("loading")}</div>
@@ -125,7 +125,7 @@ export default function GuildsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-scree text-white">
       <div className="container mx-auto px-4" style={{ maxWidth: "90%" }}>
         <div className="mb-8">
           {/* Search box */}

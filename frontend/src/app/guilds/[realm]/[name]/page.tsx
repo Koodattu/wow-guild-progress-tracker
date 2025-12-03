@@ -173,7 +173,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
           <div className="text-white text-xl">Loading guild profile...</div>
@@ -184,7 +184,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   if (error || !guildSummary) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-xl mb-4">{error || "Guild not found"}</div>
           <button onClick={() => router.push("/guilds")} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
@@ -244,7 +244,7 @@ export default function GuildProfilePage({ params }: PageProps) {
   });
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen text-white">
       <div className="container mx-auto px-4" style={{ maxWidth: "75%" }}>
         {/* Guild Header */}
         <div className={`mb-4 ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>

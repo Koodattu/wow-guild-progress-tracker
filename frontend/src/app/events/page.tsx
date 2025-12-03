@@ -121,7 +121,7 @@ export default function EventsPage() {
 
   if (loading && !eventsData) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
           <div className="text-white text-xl">{t("loading")}</div>
@@ -131,7 +131,7 @@ export default function EventsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen text-white">
       <div className="container mx-auto px-4 max-w-5xl">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
 

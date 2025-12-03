@@ -219,7 +219,7 @@ function HomeContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">⚔️</div>
           <div className="text-white text-xl">Loading guild data...</div>
@@ -229,7 +229,7 @@ function HomeContent() {
   }
 
   return (
-    <main className="bg-gray-950 text-white min-h-screen">
+    <main className=" text-white min-h-screen">
       <div className="container mx-auto px-4 max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
 
@@ -258,7 +258,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="text-4xl mb-4">⚔️</div>
             <div className="text-white text-xl">Loading guild data...</div>
