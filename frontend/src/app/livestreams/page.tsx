@@ -451,7 +451,7 @@ export default function LivestreamsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4">📺</div>
           <div className="text-white text-xl">Loading live streams...</div>
@@ -462,7 +462,7 @@ export default function LivestreamsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-xl mb-4">{error}</div>
         </div>
@@ -472,7 +472,7 @@ export default function LivestreamsPage() {
 
   if (liveStreamers.length === 0) {
     return (
-      <main className="min-h-screen bg-gray-950 text-white">
+      <main className="min-h-screen text-white">
         <div className="w-full px-4 py-8">
           <div className="text-center py-12">
             <div className="text-6xl mb-4">💤</div>
@@ -485,7 +485,7 @@ export default function LivestreamsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen text-white">
       <div className="w-full px-2 py-2">
         {/* Stream Selection Boxes - Grouped by Boss and Non-WoW */}
         <div className="mb-4 space-y-2">
