@@ -2411,6 +2411,12 @@ class GuildService {
       }));
   }
 
+  // Get minimal guild list for directory page (only essential fields)
+  async getGuildListMinimal(): Promise<any[]> {
+    const guilds = await Guild.find().select("name realm region parent_guild warcraftlogsId isCurrentlyRaiding -_id").sort({ name: 1 }).lean();
+    return guilds;
+  }
+
   // Get all guilds sorted by progress
   async getAllGuilds(): Promise<IGuild[]> {
     const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { GuildListItem } from "@/types";
+import { GuildDirectoryItem } from "@/types";
 import { api } from "@/lib/api";
 import { getGuildProfileUrl, getRaiderIOGuildUrl } from "@/lib/utils";
 import { useTranslations } from "next-intl";
@@ -11,7 +11,7 @@ import { useTranslations } from "next-intl";
 export default function GuildsPage() {
   const t = useTranslations("guildsPage");
   const tTable = useTranslations("guildTable");
-  const [guilds, setGuilds] = useState<GuildListItem[]>([]);
+  const [guilds, setGuilds] = useState<GuildDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -20,7 +20,7 @@ export default function GuildsPage() {
     const fetchGuilds = async () => {
       try {
         setError(null);
-        const data = await api.getAllGuilds();
+        const data = await api.getGuildList();
         setGuilds(data);
       } catch (err) {
         console.error("Error fetching guilds:", err);
@@ -154,7 +154,7 @@ export default function GuildsPage() {
                   <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
                   <div className="space-y-1">
                     {groupedGuilds[letter].map((guild) => (
-                      <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+                      <div key={`${guild.realm}-${guild.name}`} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
                         <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
                           {guild.parent_guild ? (
                             <>
@@ -208,7 +208,7 @@ export default function GuildsPage() {
                   <h2 className="text-4xl font-bold text-blue-400 mb-3">{letter}</h2>
                   <div className="space-y-1">
                     {groupedGuilds[letter].map((guild) => (
-                      <div key={guild._id} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
+                      <div key={`${guild.realm}-${guild.name}`} className={`flex items-center gap-2 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
                         <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="block text-gray-300 hover:text-white transition-colors">
                           {guild.parent_guild ? (
                             <>

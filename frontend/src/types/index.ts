@@ -115,6 +115,16 @@ export interface LiveStreamer {
   };
 }
 
+// Ultra-minimal guild info for directory/list page
+export interface GuildDirectoryItem {
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+  warcraftlogsId?: number;
+  isCurrentlyRaiding: boolean;
+}
+
 // Minimal guild info for leaderboard
 export interface GuildListItem {
   _id: string;

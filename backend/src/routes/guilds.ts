@@ -26,6 +26,17 @@ router.get("/live-streamers", async (req: Request, res: Response) => {
   }
 });
 
+// Get minimal guild list for directory page (name, realm, region, parent_guild, warcraftlogsId, isCurrentlyRaiding)
+router.get("/list", async (req: Request, res: Response) => {
+  try {
+    const guilds = await guildService.getGuildListMinimal();
+    res.json(guilds);
+  } catch (error) {
+    logger.error("Error fetching guild list:", error);
+    res.status(500).json({ error: "Failed to fetch guild list" });
+  }
+});
+
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
 router.get("/", async (req: Request, res: Response) => {

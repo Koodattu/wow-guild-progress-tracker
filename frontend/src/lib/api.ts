@@ -1,5 +1,6 @@
 import {
   GuildListItem,
+  GuildDirectoryItem,
   Guild,
   GuildSummary,
   Event,
@@ -90,6 +91,12 @@ export const api = {
   async getAllGuilds(): Promise<GuildListItem[]> {
     const response = await fetch(`${API_URL}/api/guilds`);
     if (!response.ok) throw new Error("Failed to fetch all guilds");
+    return response.json();
+  },
+
+  async getGuildList(): Promise<GuildDirectoryItem[]> {
+    const response = await fetch(`${API_URL}/api/guilds/list`);
+    if (!response.ok) throw new Error("Failed to fetch guild list");
     return response.json();
   },
 
