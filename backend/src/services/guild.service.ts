@@ -335,7 +335,7 @@ class GuildService {
         // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
         const blizzardGuildName = guildConfig.parent_guild || guildConfig.name;
         logger.info(`Fetching crest data for: ${blizzardGuildName} - ${guildConfig.realm}${guildConfig.parent_guild ? ` (parent guild for ${guildConfig.name})` : ""}`);
-        let crestData = null;
+        let crestData = undefined;
         let faction = undefined;
 
         try {
