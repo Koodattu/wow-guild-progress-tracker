@@ -52,35 +52,41 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
 
     return (
-      <div className={`bg-gray-800/50 rounded-lg p-2 mb-1.5 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
-        {/* Single row layout: Rank | Crest + Name | Progress */}
-        <div className="flex items-center gap-2">
-          {/* Rank section */}
-          <div className="flex flex-col items-center shrink-0 w-8" onClick={() => onGuildClick(guild)}>
-            <span className={`font-bold text-sm ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>
-            {worldRank && <span className={`text-[10px] ${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+      <div className={`bg-gray-800/50 rounded-lg mb-1.5 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
+        {/* Single row layout: Left tap zone (guild info) | Right tap zone (progress) */}
+        <div className="flex items-center">
+          {/* Left side: Rank + Guild info - navigates to guild page */}
+          <div className="flex items-center gap-2 flex-1 min-w-0 p-2 cursor-pointer active:bg-gray-700/50 rounded-l-lg" onClick={() => onGuildClick(guild)}>
+            {/* Rank section */}
+            <div className="flex flex-col items-center shrink-0 w-8">
+              <span className={`font-bold text-sm ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>
+              {worldRank && <span className={`text-[10px] ${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+            </div>
+
+            {/* Guild info */}
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <div className="w-7 h-7 shrink-0">
+                <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.22] origin-top-left" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="font-semibold text-white text-xs truncate">{guild.name}</span>
+                  {guild.isStreaming && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0"></span>}
+                  {guild.isCurrentlyRaiding && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>}
+                </div>
+                <div className="text-gray-500 text-[10px] truncate">
+                  {guild.parent_guild ? `${guild.parent_guild} - ` : ""}
+                  {guild.realm}
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Guild info */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={() => onGuildClick(guild)}>
-            <div className="w-7 h-7 shrink-0">
-              <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.22] origin-top-left" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className="font-semibold text-white text-xs truncate">{guild.name}</span>
-                {guild.isStreaming && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0"></span>}
-                {guild.isCurrentlyRaiding && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>}
-              </div>
-              <div className="text-gray-500 text-[10px] truncate">
-                {guild.parent_guild ? `${guild.parent_guild} - ` : ""}
-                {guild.realm}
-              </div>
-            </div>
-          </div>
-
-          {/* Progress - compact inline */}
-          <div className="flex items-center gap-2 shrink-0" onClick={() => onRaidProgressClick(guild)}>
+          {/* Right side: Progress - opens modal */}
+          <div
+            className="flex items-center gap-2 shrink-0 p-2 border-l border-gray-600 cursor-pointer active:bg-gray-700/50 rounded-r-lg"
+            onClick={() => onRaidProgressClick(guild)}
+          >
             <div className="text-center">
               <div className="text-orange-500 font-bold text-xs">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
               <div className="text-[9px] text-gray-500">M</div>
@@ -93,7 +99,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <div className="text-gray-300 text-xs">{mythicPulls > 0 ? mythicPulls : "-"}</div>
               <div className="text-[9px] text-gray-500">{t("pulls")}</div>
             </div>
-            <div className="text-center min-w-[32px]">
+            <div className="text-center min-w-8">
               <div className="text-gray-300 text-xs">
                 {mythicBestPullDisplay ? formatPhaseDisplay(mythicBestPullDisplay) : mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}
               </div>
