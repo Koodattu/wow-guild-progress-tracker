@@ -526,23 +526,29 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const hasProgress = mythicProgress || heroicProgress;
 
                         return (
-                          <div
-                            key={`mobile-raid-${raid.id}`}
-                            className={`rounded-lg p-2 mb-1.5 bg-gray-800/50 border border-gray-700/50 ${hasProgress ? "cursor-pointer active:bg-gray-700/50" : "opacity-40"}`}
-                            onClick={() => hasProgress && handleRaidClick(raid.id)}
-                          >
-                            <div className="flex items-center gap-2">
-                              {/* Raid Icon & Name */}
-                              {iconUrl && <Image src={iconUrl} alt="Raid icon" width={28} height={28} className="rounded shrink-0" />}
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold text-white truncate">{raid.name}</div>
-                                <div className="flex items-center gap-2 text-[10px]">
-                                  {guildRank && <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>}
-                                  {worldRank && <span className={`${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+                          <div key={`mobile-raid-${raid.id}`} className={`rounded-lg mb-1.5 bg-gray-800/50 border border-gray-700/50 ${!hasProgress ? "opacity-40" : ""}`}>
+                            <div className="flex items-center">
+                              {/* Left side: Raid Info - navigates to raid page */}
+                              <div
+                                className="flex items-center gap-2 flex-1 min-w-0 p-2 cursor-pointer active:bg-gray-700/50 rounded-l-lg"
+                                onClick={() => handleRaidInfoClick(raid.id)}
+                              >
+                                {iconUrl && <Image src={iconUrl} alt="Raid icon" width={28} height={28} className="rounded shrink-0" />}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-white truncate">{raid.name}</div>
+                                  <div className="flex items-center gap-2 text-[10px]">
+                                    {guildRank && <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>}
+                                    {worldRank && <span className={`${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+                                  </div>
                                 </div>
                               </div>
-                              {/* Progress Stats */}
-                              <div className="flex items-center gap-2 shrink-0 text-xs">
+                              {/* Right side: Progress Stats - opens modal */}
+                              <div
+                                className={`flex items-center gap-2 shrink-0 text-xs p-2 border-l border-gray-600 rounded-r-lg ${
+                                  hasProgress ? "cursor-pointer active:bg-gray-700/50" : "cursor-not-allowed"
+                                }`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                              >
                                 <div className="text-center">
                                   <div className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
                                   <div className="text-[9px] text-gray-500">M</div>
@@ -552,7 +558,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   <div className="text-[9px] text-gray-500">H</div>
                                 </div>
                                 {(totalTime > 0 || currentBossPulls > 0 || bestProgress) && (
-                                  <div className="text-center border-l border-gray-600 pl-2">
+                                  <div className="text-center">
                                     <div className="text-gray-300">{totalTime > 0 ? formatTime(totalTime) : currentBossPulls > 0 ? currentBossPulls : bestProgress || "-"}</div>
                                     <div className="text-[9px] text-gray-500">{totalTime > 0 ? "time" : currentBossPulls > 0 ? "pulls" : "best"}</div>
                                   </div>
