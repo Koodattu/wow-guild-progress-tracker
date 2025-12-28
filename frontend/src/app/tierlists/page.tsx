@@ -87,32 +87,34 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
   // Guilds are already sorted within each tier by score (highest first)
 
   return (
-    <div className="flex-1">
-      <h3 className="text-lg font-bold text-white mb-3 text-center">{title}</h3>
+    <div className="flex-1 min-w-0">
+      <h3 className="text-base md:text-lg font-bold text-white mb-2 md:mb-3 text-center">{title}</h3>
       <div className="border border-gray-700 rounded-lg overflow-hidden">
         {TIERS.map((tier) => {
           const tierGuilds = tierGroups[tier];
           return (
             <div key={tier} className="flex border-b border-gray-700 last:border-b-0">
-              <div className={`w-20 min-h-20 flex items-center justify-center font-bold text-2xl text-gray-900 ${TIER_COLORS[tier]}`}>{tier === "Crown" ? "👑" : tier}</div>
-              <div className="flex-1 bg-gray-800 p-2 flex flex-wrap items-center gap-2 min-h-20">
+              <div className={`w-10 md:w-20 min-h-14 md:min-h-20 flex items-center justify-center font-bold text-lg md:text-2xl text-gray-900 ${TIER_COLORS[tier]} shrink-0`}>
+                {tier === "Crown" ? "👑" : tier}
+              </div>
+              <div className="flex-1 bg-gray-800 p-1.5 md:p-2 flex flex-wrap items-center gap-1 md:gap-2 min-h-14 md:min-h-20">
                 {tierGuilds.map((guild, idx) => (
                   <div
                     key={idx}
-                    className="bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-sm text-gray-200 flex items-center gap-2 transition-colors cursor-pointer"
+                    className="bg-gray-700 hover:bg-gray-600 px-1.5 md:px-2 py-1 md:py-1.5 rounded text-xs md:text-sm text-gray-200 flex items-center gap-1 md:gap-2 transition-colors cursor-pointer"
                     onClick={() => onGuildClick(guild.realm, guild.guildName)}
                   >
                     {guild.crest && (
-                      <div className="w-8 h-8 shrink-0">
-                        <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
+                      <div className="w-5 h-5 md:w-8 md:h-8 shrink-0">
+                        <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.15] md:scale-[0.25] origin-top-left" />
                       </div>
                     )}
-                    <div className="flex flex-col">
-                      <span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="truncate">
                         <span className="font-bold">{guild.guildName}</span>
-                        {guild.parent_guild && <span className="text-gray-400"> ({guild.parent_guild})</span>}
+                        {guild.parent_guild && <span className="text-gray-400 hidden md:inline"> ({guild.parent_guild})</span>}
                       </span>
-                      <span className="text-xs text-gray-400">{guild.realm}</span>
+                      <span className="text-[10px] md:text-xs text-gray-400 truncate">{guild.realm}</span>
                     </div>
                   </div>
                 ))}
@@ -221,17 +223,17 @@ export default function TierListsPage() {
   };
 
   return (
-    <div className="w-full px-6">
-      <div className="mb-6">
+    <div className="w-full px-3 md:px-6">
+      <div className="mb-4 md:mb-6">
         {/* Raid Selector and Last Calculated */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <label className="text-gray-300">{t("selectRaid")}:</label>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <label className="text-gray-300 text-sm md:text-base">{t("selectRaid")}:</label>
             <select
               value={selectedRaidId ?? ""}
               onChange={(e) => handleRaidChange(e.target.value)}
               disabled={dataLoading}
-              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm md:text-base"
             >
               <option value="overall">{t("overallAllRaids")}</option>
               {raids.map((raid) => (
@@ -243,16 +245,16 @@ export default function TierListsPage() {
             {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>}
           </div>
           {calculatedAt && (
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-400 text-xs md:text-sm">
               {t("lastCalculated")}: {new Date(calculatedAt).toLocaleString()}
             </p>
           )}
         </div>
       </div>
 
-      {/* Tier Lists Grid */}
+      {/* Tier Lists Grid - Stack on mobile, side by side on desktop */}
       {guilds.length > 0 ? (
-        <div className="flex gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           <TierListDisplay title={t("overall")} guilds={guilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
           <TierListDisplay title={t("speed")} guilds={guilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
           <TierListDisplay title={t("efficiency")} guilds={guilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />

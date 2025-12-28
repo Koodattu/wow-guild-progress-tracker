@@ -14,10 +14,14 @@ export default function HorizontalEventsFeed({ events }: HorizontalEventsFeedPro
   // Adjust visible count based on screen width - more aggressive breakpoints
   useEffect(() => {
     const updateVisibleCount = () => {
-      if (window.innerWidth < 768) {
-        setVisibleCount(1); // mobile
+      if (window.innerWidth < 480) {
+        setVisibleCount(2); // small mobile - still show 2
+      } else if (window.innerWidth < 640) {
+        setVisibleCount(2); // mobile
+      } else if (window.innerWidth < 768) {
+        setVisibleCount(2); // larger mobile/small tablet
       } else if (window.innerWidth < 1024) {
-        setVisibleCount(2); // tablet
+        setVisibleCount(3); // tablet
       } else if (window.innerWidth < 1280) {
         setVisibleCount(3); // small desktop
       } else if (window.innerWidth < 1536) {
@@ -35,11 +39,11 @@ export default function HorizontalEventsFeed({ events }: HorizontalEventsFeedPro
   const displayEvents = events.slice(0, visibleCount);
 
   if (events.length === 0) {
-    return <div className="text-center text-gray-500 py-6">No events yet. Events will appear as guilds make progress!</div>;
+    return <div className="text-center text-gray-500 py-4 md:py-6 text-sm md:text-base">No events yet. Events will appear as guilds make progress!</div>;
   }
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-2 md:gap-3">
       {displayEvents.map((event) => (
         <EventCard key={event._id} event={event} className="flex-1 min-w-0" />
       ))}

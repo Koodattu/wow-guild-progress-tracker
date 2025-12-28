@@ -508,18 +508,18 @@ export default function LivestreamsPage() {
                           window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
                         }
                       }}
-                      className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                      className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
                         isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
                       }`}
                       disabled={!isSelected && selectedStreamers.length >= 6}
                     >
-                      <div className="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <div className="flex items-center gap-1.5 md:gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
                         </svg>
-                        <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                        <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                        <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
                           {streamer.guild.parent_guild ? (
                             <>
                               <span className="font-bold">{streamer.guild.name}</span>
@@ -532,9 +532,9 @@ export default function LivestreamsPage() {
                             </>
                           )}
                         </span>
-                        {streamer.gameName && <span className="text-xs text-blue-400 whitespace-nowrap">{streamer.gameName}</span>}
+                        {streamer.gameName && <span className="hidden md:inline text-xs text-blue-400 whitespace-nowrap">{streamer.gameName}</span>}
                         <div
-                          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                          className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
                             isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
                           }`}
                         >
@@ -571,18 +571,18 @@ export default function LivestreamsPage() {
                             window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
                           }
                         }}
-                        className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                        className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
                           isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
                         }`}
                         disabled={!isSelected && selectedStreamers.length >= 6}
                       >
-                        <div className="flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                        <div className="flex items-center gap-1.5 md:gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
                           </svg>
-                          <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                          <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                          <span className="text-xs text-gray-400 whitespace-nowrap">
+                          <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
                             {streamer.guild.parent_guild ? (
                               <>
                                 <span className="font-bold">{streamer.guild.name}</span>
@@ -596,7 +596,7 @@ export default function LivestreamsPage() {
                             )}
                           </span>
                           {streamer.bestPull && (
-                            <span className="text-xs text-orange-400 whitespace-nowrap">
+                            <span className="hidden md:inline text-xs text-orange-400 whitespace-nowrap">
                               {streamer.bestPull.pullCount} pulls,{" "}
                               {streamer.bestPull.bestPullPhase?.displayString
                                 ? formatPhaseDisplay(streamer.bestPull.bestPullPhase.displayString)
@@ -604,7 +604,7 @@ export default function LivestreamsPage() {
                             </span>
                           )}
                           <div
-                            className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                            className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
                               isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
                             }`}
                           >
@@ -622,7 +622,7 @@ export default function LivestreamsPage() {
           {groupedStreamers["other-wow"] && groupedStreamers["other-wow"].length > 0 && (
             <div>
               <div className="text-xs font-bold text-green-400 uppercase tracking-wide mb-1.5 px-1">World of Warcraft - Other ({groupedStreamers["other-wow"].length})</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 md:gap-2">
                 {groupedStreamers["other-wow"].map((streamer) => {
                   const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
@@ -637,18 +637,18 @@ export default function LivestreamsPage() {
                           window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
                         }
                       }}
-                      className={`px-3 py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
+                      className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
                         isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
                       }`}
                       disabled={!isSelected && selectedStreamers.length >= 6}
                     >
-                      <div className="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <div className="flex items-center gap-1.5 md:gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
                         </svg>
-                        <span className="font-bold text-white text-sm whitespace-nowrap">{streamer.channelName}</span>
+                        <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                        <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
                           {streamer.guild.parent_guild ? (
                             <>
                               <span className="font-bold">{streamer.guild.name}</span>
@@ -662,7 +662,7 @@ export default function LivestreamsPage() {
                           )}
                         </span>
                         <div
-                          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-lg font-bold ml-2 ${
+                          className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
                             isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
                           }`}
                         >
@@ -681,8 +681,8 @@ export default function LivestreamsPage() {
         {selectedStreamers.length > 0 ? (
           <div className="flex flex-col lg:flex-row gap-0" style={{ height: getStreamContainerHeight() }}>
             {/* Streams Container - Single render with dynamic positioning */}
-            <div className="flex-1 h-full relative">
-              <div className={`${spotlightStream && isSpotlightEnabled ? "relative h-full" : `grid ${streamGridClass} gap-2 h-full`}`}>
+            <div className="flex-1 h-[50vh] lg:h-full relative">
+              <div className={`${spotlightStream && isSpotlightEnabled ? "relative h-full" : `grid ${streamGridClass} gap-1 md:gap-2 h-full`}`}>
                 {selectedStreamers.map((streamer, index) => {
                   const isSpotlit = spotlightStream === streamer.channelName;
                   const inSpotlightMode = spotlightStream && isSpotlightEnabled;
@@ -830,7 +830,7 @@ export default function LivestreamsPage() {
               </div>
             </div>
 
-            {/* Toggle Button */}
+            {/* Toggle Button - only show on large screens */}
             <button
               onClick={() => setChatVisible(!chatVisible)}
               className="hidden lg:flex items-center justify-center w-3 bg-purple-600 hover:bg-purple-500 transition-colors group cursor-pointer"
@@ -839,9 +839,27 @@ export default function LivestreamsPage() {
               <div className="text-white text-2xl font-bold">{chatVisible ? "›" : "‹"}</div>
             </button>
 
+            {/* Mobile Chat Toggle */}
+            <button
+              onClick={() => setChatVisible(!chatVisible)}
+              className="lg:hidden w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+              aria-label={chatVisible ? "Hide chat" : "Show chat"}
+            >
+              <span>{chatVisible ? "Hide Chat" : "Show Chat"}</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className={`h-4 w-4 transition-transform ${chatVisible ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
             {/* Chat Area */}
-            <div className={`transition-all duration-300 overflow-hidden ${chatVisible ? "w-full lg:w-80" : "w-0"}`}>
-              <div className="bg-gray-900 rounded-lg overflow-hidden h-full flex flex-col" style={{ width: "20rem" }}>
+            <div className={`transition-all duration-300 overflow-hidden ${chatVisible ? "h-[40vh] lg:h-full w-full lg:w-80" : "h-0 lg:w-0"}`}>
+              <div className="bg-gray-900 rounded-lg overflow-hidden h-full flex flex-col w-full lg:w-80">
                 {/* Chat Tabs */}
                 {selectedStreamers.length <= 2 ? (
                   // Simple tabs for 1-2 streams

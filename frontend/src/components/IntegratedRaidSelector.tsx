@@ -93,31 +93,41 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
   return (
     <div className="mb-4 relative" ref={dropdownRef}>
       {/* Clickable Raid Header */}
-      <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer select-none hover:bg-gray-800/30 rounded-lg transition-all duration-200 p-3 -mx-3">
+      <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer select-none hover:bg-gray-800/30 rounded-lg transition-all duration-200 p-2 md:p-3 -mx-2 md:-mx-3">
         {/* Expansion name and icon */}
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm font-bold text-gray-400">{selectedRaid.expansion}</span>
-          <Image src={`/expansions/${expansionIconPath}.png`} alt={`${selectedRaid.expansion} icon`} height={20} width={32} />
+        <div className="flex items-center gap-2 mb-1 md:mb-2">
+          <span className="text-xs md:text-sm font-bold text-gray-400">{selectedRaid.expansion}</span>
+          <Image src={`/expansions/${expansionIconPath}.png`} alt={`${selectedRaid.expansion} icon`} height={16} width={26} className="md:h-5 md:w-8" />
         </div>
 
         {/* Raid name, icon, and dates */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {iconUrl && <Image src={iconUrl} alt="Raid icon" width={40} height={40} className="rounded" />}
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold">{selectedRaid.name}</h2>
-              <svg className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {iconUrl && <Image src={iconUrl} alt="Raid icon" width={32} height={32} className="rounded md:w-10 md:h-10 shrink-0" />}
+            <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+              <h2 className="text-lg md:text-2xl font-bold truncate">{selectedRaid.name}</h2>
+              <svg
+                className={`w-4 h-4 md:w-5 md:h-5 text-gray-400 transition-transform duration-200 shrink-0 ${isOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
           </div>
 
           {/* Season dates */}
-          <div className="text-right text-sm text-gray-400">
+          <div className="text-right text-xs md:text-sm text-gray-400 shrink-0 hidden sm:block">
             <div>
               {startDate} - {endDate}
             </div>
           </div>
+        </div>
+
+        {/* Mobile dates - shown below on small screens */}
+        <div className="sm:hidden text-xs text-gray-400 mt-1">
+          {startDate} - {endDate}
         </div>
       </div>
 
@@ -130,13 +140,13 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
           {expansionOrder.map((expansion) => (
             <div key={expansion}>
               {/* Expansion Header */}
-              <div className="px-4 py-2.5 text-xs font-bold text-gray-300 bg-gray-900 sticky top-0 flex items-center gap-2 border-b border-gray-700">
+              <div className="px-3 md:px-4 py-2 md:py-2.5 text-xs font-bold text-gray-300 bg-gray-900 sticky top-0 flex items-center gap-2 border-b border-gray-700">
                 <span>{expansion}</span>
-                <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={20} width={32} />
+                <Image src={getExpansionIconPath(expansion)} alt={`${expansion} icon`} height={16} width={26} className="md:h-5 md:w-8" />
               </div>
 
               {/* Raids in this expansion - Flex Layout */}
-              <div className="flex flex-wrap gap-2 p-3">
+              <div className="flex flex-wrap gap-1.5 md:gap-2 p-2 md:p-3">
                 {groupedRaids[expansion].map((raid) => {
                   const raidIconUrl = getIconUrl(raid.iconUrl);
                   const isSelected = raid.id === selectedRaidId;
@@ -148,12 +158,12 @@ export default function IntegratedRaidSelector({ raids, selectedRaidId, onRaidSe
                         onRaidSelect(raid.id);
                         setIsOpen(false);
                       }}
-                      className={`p-2 rounded-lg transition-all duration-150 flex items-center gap-2 shrink-0 ${
+                      className={`p-1.5 md:p-2 rounded-lg transition-all duration-150 flex items-center gap-1.5 md:gap-2 shrink-0 ${
                         isSelected ? "bg-blue-900/40 ring-2 ring-blue-500" : "hover:bg-gray-700/50 ring-2 ring-transparent hover:ring-gray-600"
                       }`}
                     >
-                      {raidIconUrl && <Image src={raidIconUrl} alt={`${raid.name} icon`} width={32} height={32} className="rounded" />}
-                      <span className={`text-sm font-medium whitespace-nowrap ${isSelected ? "text-blue-300" : "text-gray-200"}`}>{raid.name}</span>
+                      {raidIconUrl && <Image src={raidIconUrl} alt={`${raid.name} icon`} width={24} height={24} className="rounded md:w-8 md:h-8" />}
+                      <span className={`text-xs md:text-sm font-medium whitespace-nowrap ${isSelected ? "text-blue-300" : "text-gray-200"}`}>{raid.name}</span>
                     </button>
                   );
                 })}

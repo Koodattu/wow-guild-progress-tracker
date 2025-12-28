@@ -7,8 +7,8 @@ export default function Footer() {
   const tNav = useTranslations("navigation");
 
   return (
-    <footer className="mt-20 mb-4 pt-8 border-t border-gray-800">
-      <div className="flex items-center justify-center gap-6 text-sm text-gray-500 mb-4">
+    <footer className="mt-12 md:mt-20 mb-4 pt-6 md:pt-8 border-t border-gray-800 px-4">
+      <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-sm text-gray-500 mb-4">
         <a
           href="https://github.com/Koodattu/wow-guild-progress-tracker"
           target="_blank"
@@ -34,7 +34,7 @@ export default function Footer() {
         </a>
       </div>
       <div className="text-center">
-        <p className="text-gray-400">
+        <p className="text-gray-400 text-sm md:text-base">
           {t("madeWith")}{" "}
           <a href="https://www.twitch.tv/vaarattu" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Vaarattu

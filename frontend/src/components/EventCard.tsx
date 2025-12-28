@@ -90,17 +90,17 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
   const eventTypeText = getEventTypeDisplay(event.type);
 
   return (
-    <div className={`border-l-4 bg-gray-800/50 px-4 py-4 rounded hover:bg-gray-800/70 transition-colors ${className}`} style={{ borderLeftColor: borderColor }}>
-      <div className="flex flex-col h-full justify-between gap-3">
+    <div className={`border-l-4 bg-gray-800/50 px-3 md:px-4 py-3 md:py-4 rounded hover:bg-gray-800/70 transition-colors ${className}`} style={{ borderLeftColor: borderColor }}>
+      <div className="flex flex-col h-full justify-between gap-2 md:gap-3">
         <div>
-          <div className="flex items-start justify-between mb-2">
+          <div className="flex items-start justify-between mb-1.5 md:mb-2">
             <div className={`${difficultyColor} text-xs font-semibold uppercase`}>{event.difficulty}</div>
             <div className={`${eventTypeColor} text-xs font-semibold uppercase`}>{eventTypeText}</div>
           </div>
-          <p className="text-white text-sm leading-relaxed">{formatEventMessageWithoutDifficulty(event)}</p>
+          <p className="text-white text-xs md:text-sm leading-relaxed">{formatEventMessageWithoutDifficulty(event)}</p>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">{event.raidName}</span>
+          <span className="text-gray-500 truncate">{event.raidName}</span>
           <span className="text-gray-500 whitespace-nowrap ml-2">{getTimeAgo(event.timestamp)}</span>
         </div>
       </div>

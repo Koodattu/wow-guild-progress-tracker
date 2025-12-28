@@ -2044,6 +2044,12 @@ class GuildService {
         };
         bestPullReportCode?: string;
         bestPullFightId?: number;
+        pullHistory: Array<{
+          pullNumber: number;
+          fightPercentage: number;
+          phase?: string;
+          isKill: boolean;
+        }>;
       }
     >();
 
@@ -2112,6 +2118,7 @@ class GuildService {
           bestPullPhase: undefined,
           bestPullReportCode: undefined,
           bestPullFightId: undefined,
+          pullHistory: [],
         });
       }
 
@@ -2124,6 +2131,29 @@ class GuildService {
       if (shouldCountPull) {
         bossData.pulls++;
         bossData.totalTime += duration;
+
+        // Add to pull history for progress chart
+        // Convert phase name to short format (e.g., "Phase 3" -> "P3", "Intermission 1" -> "I1")
+        let phaseShort: string | undefined;
+        if (fight.lastPhaseName) {
+          const phaseName = fight.lastPhaseName.toLowerCase();
+          if (phaseName.includes("intermission")) {
+            const match = phaseName.match(/(\d+)/);
+            phaseShort = match ? `I${match[1]}` : "I1";
+          } else if (phaseName.includes("phase")) {
+            const match = phaseName.match(/(\d+)/);
+            phaseShort = match ? `P${match[1]}` : `P${fight.lastPhaseId || 1}`;
+          } else if (fight.lastPhaseId) {
+            phaseShort = `P${fight.lastPhaseId}`;
+          }
+        }
+
+        bossData.pullHistory.push({
+          pullNumber: bossData.pulls,
+          fightPercentage: isKill ? 0 : fightPercent,
+          phase: phaseShort,
+          isKill: isKill,
+        });
       }
 
       if (isKill) {
@@ -2233,6 +2263,7 @@ class GuildService {
         bestPullPhase: bossInfo.kills > 0 ? undefined : bossInfo.bestPullPhase,
         bestPullReportCode: bossInfo.kills > 0 ? undefined : bossInfo.bestPullReportCode,
         bestPullFightId: bossInfo.kills > 0 ? undefined : bossInfo.bestPullFightId,
+        pullHistory: bossInfo.pullHistory,
         lastUpdated: new Date(),
       };
 

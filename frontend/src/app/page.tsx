@@ -230,7 +230,7 @@ function HomeContent() {
 
   return (
     <main className=" text-white min-h-screen">
-      <div className="container mx-auto px-4 max-w-[85%] pb-8">
+      <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
 
         {/* Horizontal Events Feed at the top */}

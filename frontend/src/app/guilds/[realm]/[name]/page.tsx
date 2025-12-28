@@ -245,122 +245,228 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen text-white">
-      <div className="container mx-auto px-4" style={{ maxWidth: "75%" }}>
+      <div className="container mx-auto px-2 md:px-4 max-w-full md:max-w-[90%] lg:max-w-[75%]">
         {/* Guild Header */}
-        <div className={`mb-4 ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-4" : ""}`}>
-          <div className="flex items-start gap-3 mb-3">
-            <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0" drawFactionCircle={true} />
-            <div className="flex-1">
-              {/* Guild Name Row with Icons and Last Updated */}
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-5xl font-bold text-white">
-                    {guildSummary.name}
-                    {guildSummary.parent_guild && <span className="text-gray-400 font-normal"> ({guildSummary.parent_guild})</span>}
-                  </h1>
-                  {guildSummary.warcraftlogsId && (
-                    <a
-                      href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center w-10 h-10 hover:opacity-80 transition-opacity"
-                      title="View on Warcraft Logs"
-                    >
-                      <Image src="/wcl-logo.png" alt="WCL" width={40} height={40} className="w-full h-full object-contain" />
-                    </a>
-                  )}
-                  <a
-                    href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center w-10 h-10 hover:opacity-80 transition-opacity"
-                    title="View on Raider.IO"
-                  >
-                    <Image src="/raiderio-logo.png" alt="Raider.IO" width={40} height={40} className="w-full h-full object-contain" />
-                  </a>
-                  {guildSummary.isCurrentlyRaiding && <span className="text-sm px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
+        <div className={`mb-3 ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-2 md:pl-4" : ""}`}>
+          {/* Mobile: Compact row layout */}
+          <div className="md:hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0 w-12 h-12" drawFactionCircle={true} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <h1 className="text-xl font-bold text-white truncate">{guildSummary.name}</h1>
+                  {guildSummary.parent_guild && <span className="text-gray-400 text-sm">({guildSummary.parent_guild})</span>}
+                  {guildSummary.isCurrentlyRaiding && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-green-900/50 text-green-300">Live</span>}
                 </div>
-                {guildSummary.lastFetched && <div className="text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
-              </div>
-              {/* Realm Name Row with Tier Scores */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-3xl text-gray-400">{guildSummary.realm}</div>
-                {/* Tier Scores Display - Classical Tier Style */}
-                {guildSummary.tierScores && guildSummary.tierScores.overall && (
-                  <div className="flex items-center gap-3 text-xs">
-                    {/* Overall Score */}
-                    <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                      <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Overall</span>
-                      <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
-                        {getTierLetter(guildSummary.tierScores.overall.overallScore)}
-                      </span>
-                    </div>
-                    {/* Speed Score */}
-                    <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                      <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Speed</span>
-                      <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
-                        {getTierLetter(guildSummary.tierScores.overall.speedScore)}
-                      </span>
-                    </div>
-                    {/* Efficiency Score */}
-                    <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                      <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Efficiency</span>
-                      <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
-                        {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Raid Schedule and Twitch Streamers Row */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex flex-wrap gap-2">
-                  {guildSummary.raidSchedule &&
-                    guildSummary.raidSchedule.days &&
-                    guildSummary.raidSchedule.days.length > 0 &&
-                    [...guildSummary.raidSchedule.days]
-                      .sort((a, b) => {
-                        const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-                        return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
-                      })
-                      .map((day, index) => {
-                        const formatHour = (hour: number): string => {
-                          const h = Math.floor(hour);
-                          const m = (hour % 1) * 60;
-                          return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-                        };
-                        const dayShort = day.day.substring(0, 3);
-                        return (
-                          <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700 text-sm">
-                            {dayShort} {formatHour(day.startHour)}-{formatHour(day.endHour)}
-                          </span>
-                        );
-                      })}
-                </div>
-                {guildSummary.streamers && guildSummary.streamers.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {guildSummary.streamers.map((streamer) => (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <span>{guildSummary.realm}</span>
+                  <span>•</span>
+                  <div className="flex items-center gap-1">
+                    {guildSummary.warcraftlogsId && (
                       <a
-                        key={streamer.channelName}
-                        href={`https://www.twitch.tv/${streamer.channelName}`}
+                        href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all font-medium text-sm ${
-                          streamer.isLive
-                            ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
-                            : "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
-                        }`}
-                        title={streamer.isLive ? `${streamer.channelName} is live!` : `Visit ${streamer.channelName} on Twitch`}
+                        className="hover:opacity-80"
+                        title="WCL"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
-                        </svg>
-                        <span>{streamer.channelName}</span>
-                        {streamer.isLive && <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                        <Image src="/wcl-logo.png" alt="WCL" width={20} height={20} className="w-5 h-5 object-contain" />
                       </a>
-                    ))}
+                    )}
+                    <a
+                      href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:opacity-80"
+                      title="RIO"
+                    >
+                      <Image src="/raiderio-logo.png" alt="RIO" width={20} height={20} className="w-5 h-5 object-contain" />
+                    </a>
                   </div>
-                )}
+                </div>
+              </div>
+            </div>
+            {/* Tier Scores - Mobile Compact */}
+            {guildSummary.tierScores && guildSummary.tierScores.overall && (
+              <div className="flex items-center gap-1.5 text-[10px] mb-2">
+                <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                  <span className="bg-gray-700 px-1 py-0.5 text-gray-300 font-medium">Overall</span>
+                  <span className={`px-1.5 py-0.5 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
+                    {getTierLetter(guildSummary.tierScores.overall.overallScore)}
+                  </span>
+                </div>
+                <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                  <span className="bg-gray-700 px-1 py-0.5 text-gray-300 font-medium">Spd</span>
+                  <span className={`px-1.5 py-0.5 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
+                    {getTierLetter(guildSummary.tierScores.overall.speedScore)}
+                  </span>
+                </div>
+                <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                  <span className="bg-gray-700 px-1 py-0.5 text-gray-300 font-medium">Eff</span>
+                  <span className={`px-1.5 py-0.5 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
+                    {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {/* Raid Schedule - Mobile Compact */}
+            {guildSummary.raidSchedule && guildSummary.raidSchedule.days && guildSummary.raidSchedule.days.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2 text-[10px]">
+                {[...guildSummary.raidSchedule.days]
+                  .sort((a, b) => {
+                    const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                    return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
+                  })
+                  .map((day, index) => {
+                    const formatHour = (hour: number): string => {
+                      const h = Math.floor(hour);
+                      const m = (hour % 1) * 60;
+                      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+                    };
+                    return (
+                      <span key={index} className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-700">
+                        {day.day.substring(0, 2)} {formatHour(day.startHour)}-{formatHour(day.endHour)}
+                      </span>
+                    );
+                  })}
+              </div>
+            )}
+            {/* Streamers - Mobile */}
+            {guildSummary.streamers && guildSummary.streamers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {guildSummary.streamers.map((streamer) => (
+                  <a
+                    key={streamer.channelName}
+                    href={`https://www.twitch.tv/${streamer.channelName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${streamer.isLive ? "bg-purple-600 text-white" : "bg-gray-800 text-gray-300"}`}
+                  >
+                    <Image src="/twitch-logo.png" alt="" width={12} height={12} className="w-3 h-3" />
+                    {streamer.channelName}
+                    {streamer.isLive && <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop: Original layout */}
+          <div className="hidden md:block">
+            <div className="flex flex-row items-start gap-3 mb-3">
+              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0 w-32 h-32" drawFactionCircle={true} />
+              <div className="flex-1 w-full">
+                {/* Guild Name Row with Icons and Last Updated */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-2xl md:text-5xl font-bold text-white">
+                      {guildSummary.name}
+                      {guildSummary.parent_guild && <span className="text-gray-400 font-normal"> ({guildSummary.parent_guild})</span>}
+                    </h1>
+                    {guildSummary.warcraftlogsId && (
+                      <a
+                        href={`https://www.warcraftlogs.com/guild/id/${guildSummary.warcraftlogsId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 hover:opacity-80 transition-opacity"
+                        title="View on Warcraft Logs"
+                      >
+                        <Image src="/wcl-logo.png" alt="WCL" width={40} height={40} className="w-full h-full object-contain" />
+                      </a>
+                    )}
+                    <a
+                      href={getRaiderIOGuildUrl(guildSummary.region, guildSummary.realm, guildSummary.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 hover:opacity-80 transition-opacity"
+                      title="View on Raider.IO"
+                    >
+                      <Image src="/raiderio-logo.png" alt="Raider.IO" width={40} height={40} className="w-full h-full object-contain" />
+                    </a>
+                    {guildSummary.isCurrentlyRaiding && <span className="text-xs md:text-sm px-2 md:px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
+                  </div>
+                  {guildSummary.lastFetched && <div className="text-xs md:text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
+                </div>
+                {/* Realm Name Row with Tier Scores */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-2">
+                  <div className="text-xl md:text-3xl text-gray-400">{guildSummary.realm}</div>
+                  {/* Tier Scores Display - Classical Tier Style */}
+                  {guildSummary.tierScores && guildSummary.tierScores.overall && (
+                    <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs">
+                      {/* Overall Score */}
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Overall</span>
+                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.overallScore)}
+                        </span>
+                      </div>
+                      {/* Speed Score */}
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Speed</span>
+                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.speedScore)}
+                        </span>
+                      </div>
+                      {/* Efficiency Score */}
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Eff</span>
+                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Raid Schedule and Twitch Streamers Row */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-2">
+                  <div className="flex flex-wrap gap-1.5 md:gap-2">
+                    {guildSummary.raidSchedule &&
+                      guildSummary.raidSchedule.days &&
+                      guildSummary.raidSchedule.days.length > 0 &&
+                      [...guildSummary.raidSchedule.days]
+                        .sort((a, b) => {
+                          const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                          return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
+                        })
+                        .map((day, index) => {
+                          const formatHour = (hour: number): string => {
+                            const h = Math.floor(hour);
+                            const m = (hour % 1) * 60;
+                            return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+                          };
+                          const dayShort = day.day.substring(0, 3);
+                          return (
+                            <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700 text-sm">
+                              {dayShort} {formatHour(day.startHour)}-{formatHour(day.endHour)}
+                            </span>
+                          );
+                        })}
+                  </div>
+                  {guildSummary.streamers && guildSummary.streamers.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {guildSummary.streamers.map((streamer) => (
+                        <a
+                          key={streamer.channelName}
+                          href={`https://www.twitch.tv/${streamer.channelName}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all font-medium text-sm ${
+                            streamer.isLive
+                              ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
+                              : "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                          }`}
+                          title={streamer.isLive ? `${streamer.channelName} is live!` : `Visit ${streamer.channelName} on Twitch`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+                          </svg>
+                          <span>{streamer.channelName}</span>
+                          {streamer.isLive && <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -376,33 +482,124 @@ export default function GuildProfilePage({ params }: PageProps) {
         {/* Progress Table */}
         {guildSummary.progress.length > 0 ? (
           <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
+            {/* Mobile Card View */}
+            <div className="md:hidden">
+              {/* Mobile Header with Toggle */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 bg-gray-800/50">
+                <span className="text-xs font-semibold text-gray-300">Raid Progress</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowAllRaids(!showAllRaids)}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
+                    role="switch"
+                    aria-checked={showAllRaids}
+                  >
+                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${showAllRaids ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </button>
+                  <span className="text-[10px] text-gray-400">All</span>
+                </div>
+              </div>
+              {/* Mobile Raid Cards */}
+              <div className="p-2 space-y-2">
+                {sortedExpansions.map(([expansion, raidEntries]) => {
+                  const expansionIconPath = expansion.toLowerCase().replace(/\s+/g, "-");
+                  return (
+                    <div key={`mobile-expansion-${expansion}`}>
+                      {/* Expansion Header */}
+                      <div className="flex items-center gap-2 py-1.5 mb-1">
+                        <span className="text-xs font-bold text-gray-400">{expansion}</span>
+                        <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={16} width={24} />
+                      </div>
+                      {/* Raid Cards */}
+                      {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
+                        const iconUrl = getIconUrl(raid.iconUrl);
+                        const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                        const currentBossPulls = mythicProgress?.currentBossPulls || 0;
+                        const bestProgress = mythicProgress?.bestPullPhase?.displayString
+                          ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
+                          : mythicProgress && mythicProgress.bestPullPercent < 100
+                          ? formatPercent(mythicProgress.bestPullPercent)
+                          : null;
+                        const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
+                        const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+                        const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
+                        const hasProgress = mythicProgress || heroicProgress;
+
+                        return (
+                          <div
+                            key={`mobile-raid-${raid.id}`}
+                            className={`rounded-lg p-2 mb-1.5 bg-gray-800/50 border border-gray-700/50 ${hasProgress ? "cursor-pointer active:bg-gray-700/50" : "opacity-40"}`}
+                            onClick={() => hasProgress && handleRaidClick(raid.id)}
+                          >
+                            <div className="flex items-center gap-2">
+                              {/* Raid Icon & Name */}
+                              {iconUrl && <Image src={iconUrl} alt="Raid icon" width={28} height={28} className="rounded shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-white truncate">{raid.name}</div>
+                                <div className="flex items-center gap-2 text-[10px]">
+                                  {guildRank && <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>}
+                                  {worldRank && <span className={`${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+                                </div>
+                              </div>
+                              {/* Progress Stats */}
+                              <div className="flex items-center gap-2 shrink-0 text-xs">
+                                <div className="text-center">
+                                  <div className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-[9px] text-gray-500">M</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-[9px] text-gray-500">H</div>
+                                </div>
+                                {(totalTime > 0 || currentBossPulls > 0 || bestProgress) && (
+                                  <div className="text-center border-l border-gray-600 pl-2">
+                                    <div className="text-gray-300">{totalTime > 0 ? formatTime(totalTime) : currentBossPulls > 0 ? currentBossPulls : bestProgress || "-"}</div>
+                                    <div className="text-[9px] text-gray-500">{totalTime > 0 ? "time" : currentBossPulls > 0 ? "pulls" : "best"}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full border-collapse min-w-[600px]">
                 <thead>
                   <tr className="border-b border-gray-700 bg-gray-800/50">
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">
-                      <div className="flex items-center gap-3">
+                    <th className="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-gray-300">
+                      <div className="flex items-center gap-2 md:gap-3">
                         <span>Raid</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 md:gap-2">
                           <button
                             onClick={() => setShowAllRaids(!showAllRaids)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
+                            className={`relative inline-flex h-4 md:h-5 w-7 md:w-9 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
                             role="switch"
                             aria-checked={showAllRaids}
                           >
-                            <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${showAllRaids ? "translate-x-5" : "translate-x-1"}`} />
+                            <span
+                              className={`inline-block h-2.5 md:h-3 w-2.5 md:w-3 transform rounded-full bg-white transition-transform ${
+                                showAllRaids ? "translate-x-4 md:translate-x-5" : "translate-x-0.5 md:translate-x-1"
+                              }`}
+                            />
                           </button>
-                          <span className="text-xs text-gray-400 font-normal whitespace-nowrap">Show All</span>
+                          <span className="text-[10px] md:text-xs text-gray-400 font-normal whitespace-nowrap">All</span>
                         </div>
                       </div>
                     </th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Rank</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">World</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">Mythic</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-purple-500">Heroic</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Time</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Pulls</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-300">Progress</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Rank</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">World</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-orange-500 border-l-2 border-gray-700">M</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-purple-500">H</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Time</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Pulls</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">%</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -447,22 +644,22 @@ export default function GuildProfilePage({ params }: PageProps) {
                             <tr key={raid.id} className="border-b border-gray-800">
                               {/* First clickable area: Raid Name, Rank, World Rank */}
                               <td
-                                className={`px-4 py-3 cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                className={`px-2 md:px-4 py-2 md:py-3 cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
                                   !hasProgress ? "opacity-40" : ""
                                 }`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidInfoRow(null)}
                               >
-                                <div className="flex items-center gap-3">
-                                  {iconUrl && <Image src={iconUrl} alt="Raid icon" width={24} height={24} className="rounded" />}
-                                  <span className="font-semibold text-white">{raid.name}</span>
+                                <div className="flex items-center gap-2 md:gap-3">
+                                  {iconUrl && <Image src={iconUrl} alt="Raid icon" width={24} height={24} className="rounded w-5 h-5 md:w-6 md:h-6" />}
+                                  <span className="font-semibold text-white text-xs md:text-base">{raid.name}</span>
                                 </div>
                               </td>
                               <td
-                                className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  !hasProgress ? "opacity-40" : ""
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base cursor-pointer transition-colors ${
+                                  hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${!hasProgress ? "opacity-40" : ""}`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidInfoRow(null)}
@@ -470,9 +667,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 {guildRank ? <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span> : <span className="text-gray-500">-</span>}
                               </td>
                               <td
-                                className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  !hasProgress ? "opacity-40" : ""
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base cursor-pointer transition-colors ${
+                                  hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${!hasProgress ? "opacity-40" : ""}`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidInfoRow(null)}
@@ -482,9 +679,9 @@ export default function GuildProfilePage({ params }: PageProps) {
 
                               {/* Second clickable area: Raid Progress columns */}
                               <td
-                                className={`px-4 py-3 text-center transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors border-l-2 border-gray-700 ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
@@ -492,9 +689,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
                               </td>
                               <td
-                                className={`px-4 py-3 text-center transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
@@ -502,9 +699,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
                               </td>
                               <td
-                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
@@ -512,9 +709,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 {totalTime > 0 ? formatTime(totalTime) : "-"}
                               </td>
                               <td
-                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
@@ -522,9 +719,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 {currentBossPulls > 0 ? currentBossPulls : "-"}
                               </td>
                               <td
-                                className={`px-4 py-3 text-center text-sm text-gray-300 transition-colors ${hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""} ${
-                                  hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"
-                                }`}
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}

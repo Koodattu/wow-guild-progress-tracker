@@ -6,6 +6,14 @@ export interface BestPullPhase {
   displayString: string; // e.g., "45% P3"
 }
 
+// Pull history entry for progress charts
+export interface PullHistoryEntry {
+  pullNumber: number;
+  fightPercentage: number; // 0-100, where 0 = kill, 100 = instant wipe
+  phase?: string; // Phase identifier like "P1", "P2", "I1" etc.
+  isKill: boolean;
+}
+
 export interface GuildCrest {
   emblem: {
     id: number;
@@ -51,6 +59,7 @@ export interface BossProgress {
   bestPullPhase?: BestPullPhase; // Phase context for best pull
   bestPullReportCode?: string; // WCL report code for best pull (for unkilled bosses)
   bestPullFightId?: number; // Fight ID within the report for best pull (for unkilled bosses)
+  pullHistory?: PullHistoryEntry[]; // Pull history for progress charts (up to first kill)
   lastUpdated: string;
 }
 

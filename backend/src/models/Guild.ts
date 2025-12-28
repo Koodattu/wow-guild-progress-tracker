@@ -9,6 +9,14 @@ export interface IBestPullPhase {
   displayString: string; // e.g., "45% P3"
 }
 
+// Pull history entry for progress charts
+export interface IPullHistoryEntry {
+  pullNumber: number;
+  fightPercentage: number; // 0-100, where 0 = kill, 100 = instant wipe
+  phase?: string; // Phase identifier like "P1", "P2", "I1" etc.
+  isKill: boolean;
+}
+
 export interface IBossProgress {
   bossId: number;
   bossName: string;
@@ -24,6 +32,7 @@ export interface IBossProgress {
   bestPullPhase?: IBestPullPhase; // Phase context for best pull
   bestPullReportCode?: string; // WCL report code for best pull (for unkilled bosses)
   bestPullFightId?: number; // Fight ID within the report for best pull (for unkilled bosses)
+  pullHistory?: IPullHistoryEntry[]; // Pull history for progress charts (up to first kill)
   lastUpdated: Date;
 }
 
@@ -126,6 +135,14 @@ const BossProgressSchema: Schema = new Schema(
     },
     bestPullReportCode: { type: String },
     bestPullFightId: { type: Number },
+    pullHistory: [
+      {
+        pullNumber: { type: Number, required: true },
+        fightPercentage: { type: Number, required: true },
+        phase: { type: String },
+        isKill: { type: Boolean, required: true },
+      },
+    ],
     lastUpdated: { type: Date, default: Date.now },
   },
   { _id: false }

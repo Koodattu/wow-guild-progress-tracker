@@ -132,43 +132,45 @@ export default function EventsPage() {
 
   return (
     <main className="min-h-screen text-white">
-      <div className="container mx-auto px-4 max-w-5xl">
-        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8">{error}</div>}
+      <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-5xl">
+        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8 text-sm md:text-base">{error}</div>}
 
         {/* Filters */}
-        <div className="mb-6">
-          <div className="flex flex-wrap gap-x-8 gap-y-4">
+        <div className="mb-4 md:mb-6">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-4 md:gap-x-8 md:gap-y-4">
             {/* Event Type Filter */}
-            <div className="flex-1 min-w-[300px]">
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">{t("eventTypes")}</h3>
-              <div className="flex flex-wrap gap-3">
+            <div className="flex-1 min-w-0 md:min-w-[300px]">
+              <h3 className="text-xs md:text-sm font-semibold text-gray-300 mb-2">{t("eventTypes")}</h3>
+              <div className="flex flex-wrap gap-2 md:gap-3">
                 {EVENT_TYPES.map((type) => (
-                  <label key={type} className="flex items-center gap-2 cursor-pointer group">
+                  <label key={type} className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedEventTypes.has(type)}
                       onChange={() => toggleEventType(type)}
                       className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-950 cursor-pointer"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{getEventTypeLabel(type)}</span>
+                    <span className="text-xs md:text-sm text-gray-300 group-hover:text-white transition-colors">{getEventTypeLabel(type)}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             {/* Difficulty Filter */}
-            <div className="flex-1 min-w-[200px]">
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">{t("difficulties")}</h3>
-              <div className="flex flex-wrap gap-3">
+            <div className="flex-1 min-w-0 md:min-w-[200px]">
+              <h3 className="text-xs md:text-sm font-semibold text-gray-300 mb-2">{t("difficulties")}</h3>
+              <div className="flex flex-wrap gap-2 md:gap-3">
                 {DIFFICULTIES.map((difficulty) => (
-                  <label key={difficulty} className="flex items-center gap-2 cursor-pointer group">
+                  <label key={difficulty} className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedDifficulties.has(difficulty)}
                       onChange={() => toggleDifficulty(difficulty)}
                       className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-950 cursor-pointer"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors capitalize">{difficulty === "mythic" ? t("mythic") : t("heroic")}</span>
+                    <span className="text-xs md:text-sm text-gray-300 group-hover:text-white transition-colors capitalize">
+                      {difficulty === "mythic" ? t("mythic") : t("heroic")}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -177,13 +179,15 @@ export default function EventsPage() {
         </div>
 
         {/* Event count */}
-        <div className="flex justify-end mb-4">
-          {eventsData && <div className="text-sm text-gray-400">{t("showingEvents", { start: 1, end: filteredEvents?.length || 0, total: eventsData.pagination.totalCount })}</div>}
+        <div className="flex justify-end mb-3 md:mb-4">
+          {eventsData && (
+            <div className="text-xs md:text-sm text-gray-400">{t("showingEvents", { start: 1, end: filteredEvents?.length || 0, total: eventsData.pagination.totalCount })}</div>
+          )}
         </div>
 
         {filteredEvents && filteredEvents.length > 0 ? (
           <>
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               {filteredEvents.map((event) => (
                 <EventCard key={event._id} event={event} />
               ))}
@@ -191,25 +195,28 @@ export default function EventsPage() {
 
             {/* Pagination Controls */}
             {eventsData && eventsData.pagination.totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-8">
+              <div className="flex items-center justify-center gap-1.5 md:gap-2 mt-6 md:mt-8 flex-wrap">
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                     currentPage === 1 ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
                   }`}
                 >
                   {t("previous")}
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 md:gap-2">
                   {/* First page */}
                   {currentPage > 3 && (
                     <>
-                      <button onClick={() => handlePageChange(1)} className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors">
+                      <button
+                        onClick={() => handlePageChange(1)}
+                        className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors"
+                      >
                         1
                       </button>
-                      {currentPage > 4 && <span className="text-gray-500">...</span>}
+                      {currentPage > 4 && <span className="text-gray-500 text-xs md:text-sm">...</span>}
                     </>
                   )}
 
@@ -223,7 +230,7 @@ export default function EventsPage() {
                         <button
                           key={page}
                           onClick={() => handlePageChange(page)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                             page === currentPage ? "bg-blue-600 text-white" : "bg-gray-800 text-white hover:bg-gray-700"
                           }`}
                         >
@@ -234,10 +241,10 @@ export default function EventsPage() {
                   {/* Last page */}
                   {eventsData && currentPage < eventsData.pagination.totalPages - 2 && (
                     <>
-                      {currentPage < eventsData.pagination.totalPages - 3 && <span className="text-gray-500">...</span>}
+                      {currentPage < eventsData.pagination.totalPages - 3 && <span className="text-gray-500 text-xs md:text-sm">...</span>}
                       <button
                         onClick={() => handlePageChange(eventsData.pagination.totalPages)}
-                        className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors"
+                        className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors"
                       >
                         {eventsData.pagination.totalPages}
                       </button>
@@ -248,7 +255,7 @@ export default function EventsPage() {
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={eventsData ? currentPage === eventsData.pagination.totalPages : true}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
                     eventsData && currentPage === eventsData.pagination.totalPages ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
                   }`}
                 >
