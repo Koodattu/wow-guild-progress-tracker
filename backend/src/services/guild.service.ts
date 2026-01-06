@@ -1004,6 +1004,28 @@ class GuildService {
         if (report.fights && report.fights.length > 0) {
           const encounterPhases = report.phases || [];
 
+          // Get fight IDs for tracked raid bosses only
+          const trackedFightIds: number[] = [];
+          for (const fight of report.fights) {
+            if (validBossIds.has(fight.encounterID)) {
+              trackedFightIds.push(fight.id);
+            }
+          }
+
+          // Fetch death events for all tracked fights in this report (single API call)
+          let deathsByFight = new Map<number, any[]>();
+          if (trackedFightIds.length > 0) {
+            try {
+              const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
+              if (deathData.reportData?.report) {
+                const actors = deathData.reportData.report.masterData?.actors || [];
+                deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, report.fights);
+              }
+            } catch (error: any) {
+              guildLog.warn(`Failed to fetch deaths for report ${report.code}: ${error.message}`);
+            }
+          }
+
           for (const fight of report.fights) {
             const encounterId = fight.encounterID;
 
@@ -1019,6 +1041,9 @@ class GuildService {
 
             // Determine phase information
             const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
+
+            // Get deaths for this fight
+            const deaths = deathsByFight.get(fight.id) || [];
 
             // Save fight to database
             const fightTimestamp = new Date(report.startTime + fight.startTime);
@@ -1043,6 +1068,7 @@ class GuildService {
                   name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
                 })),
                 progressDisplay: phaseInfo.progressDisplay,
+                deaths: deaths,
                 reportStartTime: report.startTime,
                 reportEndTime: report.endTime || 0,
                 fightStartTime: fight.startTime,
@@ -1169,6 +1195,28 @@ class GuildService {
         const encounterPhases = report.phases || [];
         let newFightsInThisReport = 0;
 
+        // Get fight IDs for tracked raid bosses only
+        const trackedFightIds: number[] = [];
+        for (const fight of report.fights) {
+          if (validBossIds.has(fight.encounterID)) {
+            trackedFightIds.push(fight.id);
+          }
+        }
+
+        // Fetch death events for all tracked fights in this report (single API call)
+        let deathsByFight = new Map<number, any[]>();
+        if (trackedFightIds.length > 0) {
+          try {
+            const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
+            if (deathData.reportData?.report) {
+              const actors = deathData.reportData.report.masterData?.actors || [];
+              deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, report.fights);
+            }
+          } catch (error: any) {
+            guildLog.warn(`Failed to fetch deaths for report ${report.code}: ${error.message}`);
+          }
+        }
+
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
 
@@ -1204,6 +1252,9 @@ class GuildService {
           // Determine phase information
           const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
 
+          // Get deaths for this fight
+          const deaths = deathsByFight.get(fight.id) || [];
+
           // Save fight to database
           const fightTimestamp = new Date(report.startTime + fight.startTime);
           await Fight.findOneAndUpdate(
@@ -1227,6 +1278,7 @@ class GuildService {
                 name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
               })),
               progressDisplay: phaseInfo.progressDisplay,
+              deaths: deaths,
               reportStartTime: report.startTime,
               reportEndTime: reportEndTime,
               fightStartTime: fight.startTime,
@@ -1486,6 +1538,28 @@ class GuildService {
         const encounterPhases = report.phases || [];
         let newFightsInThisReport = 0;
 
+        // Get fight IDs for tracked raid bosses only
+        const trackedFightIds: number[] = [];
+        for (const fight of report.fights) {
+          if (validBossIds.has(fight.encounterID)) {
+            trackedFightIds.push(fight.id);
+          }
+        }
+
+        // Fetch death events for all tracked fights in this report (single API call)
+        let deathsByFight = new Map<number, any[]>();
+        if (trackedFightIds.length > 0) {
+          try {
+            const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
+            if (deathData.reportData?.report) {
+              const actors = deathData.reportData.report.masterData?.actors || [];
+              deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, report.fights);
+            }
+          } catch (error: any) {
+            guildLog.warn(`Failed to fetch deaths for report ${report.code}: ${error.message}`);
+          }
+        }
+
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
 
@@ -1521,6 +1595,9 @@ class GuildService {
           // Determine phase information
           const phaseInfo = wclService.determinePhaseInfo(fight, encounterPhases);
 
+          // Get deaths for this fight
+          const deaths = deathsByFight.get(fight.id) || [];
+
           // Save fight to database
           const fightTimestamp = new Date(report.startTime + fight.startTime);
           await Fight.findOneAndUpdate(
@@ -1544,6 +1621,7 @@ class GuildService {
                 name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
               })),
               progressDisplay: phaseInfo.progressDisplay,
+              deaths: deaths,
               reportStartTime: report.startTime,
               reportEndTime: reportEndTime,
               fightStartTime: fight.startTime,

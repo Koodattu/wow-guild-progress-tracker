@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import logger from "../utils/logger";
+import { log } from "console";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -22,6 +23,8 @@ class WarcraftLogsService {
     if (this.accessToken && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
+
+    logger.info("Authenticating with Warcraft Logs API...");
 
     const clientId = process.env.WCL_CLIENT_ID;
     const clientSecret = process.env.WCL_CLIENT_SECRET;
@@ -50,6 +53,7 @@ class WarcraftLogsService {
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min early
 
     logger.info("WCL authenticated successfully");
+
     return this.accessToken;
   }
 
@@ -747,6 +751,202 @@ class WarcraftLogsService {
     };
 
     return this.query<any>(query, variables);
+  }
+
+  /**
+   * Fetch death events for a specific fight
+   * Returns all player deaths with character name, server, and timestamps
+   */
+  async getDeathEventsForFight(reportCode: string, fightId: number) {
+    // Use maximum API limit to fetch all deaths
+    const queryLimit = 10000;
+
+    const query = `
+      query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            code
+            startTime
+            masterData {
+              actors(type: "Player") {
+                id
+                name
+                server
+              }
+            }
+            events(
+              fightIDs: $fightIds,
+              dataType: Deaths,
+              hostilityType: Friendlies,
+              limit: $limit
+            ) {
+              data
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      reportCode,
+      fightIds: [fightId],
+      limit: queryLimit,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
+  /**
+   * Fetch death events for multiple fights in a report (more efficient)
+   * Returns all deaths grouped by fight ID
+   */
+  async getDeathEventsForReport(reportCode: string, fightIds: number[]) {
+    // Use maximum API limit to fetch all deaths
+    const queryLimit = 10000;
+
+    const query = `
+      query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            code
+            startTime
+            masterData {
+              actors(type: "Player") {
+                id
+                name
+                server
+              }
+            }
+            events(
+              fightIDs: $fightIds,
+              dataType: Deaths,
+              hostilityType: Friendlies,
+              limit: $limit
+            ) {
+              data
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      reportCode,
+      fightIds,
+      limit: queryLimit,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
+  /**
+   * Parse death events from WCL response and group by fight
+   * Death events contain: timestamp, type: "death", targetID (the player who died), fight
+   */
+  parseDeathEventsByFight(deathEventsData: any, actors: any[], fights: any[]) {
+    if (!deathEventsData?.events?.data) {
+      return new Map();
+    }
+
+    const events = JSON.parse(JSON.stringify(deathEventsData.events.data));
+
+    // Create a map of actor IDs to actor info
+    const actorMap = new Map();
+    if (actors) {
+      for (const actor of actors) {
+        actorMap.set(actor.id, { name: actor.name, server: actor.server });
+      }
+    }
+
+    // Create a map of fight IDs to fight start times
+    const fightMap = new Map();
+    if (fights) {
+      for (const fight of fights) {
+        fightMap.set(fight.id, fight.startTime);
+      }
+    }
+
+    // Group deaths by fight ID
+    const deathsByFight = new Map<number, any[]>();
+
+    for (const event of events) {
+      if (event.type === "death" && event.targetID && event.fight) {
+        const actor = actorMap.get(event.targetID);
+        const fightStartTime = fightMap.get(event.fight);
+
+        if (actor && fightStartTime !== undefined) {
+          if (!deathsByFight.has(event.fight)) {
+            deathsByFight.set(event.fight, []);
+          }
+
+          deathsByFight.get(event.fight)!.push({
+            name: actor.name,
+            server: actor.server || "Unknown",
+            timestamp: event.timestamp, // Absolute timestamp relative to report start
+            deathTime: event.timestamp - fightStartTime, // Time relative to fight start
+          });
+        }
+      }
+    }
+
+    // Sort each fight's deaths by timestamp (chronological order)
+    for (const [fightId, deaths] of deathsByFight.entries()) {
+      deaths.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    return deathsByFight;
+  }
+
+  /**
+   * Parse death events from WCL response
+   * Death events contain: timestamp, type: "death", sourceID (the player who died)
+   */
+  parseDeathEvents(deathEventsData: any, actors: any[], fightStartTime: number) {
+    if (!deathEventsData?.events?.data) {
+      return [];
+    }
+
+    const events = JSON.parse(JSON.stringify(deathEventsData.events.data));
+
+    // Create a map of actor IDs to actor info
+    const actorMap = new Map();
+    if (actors) {
+      for (const actor of actors) {
+        actorMap.set(actor.id, { name: actor.name, server: actor.server });
+      }
+    }
+
+    // Parse death events
+    const deaths = [];
+    for (const event of events) {
+      if (event.type === "death" && event.targetID) {
+        const actor = actorMap.get(event.targetID);
+        if (actor) {
+          deaths.push({
+            name: actor.name,
+            server: actor.server || "Unknown",
+            timestamp: event.timestamp, // Absolute timestamp relative to report start
+            deathTime: event.timestamp - fightStartTime, // Time relative to fight start
+          });
+        }
+      }
+    }
+
+    // Sort by timestamp (chronological order)
+    deaths.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Keep only the first N deaths
+    return deaths;
   }
 }
 
