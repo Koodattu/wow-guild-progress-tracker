@@ -27,6 +27,7 @@ import {
   AnalyticsTrends,
   AnalyticsSlowEndpoint,
   AnalyticsErrors,
+  User,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -283,5 +284,34 @@ export const api = {
     const response = await fetch(`${API_URL}/api/analytics/errors?days=${days}`);
     if (!response.ok) throw new Error("Failed to fetch error analytics");
     return response.json();
+  },
+
+  // Auth endpoints
+  async getDiscordLoginUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/discord/login`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Discord login URL");
+    return response.json();
+  },
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/me`, {
+        credentials: "include",
+      });
+      if (response.status === 401) return null;
+      if (!response.ok) throw new Error("Failed to get current user");
+      return response.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async logout(): Promise<void> {
+    await fetch(`${API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
   },
 };

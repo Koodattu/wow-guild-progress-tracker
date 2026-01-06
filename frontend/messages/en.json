@@ -11,7 +11,9 @@
     "loginWithDiscord": "Login with Discord",
     "github": "GitHub",
     "discord": "Discord",
-    "twitch": "Twitch"
+    "twitch": "Twitch",
+    "profile": "Profile",
+    "logout": "Log Out"
   },
   "infoDialog": {
     "title": "About This Site",
@@ -190,5 +192,17 @@
     "refresh": "Refresh",
     "viewMore": "View More",
     "viewLess": "View Less"
+  },
+  "profilePage": {
+    "title": "Profile",
+    "discordAccount": "Discord Account",
+    "discordId": "Discord ID",
+    "memberSince": "Member Since",
+    "lastLogin": "Last Login",
+    "logout": "Log Out",
+    "comingSoon": "Coming Soon",
+    "linkBattleNet": "Link Battle.net account",
+    "linkTwitch": "Link Twitch account",
+    "manageCharacters": "Manage WoW characters"
   }
 }

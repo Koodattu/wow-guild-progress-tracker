@@ -460,3 +460,19 @@ export interface AnalyticsErrors {
   details: AnalyticsErrorDetail[];
   summary: AnalyticsErrorSummary[];
 }
+
+// User/Auth types
+export interface DiscordUserInfo {
+  id: string;
+  username: string;
+  discriminator: string;
+  avatar: string | null;
+  avatarUrl: string;
+}
+
+export interface User {
+  id: string;
+  discord: DiscordUserInfo;
+  createdAt: string;
+  lastLoginAt: string;
+}

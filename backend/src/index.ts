@@ -4,6 +4,7 @@ dotenv.config();
 
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import path from "path";
 import logger from "./utils/logger";
 import connectDB from "./config/database";
@@ -15,14 +16,21 @@ import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
 import tierlistsRouter from "./routes/tierlists";
 import analyticsRouter from "./routes/analytics";
+import authRouter from "./routes/auth";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === "production" ? "https://suomiwow.vaarattu.tv" : "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 
 // Analytics middleware - tracks all requests automatically
 app.use(analyticsMiddleware);
@@ -36,6 +44,7 @@ app.use("/api/events", eventsRouter);
 app.use("/api/raids", raidsRouter);
 app.use("/api/tierlists", tierlistsRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/auth", authRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {

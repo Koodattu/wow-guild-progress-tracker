@@ -11,7 +11,9 @@
     "loginWithDiscord": "Kirjaudu Discordilla",
     "github": "GitHub",
     "discord": "Discord",
-    "twitch": "Twitch"
+    "twitch": "Twitch",
+    "profile": "Profiili",
+    "logout": "Kirjaudu ulos"
   },
   "infoDialog": {
     "title": "Tietoa Sivustosta",
@@ -190,5 +192,17 @@
     "refresh": "Päivitä",
     "viewMore": "Näytä Lisää",
     "viewLess": "Näytä Vähemmän"
+  },
+  "profilePage": {
+    "title": "Profiili",
+    "discordAccount": "Discord-tili",
+    "discordId": "Discord ID",
+    "memberSince": "Jäsen alkaen",
+    "lastLogin": "Viimeisin kirjautuminen",
+    "logout": "Kirjaudu ulos",
+    "comingSoon": "Tulossa pian",
+    "linkBattleNet": "Linkitä Battle.net-tili",
+    "linkTwitch": "Linkitä Twitch-tili",
+    "manageCharacters": "Hallitse WoW-hahmoja"
   }
 }
