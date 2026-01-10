@@ -36,7 +36,7 @@ export interface IBattleNetAccount {
   id: string; // Battle.net account ID (sub from OAuth)
   battletag: string;
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string; // Optional - Battle.net doesn't always return refresh tokens
   tokenExpiresAt: Date;
   connectedAt: Date;
   characters: IWoWCharacter[];
@@ -98,7 +98,7 @@ const BattleNetAccountSchema = new Schema<IBattleNetAccount>(
     id: { type: String, required: true },
     battletag: { type: String, required: true },
     accessToken: { type: String, required: true },
-    refreshToken: { type: String, required: true },
+    refreshToken: { type: String, required: false },
     tokenExpiresAt: { type: Date, required: true },
     connectedAt: { type: Date, default: Date.now },
     characters: { type: [WoWCharacterSchema], default: [] },

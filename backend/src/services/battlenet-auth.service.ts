@@ -243,7 +243,7 @@ class BattleNetAuthService {
       id: userInfo.sub,
       battletag: userInfo.battletag,
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token || "",
+      refreshToken: tokens.refresh_token, // May be undefined
       tokenExpiresAt,
       connectedAt: new Date(),
       characters,
