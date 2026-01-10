@@ -206,6 +206,7 @@ export class BlizzardApiClient {
 
       const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
 
+      logger.info(`[API REQUEST] POST ${this.oauthUrl}`);
       const response = await fetch(this.oauthUrl, {
         method: "POST",
         headers: {
@@ -252,6 +253,7 @@ export class BlizzardApiClient {
     const token = await this.getAccessToken();
 
     try {
+      logger.info(`[API REQUEST] BlizzardService.makeAuthenticatedRequest - GET ${url}`);
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,

@@ -35,6 +35,7 @@ class WarcraftLogsService {
 
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
+    logger.info(`[API REQUEST] POST https://www.warcraftlogs.com/oauth/token`);
     const response = await fetch("https://www.warcraftlogs.com/oauth/token", {
       method: "POST",
       headers: {
@@ -143,6 +144,7 @@ class WarcraftLogsService {
 
   // Get guild reports without zone filter to see all available reports
   async getGuildReportsAll(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getGuildReportsAll - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         reportData {
@@ -175,6 +177,7 @@ class WarcraftLogsService {
   // Get guild reports with full fight data - NO zone filter (for initial fetch)
   // This fetches all reports across all content (raids, dungeons, etc.)
   async getGuildReportsWithFights(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10, page: number = 1, retryOnGatewayTimeout: boolean = false) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getGuildReportsWithFights - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, page: ${page})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -243,6 +246,7 @@ class WarcraftLogsService {
   // Lightweight check for new reports - only fetches codes and timestamps, no fights data
   // This is much cheaper (uses fewer points) than fetching full report data
   async checkForNewReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 5) {
+    logger.info(`[API REQUEST] WarcraftLogsService.checkForNewReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!) {
         rateLimitData {
@@ -276,6 +280,7 @@ class WarcraftLogsService {
   // Get recent reports for a guild WITHOUT filtering by zone
   // This ensures we catch all reports even if WCL tags them with a different zone
   async getRecentReports(guildName: string, serverSlug: string, serverRegion: string, limit: number = 3) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getRecentReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         rateLimitData {
@@ -307,6 +312,7 @@ class WarcraftLogsService {
 
   // Get a single report by code with all fight details
   async getReportByCode(reportCode: string, difficultyId: number) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getReportByCode - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode})`);
     const query = `
       query($reportCode: String!, $difficulty: Int!) {
         rateLimitData {
@@ -344,6 +350,7 @@ class WarcraftLogsService {
 
   // Get a single report by code with fights - ALL difficulties (not filtered)
   async getReportByCodeAllDifficulties(reportCode: string) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getReportByCodeAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode})`);
     const query = `
       query($reportCode: String!) {
         rateLimitData {
@@ -395,6 +402,9 @@ class WarcraftLogsService {
   // Get guild info and recent reports for a specific raid - ALL difficulties (not filtered)
   // Note: Limit kept low (10) to avoid WCL query complexity limits when fetching phase data
   async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 10, page: number = 1) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReportsAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -459,6 +469,9 @@ class WarcraftLogsService {
 
   // Get zone (raid) information - with caching
   async getGuildReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, difficultyId: number, limit: number = 50, page: number = 1) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $difficulty: Int!, $page: Int!) {
         rateLimitData {
@@ -513,6 +526,7 @@ class WarcraftLogsService {
     // Don't use cache here because we need detailed encounter data
     // The getZones() cache only has id and name, not encounters
 
+    logger.info(`[API REQUEST] WarcraftLogsService.getZone - POST https://www.warcraftlogs.com/api/v2/client (zone: ${zoneId})`);
     // Fetch fresh data with encounters
     const query = `
       query($zoneId: Int!) {
@@ -551,6 +565,7 @@ class WarcraftLogsService {
     }
 
     logger.info("Fetching fresh zones data...");
+    logger.info(`[API REQUEST] WarcraftLogsService.getZones - POST https://www.warcraftlogs.com/api/v2/client`);
     const query = `
       query {
         rateLimitData {
@@ -686,6 +701,7 @@ class WarcraftLogsService {
    * Returns world progress ranking (always uses highest difficulty - Mythic)
    */
   async getGuildZoneRanking(guildName: string, serverSlug: string, serverRegion: string, zoneId: number) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getGuildZoneRanking - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!) {
         rateLimitData {
@@ -725,6 +741,7 @@ class WarcraftLogsService {
    * This should only be called once during initial fetch
    */
   async getGuildDetails(guildName: string, serverSlug: string, serverRegion: string) {
+    logger.info(`[API REQUEST] WarcraftLogsService.getGuildDetails - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`);
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!) {
         rateLimitData {
@@ -761,6 +778,7 @@ class WarcraftLogsService {
     // Use maximum API limit to fetch all deaths
     const queryLimit = 10000;
 
+    logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForFight - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, fight: ${fightId})`);
     const query = `
       query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
         rateLimitData {
@@ -809,6 +827,7 @@ class WarcraftLogsService {
     // Use maximum API limit to fetch all deaths
     const queryLimit = 10000;
 
+    logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, ${fightIds.length} fights)`);
     const query = `
       query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
         rateLimitData {

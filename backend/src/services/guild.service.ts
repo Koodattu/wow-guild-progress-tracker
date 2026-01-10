@@ -12,6 +12,9 @@ import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 
 class GuildService {
+  // Configuration for death events fetching
+  private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
+
   // Sync raid information from WarcraftLogs to database
   async syncRaidsFromWCL(): Promise<void> {
     logger.info("Syncing raid data from WarcraftLogs...");
@@ -1014,7 +1017,7 @@ class GuildService {
 
           // Fetch death events for all tracked fights in this report (single API call)
           let deathsByFight = new Map<number, any[]>();
-          if (trackedFightIds.length > 0) {
+          if (this.fetchDeathEvents && trackedFightIds.length > 0) {
             try {
               const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
               if (deathData.reportData?.report) {
@@ -1205,7 +1208,7 @@ class GuildService {
 
         // Fetch death events for all tracked fights in this report (single API call)
         let deathsByFight = new Map<number, any[]>();
-        if (trackedFightIds.length > 0) {
+        if (this.fetchDeathEvents && trackedFightIds.length > 0) {
           try {
             const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
             if (deathData.reportData?.report) {
@@ -1548,7 +1551,7 @@ class GuildService {
 
         // Fetch death events for all tracked fights in this report (single API call)
         let deathsByFight = new Map<number, any[]>();
-        if (trackedFightIds.length > 0) {
+        if (this.fetchDeathEvents && trackedFightIds.length > 0) {
           try {
             const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
             if (deathData.reportData?.report) {

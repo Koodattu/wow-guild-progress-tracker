@@ -58,6 +58,7 @@ export class IconCacheService {
 
     try {
       logger.info(`📥 Downloading icon: ${filename}`);
+      logger.info(`[API REQUEST] GET ${blizzardIconUrl}`);
 
       // Download the icon from Blizzard
       const response = await fetch(blizzardIconUrl);

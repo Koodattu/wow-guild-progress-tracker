@@ -118,6 +118,14 @@ const startServer = async () => {
       logger.info("UPDATE_WORLD_RANKS_ON_STARTUP is disabled, skipping startup world ranks update");
     }
 
+    // Log death events fetching status
+    const fetchDeathEvents = process.env.FETCH_DEATH_EVENTS === "true";
+    if (fetchDeathEvents) {
+      logger.info("FETCH_DEATH_EVENTS is enabled, death events and actor data will be fetched for fights");
+    } else {
+      logger.info("FETCH_DEATH_EVENTS is disabled (default), death events will not be fetched to reduce data volume");
+    }
+
     // Update guild crests on startup if enabled
     const updateGuildCrestsOnStartup = process.env.UPDATE_GUILD_CRESTS_ON_STARTUP === "true";
     if (updateGuildCrestsOnStartup) {

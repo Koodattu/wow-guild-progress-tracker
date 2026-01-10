@@ -77,6 +77,7 @@ class DiscordService {
       redirect_uri: this.redirectUri,
     });
 
+    logger.info(`[API REQUEST] POST https://discord.com/api/oauth2/token`);
     const response = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: {
@@ -98,6 +99,7 @@ class DiscordService {
    * Get Discord user info using access token
    */
   async getUserInfo(accessToken: string): Promise<DiscordUserResponse> {
+    logger.info(`[API REQUEST] GET https://discord.com/api/users/@me`);
     const response = await fetch("https://discord.com/api/users/@me", {
       headers: {
         Authorization: `Bearer ${accessToken}`,

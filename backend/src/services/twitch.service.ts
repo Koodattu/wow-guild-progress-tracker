@@ -61,6 +61,7 @@ class TwitchService {
 
     // Request new token
     try {
+      logger.info(`[API REQUEST] POST https://id.twitch.tv/oauth2/token`);
       const response = await fetch("https://id.twitch.tv/oauth2/token", {
         method: "POST",
         headers: {
@@ -113,6 +114,7 @@ class TwitchService {
       // Build query string with user_login parameters
       const queryParams = channelNames.map((name) => `user_login=${encodeURIComponent(name.toLowerCase())}`).join("&");
 
+      logger.info(`[API REQUEST] GET https://api.twitch.tv/helix/streams?${queryParams}`);
       const response = await fetch(`https://api.twitch.tv/helix/streams?${queryParams}`, {
         headers: {
           "Client-ID": this.clientId,

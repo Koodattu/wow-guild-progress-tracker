@@ -52,6 +52,7 @@ export class RaiderIOApiClient {
       const url = `${this.apiBaseUrl}/raiding/static-data?access_key=${this.apiKey}&expansion_id=${expansionId}`;
 
       logger.info(`📅 Fetching raid dates for expansion ${expansionId}...`);
+      logger.info(`[API REQUEST] GET ${this.apiBaseUrl}/raiding/static-data?expansion_id=${expansionId}`);
 
       const response = await fetch(url);
 
