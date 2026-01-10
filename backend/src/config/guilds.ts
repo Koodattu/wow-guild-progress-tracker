@@ -6,9 +6,9 @@ export interface TrackedGuild {
   streamers?: string[]; // Twitch channel names
 }
 
-export const GUILDS: TrackedGuild[] = [{ name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen", "b0aty", "wiba"] }];
+export const GUILDS_DEV: TrackedGuild[] = [{ name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen", "b0aty", "wiba"] }];
 
-export const GUILDS2: TrackedGuild[] = [
+export const GUILDS_DEV_B: TrackedGuild[] = [
   { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen", "b0aty", "wiba"] },
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },

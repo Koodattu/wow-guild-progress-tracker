@@ -7,7 +7,7 @@ import TierList from "../models/TierList";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
-import { GUILDS, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
+import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 
@@ -320,7 +320,7 @@ class GuildService {
   async initializeGuilds(): Promise<void> {
     logger.info("Initializing guilds from config...");
 
-    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
     logger.info(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
 
     for (const guildConfig of guildsToTrack) {
@@ -379,7 +379,7 @@ class GuildService {
   async syncGuildConfigData(): Promise<void> {
     logger.info("Syncing guild config data (parent_guild, streamers)...");
 
-    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
 
     for (const guildConfig of guildsToTrack) {
       try {
