@@ -28,6 +28,7 @@ import {
   AnalyticsSlowEndpoint,
   AnalyticsErrors,
   User,
+  WoWCharacter,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -313,5 +314,61 @@ export const api = {
       method: "POST",
       credentials: "include",
     });
+  },
+
+  // Twitch account connection
+  async getTwitchConnectUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/twitch/connect`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Twitch connect URL");
+    return response.json();
+  },
+
+  async disconnectTwitch(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/twitch/disconnect`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to disconnect Twitch");
+  },
+
+  // Battle.net account connection
+  async getBattleNetConnectUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/connect`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Battle.net connect URL");
+    return response.json();
+  },
+
+  async disconnectBattleNet(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/disconnect`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to disconnect Battle.net");
+  },
+
+  async updateCharacterSelection(characterIds: number[]): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ characterIds }),
+    });
+    if (!response.ok) throw new Error("Failed to update character selection");
+    return response.json();
+  },
+
+  async refreshWoWCharacters(): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to refresh characters");
+    return response.json();
   },
 };

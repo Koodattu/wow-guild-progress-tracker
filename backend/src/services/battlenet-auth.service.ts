@@ -1,0 +1,338 @@
+import logger from "../utils/logger";
+import User, { IUser, IWoWCharacter } from "../models/User";
+
+interface BattleNetTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string; // Battle.net may not always return a refresh token
+  scope: string;
+  sub: string; // Battle.net account ID
+}
+
+interface BattleNetUserInfo {
+  sub: string;
+  id: number;
+  battletag: string;
+}
+
+interface WoWCharacterFromAPI {
+  character: {
+    href: string;
+  };
+  protected_character: {
+    href: string;
+  };
+  name: string;
+  id: number;
+  realm: {
+    key: {
+      href: string;
+    };
+    name: string;
+    id: number;
+    slug: string;
+  };
+  playable_class: {
+    key: {
+      href: string;
+    };
+    name: string;
+    id: number;
+  };
+  playable_race: {
+    key: {
+      href: string;
+    };
+    name: string;
+    id: number;
+  };
+  gender: {
+    type: string;
+    name: string;
+  };
+  faction: {
+    type: "ALLIANCE" | "HORDE";
+    name: string;
+  };
+  level: number;
+}
+
+interface WoWProfileSummary {
+  _links: {
+    self: { href: string };
+    user: { href: string };
+    profile: { href: string };
+  };
+  id: number;
+  wow_accounts?: Array<{
+    id: number;
+    characters: WoWCharacterFromAPI[];
+  }>;
+}
+
+class BattleNetAuthService {
+  private clientId: string;
+  private clientSecret: string;
+  private redirectUri: string;
+  private region: string = "eu"; // Default to EU for Finnish users
+
+  constructor() {
+    this.clientId = process.env.BLIZZARD_CLIENT_ID || "";
+    this.clientSecret = process.env.BLIZZARD_CLIENT_SECRET || "";
+
+    // Determine redirect URI based on environment
+    const isProd = process.env.NODE_ENV === "production";
+    this.redirectUri = isProd ? "https://suomiwow.vaarattu.tv/api/auth/battlenet/callback" : "http://localhost:3001/api/auth/battlenet/callback";
+
+    if (!this.clientId || !this.clientSecret) {
+      logger.warn("Battle.net OAuth credentials not configured for user authentication");
+    } else {
+      logger.info(`Battle.net OAuth configured with redirect URI: ${this.redirectUri}`);
+    }
+  }
+
+  /**
+   * Check if Battle.net OAuth is enabled
+   */
+  isEnabled(): boolean {
+    return this.clientId !== "" && this.clientSecret !== "";
+  }
+
+  /**
+   * Get the Battle.net OAuth authorization URL for connecting account
+   * Uses state parameter to prevent CSRF and include user ID
+   */
+  getAuthorizationUrl(userId: string, state: string): string {
+    const params = new URLSearchParams({
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      response_type: "code",
+      scope: "openid wow.profile", // OpenID for identity, wow.profile for WoW characters
+      state: state, // Includes encrypted userId for security
+    });
+
+    // Use EU OAuth endpoint for Finnish users
+    return `https://oauth.battle.net/authorize?${params.toString()}`;
+  }
+
+  /**
+   * Exchange authorization code for tokens
+   */
+  async exchangeCode(code: string): Promise<BattleNetTokenResponse> {
+    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
+
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: this.redirectUri,
+    });
+
+    logger.info(`[API REQUEST] POST https://oauth.battle.net/token`);
+    const response = await fetch("https://oauth.battle.net/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${credentials}`,
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.error("Failed to exchange Battle.net code:", error);
+      throw new Error("Failed to exchange authorization code");
+    }
+
+    return response.json() as Promise<BattleNetTokenResponse>;
+  }
+
+  /**
+   * Get Battle.net user info using access token
+   */
+  async getUserInfo(accessToken: string): Promise<BattleNetUserInfo> {
+    logger.info(`[API REQUEST] GET https://oauth.battle.net/userinfo`);
+    const response = await fetch("https://oauth.battle.net/userinfo", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.error("Failed to get Battle.net user info:", error);
+      throw new Error("Failed to get user info");
+    }
+
+    return response.json() as Promise<BattleNetUserInfo>;
+  }
+
+  /**
+   * Get WoW profile summary including all characters
+   */
+  async getWoWCharacters(accessToken: string): Promise<IWoWCharacter[]> {
+    const apiUrl = `https://${this.region}.api.blizzard.com/profile/user/wow?namespace=profile-${this.region}&locale=en_US`;
+
+    logger.info(`[API REQUEST] GET ${apiUrl}`);
+    const response = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.error("Failed to get WoW profile:", error);
+      // Return empty array instead of throwing - user might not have WoW
+      return [];
+    }
+
+    const profile = (await response.json()) as WoWProfileSummary;
+
+    // Extract characters from all WoW accounts
+    const characters: IWoWCharacter[] = [];
+
+    if (profile.wow_accounts) {
+      for (const account of profile.wow_accounts) {
+        if (account.characters) {
+          for (const char of account.characters) {
+            // Only include characters level 10+
+            if (char.level >= 10) {
+              characters.push({
+                id: char.id,
+                name: char.name,
+                realm: char.realm.name,
+                realmSlug: char.realm.slug,
+                class: char.playable_class.name,
+                level: char.level,
+                faction: char.faction.type,
+                selected: false, // Default to not selected
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Sort by level descending
+    characters.sort((a, b) => b.level - a.level);
+
+    logger.info(`Fetched ${characters.length} WoW characters (level 10+)`);
+    return characters;
+  }
+
+  /**
+   * Connect Battle.net account to existing user
+   */
+  async connectBattleNetAccount(userId: string, userInfo: BattleNetUserInfo, tokens: BattleNetTokenResponse, characters: IWoWCharacter[]): Promise<IUser> {
+    const tokenExpiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+
+    // Check if this Battle.net account is already connected to another user
+    const existingUser = await User.findOne({ "battlenet.id": userInfo.sub });
+    if (existingUser && existingUser._id.toString() !== userId) {
+      throw new Error("This Battle.net account is already connected to another user");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Update user with Battle.net account
+    user.battlenet = {
+      id: userInfo.sub,
+      battletag: userInfo.battletag,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || "",
+      tokenExpiresAt,
+      connectedAt: new Date(),
+      characters,
+      lastCharacterSync: new Date(),
+    };
+
+    await user.save();
+    logger.info(`Battle.net account connected: ${userInfo.battletag} with ${characters.length} characters to user ${userId}`);
+
+    return user;
+  }
+
+  /**
+   * Update character selection for a user
+   */
+  async updateCharacterSelection(userId: string, characterIds: number[]): Promise<IUser> {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.battlenet) {
+      throw new Error("No Battle.net account connected");
+    }
+
+    // Update selected status for each character
+    for (const char of user.battlenet.characters) {
+      char.selected = characterIds.includes(char.id);
+    }
+
+    await user.save();
+    logger.info(`Updated character selection for user ${userId}: ${characterIds.length} characters selected`);
+
+    return user;
+  }
+
+  /**
+   * Refresh WoW characters for a user
+   */
+  async refreshCharacters(userId: string): Promise<IWoWCharacter[]> {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.battlenet) {
+      throw new Error("No Battle.net account connected");
+    }
+
+    // TODO: Check if token needs refresh and refresh it if needed
+
+    // Get fresh character list
+    const characters = await this.getWoWCharacters(user.battlenet.accessToken);
+
+    // Preserve selection state from existing characters
+    const existingSelections = new Set(user.battlenet.characters.filter((c) => c.selected).map((c) => c.id));
+
+    for (const char of characters) {
+      char.selected = existingSelections.has(char.id);
+    }
+
+    user.battlenet.characters = characters;
+    user.battlenet.lastCharacterSync = new Date();
+    await user.save();
+
+    logger.info(`Refreshed ${characters.length} characters for user ${userId}`);
+    return characters;
+  }
+
+  /**
+   * Disconnect Battle.net account from user
+   */
+  async disconnectBattleNetAccount(userId: string): Promise<IUser> {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.battlenet) {
+      throw new Error("No Battle.net account connected");
+    }
+
+    const battletag = user.battlenet.battletag;
+    user.battlenet = undefined;
+    await user.save();
+
+    logger.info(`Battle.net account disconnected: ${battletag} from user ${userId}`);
+    return user;
+  }
+}
+
+export default new BattleNetAuthService();

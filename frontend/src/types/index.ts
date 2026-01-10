@@ -470,9 +470,38 @@ export interface DiscordUserInfo {
   avatarUrl: string;
 }
 
+export interface TwitchUserInfo {
+  id: string;
+  login: string;
+  displayName: string;
+  profileImageUrl: string | null;
+  connectedAt: string;
+}
+
+export interface WoWCharacter {
+  id: number;
+  name: string;
+  realm: string;
+  realmSlug: string;
+  class: string;
+  level: number;
+  faction: "ALLIANCE" | "HORDE";
+  selected: boolean;
+}
+
+export interface BattleNetUserInfo {
+  id: string;
+  battletag: string;
+  connectedAt: string;
+  characters: WoWCharacter[];
+  lastCharacterSync: string | null;
+}
+
 export interface User {
   id: string;
   discord: DiscordUserInfo;
+  twitch?: TwitchUserInfo;
+  battlenet?: BattleNetUserInfo;
   createdAt: string;
   lastLoginAt: string;
 }
