@@ -489,6 +489,7 @@ export interface WoWCharacter {
   faction: "ALLIANCE" | "HORDE";
   guild?: string;
   selected: boolean;
+  inactive?: boolean;
 }
 
 export interface BattleNetUserInfo {

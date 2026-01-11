@@ -165,8 +165,12 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
                       </span>
                       <span className="text-white font-normal text-sm">-{character.realm}</span>
 
-                      {/* Guild Name */}
-                      {character.guild && <span className="text-yellow-400 text-sm mb-0.5 truncate ml-2">&lt;{character.guild}&gt;</span>}
+                      {/* Guild Name or Inactive Status */}
+                      {character.inactive ? (
+                        <span className="text-red-500 text-sm mb-0.5 truncate ml-2">&lt;inactive&gt;</span>
+                      ) : (
+                        character.guild && <span className="text-yellow-400 text-sm mb-0.5 truncate ml-2">&lt;{character.guild}&gt;</span>
+                      )}
                     </div>
 
                     {/* Character Details: Level, Race, Class */}

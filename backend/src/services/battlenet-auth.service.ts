@@ -240,8 +240,8 @@ class BattleNetAuthService {
       for (const account of profile.wow_accounts) {
         if (account.characters) {
           for (const char of account.characters) {
-            // Only include characters level 10+
-            if (char.level >= 10) {
+            // Only include characters level 60+
+            if (char.level >= 60) {
               // Optionally fetch guild information from protected character profile
               let guildName: string | undefined;
               if (fetchGuilds) {
@@ -264,6 +264,7 @@ class BattleNetAuthService {
                 faction: char.faction.type,
                 guild: guildName,
                 selected: false, // Default to not selected
+                inactive: false, // Default to active
               });
             }
           }
@@ -274,7 +275,7 @@ class BattleNetAuthService {
     // Sort by level descending
     characters.sort((a, b) => b.level - a.level);
 
-    logger.info(`Fetched ${characters.length} WoW characters (level 10+)${fetchGuilds ? " with guild info" : ""}`);
+    logger.info(`Fetched ${characters.length} WoW characters (level 60+)${fetchGuilds ? " with guild info" : ""}`);
     return characters;
   }
 
@@ -306,9 +307,19 @@ class BattleNetAuthService {
           const profile: any = await response.json();
           if (profile.guild && profile.guild.name) {
             char.guild = profile.guild.name;
+            char.inactive = false;
             updated++;
             logger.info(`Enriched ${char.name} with guild: ${profile.guild.name}`);
+          } else {
+            // Character has no guild but is active
+            char.inactive = false;
           }
+        } else if (response.status === 404) {
+          // Character is inactive (not found in API)
+          char.inactive = true;
+          char.guild = "inactive";
+          updated++;
+          logger.info(`Marked ${char.name} as inactive (404 from API)`);
         } else {
           logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
         }

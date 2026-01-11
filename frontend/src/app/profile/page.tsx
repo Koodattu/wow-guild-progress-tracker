@@ -472,7 +472,11 @@ export default function ProfilePage() {
                         {character.name}
                       </span>
                       <span className="text-white font-normal text-sm truncate">-{character.realm}</span>
-                      {character.guild && <span className="text-yellow-400 text-sm ml-2 truncate">&lt;{character.guild}&gt;</span>}
+                      {character.inactive ? (
+                        <span className="text-red-500 text-sm ml-2 truncate">&lt;inactive&gt;</span>
+                      ) : (
+                        character.guild && <span className="text-yellow-400 text-sm ml-2 truncate">&lt;{character.guild}&gt;</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-sm flex-nowrap">
                       <span className="text-white">Level {character.level}</span>

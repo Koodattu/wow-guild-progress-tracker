@@ -32,6 +32,7 @@ export interface IWoWCharacter {
   faction: "ALLIANCE" | "HORDE";
   guild?: string;
   selected: boolean; // Whether user has selected this character to display
+  inactive?: boolean; // Whether the character is inactive (404 from API)
 }
 
 export interface IBattleNetAccount {
