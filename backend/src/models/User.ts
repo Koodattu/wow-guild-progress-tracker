@@ -94,6 +94,7 @@ const WoWCharacterSchema = new Schema<IWoWCharacter>(
     faction: { type: String, enum: ["ALLIANCE", "HORDE"], required: true },
     guild: { type: String, required: false },
     selected: { type: Boolean, default: false },
+    inactive: { type: Boolean, default: false },
   },
   { _id: false }
 );

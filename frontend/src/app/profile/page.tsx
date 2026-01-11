@@ -3,7 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
 import { FaBattleNet } from "react-icons/fa";
@@ -42,29 +42,19 @@ export default function ProfilePage() {
   const [isSavingCharacters, setIsSavingCharacters] = useState(false);
   const [showCharacterDialog, setShowCharacterDialog] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const hasTriggeredRefresh = useRef(false);
 
   // Check if we should open the dialog after Battle.net connection
   useEffect(() => {
     const connected = searchParams.get("connected");
-    if (connected === "battlenet" && user?.battlenet?.characters && user.battlenet.characters.length > 0) {
+    if (connected === "battlenet" && user?.battlenet?.characters && user.battlenet.characters.length > 0 && !hasTriggeredRefresh.current) {
+      hasTriggeredRefresh.current = true;
       setShowCharacterDialog(true);
-
-      // Start polling for guild enrichment (every 3 seconds for up to 30 seconds)
-      let pollCount = 0;
-      const maxPolls = 10;
-      const pollInterval = setInterval(async () => {
-        pollCount++;
-        await refreshUser();
-
-        // Stop polling after max attempts or when all characters have guilds checked
-        if (pollCount >= maxPolls) {
-          clearInterval(pollInterval);
-        }
-      }, 3000);
-
-      return () => clearInterval(pollInterval);
+      // Trigger character refresh with guild enrichment
+      handleRefreshCharacters();
     }
-  }, [searchParams, user?.battlenet?.characters, refreshUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user?.battlenet?.characters]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -161,19 +151,26 @@ export default function ProfilePage() {
     }
   };
 
-  const handleRefreshCharacters = async () => {
+  const handleRefreshCharacters = useCallback(async () => {
+    // Prevent duplicate calls
+    if (isRefreshingCharacters) {
+      return;
+    }
+
     try {
       setIsRefreshingCharacters(true);
       await api.refreshWoWCharacters();
       await refreshUser();
       setMessage({ type: "success", text: t("charactersRefreshed") });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to refresh characters:", error);
-      setMessage({ type: "error", text: t("refreshError") });
+      // Check if it's a rate limit error
+      const errorMessage = error?.response?.data?.error || error?.message || t("refreshError");
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setIsRefreshingCharacters(false);
     }
-  };
+  }, [isRefreshingCharacters, refreshUser, t]);
 
   const handleRefreshTwitch = async () => {
     try {

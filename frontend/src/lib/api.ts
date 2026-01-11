@@ -368,7 +368,12 @@ export const api = {
       method: "POST",
       credentials: "include",
     });
-    if (!response.ok) throw new Error("Failed to refresh characters");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to refresh characters" }));
+      const error: any = new Error(errorData.error || "Failed to refresh characters");
+      error.response = { data: errorData };
+      throw error;
+    }
     return response.json();
   },
 };

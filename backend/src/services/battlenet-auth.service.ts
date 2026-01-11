@@ -96,6 +96,7 @@ class BattleNetAuthService {
   private clientSecret: string;
   private redirectUri: string;
   private region: string = "eu"; // Default to EU for Finnish users
+  private activeRefreshes: Map<string, Promise<IWoWCharacter[]>> = new Map(); // Track ongoing refreshes
 
   constructor() {
     this.clientId = process.env.BLIZZARD_CLIENT_ID || "";
@@ -362,16 +363,11 @@ class BattleNetAuthService {
       tokenExpiresAt,
       connectedAt: new Date(),
       characters,
-      lastCharacterSync: new Date(),
+      lastCharacterSync: null, // Set to null initially to allow immediate refresh for guild enrichment
     };
 
     await user.save();
     logger.info(`Battle.net account connected: ${userInfo.battletag} with ${characters.length} characters to user ${userId}`);
-
-    // Trigger async guild enrichment in the background (don't await)
-    this.enrichCharactersWithGuilds(userId).catch((error) => {
-      logger.error(`Failed to enrich characters with guilds for user ${userId}:`, error);
-    });
 
     return user;
   }
@@ -402,9 +398,36 @@ class BattleNetAuthService {
 
   /**
    * Refresh WoW characters for a user
-   * This fetches guild info since it's a manual refresh
+   * This fetches characters and enriches them with guild info before returning
    */
   async refreshCharacters(userId: string): Promise<IWoWCharacter[]> {
+    // Check if there's already an ongoing refresh for this user
+    const existingRefresh = this.activeRefreshes.get(userId);
+    if (existingRefresh) {
+      logger.info(`Reusing ongoing refresh operation for user ${userId}`);
+      return existingRefresh;
+    }
+
+    // Create the refresh promise
+    const refreshPromise = this._doRefreshCharacters(userId);
+
+    // Store it to prevent concurrent refreshes
+    this.activeRefreshes.set(userId, refreshPromise);
+
+    // Clean up when done (success or failure)
+    refreshPromise
+      .finally(() => {
+        this.activeRefreshes.delete(userId);
+      })
+      .catch(() => {}); // Prevent unhandled rejection
+
+    return refreshPromise;
+  }
+
+  /**
+   * Internal method to actually perform the refresh
+   */
+  private async _doRefreshCharacters(userId: string): Promise<IWoWCharacter[]> {
     const user = await User.findById(userId);
     if (!user) {
       throw new Error("User not found");
@@ -414,10 +437,22 @@ class BattleNetAuthService {
       throw new Error("No Battle.net account connected");
     }
 
+    // Rate limiting: prevent refreshes more often than once per 30 seconds
+    if (user.battlenet.lastCharacterSync) {
+      const timeSinceLastSync = Date.now() - user.battlenet.lastCharacterSync.getTime();
+      const minInterval = 30000; // 30 seconds
+      if (timeSinceLastSync < minInterval) {
+        const remainingTime = Math.ceil((minInterval - timeSinceLastSync) / 1000);
+        throw new Error(`Please wait ${remainingTime} seconds before refreshing again`);
+      }
+    }
+
+    logger.info(`Starting character refresh for user ${userId}`);
+
     // TODO: Check if token needs refresh and refresh it if needed
 
-    // Get fresh character list with guild information
-    const characters = await this.getWoWCharacters(user.battlenet.accessToken, true);
+    // Get fresh character list WITHOUT guild information (fast initial fetch)
+    const characters = await this.getWoWCharacters(user.battlenet.accessToken, false);
 
     // Preserve selection state from existing characters
     const existingSelections = new Set(user.battlenet.characters.filter((c) => c.selected).map((c) => c.id));
@@ -426,12 +461,58 @@ class BattleNetAuthService {
       char.selected = existingSelections.has(char.id);
     }
 
+    // Save characters first (without guilds)
     user.battlenet.characters = characters;
     user.battlenet.lastCharacterSync = new Date();
     await user.save();
 
-    logger.info(`Refreshed ${characters.length} characters for user ${userId}`);
-    return characters;
+    logger.info(`Fetched ${characters.length} characters, now enriching with guild info`);
+
+    // Now enrich with guild information synchronously
+    let updated = 0;
+    for (const char of user.battlenet.characters) {
+      try {
+        const apiUrl = `https://${this.region}.api.blizzard.com/profile/wow/character/${char.realmSlug}/${char.name.toLowerCase()}?namespace=profile-${this.region}&locale=en_US`;
+
+        const response = await fetch(apiUrl, {
+          headers: {
+            Authorization: `Bearer ${user.battlenet.accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const profile: any = await response.json();
+          if (profile.guild && profile.guild.name) {
+            char.guild = profile.guild.name;
+            char.inactive = false;
+            updated++;
+            logger.info(`Enriched ${char.name} with guild: ${profile.guild.name}`);
+          } else {
+            // Character has no guild but is active
+            char.inactive = false;
+          }
+        } else if (response.status === 404) {
+          // Character is inactive (not found in API)
+          char.inactive = true;
+          char.guild = "inactive";
+          updated++;
+          logger.info(`Marked ${char.name} as inactive (404 from API)`);
+        } else {
+          logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (error) {
+        logger.warn(`Failed to fetch guild for ${char.name}: ${error}`);
+      }
+    }
+
+    // Save again with enriched data
+    await user.save();
+
+    logger.info(`Completed character refresh for user ${userId}: ${characters.length} characters, ${updated} enriched with guild/inactive status`);
+    return user.battlenet.characters;
   }
 
   /**
