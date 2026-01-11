@@ -350,6 +350,14 @@ export const api = {
     if (!response.ok) throw new Error("Failed to disconnect Battle.net");
   },
 
+  async getAllWoWCharacters(): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch WoW characters");
+    return response.json();
+  },
+
   async updateCharacterSelection(characterIds: number[]): Promise<{ characters: WoWCharacter[] }> {
     const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
       method: "POST",

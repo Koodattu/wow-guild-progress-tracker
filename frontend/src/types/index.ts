@@ -463,16 +463,11 @@ export interface AnalyticsErrors {
 
 // User/Auth types
 export interface DiscordUserInfo {
-  id: string;
   username: string;
-  discriminator: string;
-  avatar: string | null;
   avatarUrl: string;
 }
 
 export interface TwitchUserInfo {
-  id: string;
-  login: string;
   displayName: string;
   profileImageUrl: string | null;
   connectedAt: string;
@@ -482,7 +477,7 @@ export interface WoWCharacter {
   id: number;
   name: string;
   realm: string;
-  realmSlug: string;
+  realmSlug?: string; // Only present when fetching all characters
   class: string;
   race: string;
   level: number;
@@ -493,7 +488,6 @@ export interface WoWCharacter {
 }
 
 export interface BattleNetUserInfo {
-  id: string;
   battletag: string;
   connectedAt: string;
   characters: WoWCharacter[];
@@ -501,7 +495,6 @@ export interface BattleNetUserInfo {
 }
 
 export interface User {
-  id: string;
   discord: DiscordUserInfo;
   twitch?: TwitchUserInfo;
   battlenet?: BattleNetUserInfo;

@@ -114,14 +114,10 @@ router.get("/me", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Session expired" });
     }
 
-    // Build response with connected accounts
+    // Build response with connected accounts (minimal data)
     const response: Record<string, unknown> = {
-      id: user._id,
       discord: {
-        id: user.discord.id,
         username: user.discord.username,
-        discriminator: user.discord.discriminator,
-        avatar: user.discord.avatar,
         avatarUrl: discordService.getAvatarUrl(user.discord.id, user.discord.avatar),
       },
       createdAt: user.createdAt,
@@ -131,8 +127,6 @@ router.get("/me", async (req: Request, res: Response) => {
     // Include Twitch info if connected
     if (user.twitch) {
       response.twitch = {
-        id: user.twitch.id,
-        login: user.twitch.login,
         displayName: user.twitch.displayName,
         profileImageUrl: user.twitch.profileImageUrl,
         connectedAt: user.twitch.connectedAt,
@@ -141,11 +135,25 @@ router.get("/me", async (req: Request, res: Response) => {
 
     // Include Battle.net info if connected
     if (user.battlenet) {
+      // Only return selected characters with minimal fields
+      const selectedCharacters = user.battlenet.characters
+        .filter((c) => c.selected)
+        .map((c) => ({
+          name: c.name,
+          realm: c.realm,
+          class: c.class,
+          race: c.race,
+          level: c.level,
+          faction: c.faction,
+          guild: c.guild,
+          selected: c.selected,
+          inactive: c.inactive,
+        }));
+
       response.battlenet = {
-        id: user.battlenet.id,
         battletag: user.battlenet.battletag,
         connectedAt: user.battlenet.connectedAt,
-        characters: user.battlenet.characters,
+        characters: selectedCharacters,
         lastCharacterSync: user.battlenet.lastCharacterSync,
       };
     }
@@ -376,6 +384,45 @@ router.post("/battlenet/disconnect", async (req: Request, res: Response) => {
   }
 });
 
+// Get all WoW characters (for character selection dialog)
+router.get("/battlenet/characters", async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.cookies?.session;
+    if (!sessionId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await discordService.getUserFromSession(sessionId);
+    if (!user) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    if (!user.battlenet) {
+      return res.status(400).json({ error: "No Battle.net account connected" });
+    }
+
+    // Return all characters with minimal fields (exclude realmSlug, guildRealm, guildRealmSlug)
+    // Keep id for selection purposes
+    const characters = user.battlenet.characters.map((c) => ({
+      id: c.id,
+      name: c.name,
+      realm: c.realm,
+      class: c.class,
+      race: c.race,
+      level: c.level,
+      faction: c.faction,
+      guild: c.guild,
+      selected: c.selected,
+      inactive: c.inactive,
+    }));
+
+    res.json({ characters });
+  } catch (error) {
+    logger.error("Error fetching characters:", error);
+    res.status(500).json({ error: "Failed to fetch characters" });
+  }
+});
+
 // Update WoW character selection
 router.post("/battlenet/characters", async (req: Request, res: Response) => {
   try {
@@ -396,8 +443,24 @@ router.post("/battlenet/characters", async (req: Request, res: Response) => {
 
     const updatedUser = await battlenetAuthService.updateCharacterSelection(user._id.toString(), characterIds);
 
+    // Return only selected characters with minimal fields
+    const selectedCharacters =
+      updatedUser.battlenet?.characters
+        .filter((c) => c.selected)
+        .map((c) => ({
+          name: c.name,
+          realm: c.realm,
+          class: c.class,
+          race: c.race,
+          level: c.level,
+          faction: c.faction,
+          guild: c.guild,
+          selected: c.selected,
+          inactive: c.inactive,
+        })) || [];
+
     res.json({
-      characters: updatedUser.battlenet?.characters || [],
+      characters: selectedCharacters,
     });
   } catch (error) {
     logger.error("Error updating character selection:", error);

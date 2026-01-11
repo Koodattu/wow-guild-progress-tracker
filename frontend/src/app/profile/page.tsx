@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
+import { WoWCharacter } from "@/types";
 import { FaBattleNet } from "react-icons/fa";
 import { FaTwitch } from "react-icons/fa";
 
@@ -41,20 +42,25 @@ export default function ProfilePage() {
   const [isRefreshingBattleNet, setIsRefreshingBattleNet] = useState(false);
   const [isSavingCharacters, setIsSavingCharacters] = useState(false);
   const [showCharacterDialog, setShowCharacterDialog] = useState(false);
+  const [allCharacters, setAllCharacters] = useState<WoWCharacter[]>([]);
+  const [isLoadingCharacters, setIsLoadingCharacters] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const hasTriggeredRefresh = useRef(false);
 
   // Check if we should open the dialog after Battle.net connection
   useEffect(() => {
     const connected = searchParams.get("connected");
-    if (connected === "battlenet" && user?.battlenet?.characters && user.battlenet.characters.length > 0 && !hasTriggeredRefresh.current) {
+    if (connected === "battlenet" && user?.battlenet && !hasTriggeredRefresh.current) {
       hasTriggeredRefresh.current = true;
-      setShowCharacterDialog(true);
       // Trigger character refresh with guild enrichment
       handleRefreshCharacters();
+      // Open dialog after a short delay to allow refresh to start
+      setTimeout(() => {
+        handleOpenCharacterDialog();
+      }, 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, user?.battlenet?.characters]);
+  }, [searchParams, user?.battlenet]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -161,6 +167,17 @@ export default function ProfilePage() {
       setIsRefreshingCharacters(true);
       await api.refreshWoWCharacters();
       await refreshUser();
+
+      // If dialog is open, refresh the full character list too
+      if (showCharacterDialog) {
+        try {
+          const { characters } = await api.getAllWoWCharacters();
+          setAllCharacters(characters);
+        } catch (error) {
+          console.error("Failed to refresh full character list:", error);
+        }
+      }
+
       setMessage({ type: "success", text: t("charactersRefreshed") });
     } catch (error: any) {
       console.error("Failed to refresh characters:", error);
@@ -170,7 +187,7 @@ export default function ProfilePage() {
     } finally {
       setIsRefreshingCharacters(false);
     }
-  }, [isRefreshingCharacters, refreshUser, t]);
+  }, [isRefreshingCharacters, refreshUser, t, showCharacterDialog]);
 
   const handleRefreshTwitch = async () => {
     try {
@@ -210,6 +227,25 @@ export default function ProfilePage() {
       setMessage({ type: "error", text: t("saveError") });
     } finally {
       setIsSavingCharacters(false);
+    }
+  };
+
+  const handleOpenCharacterDialog = async () => {
+    setShowCharacterDialog(true);
+
+    // Fetch all characters when dialog opens (if not already loaded or needs refresh)
+    if (allCharacters.length === 0 || user?.battlenet?.characters.length !== allCharacters.filter((c) => c.selected).length) {
+      try {
+        setIsLoadingCharacters(true);
+        const { characters } = await api.getAllWoWCharacters();
+        setAllCharacters(characters);
+      } catch (error) {
+        console.error("Failed to fetch characters:", error);
+        setMessage({ type: "error", text: t("refreshError") });
+        setShowCharacterDialog(false);
+      } finally {
+        setIsLoadingCharacters(false);
+      }
     }
   };
 
@@ -264,10 +300,6 @@ export default function ProfilePage() {
 
           {/* Account Info */}
           <div className="border-t border-gray-700 pt-6 space-y-4">
-            <div>
-              <label className="text-sm text-gray-400">{t("discordId")}</label>
-              <p className="text-white font-mono">{user.discord.id}</p>
-            </div>
             <div>
               <label className="text-sm text-gray-400">{t("memberSince")}</label>
               <p className="text-white">
@@ -435,33 +467,23 @@ export default function ProfilePage() {
           <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">{t("wowCharacters")}</h3>
-              {user.battlenet.characters.length > 0 && (
-                <button
-                  onClick={() => setShowCharacterDialog(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium"
-                >
-                  {t("editCharacters")}
-                </button>
-              )}
+              <button onClick={handleOpenCharacterDialog} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium">
+                {t("editCharacters")}
+              </button>
             </div>
 
             {selectedCharacters.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-400 mb-4">{t("noCharactersSelected")}</p>
-                {user.battlenet.characters.length > 0 && (
-                  <button
-                    onClick={() => setShowCharacterDialog(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium"
-                  >
-                    {t("selectCharactersDescription")}
-                  </button>
-                )}
+                <button onClick={handleOpenCharacterDialog} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium">
+                  {t("selectCharactersDescription")}
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 {selectedCharacters.map((character) => (
                   <div
-                    key={character.id}
+                    key={`${character.id}-${character.name}-${character.realm}`}
                     className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-all hover:bg-gray-700 flex items-center justify-between"
                   >
                     <div className="flex items-center min-w-0">
@@ -503,11 +525,11 @@ export default function ProfilePage() {
         {/* Character Selector Dialog */}
         {showCharacterDialog && user.battlenet && (
           <CharacterSelectorDialog
-            characters={user.battlenet.characters}
+            characters={allCharacters.length > 0 ? allCharacters : user.battlenet.characters}
             onSave={handleSaveCharacters}
             onCancel={() => setShowCharacterDialog(false)}
             onRefresh={handleRefreshCharacters}
-            isRefreshing={isRefreshingCharacters || isSavingCharacters}
+            isRefreshing={isRefreshingCharacters || isSavingCharacters || isLoadingCharacters}
           />
         )}
       </div>
