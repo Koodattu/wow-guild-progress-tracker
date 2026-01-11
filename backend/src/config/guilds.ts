@@ -131,3 +131,12 @@ export const MANUAL_RAID_DATES = [
     euEndDate: "2016-07-20",
   },
 ];
+
+// Pickems raid ids, some raid tiers have multiple raids
+export const PICKEMS_RAID_IDS = [
+  [44], // Manaforge Omega
+  [42], // Liberation of Undermine
+  [38], // Nerubar Palace
+  [33, 35], // Aberrus + Amirdrassil
+  [26, 28, 29], // All shadowlands raids
+];

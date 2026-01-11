@@ -347,7 +347,11 @@ export default function ProfilePage() {
           <div className="mb-6 pb-6 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <FaTwitch className="w-8 h-8 text-purple-500" />
+                {user.twitch && user.twitch.profileImageUrl ? (
+                  <img src={user.twitch.profileImageUrl} alt={user.twitch.displayName} className="w-12 h-12 rounded-full border-2 border-purple-500" />
+                ) : (
+                  <FaTwitch className="w-8 h-8 text-purple-500" />
+                )}
                 <div>
                   <h4 className="text-white font-medium">{t("twitchAccount")}</h4>
                   {user.twitch ? <p className="text-purple-400 text-sm">{user.twitch.displayName}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
