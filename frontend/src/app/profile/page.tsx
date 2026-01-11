@@ -168,14 +168,13 @@ export default function ProfilePage() {
       await api.refreshWoWCharacters();
       await refreshUser();
 
-      // If dialog is open, refresh the full character list too
-      if (showCharacterDialog) {
-        try {
-          const { characters } = await api.getAllWoWCharacters();
-          setAllCharacters(characters);
-        } catch (error) {
-          console.error("Failed to refresh full character list:", error);
-        }
+      // Always fetch the full character list after refresh (for dialog updates)
+      // This ensures the dialog gets updated enriched data even if opened during refresh
+      try {
+        const { characters } = await api.getAllWoWCharacters();
+        setAllCharacters(characters);
+      } catch (error) {
+        console.error("Failed to fetch updated character list:", error);
       }
 
       setMessage({ type: "success", text: t("charactersRefreshed") });
@@ -187,7 +186,7 @@ export default function ProfilePage() {
     } finally {
       setIsRefreshingCharacters(false);
     }
-  }, [isRefreshingCharacters, refreshUser, t, showCharacterDialog]);
+  }, [isRefreshingCharacters, refreshUser, t]);
 
   const handleRefreshTwitch = async () => {
     try {
@@ -233,8 +232,9 @@ export default function ProfilePage() {
   const handleOpenCharacterDialog = async () => {
     setShowCharacterDialog(true);
 
-    // Fetch all characters when dialog opens (if not already loaded or needs refresh)
-    if (allCharacters.length === 0 || user?.battlenet?.characters.length !== allCharacters.filter((c) => c.selected).length) {
+    // Fetch all characters when dialog opens if not already loaded/refreshing
+    // Don't fetch if we're currently refreshing (handleRefreshCharacters will do it)
+    if (allCharacters.length === 0 && !isRefreshingCharacters) {
       try {
         setIsLoadingCharacters(true);
         const { characters } = await api.getAllWoWCharacters();
