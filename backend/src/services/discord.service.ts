@@ -202,6 +202,16 @@ class DiscordService {
     }
     return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png`;
   }
+
+  /**
+   * Check if a Discord username is an admin
+   */
+  isAdmin(discordUsername: string): boolean {
+    const adminNames = process.env.ADMIN_DISCORD_NAMES || "";
+    if (!adminNames) return false;
+    const adminList = adminNames.split(",").map((name) => name.trim().toLowerCase());
+    return adminList.includes(discordUsername.toLowerCase());
+  }
 }
 
 export default new DiscordService();

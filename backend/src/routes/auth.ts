@@ -120,6 +120,7 @@ router.get("/me", async (req: Request, res: Response) => {
         username: user.discord.username,
         avatarUrl: discordService.getAvatarUrl(user.discord.id, user.discord.avatar),
       },
+      isAdmin: discordService.isAdmin(user.discord.username),
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     };

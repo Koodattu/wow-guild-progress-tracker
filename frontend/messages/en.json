@@ -13,7 +13,8 @@
     "discord": "Discord",
     "twitch": "Twitch",
     "profile": "Profile",
-    "logout": "Log Out"
+    "logout": "Log Out",
+    "adminPanel": "Admin Panel"
   },
   "infoDialog": {
     "title": "About This Site",
@@ -254,5 +255,61 @@
     "cancel": "Cancel",
     "save": "Save Selection",
     "loading": "Loading characters..."
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "description": "Manage users, guilds, and view analytics.",
+    "loading": "Loading...",
+    "tabs": {
+      "overview": "Overview",
+      "users": "Users",
+      "guilds": "Guilds",
+      "analytics": "Analytics"
+    },
+    "overview": {
+      "totalUsers": "Total Users",
+      "totalGuilds": "Total Guilds",
+      "activeToday": "active today",
+      "updatedToday": "updated today"
+    },
+    "users": {
+      "total": "Total Users",
+      "activeWeek": "Active This Week",
+      "withTwitch": "With Twitch",
+      "withBattlenet": "With Battle.net",
+      "discord": "Discord",
+      "twitch": "Twitch",
+      "battlenet": "Battle.net",
+      "lastLogin": "Last Login"
+    },
+    "guilds": {
+      "total": "Total Guilds",
+      "currentlyRaiding": "Currently Raiding",
+      "horde": "Horde",
+      "alliance": "Alliance",
+      "name": "Name",
+      "realm": "Realm",
+      "faction": "Faction",
+      "status": "Status",
+      "lastFetched": "Last Fetched",
+      "raiding": "Raiding",
+      "idle": "Idle"
+    },
+    "analytics": {
+      "currentHour": "Current Hour",
+      "avgResponseTime": "Avg Response Time",
+      "reqPerMin": "Requests/Min",
+      "last24h": "Last 24 Hours",
+      "last7d": "Last 7 Days",
+      "last30d": "Last 30 Days",
+      "topEndpoints": "Top Endpoints",
+      "requests": "requests"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page",
+      "of": "of"
+    }
   }
 }

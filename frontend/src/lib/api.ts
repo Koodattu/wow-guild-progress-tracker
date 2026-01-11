@@ -29,6 +29,11 @@ import {
   AnalyticsErrors,
   User,
   WoWCharacter,
+  AdminUsersResponse,
+  AdminGuildsResponse,
+  AdminUserStats,
+  AdminGuildStats,
+  AdminOverview,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -382,6 +387,79 @@ export const api = {
       error.response = { data: errorData };
       throw error;
     }
+    return response.json();
+  },
+
+  // Admin endpoints (requires admin authentication)
+  async getAdminOverview(): Promise<AdminOverview> {
+    const response = await fetch(`${API_URL}/api/admin/overview`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch admin overview");
+    return response.json();
+  },
+
+  async getAdminUsers(page: number = 1, limit: number = 20): Promise<AdminUsersResponse> {
+    const response = await fetch(`${API_URL}/api/admin/users?page=${page}&limit=${limit}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch users");
+    return response.json();
+  },
+
+  async getAdminUserStats(): Promise<AdminUserStats> {
+    const response = await fetch(`${API_URL}/api/admin/users/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch user stats");
+    return response.json();
+  },
+
+  async getAdminGuilds(page: number = 1, limit: number = 20): Promise<AdminGuildsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch guilds");
+    return response.json();
+  },
+
+  async getAdminGuildStats(): Promise<AdminGuildStats> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch guild stats");
+    return response.json();
+  },
+
+  async getAdminAnalyticsOverview(): Promise<AnalyticsOverview> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/overview`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch analytics overview");
+    return response.json();
+  },
+
+  async getAdminAnalyticsDaily(days: number = 30): Promise<AnalyticsDaily[]> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/daily?days=${days}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch daily analytics");
+    return response.json();
+  },
+
+  async getAdminAnalyticsEndpoints(days: number = 7): Promise<AnalyticsEndpoint[]> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/endpoints?days=${days}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch endpoint analytics");
+    return response.json();
+  },
+
+  async getAdminAnalyticsRealtime(): Promise<AnalyticsRealtime> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/realtime`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch realtime analytics");
     return response.json();
   },
 };

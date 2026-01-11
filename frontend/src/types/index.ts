@@ -498,6 +498,94 @@ export interface User {
   discord: DiscordUserInfo;
   twitch?: TwitchUserInfo;
   battlenet?: BattleNetUserInfo;
+  isAdmin: boolean;
   createdAt: string;
   lastLoginAt: string;
+}
+
+// Admin Panel types
+export interface AdminUser {
+  id: string;
+  discord: {
+    id: string;
+    username: string;
+    hasAvatar: boolean;
+  };
+  twitch: {
+    displayName: string;
+    connectedAt: string;
+  } | null;
+  battlenet: {
+    battletag: string;
+    connectedAt: string;
+  } | null;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface AdminGuild {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  warcraftlogsId?: number;
+  parentGuild?: string;
+  isCurrentlyRaiding: boolean;
+  lastFetched?: string;
+  createdAt?: string;
+  progress?: {
+    raidName: string;
+    difficulty: string;
+    bossesDefeated: number;
+    totalBosses: number;
+  }[];
+}
+
+export interface AdminPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  pagination: AdminPagination;
+}
+
+export interface AdminGuildsResponse {
+  guilds: AdminGuild[];
+  pagination: AdminPagination;
+}
+
+export interface AdminUserStats {
+  total: number;
+  active: {
+    last24Hours: number;
+    last7Days: number;
+    last30Days: number;
+  };
+  connections: {
+    twitch: number;
+    battlenet: number;
+  };
+}
+
+export interface AdminGuildStats {
+  total: number;
+  currentlyRaiding: number;
+  withWarcraftlogsId: number;
+  factions: Record<string, number>;
+}
+
+export interface AdminOverview {
+  users: {
+    total: number;
+    activeToday: number;
+  };
+  guilds: {
+    total: number;
+    updatedToday: number;
+  };
 }

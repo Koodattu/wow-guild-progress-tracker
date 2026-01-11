@@ -13,7 +13,8 @@
     "discord": "Discord",
     "twitch": "Twitch",
     "profile": "Profiili",
-    "logout": "Kirjaudu ulos"
+    "logout": "Kirjaudu ulos",
+    "adminPanel": "Hallintapaneeli"
   },
   "infoDialog": {
     "title": "Tietoa Sivustosta",
@@ -234,5 +235,61 @@
     "charactersSaved": "Hahmovalinta tallennettu!",
     "saveError": "Hahmovalinnan tallennus epäonnistui. Yritä uudelleen.",
     "lastSynced": "Viimeksi synkronoitu:"
+  },
+  "admin": {
+    "title": "Hallintapaneeli",
+    "description": "Hallitse käyttäjiä, kiltoja ja tarkastele analytiikkaa.",
+    "loading": "Ladataan...",
+    "tabs": {
+      "overview": "Yleiskatsaus",
+      "users": "Käyttäjät",
+      "guilds": "Killat",
+      "analytics": "Analytiikka"
+    },
+    "overview": {
+      "totalUsers": "Käyttäjiä yhteensä",
+      "totalGuilds": "Kiltoja yhteensä",
+      "activeToday": "aktiivisia tänään",
+      "updatedToday": "päivitetty tänään"
+    },
+    "users": {
+      "total": "Käyttäjiä yhteensä",
+      "activeWeek": "Aktiivisia tällä viikolla",
+      "withTwitch": "Twitch-yhdistettyjä",
+      "withBattlenet": "Battle.net-yhdistettyjä",
+      "discord": "Discord",
+      "twitch": "Twitch",
+      "battlenet": "Battle.net",
+      "lastLogin": "Viimeisin kirjautuminen"
+    },
+    "guilds": {
+      "total": "Kiltoja yhteensä",
+      "currentlyRaiding": "Raidaa tällä hetkellä",
+      "horde": "Horde",
+      "alliance": "Alliance",
+      "name": "Nimi",
+      "realm": "Realm",
+      "faction": "Factio",
+      "status": "Tila",
+      "lastFetched": "Viimeksi haettu",
+      "raiding": "Raidaa",
+      "idle": "Ei aktiivinen"
+    },
+    "analytics": {
+      "currentHour": "Nykyinen tunti",
+      "avgResponseTime": "Keskim. vasteaika",
+      "reqPerMin": "Pyyntöjä/min",
+      "last24h": "Viimeiset 24 tuntia",
+      "last7d": "Viimeiset 7 päivää",
+      "last30d": "Viimeiset 30 päivää",
+      "topEndpoints": "Suosituimmat päätepisteet",
+      "requests": "pyyntöä"
+    },
+    "pagination": {
+      "previous": "Edellinen",
+      "next": "Seuraava",
+      "page": "Sivu",
+      "of": "/"
+    }
   }
 }
