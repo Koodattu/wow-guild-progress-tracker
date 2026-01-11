@@ -224,7 +224,7 @@
     "twitchConnectionFailed": "Failed to connect Twitch account. Please try again.",
     "battlenetConnectionFailed": "Failed to connect Battle.net account. Please try again.",
     "wowCharacters": "WoW Characters",
-    "selectCharactersDescription": "Select the characters you want to associate with your profile. These will be visible on your public profile in the future.",
+    "selectCharactersDescription": "Select the characters you want to associate with your profile.",
     "refresh": "Refresh",
     "refreshing": "Refreshing...",
     "charactersRefreshed": "Character list refreshed successfully!",
@@ -233,6 +233,25 @@
     "saving": "Saving...",
     "charactersSaved": "Character selection saved!",
     "saveError": "Failed to save character selection. Please try again.",
-    "lastSynced": "Last synced:"
+    "lastSynced": "Last synced:",
+    "editCharacters": "Edit Characters",
+    "noCharactersSelected": "No characters selected"
+  },
+  "characterSelector": {
+    "title": "Select Your Characters",
+    "searchPlaceholder": "Search by name, realm, class, race, level, or guild...",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "selected": "{count} of {total} selected",
+    "noResults": "No characters match your search",
+    "noCharacters": "No characters found",
+    "race": "Race",
+    "level": "Level",
+    "class": "Class",
+    "guild": "Guild",
+    "cancel": "Cancel",
+    "save": "Save Selection"
   }
 }

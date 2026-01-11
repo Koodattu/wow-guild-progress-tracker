@@ -5,6 +5,24 @@ import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
+
+// WoW Class colors
+const CLASS_COLORS: { [key: string]: string } = {
+  "Death Knight": "#C41E3A",
+  "Demon Hunter": "#A330C9",
+  Druid: "#FF7C0A",
+  Evoker: "#33937F",
+  Hunter: "#AAD372",
+  Mage: "#3FC7EB",
+  Monk: "#00FF98",
+  Paladin: "#F48CBA",
+  Priest: "#FFFFFF",
+  Rogue: "#FFF468",
+  Shaman: "#0070DD",
+  Warlock: "#8788EE",
+  Warrior: "#C69B6D",
+};
 
 export default function ProfilePage() {
   const { user, isLoading, logout, refreshUser } = useAuth();
@@ -17,17 +35,19 @@ export default function ProfilePage() {
   const [isDisconnectingTwitch, setIsDisconnectingTwitch] = useState(false);
   const [isDisconnectingBattleNet, setIsDisconnectingBattleNet] = useState(false);
   const [isRefreshingCharacters, setIsRefreshingCharacters] = useState(false);
+  const [isRefreshingTwitch, setIsRefreshingTwitch] = useState(false);
+  const [isRefreshingBattleNet, setIsRefreshingBattleNet] = useState(false);
   const [isSavingCharacters, setIsSavingCharacters] = useState(false);
-  const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<number>>(new Set());
+  const [showCharacterDialog, setShowCharacterDialog] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Initialize selected characters from user data
+  // Check if we should open the dialog after Battle.net connection
   useEffect(() => {
-    if (user?.battlenet?.characters) {
-      const selected = new Set(user.battlenet.characters.filter((c) => c.selected).map((c) => c.id));
-      setSelectedCharacterIds(selected);
+    const connected = searchParams.get("connected");
+    if (connected === "battlenet" && user?.battlenet?.characters && user.battlenet.characters.length > 0) {
+      setShowCharacterDialog(true);
     }
-  }, [user?.battlenet?.characters]);
+  }, [searchParams, user?.battlenet?.characters]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -138,24 +158,39 @@ export default function ProfilePage() {
     }
   };
 
-  const handleToggleCharacter = (characterId: number) => {
-    setSelectedCharacterIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(characterId)) {
-        newSet.delete(characterId);
-      } else {
-        newSet.add(characterId);
-      }
-      return newSet;
-    });
+  const handleRefreshTwitch = async () => {
+    try {
+      setIsRefreshingTwitch(true);
+      await refreshUser();
+      setMessage({ type: "success", text: "Twitch data refreshed!" });
+    } catch (error) {
+      console.error("Failed to refresh Twitch:", error);
+      setMessage({ type: "error", text: "Failed to refresh Twitch data." });
+    } finally {
+      setIsRefreshingTwitch(false);
+    }
   };
 
-  const handleSaveCharacters = async () => {
+  const handleRefreshBattleNet = async () => {
+    try {
+      setIsRefreshingBattleNet(true);
+      await refreshUser();
+      setMessage({ type: "success", text: "Battle.net data refreshed!" });
+    } catch (error) {
+      console.error("Failed to refresh Battle.net:", error);
+      setMessage({ type: "error", text: "Failed to refresh Battle.net data." });
+    } finally {
+      setIsRefreshingBattleNet(false);
+    }
+  };
+
+  const handleSaveCharacters = async (selectedIds: number[]) => {
     try {
       setIsSavingCharacters(true);
-      await api.updateCharacterSelection(Array.from(selectedCharacterIds));
+      await api.updateCharacterSelection(selectedIds);
       await refreshUser();
       setMessage({ type: "success", text: t("charactersSaved") });
+      setShowCharacterDialog(false);
     } catch (error) {
       console.error("Failed to save character selection:", error);
       setMessage({ type: "error", text: t("saveError") });
@@ -164,16 +199,13 @@ export default function ProfilePage() {
     }
   };
 
-  // Check if character selection has changed
-  const hasCharacterSelectionChanged = useCallback(() => {
-    if (!user?.battlenet?.characters) return false;
-    const currentSelected = new Set(user.battlenet.characters.filter((c) => c.selected).map((c) => c.id));
-    if (currentSelected.size !== selectedCharacterIds.size) return true;
-    for (const id of selectedCharacterIds) {
-      if (!currentSelected.has(id)) return true;
-    }
-    return false;
-  }, [user?.battlenet?.characters, selectedCharacterIds]);
+  const getClassColor = (className: string): string => {
+    return CLASS_COLORS[className] || "#FFFFFF";
+  };
+
+  const getFactionColor = (faction: "ALLIANCE" | "HORDE"): string => {
+    return faction === "ALLIANCE" ? "#3B82F6" : "#EF4444";
+  };
 
   if (isLoading) {
     return (
@@ -187,13 +219,7 @@ export default function ProfilePage() {
     return null;
   }
 
-  const getFactionColor = (faction: "ALLIANCE" | "HORDE") => {
-    return faction === "ALLIANCE" ? "text-blue-400" : "text-red-400";
-  };
-
-  const getFactionBg = (faction: "ALLIANCE" | "HORDE") => {
-    return faction === "ALLIANCE" ? "bg-blue-900/20" : "bg-red-900/20";
-  };
+  const selectedCharacters = user.battlenet?.characters.filter((c) => c.selected) || [];
 
   return (
     <main className="min-h-screen px-4 md:px-6 py-8">
@@ -283,23 +309,42 @@ export default function ProfilePage() {
                   {user.twitch ? <p className="text-purple-400 text-sm">{user.twitch.displayName}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
                 </div>
               </div>
-              {user.twitch ? (
-                <button
-                  onClick={handleDisconnectTwitch}
-                  disabled={isDisconnectingTwitch}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors text-sm disabled:opacity-50"
-                >
-                  {isDisconnectingTwitch ? t("disconnecting") : t("disconnect")}
-                </button>
-              ) : (
-                <button
-                  onClick={handleConnectTwitch}
-                  disabled={isConnectingTwitch}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
-                >
-                  {isConnectingTwitch ? t("connecting") : t("connect")}
-                </button>
-              )}
+              <div className="flex gap-2">
+                {user.twitch ? (
+                  <>
+                    <button
+                      onClick={handleRefreshTwitch}
+                      disabled={isRefreshingTwitch}
+                      className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <svg className={`w-4 h-4 ${isRefreshingTwitch ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      {t("refresh")}
+                    </button>
+                    <button
+                      onClick={handleDisconnectTwitch}
+                      disabled={isDisconnectingTwitch}
+                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
+                    >
+                      {isDisconnectingTwitch ? t("disconnecting") : t("disconnect")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleConnectTwitch}
+                    disabled={isConnectingTwitch}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
+                  >
+                    {isConnectingTwitch ? t("connecting") : t("connect")}
+                  </button>
+                )}
+              </div>
             </div>
             {user.twitch && (
               <p className="text-gray-500 text-xs mt-2">
@@ -317,31 +362,50 @@ export default function ProfilePage() {
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <svg className="w-8 h-8 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10.457 0c.618 1.558 1.054 2.786 1.34 3.852.063.196.138.478.203.696a8.084 8.084 0 0 1 2.126-.281c5.425 0 9.874 5.263 9.874 10.104 0 2.775-1.06 5.074-2.904 6.704l-.136.108.481.728c.371.478.619.873.805 1.235l.02.04-.01.008C19.86 23.677 16.68 24 13.5 24 6.585 24 0 21.32 0 15.62c0-1.981.71-4.252 2.103-6.528.07.016.168.032.28.048 1.348.198 2.95-.062 3.882-.632.148-.09.284-.205.402-.348-1.16 1.313-1.703 3.162-1.703 5.46 0 4.18 3.063 8.015 6.672 8.015 3.03 0 5.696-1.744 6.516-4.625.084-.294.143-.546.184-.762l.015-.087c.157-.96.068-1.935-.218-2.943a7.12 7.12 0 0 0-.393-1.014c-.37-.793-1.127-1.868-1.735-2.472a6.463 6.463 0 0 0-1.283-.973c-.314-.18-.55-.285-.872-.39a5.88 5.88 0 0 0-.793-.193c-.095-.016-.207-.03-.32-.038a4.25 4.25 0 0 0-.506-.006c-.143.01-.21.022-.303.038-.094.017-.197.04-.306.067-.218.054-.428.123-.643.209-.087.035-.185.077-.3.127-.115.051-.231.107-.35.167a5.43 5.43 0 0 0-.626.369c-.29.2-.58.437-.862.71-.283.273-.53.549-.74.822-.21.273-.39.536-.54.783-.148.247-.27.478-.365.687a4.73 4.73 0 0 0-.26.652 4.22 4.22 0 0 0-.129.499 2.54 2.54 0 0 0-.037.284c-.003.062.001.096.009.103.007.008.04-.015.096-.076.112-.123.29-.358.5-.677.42-.639.964-1.55 1.462-2.454.249-.452.482-.895.682-1.303.2-.408.367-.784.487-1.098l.042-.113c-.012.237-.018.487-.018.746 0 .622.048 1.275.146 1.946.196 1.342.585 2.665 1.129 3.817l.074.154c.12.244.237.465.35.659.057.097.118.193.183.288.065.095.13.184.195.268a3.29 3.29 0 0 0 .407.44c.144.127.29.236.435.326.29.18.568.302.815.375.123.037.24.063.349.08l.026.003c.08.01.147.017.207.02.06.004.117.005.17.004a1.63 1.63 0 0 0 .282-.033c.043-.01.084-.02.123-.033.078-.025.147-.054.215-.087.136-.066.263-.147.389-.24.251-.184.51-.42.78-.7a6.62 6.62 0 0 0 .385-.443c.085-.104.168-.212.248-.32.08-.11.157-.218.23-.325.147-.214.278-.42.388-.606l.032-.054c-.218.662-.577 1.303-1.075 1.863-.249.28-.528.537-.83.759-.151.111-.308.213-.469.302-.16.09-.325.167-.491.232a3.37 3.37 0 0 1-.504.146 2.51 2.51 0 0 1-.488.048c-.142-.003-.271-.015-.385-.035a2.2 2.2 0 0 1-.325-.076 2.54 2.54 0 0 1-.27-.101 3.08 3.08 0 0 1-.487-.26c-.15-.098-.293-.207-.429-.325a4.5 4.5 0 0 1-.385-.374 5.42 5.42 0 0 1-.651-.857 7.86 7.86 0 0 1-.503-.88c-.148-.293-.28-.59-.395-.885a12.24 12.24 0 0 1-.288-.866 12.06 12.06 0 0 1-.387-1.882 11.94 11.94 0 0 1-.08-1.502c.009-.336.034-.665.077-.984z" />
+                <svg className="w-8 h-8 text-blue-400" viewBox="0 0 30 30" fill="currentColor">
+                  <path d="M 14.5625 0.0625 C 13.40625 1.089844 12.59375 2.632813 12.28125 4.34375 C 12.265625 4.441406 12.269531 4.558594 12.25 4.65625 C 14.191406 4.855469 16.019531 5.925781 17.21875 7.53125 C 17.289063 7.628906 17.339844 7.726563 17.40625 7.8125 C 17.730469 7.351563 17.980469 6.816406 18.125 6.25 C 18.527344 4.742188 18.230469 3.113281 17.34375 1.84375 C 17.328125 1.820313 17.296875 1.804688 17.28125 1.78125 C 17.101563 1.539063 16.886719 1.3125 16.65625 1.09375 C 15.976563 0.460938 15.207031 0.148438 14.5625 0.0625 Z M 8.78125 1.15625 C 6.929688 4.335938 6.894531 8.1875 8.65625 11.09375 C 9.257813 11.992188 10.023438 12.765625 10.875 13.40625 C 11.027344 12.988281 11.246094 12.617188 11.46875 12.28125 C 12.347656 10.972656 13.539063 9.8125 14.90625 8.90625 C 14.90625 8.90625 14.925781 8.90625 14.9375 8.90625 C 14.207031 7.375 12.65625 6.371094 10.9375 6.1875 C 10.917969 6.1875 10.894531 6.1875 10.875 6.1875 C 9.925781 6.101563 8.964844 6.265625 8.09375 6.625 C 8.132813 5.6875 8.386719 4.730469 8.8125 3.875 C 8.839844 3.820313 8.839844 3.742188 8.875 3.6875 C 9.511719 2.464844 10.457031 1.527344 11.53125 0.84375 C 10.59375 0.800781 9.640625 0.875 8.78125 1.15625 Z M 4.21875 7.5 C 4.1875 7.554688 4.15625 7.632813 4.125 7.6875 C 3.015625 9.488281 2.820313 11.746094 3.46875 13.75 C 3.734375 14.589844 4.152344 15.367188 4.65625 16.0625 C 5.484375 15.75 6.386719 15.53125 7.3125 15.46875 C 9.023438 15.359375 10.792969 15.769531 12.3125 16.625 C 12.328125 16.636719 12.359375 16.613281 12.375 16.625 C 11.484375 15.3125 10.773438 13.839844 10.3125 12.28125 C 9.636719 11.757813 9.039063 11.117188 8.5625 10.40625 C 8.558594 10.394531 8.535156 10.386719 8.53125 10.375 C 6.953125 8.066406 6.839844 5.144531 8.15625 2.78125 C 7.816406 2.910156 7.484375 3.054688 7.15625 3.21875 C 5.53125 4.078125 4.464844 5.660156 4.21875 7.5 Z M 20.78125 10.5625 C 18.898438 10.695313 17.125 11.648438 15.9375 13.1875 C 15.351563 13.953125 14.917969 14.832031 14.6875 15.75 C 15.523438 16.246094 16.34375 16.851563 17.03125 17.625 C 18.277344 19.042969 19.046875 20.835938 19.21875 22.71875 C 19.226563 22.800781 19.210938 22.886719 19.21875 22.96875 C 19.308594 22.925781 19.386719 22.855469 19.46875 22.8125 C 19.601563 22.742188 19.730469 22.667969 19.84375 22.5625 C 21.957031 20.863281 22.820313 17.929688 22.03125 15.34375 C 21.507813 13.632813 20.21875 12.117188 18.625 11.34375 C 18.214844 11.148438 17.789063 10.988281 17.34375 10.875 C 17.335938 10.875 17.320313 10.875 17.3125 10.875 C 16.871094 10.765625 16.402344 10.707031 15.9375 10.6875 C 15.90625 10.6875 15.875 10.6875 15.84375 10.6875 C 15.496094 10.679688 15.136719 10.6875 14.78125 10.6875 C 15.386719 10.40625 16.058594 10.21875 16.75 10.125 C 16.914063 10.101563 17.085938 10.082031 17.25 10.0625 C 18.460938 9.929688 19.699219 10.183594 20.78125 10.5625 Z M 22.6875 11.3125 C 21.703125 11.917969 20.851563 12.683594 20.125 13.5625 C 21.0625 14.609375 21.707031 15.886719 22 17.28125 C 22.035156 17.441406 22.050781 17.617188 22.0625 17.78125 C 23.085938 16.886719 23.9375 15.796875 24.5625 14.59375 C 25.875 12.183594 25.769531 9.300781 24.28125 7 C 23.9375 8.863281 23.269531 10.207031 22.6875 11.3125 Z M 1.65625 12.90625 C 1.597656 13.113281 1.578125 13.324219 1.53125 13.53125 C 1.15625 15.628906 1.785156 17.878906 3.15625 19.5 C 3.390625 19.769531 3.648438 20.011719 3.90625 20.25 C 3.945313 19.019531 4.175781 17.78125 4.65625 16.625 C 5.066406 15.652344 5.644531 14.757813 6.34375 13.96875 C 4.878906 13.730469 3.363281 13.9375 2 14.53125 C 1.871094 14.015625 1.757813 13.457031 1.65625 12.90625 Z M 12.71875 17.6875 C 11.414063 17.386719 10.042969 17.386719 8.75 17.6875 C 7.671875 17.9375 6.640625 18.371094 5.71875 18.9375 C 5.722656 18.949219 5.746094 18.957031 5.75 18.96875 C 5.910156 19.085938 6.0625 19.195313 6.21875 19.3125 C 6.21875 19.3125 6.25 19.3125 6.25 19.3125 C 8.191406 20.675781 10.660156 20.988281 12.90625 20.1875 C 13.078125 20.125 13.25 20.042969 13.40625 19.96875 C 13.707031 19.828125 13.988281 19.679688 14.28125 19.5 C 14.28125 19.5 14.28125 19.5 14.28125 19.5 C 13.730469 18.9375 13.222656 18.3125 12.71875 17.6875 Z M 17.0625 19.125 C 16.8125 19.367188 16.546875 19.625 16.3125 19.90625 C 16.160156 20.078125 16.023438 20.261719 15.875 20.4375 C 15.84375 20.46875 15.8125 20.5 15.78125 20.53125 C 15.75 20.5625 15.71875 20.574219 15.6875 20.59375 C 15.683594 20.597656 15.65625 20.621094 15.65625 20.625 C 15.652344 20.628906 15.65625 20.652344 15.65625 20.65625 C 15.570313 20.753906 15.496094 20.871094 15.40625 20.96875 C 14.578125 21.96875 13.882813 23.070313 13.375 24.28125 C 13.242188 24.589844 13.113281 24.914063 13 25.25 C 13 25.253906 13 25.277344 13 25.28125 C 12.855469 25.738281 12.742188 26.199219 12.65625 26.6875 C 13.585938 26.132813 14.292969 25.121094 14.59375 24 C 14.789063 23.257813 14.8125 22.484375 14.6875 21.75 C 14.621094 21.394531 14.546875 21.050781 14.4375 20.71875 C 14.429688 20.691406 14.445313 20.652344 14.4375 20.625 C 14.429688 20.601563 14.445313 20.570313 14.4375 20.5625 C 14.421875 20.515625 14.390625 20.484375 14.375 20.4375 C 14.367188 20.414063 14.382813 20.398438 14.375 20.375 C 14.371094 20.363281 14.347656 20.355469 14.34375 20.34375 C 14.339844 20.339844 14.347656 20.316406 14.34375 20.3125 C 14.207031 19.988281 14.050781 19.667969 13.875 19.375 C 14.917969 20.011719 16.113281 20.410156 17.34375 20.5 C 17.269531 20.03125 17.183594 19.578125 17.0625 19.125 Z M 19.53125 21.96875 C 19.457031 23.785156 18.863281 25.492188 17.875 26.9375 C 17.78125 27.0625 17.71875 27.21875 17.625 27.34375 C 17.621094 27.347656 17.628906 27.371094 17.625 27.375 C 16.824219 28.40625 15.855469 29.304688 14.75 30.03125 C 14.769531 30.03125 14.761719 30.03125 14.78125 30.03125 C 15.632813 29.980469 16.492188 29.722656 17.25 29.25 C 18.742188 28.316406 19.886719 26.859375 20.5 25.25 C 21.253906 23.28125 21.207031 21.042969 20.375 19.09375 C 20.101563 20.035156 19.824219 21.003906 19.53125 21.96875 Z M 8 22 C 8.191406 22.484375 8.429688 22.960938 8.6875 23.40625 C 9.664063 25.097656 11.128906 26.410156 12.8125 27.15625 C 12.675781 26.476563 12.617188 25.769531 12.625 25.0625 C 12.644531 23.667969 13.03125 22.277344 13.75 21.03125 C 12.046875 21.386719 10.242188 21.242188 8.59375 20.59375 C 8.34375 21.042969 8.148438 21.511719 8 22 Z M 24.9375 19.1875 C 24.730469 20.273438 24.335938 21.328125 23.75 22.28125 C 22.601563 24.167969 20.800781 25.519531 18.78125 26.15625 C 19.707031 27.234375 20.214844 28.632813 20.21875 30.0625 C 21.359375 29.207031 22.3125 28.109375 23 26.875 C 24.777344 23.804688 24.765625 19.972656 22.96875 16.90625 C 23.507813 17.535156 24.011719 18.207031 24.46875 18.9375 C 24.578125 19.113281 24.769531 19.320313 24.875 19.5 C 24.898438 19.535156 24.914063 19.589844 24.9375 19.625 C 24.9375 19.628906 24.9375 19.644531 24.9375 19.65625 C 24.9375 19.679688 24.9375 19.695313 24.9375 19.71875 C 24.9375 19.75 24.914063 19.78125 24.9375 19.8125 C 24.914063 19.917969 24.988281 20.039063 24.9375 20.125 C 24.914063 20.175781 24.894531 20.230469 24.875 20.28125 C 24.828125 20.382813 24.800781 20.476563 24.71875 20.5625 C 24.714844 20.566406 24.722656 20.589844 24.71875 20.59375 C 24.707031 20.609375 24.699219 20.640625 24.6875 20.65625 C 24.636719 20.738281 24.585938 20.828125 24.53125 20.90625 C 24.519531 20.925781 24.511719 20.949219 24.5 20.96875 C 24.464844 21.019531 24.441406 21.074219 24.40625 21.125 C 24.398438 21.140625 24.382813 21.171875 24.375 21.1875 C 24.371094 21.195313 24.347656 21.210938 24.34375 21.21875 C 24.027344 21.710938 23.691406 22.183594 23.3125 22.625 C 24.203125 21.800781 24.921875 20.78125 25.4375 19.65625 C 25.28125 19.457031 25.113281 19.3125 24.9375 19.1875 Z M 6.09375 22.875 C 5.519531 23.828125 5.113281 24.882813 4.9375 25.96875 C 3.320313 24.074219 2.75 21.457031 3.46875 19.09375 C 3.058594 19.738281 2.6875 20.398438 2.375 21.09375 C 1.039063 23.820313 1.128906 27.042969 2.59375 29.6875 C 3.28125 27.648438 4.480469 25.117188 6.09375 22.875 Z M 9.40625 24.625 C 9.695313 25.394531 10.101563 26.117188 10.59375 26.78125 C 12.011719 28.835938 14.257813 30.105469 16.65625 30.28125 C 15.359375 29.515625 14.300781 28.390625 13.59375 27.09375 C 13.230469 26.429688 12.976563 25.714844 12.84375 24.96875 C 11.617188 25.144531 10.386719 25.027344 9.21875 24.65625 C 9.28125 24.648438 9.34375 24.632813 9.40625 24.625 Z M 18.28125 27.1875 C 18.070313 28.171875 17.632813 29.105469 17.03125 29.9375 C 16.640625 30.488281 16.167969 30.96875 15.625 31.375 C 17.5625 31.183594 19.410156 30.128906 20.625 28.5 C 21.03125 27.960938 21.359375 27.371094 21.625 26.75 C 20.519531 26.894531 19.382813 27.15625 18.28125 27.1875 Z" />
                 </svg>
                 <div>
                   <h4 className="text-white font-medium">{t("battlenetAccount")}</h4>
                   {user.battlenet ? <p className="text-blue-400 text-sm">{user.battlenet.battletag}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
                 </div>
               </div>
-              {user.battlenet ? (
-                <button
-                  onClick={handleDisconnectBattleNet}
-                  disabled={isDisconnectingBattleNet}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors text-sm disabled:opacity-50"
-                >
-                  {isDisconnectingBattleNet ? t("disconnecting") : t("disconnect")}
-                </button>
-              ) : (
-                <button
-                  onClick={handleConnectBattleNet}
-                  disabled={isConnectingBattleNet}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
-                >
-                  {isConnectingBattleNet ? t("connecting") : t("connect")}
-                </button>
-              )}
+              <div className="flex gap-2">
+                {user.battlenet ? (
+                  <>
+                    <button
+                      onClick={handleRefreshBattleNet}
+                      disabled={isRefreshingBattleNet}
+                      className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <svg className={`w-4 h-4 ${isRefreshingBattleNet ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      {t("refresh")}
+                    </button>
+                    <button
+                      onClick={handleDisconnectBattleNet}
+                      disabled={isDisconnectingBattleNet}
+                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
+                    >
+                      {isDisconnectingBattleNet ? t("disconnecting") : t("disconnect")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleConnectBattleNet}
+                    disabled={isConnectingBattleNet}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm disabled:opacity-50"
+                  >
+                    {isConnectingBattleNet ? t("connecting") : t("connect")}
+                  </button>
+                )}
+              </div>
             </div>
             {user.battlenet && (
               <p className="text-gray-500 text-xs mt-2">
@@ -357,72 +421,67 @@ export default function ProfilePage() {
         </div>
 
         {/* WoW Characters Section */}
-        {user.battlenet && user.battlenet.characters.length > 0 && (
+        {user.battlenet && (
           <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">{t("wowCharacters")}</h3>
-              <button
-                onClick={handleRefreshCharacters}
-                disabled={isRefreshingCharacters}
-                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
-              >
-                <svg className={`w-4 h-4 ${isRefreshingCharacters ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                {isRefreshingCharacters ? t("refreshing") : t("refresh")}
-              </button>
+              {user.battlenet.characters.length > 0 && (
+                <button
+                  onClick={() => setShowCharacterDialog(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium"
+                >
+                  {t("editCharacters")}
+                </button>
+              )}
             </div>
 
-            <p className="text-gray-400 text-sm mb-4">{t("selectCharactersDescription")}</p>
-
-            {/* Character List */}
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {user.battlenet.characters.map((character) => (
-                <label
-                  key={character.id}
-                  className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors ${
-                    selectedCharacterIds.has(character.id)
-                      ? getFactionBg(character.faction) + " border border-gray-600"
-                      : "bg-gray-700/50 hover:bg-gray-700 border border-transparent"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedCharacterIds.has(character.id)}
-                    onChange={() => handleToggleCharacter(character.id)}
-                    className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${getFactionColor(character.faction)}`}>{character.name}</span>
-                      <span className="text-gray-400 text-sm">-</span>
-                      <span className="text-gray-400 text-sm truncate">{character.realm}</span>
+            {selectedCharacters.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-400 mb-4">{t("noCharactersSelected")}</p>
+                {user.battlenet.characters.length > 0 && (
+                  <button
+                    onClick={() => setShowCharacterDialog(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium"
+                  >
+                    {t("selectCharactersDescription")}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {selectedCharacters.map((character) => (
+                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-colors">
+                    {/* Character Name */}
+                    <div className="font-bold text-lg mb-1" style={{ color: getClassColor(character.class) }}>
+                      {character.name}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <span>Level {character.level}</span>
-                      <span>•</span>
-                      <span>{character.class}</span>
+
+                    {/* Realm */}
+                    <div className="text-gray-400 text-sm mb-2">{character.realm}</div>
+
+                    {/* Character Details */}
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-500">Race:</span>
+                        <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-500">Class:</span>
+                        <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-500">Level:</span>
+                        <span className="text-white">{character.level}</span>
+                      </div>
+                      {character.guild && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-500">Guild:</span>
+                          <span className="text-yellow-400 truncate">{character.guild}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </label>
-              ))}
-            </div>
-
-            {/* Save Button */}
-            {hasCharacterSelectionChanged() && (
-              <div className="mt-4 pt-4 border-t border-gray-700">
-                <button
-                  onClick={handleSaveCharacters}
-                  disabled={isSavingCharacters}
-                  className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium disabled:opacity-50"
-                >
-                  {isSavingCharacters ? t("saving") : t("saveCharacters")}
-                </button>
+                ))}
               </div>
             )}
 
@@ -439,6 +498,17 @@ export default function ProfilePage() {
               </p>
             )}
           </div>
+        )}
+
+        {/* Character Selector Dialog */}
+        {showCharacterDialog && user.battlenet && (
+          <CharacterSelectorDialog
+            characters={user.battlenet.characters}
+            onSave={handleSaveCharacters}
+            onCancel={() => setShowCharacterDialog(false)}
+            onRefresh={handleRefreshCharacters}
+            isRefreshing={isRefreshingCharacters || isSavingCharacters}
+          />
         )}
       </div>
     </main>

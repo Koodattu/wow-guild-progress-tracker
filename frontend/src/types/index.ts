@@ -484,8 +484,10 @@ export interface WoWCharacter {
   realm: string;
   realmSlug: string;
   class: string;
+  race: string;
   level: number;
   faction: "ALLIANCE" | "HORDE";
+  guild?: string;
   selected: boolean;
 }
 
