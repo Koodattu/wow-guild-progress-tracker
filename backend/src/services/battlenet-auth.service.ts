@@ -281,6 +281,50 @@ class BattleNetAuthService {
   }
 
   /**
+   * Enrich a single character with guild information from the API
+   * @private
+   */
+  private async _enrichSingleCharacterWithGuild(char: IWoWCharacter, accessToken: string): Promise<boolean> {
+    try {
+      const apiUrl = `https://${this.region}.api.blizzard.com/profile/wow/character/${char.realmSlug}/${char.name.toLowerCase()}?namespace=profile-${this.region}&locale=en_US`;
+
+      const response = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const profile: any = await response.json();
+        if (profile.guild && profile.guild.name) {
+          char.guild = profile.guild.name;
+          char.guildRealm = profile.guild.realm?.name;
+          char.guildRealmSlug = profile.guild.realm?.slug;
+          char.inactive = false;
+          logger.info(`Enriched ${char.name} with guild: ${profile.guild.name} (${profile.guild.realm?.name || "unknown realm"})`);
+          return true;
+        } else {
+          // Character has no guild but is active
+          char.inactive = false;
+          return false;
+        }
+      } else if (response.status === 404) {
+        // Character is inactive (not found in API)
+        char.inactive = true;
+        char.guild = "inactive";
+        logger.info(`Marked ${char.name} as inactive (404 from API)`);
+        return true;
+      } else {
+        logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
+        return false;
+      }
+    } catch (error) {
+      logger.warn(`Failed to fetch guild for ${char.name}: ${error}`);
+      return false;
+    }
+  }
+
+  /**
    * Fetch guild information for existing characters
    * This can be run asynchronously after initial character fetch
    */
@@ -295,41 +339,11 @@ class BattleNetAuthService {
 
     // Update each character with guild info using public character profile API
     for (const char of user.battlenet.characters) {
-      try {
-        const apiUrl = `https://${this.region}.api.blizzard.com/profile/wow/character/${char.realmSlug}/${char.name.toLowerCase()}?namespace=profile-${this.region}&locale=en_US`;
+      const wasUpdated = await this._enrichSingleCharacterWithGuild(char, user.battlenet.accessToken);
+      if (wasUpdated) updated++;
 
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: `Bearer ${user.battlenet.accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          const profile: any = await response.json();
-          if (profile.guild && profile.guild.name) {
-            char.guild = profile.guild.name;
-            char.inactive = false;
-            updated++;
-            logger.info(`Enriched ${char.name} with guild: ${profile.guild.name}`);
-          } else {
-            // Character has no guild but is active
-            char.inactive = false;
-          }
-        } else if (response.status === 404) {
-          // Character is inactive (not found in API)
-          char.inactive = true;
-          char.guild = "inactive";
-          updated++;
-          logger.info(`Marked ${char.name} as inactive (404 from API)`);
-        } else {
-          logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
-        }
-
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        logger.warn(`Failed to fetch guild for ${char.name}: ${error}`);
-      }
+      // Small delay to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     user.battlenet.lastCharacterSync = new Date();
@@ -471,41 +485,11 @@ class BattleNetAuthService {
     // Now enrich with guild information synchronously
     let updated = 0;
     for (const char of user.battlenet.characters) {
-      try {
-        const apiUrl = `https://${this.region}.api.blizzard.com/profile/wow/character/${char.realmSlug}/${char.name.toLowerCase()}?namespace=profile-${this.region}&locale=en_US`;
+      const wasUpdated = await this._enrichSingleCharacterWithGuild(char, user.battlenet.accessToken);
+      if (wasUpdated) updated++;
 
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: `Bearer ${user.battlenet.accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          const profile: any = await response.json();
-          if (profile.guild && profile.guild.name) {
-            char.guild = profile.guild.name;
-            char.inactive = false;
-            updated++;
-            logger.info(`Enriched ${char.name} with guild: ${profile.guild.name}`);
-          } else {
-            // Character has no guild but is active
-            char.inactive = false;
-          }
-        } else if (response.status === 404) {
-          // Character is inactive (not found in API)
-          char.inactive = true;
-          char.guild = "inactive";
-          updated++;
-          logger.info(`Marked ${char.name} as inactive (404 from API)`);
-        } else {
-          logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
-        }
-
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        logger.warn(`Failed to fetch guild for ${char.name}: ${error}`);
-      }
+      // Small delay to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     // Save again with enriched data

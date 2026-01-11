@@ -31,6 +31,8 @@ export interface IWoWCharacter {
   level: number;
   faction: "ALLIANCE" | "HORDE";
   guild?: string;
+  guildRealm?: string; // Guild's realm name
+  guildRealmSlug?: string; // Guild's realm slug
   selected: boolean; // Whether user has selected this character to display
   inactive?: boolean; // Whether the character is inactive (404 from API)
 }
@@ -93,6 +95,8 @@ const WoWCharacterSchema = new Schema<IWoWCharacter>(
     level: { type: Number, required: true },
     faction: { type: String, enum: ["ALLIANCE", "HORDE"], required: true },
     guild: { type: String, required: false },
+    guildRealm: { type: String, required: false },
+    guildRealmSlug: { type: String, required: false },
     selected: { type: Boolean, default: false },
     inactive: { type: Boolean, default: false },
   },
