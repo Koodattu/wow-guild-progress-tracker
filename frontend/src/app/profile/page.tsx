@@ -463,22 +463,20 @@ export default function ProfilePage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-2">
                 {selectedCharacters.map((character) => (
-                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-all hover:bg-gray-700">
-                    {/* Character Name and Realm */}
-                    <div className="mb-2">
-                      <span className="font-bold text-lg" style={{ color: getClassColor(character.class) }}>
+                  <div
+                    key={character.id}
+                    className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-all hover:bg-gray-700 flex items-center justify-between"
+                  >
+                    <div className="flex items-center min-w-0">
+                      <span className="font-bold text-lg truncate" style={{ color: getClassColor(character.class) }}>
                         {character.name}
                       </span>
-                      <span className="text-white font-normal text-sm">-{character.realm}</span>
+                      <span className="text-white font-normal text-sm truncate">-{character.realm}</span>
+                      {character.guild && <span className="text-yellow-400 text-sm ml-2 truncate">&lt;{character.guild}&gt;</span>}
                     </div>
-
-                    {/* Guild Name */}
-                    {character.guild && <div className="text-yellow-400 text-sm mb-2 truncate">&lt;{character.guild}&gt;</div>}
-
-                    {/* Character Details: Level, Race, Class */}
-                    <div className="flex items-center gap-2 text-sm flex-wrap">
+                    <div className="flex items-center gap-2 text-sm flex-nowrap">
                       <span className="text-white">Level {character.level}</span>
                       <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
                       <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
