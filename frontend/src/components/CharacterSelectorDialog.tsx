@@ -145,7 +145,7 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
               {filteredCharacters.map((character) => (
                 <label
                   key={character.id}
-                  className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+                  className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
                     selectedIds.has(character.id)
                       ? "bg-gray-700 border-2 border-blue-500 shadow-lg"
                       : "bg-gray-700/50 border-2 border-transparent hover:bg-gray-700 hover:border-gray-600"
@@ -158,34 +158,20 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
                     className="mt-1 w-5 h-5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
                   />
                   <div className="flex-1 min-w-0">
-                    {/* Character Name */}
-                    <div className="font-bold text-lg mb-1" style={{ color: getClassColor(character.class) }}>
-                      {character.name}
+                    {/* First Line: Character-Realm & Guild-Realm */}
+                    <div className="flex items-center gap-2 mb-1.5 text-sm">
+                      <span className="font-bold text-lg" style={{ color: getClassColor(character.class) }}>
+                        {character.name}
+                        <span className="text-white font-normal text-sm">-{character.realm}</span>
+                      </span>
+                      {character.guild && <span className="text-yellow-400 truncate">&lt;{character.guild}&gt;</span>}
                     </div>
 
-                    {/* Realm */}
-                    <div className="text-gray-400 text-sm mb-2">{character.realm}</div>
-
-                    {/* Character Details Grid */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">{t("race")}:</span>
-                        <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">{t("level")}:</span>
-                        <span className="text-white">{character.level}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">{t("class")}:</span>
-                        <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
-                      </div>
-                      {character.guild && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-gray-500">{t("guild")}:</span>
-                          <span className="text-yellow-400 truncate">{character.guild}</span>
-                        </div>
-                      )}
+                    {/* Second Line: Level, Race, Class */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-white">Level {character.level}</span>
+                      <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
+                      <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
                     </div>
                   </div>
                 </label>

@@ -58,6 +58,26 @@ interface WoWCharacterFromAPI {
   level: number;
 }
 
+interface ProtectedCharacterProfile {
+  id: number;
+  name: string;
+  guild?: {
+    key: {
+      href: string;
+    };
+    name: string;
+    id: number;
+    realm: {
+      key: {
+        href: string;
+      };
+      name: string;
+      id: number;
+      slug: string;
+    };
+  };
+}
+
 interface WoWProfileSummary {
   _links: {
     self: { href: string };
@@ -168,9 +188,33 @@ class BattleNetAuthService {
   }
 
   /**
-   * Get WoW profile summary including all characters
+   * Get protected character profile to fetch guild information
    */
-  async getWoWCharacters(accessToken: string): Promise<IWoWCharacter[]> {
+  async getProtectedCharacterProfile(accessToken: string, realmId: number, characterId: number): Promise<ProtectedCharacterProfile | null> {
+    const apiUrl = `https://${this.region}.api.blizzard.com/profile/user/wow/protected-character/${realmId}-${characterId}?namespace=profile-${this.region}&locale=en_US`;
+
+    logger.info(`[API REQUEST] GET ${apiUrl}`);
+    const response = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.warn(`Failed to get protected character profile for ${characterId}:`, error);
+      return null;
+    }
+
+    return (await response.json()) as ProtectedCharacterProfile;
+  }
+
+  /**
+   * Get WoW profile summary including all characters
+   * @param accessToken - Battle.net access token
+   * @param fetchGuilds - Whether to fetch guild information (default: false for fast initial load)
+   */
+  async getWoWCharacters(accessToken: string, fetchGuilds: boolean = false): Promise<IWoWCharacter[]> {
     const apiUrl = `https://${this.region}.api.blizzard.com/profile/user/wow?namespace=profile-${this.region}&locale=en_US`;
 
     logger.info(`[API REQUEST] GET ${apiUrl}`);
@@ -198,14 +242,27 @@ class BattleNetAuthService {
           for (const char of account.characters) {
             // Only include characters level 10+
             if (char.level >= 10) {
+              // Optionally fetch guild information from protected character profile
+              let guildName: string | undefined;
+              if (fetchGuilds) {
+                try {
+                  const protectedProfile = await this.getProtectedCharacterProfile(accessToken, char.realm.id, char.id);
+                  guildName = protectedProfile?.guild?.name;
+                } catch (error) {
+                  logger.warn(`Could not fetch guild for character ${char.name}: ${error}`);
+                }
+              }
+
               characters.push({
                 id: char.id,
                 name: char.name,
                 realm: char.realm.name,
                 realmSlug: char.realm.slug,
                 class: char.playable_class.name,
+                race: char.playable_race.name,
                 level: char.level,
                 faction: char.faction.type,
+                guild: guildName,
                 selected: false, // Default to not selected
               });
             }
@@ -217,8 +274,55 @@ class BattleNetAuthService {
     // Sort by level descending
     characters.sort((a, b) => b.level - a.level);
 
-    logger.info(`Fetched ${characters.length} WoW characters (level 10+)`);
+    logger.info(`Fetched ${characters.length} WoW characters (level 10+)${fetchGuilds ? " with guild info" : ""}`);
     return characters;
+  }
+
+  /**
+   * Fetch guild information for existing characters
+   * This can be run asynchronously after initial character fetch
+   */
+  async enrichCharactersWithGuilds(userId: string): Promise<void> {
+    const user = await User.findById(userId);
+    if (!user || !user.battlenet) {
+      throw new Error("User or Battle.net account not found");
+    }
+
+    logger.info(`Starting async guild enrichment for ${user.battlenet.characters.length} characters`);
+    let updated = 0;
+
+    // Update each character with guild info using public character profile API
+    for (const char of user.battlenet.characters) {
+      try {
+        const apiUrl = `https://${this.region}.api.blizzard.com/profile/wow/character/${char.realmSlug}/${char.name.toLowerCase()}?namespace=profile-${this.region}&locale=en_US`;
+
+        const response = await fetch(apiUrl, {
+          headers: {
+            Authorization: `Bearer ${user.battlenet.accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const profile: any = await response.json();
+          if (profile.guild && profile.guild.name) {
+            char.guild = profile.guild.name;
+            updated++;
+            logger.info(`Enriched ${char.name} with guild: ${profile.guild.name}`);
+          }
+        } else {
+          logger.warn(`Failed to fetch profile for ${char.name} on ${char.realmSlug}: ${response.status}`);
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (error) {
+        logger.warn(`Failed to fetch guild for ${char.name}: ${error}`);
+      }
+    }
+
+    user.battlenet.lastCharacterSync = new Date();
+    await user.save();
+    logger.info(`Completed guild enrichment for user ${userId}: ${updated}/${user.battlenet.characters.length} characters updated with guild info`);
   }
 
   /**
@@ -253,6 +357,11 @@ class BattleNetAuthService {
     await user.save();
     logger.info(`Battle.net account connected: ${userInfo.battletag} with ${characters.length} characters to user ${userId}`);
 
+    // Trigger async guild enrichment in the background (don't await)
+    this.enrichCharactersWithGuilds(userId).catch((error) => {
+      logger.error(`Failed to enrich characters with guilds for user ${userId}:`, error);
+    });
+
     return user;
   }
 
@@ -282,6 +391,7 @@ class BattleNetAuthService {
 
   /**
    * Refresh WoW characters for a user
+   * This fetches guild info since it's a manual refresh
    */
   async refreshCharacters(userId: string): Promise<IWoWCharacter[]> {
     const user = await User.findById(userId);
@@ -295,8 +405,8 @@ class BattleNetAuthService {
 
     // TODO: Check if token needs refresh and refresh it if needed
 
-    // Get fresh character list
-    const characters = await this.getWoWCharacters(user.battlenet.accessToken);
+    // Get fresh character list with guild information
+    const characters = await this.getWoWCharacters(user.battlenet.accessToken, true);
 
     // Preserve selection state from existing characters
     const existingSelections = new Set(user.battlenet.characters.filter((c) => c.selected).map((c) => c.id));

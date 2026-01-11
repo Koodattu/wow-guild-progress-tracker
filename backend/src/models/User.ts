@@ -27,8 +27,10 @@ export interface IWoWCharacter {
   realm: string;
   realmSlug: string;
   class: string;
+  race: string;
   level: number;
   faction: "ALLIANCE" | "HORDE";
+  guild?: string;
   selected: boolean; // Whether user has selected this character to display
 }
 
@@ -86,8 +88,10 @@ const WoWCharacterSchema = new Schema<IWoWCharacter>(
     realm: { type: String, required: true },
     realmSlug: { type: String, required: true },
     class: { type: String, required: true },
+    race: { type: String, required: true },
     level: { type: Number, required: true },
     faction: { type: String, enum: ["ALLIANCE", "HORDE"], required: true },
+    guild: { type: String, required: false },
     selected: { type: Boolean, default: false },
   },
   { _id: false }

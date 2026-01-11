@@ -46,8 +46,23 @@ export default function ProfilePage() {
     const connected = searchParams.get("connected");
     if (connected === "battlenet" && user?.battlenet?.characters && user.battlenet.characters.length > 0) {
       setShowCharacterDialog(true);
+
+      // Start polling for guild enrichment (every 3 seconds for up to 30 seconds)
+      let pollCount = 0;
+      const maxPolls = 10;
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        await refreshUser();
+
+        // Stop polling after max attempts or when all characters have guilds checked
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+        }
+      }, 3000);
+
+      return () => clearInterval(pollInterval);
     }
-  }, [searchParams, user?.battlenet?.characters]);
+  }, [searchParams, user?.battlenet?.characters, refreshUser]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -450,35 +465,26 @@ export default function ProfilePage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {selectedCharacters.map((character) => (
-                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-colors">
-                    {/* Character Name */}
-                    <div className="font-bold text-lg mb-1" style={{ color: getClassColor(character.class) }}>
-                      {character.name}
+                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-3 border border-gray-600 hover:border-gray-500 transition-colors">
+                    {/* First Line: Character-Realm & Guild-Realm */}
+                    <div className="flex items-center gap-2 mb-1.5 text-sm">
+                      <span className="font-bold" style={{ color: getClassColor(character.class) }}>
+                        {character.name}-{character.realm}
+                      </span>
                     </div>
+                    {character.guild && (
+                      <div className="text-yellow-400 text-sm mb-1.5 truncate">
+                        &lt;{character.guild}-{character.realm}&gt;
+                      </div>
+                    )}
 
-                    {/* Realm */}
-                    <div className="text-gray-400 text-sm mb-2">{character.realm}</div>
-
-                    {/* Character Details */}
-                    <div className="space-y-1 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">Race:</span>
-                        <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">Class:</span>
-                        <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500">Level:</span>
-                        <span className="text-white">{character.level}</span>
-                      </div>
-                      {character.guild && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-gray-500">Guild:</span>
-                          <span className="text-yellow-400 truncate">{character.guild}</span>
-                        </div>
-                      )}
+                    {/* Second Line: Level, Race, Class */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-white">Level {character.level}</span>
+                      <span className="text-gray-500">•</span>
+                      <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
+                      <span className="text-gray-500">•</span>
+                      <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
                     </div>
                   </div>
                 ))}
