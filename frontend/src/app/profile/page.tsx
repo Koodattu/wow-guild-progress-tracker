@@ -463,27 +463,24 @@ export default function ProfilePage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {selectedCharacters.map((character) => (
-                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-3 border border-gray-600 hover:border-gray-500 transition-colors">
-                    {/* First Line: Character-Realm & Guild-Realm */}
-                    <div className="flex items-center gap-2 mb-1.5 text-sm">
-                      <span className="font-bold" style={{ color: getClassColor(character.class) }}>
-                        {character.name}-{character.realm}
+                  <div key={character.id} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-gray-500 transition-all hover:bg-gray-700">
+                    {/* Character Name and Realm */}
+                    <div className="mb-2">
+                      <span className="font-bold text-lg" style={{ color: getClassColor(character.class) }}>
+                        {character.name}
                       </span>
+                      <span className="text-white font-normal text-sm">-{character.realm}</span>
                     </div>
-                    {character.guild && (
-                      <div className="text-yellow-400 text-sm mb-1.5 truncate">
-                        &lt;{character.guild}-{character.realm}&gt;
-                      </div>
-                    )}
 
-                    {/* Second Line: Level, Race, Class */}
-                    <div className="flex items-center gap-2 text-sm">
+                    {/* Guild Name */}
+                    {character.guild && <div className="text-yellow-400 text-sm mb-2 truncate">&lt;{character.guild}&gt;</div>}
+
+                    {/* Character Details: Level, Race, Class */}
+                    <div className="flex items-center gap-2 text-sm flex-wrap">
                       <span className="text-white">Level {character.level}</span>
-                      <span className="text-gray-500">•</span>
                       <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
-                      <span className="text-gray-500">•</span>
                       <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
                     </div>
                   </div>

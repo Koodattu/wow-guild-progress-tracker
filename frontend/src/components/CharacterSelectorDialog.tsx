@@ -81,8 +81,8 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="p-6 border-b border-gray-700">
           <div className="flex items-center justify-between mb-4">
@@ -137,11 +137,11 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
         </div>
 
         {/* Character List */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4">
           {filteredCharacters.length === 0 ? (
             <div className="text-center text-gray-400 py-12">{searchQuery ? t("noResults") : t("noCharacters")}</div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredCharacters.map((character) => (
                 <label
                   key={character.id}
@@ -155,20 +155,22 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
                     type="checkbox"
                     checked={selectedIds.has(character.id)}
                     onChange={() => handleToggle(character.id)}
-                    className="mt-1 w-5 h-5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
+                    className="mt-1 w-5 h-5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800 shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    {/* First Line: Character-Realm & Guild-Realm */}
-                    <div className="flex items-center gap-2 mb-1.5 text-sm">
+                    {/* Character Name and Realm */}
+                    <div className="mb-0.5">
                       <span className="font-bold text-lg" style={{ color: getClassColor(character.class) }}>
                         {character.name}
-                        <span className="text-white font-normal text-sm">-{character.realm}</span>
                       </span>
-                      {character.guild && <span className="text-yellow-400 truncate">&lt;{character.guild}&gt;</span>}
+                      <span className="text-white font-normal text-sm">-{character.realm}</span>
+
+                      {/* Guild Name */}
+                      {character.guild && <span className="text-yellow-400 text-sm mb-0.5 truncate ml-2">&lt;{character.guild}&gt;</span>}
                     </div>
 
-                    {/* Second Line: Level, Race, Class */}
-                    <div className="flex items-center gap-2 text-sm">
+                    {/* Character Details: Level, Race, Class */}
+                    <div className="flex items-center gap-1.5 text-sm flex-wrap">
                       <span className="text-white">Level {character.level}</span>
                       <span style={{ color: getFactionColor(character.faction) }}>{character.race}</span>
                       <span style={{ color: getClassColor(character.class) }}>{character.class}</span>
