@@ -7,48 +7,189 @@ export interface TrackedGuild {
 }
 
 export const GUILDS: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "forsen", "b0aty", "wiba"] },
-  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
-  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
-  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
-  { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
+  {
+    name: "Tuju",
+    realm: "Kazzak",
+    region: "EU",
+    streamers: ["vaarattu", "forsen", "b0aty", "wiba"],
+  },
+  {
+    name: "ST-Raid",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["kukkis12"],
+  },
+  {
+    name: "PH-Tiimi",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["suhruu"],
+  },
+  {
+    name: "CE-Tiimi",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["zetabeachh"],
+  },
+  {
+    name: "HinausYhtiö",
+    realm: "Twisting-Nether",
+    region: "EU",
+    streamers: ["aamunkajo_", "rrrrage"],
+  },
   { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
-  { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
-  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["croukou"] },
-  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU", streamers: ["ventrixi", "kermisgg", "apepforever"] },
-  { name: "Hakkapeliitta", realm: "Darkspear", region: "EU", streamers: ["xofe"] },
+  {
+    name: "Kultzipuppelit",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["janeli"],
+  },
+  {
+    name: "Näkijän taru",
+    realm: "Bloodfeather",
+    region: "EU",
+    streamers: ["croukou"],
+  },
+  {
+    name: "käsipainoilla bodaus",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["ventrixi", "kermisgg", "apepforever"],
+  },
+  {
+    name: "Hakkapeliitta",
+    realm: "Darkspear",
+    region: "EU",
+    streamers: ["xofe"],
+  },
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [
-  { name: "Tuju", realm: "Kazzak", region: "EU", streamers: ["vaarattu", "kahvig", "forsen"] },
+  {
+    name: "Tuju",
+    realm: "Kazzak",
+    region: "EU",
+    streamers: ["vaarattu", "kahvig", "forsen"],
+  },
   { name: "IHAN SAMA", realm: "Stormreaver", region: "EU" },
-  { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
-  { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
-  { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
+  {
+    name: "ST-Raid",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["kukkis12"],
+  },
+  {
+    name: "PH-Tiimi",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["suhruu"],
+  },
+  {
+    name: "CE-Tiimi",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "IHAN SAMA",
+    streamers: ["zetabeachh"],
+  },
   { name: "Kilta", realm: "Ravencrest", region: "EU", streamers: ["nasuxi"] },
-  { name: "käsipainoilla bodaus", realm: "Stormreaver", region: "EU", streamers: ["ventrixi", "kermisgg", "apepforever"] },
+  {
+    name: "käsipainoilla bodaus",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["ventrixi", "kermisgg", "apepforever"],
+  },
   { name: "Nave", realm: "Kazzak", region: "EU" },
   { name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   { name: "Marras", realm: "Kazzak", region: "EU" },
-  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["persecticus", "diskopallo"] },
-  { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora", "heiqs"] },
-  { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0", "deeheals"] },
-  { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
-  { name: "Kultzipuppelit", realm: "Stormreaver", region: "EU", streamers: ["janeli"] },
+  {
+    name: "LkaksP Issue",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["persecticus", "diskopallo"],
+  },
+  {
+    name: "TURTLES KIMBLE",
+    realm: "Tarren-Mill",
+    region: "EU",
+    streamers: ["baldoora", "heiqs"],
+  },
+  {
+    name: "Beyond Harmless",
+    realm: "Sylvanas",
+    region: "EU",
+    streamers: ["jonim0", "deeheals"],
+  },
+  {
+    name: "HinausYhtiö",
+    realm: "Twisting-Nether",
+    region: "EU",
+    streamers: ["aamunkajo_", "rrrrage"],
+  },
+  {
+    name: "Kultzipuppelit",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["janeli"],
+  },
   { name: "Taikaolennot", realm: "Outland", region: "EU" },
-  { name: "Hakkapeliitta", realm: "Darkspear", region: "EU", streamers: ["xofe"] },
+  {
+    name: "Hakkapeliitta",
+    realm: "Darkspear",
+    region: "EU",
+    streamers: ["xofe"],
+  },
   { name: "Urheilujätkät", realm: "Stormreaver", region: "EU" },
-  { name: "Näkijän taru", realm: "Bloodfeather", region: "EU", streamers: ["croukou"] },
+  {
+    name: "Näkijän taru",
+    realm: "Bloodfeather",
+    region: "EU",
+    streamers: ["croukou"],
+  },
   { name: "Forbidden", realm: "Vashj", region: "EU", streamers: ["byrchi"] },
-  { name: "Tony Halme Pro Skater", realm: "Stormreaver", region: "EU", streamers: ["lakuclap", "mjog", "iyni"] },
-  { name: "Slack", realm: "Stormreaver", region: "EU", streamers: ["realriski"] },
-  { name: "Kelacity", realm: "Stormreaver", region: "EU", parent_guild: "Tony Halme Pro Skater" },
-  { name: "Muisted", realm: "Stormreaver", region: "EU", streamers: ["alfamyscars", "purelysofie"] },
-  { name: "TURBO SAAB", realm: "Stormreaver", region: "EU", streamers: ["kartssa"] },
+  {
+    name: "Tony Halme Pro Skater",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["lakuclap", "mjog", "iyni"],
+  },
+  {
+    name: "Slack",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["realriski"],
+  },
+  {
+    name: "Kelacity",
+    realm: "Stormreaver",
+    region: "EU",
+    parent_guild: "Tony Halme Pro Skater",
+  },
+  {
+    name: "Muisted",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["alfamyscars", "purelysofie"],
+  },
+  {
+    name: "TURBO SAAB",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["kartssa"],
+  },
   { name: "Rennosti", realm: "Stormreaver", region: "EU" },
   { name: "Winland", realm: "Silvermoon", region: "EU" },
   { name: "Kaaos", realm: "Argent-Dawn", region: "EU" },
-  { name: "Noni", realm: "Stormreaver", region: "EU", streamers: ["suomimeme"] },
+  {
+    name: "Noni",
+    realm: "Stormreaver",
+    region: "EU",
+    streamers: ["suomimeme"],
+  },
   { name: "Memento", realm: "Stormreaver", region: "EU" },
   { name: "Memento", realm: "Frostwhisper", region: "EU" },
   { name: "Karanteeni", realm: "Ravencrest", region: "EU" },
@@ -61,10 +202,10 @@ export const TRACKED_RAIDS = [
   44, // Manaforge Omega
   42, // Liberation of Undermine
   38, // Nerubar Palace
-  35, // Amirdrassil the Dreams Hope
-  33, // Aberrus, the Shadowed Crucible
-  31, // Vault of the Incarnates
-  29, // Sepulcher of the First Ones
+  /* 35, // Amirdrassil the Dreams Hope
+ // 33, // Aberrus, the Shadowed Crucible
+ // 31, // Vault of the Incarnates
+ // 29, // Sepulcher of the First Ones
   28, // Sanctum of Domination
   26, // Castle Nathria
   24, // Ny'alotha, the Waking City
@@ -81,7 +222,7 @@ export const TRACKED_RAIDS = [
   7, // Blackrock Foundry
   6, // Highmaul
   5, // Siege of Orgrimmar
-  4, // Throne of Thunder
+  4, // Throne of Thunder */
 ];
 
 // Current raids that are actively being tracked for updates
