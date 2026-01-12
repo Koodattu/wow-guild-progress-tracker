@@ -244,6 +244,20 @@ export interface RaidDates {
   ends?: RegionDates;
 }
 
+// Home page data response (single endpoint with all data)
+export interface HomePageData {
+  raid: {
+    id: number;
+    name: string;
+    slug: string;
+    expansion: string;
+    iconUrl?: string;
+  };
+  dates: RaidDates;
+  guilds: GuildListItem[];
+  events: Event[];
+}
+
 // Minimal raid info (without bosses or dates) - used in raid selector
 export interface RaidInfo {
   id: number;

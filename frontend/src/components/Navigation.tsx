@@ -91,11 +91,13 @@ export default function Navigation() {
               <div className="hidden lg:flex gap-6">
                 <Link
                   href="/"
-                  className={`text-sm font-medium transition-colors ${
-                    isActive("/") && !pathname.startsWith("/guilds") && !pathname.startsWith("/events") && !pathname.startsWith("/timetable") && !pathname.startsWith("/tierlists")
-                      ? "text-blue-400 border-b-2 border-blue-400"
-                      : "text-gray-400 hover:text-white"
-                  } py-5`}
+                  className={`text-sm font-medium transition-colors ${isActive("/") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                >
+                  {t("home")}
+                </Link>
+                <Link
+                  href="/progress"
+                  className={`text-sm font-medium transition-colors ${isActive("/progress") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
                   {t("progressLeaderboard")}
                 </Link>

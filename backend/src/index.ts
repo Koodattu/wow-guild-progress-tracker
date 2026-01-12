@@ -12,6 +12,8 @@ import guildService from "./services/guild.service";
 import blizzardService from "./services/blizzard.service";
 import scheduler from "./services/scheduler.service";
 import guildsRouter from "./routes/guilds";
+import progressRouter from "./routes/progress";
+import homeRouter from "./routes/home";
 import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
 import tierlistsRouter from "./routes/tierlists";
@@ -41,6 +43,8 @@ app.use("/icons", express.static(path.join(__dirname, "../public/icons")));
 
 // Routes
 app.use("/api/guilds", guildsRouter);
+app.use("/api/progress", progressRouter);
+app.use("/api/home", homeRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/raids", raidsRouter);
 app.use("/api/tierlists", tierlistsRouter);

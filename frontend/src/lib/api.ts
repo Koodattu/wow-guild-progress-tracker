@@ -34,6 +34,7 @@ import {
   AdminUserStats,
   AdminGuildStats,
   AdminOverview,
+  HomePageData,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -50,9 +51,16 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 
 export const api = {
+  // Home page endpoint - returns all data for the home page in a single request
+  async getHomeData(): Promise<HomePageData> {
+    const response = await fetch(`${API_URL}/api/home`);
+    if (!response.ok) throw new Error("Failed to fetch home page data");
+    return response.json();
+  },
+
   // Guild endpoints
   async getGuilds(raidId?: number): Promise<GuildListItem[]> {
-    const url = raidId ? `${API_URL}/api/guilds?raidId=${raidId}` : `${API_URL}/api/guilds`;
+    const url = raidId ? `${API_URL}/api/progress?raidId=${raidId}` : `${API_URL}/api/guilds`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
