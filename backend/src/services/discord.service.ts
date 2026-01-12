@@ -62,7 +62,7 @@ class DiscordService {
       scope: "identify",
     });
 
-    return `https://discord.com/oauth2/authorize?${params.toString()}`;
+    return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
   }
 
   /**
