@@ -57,6 +57,32 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+// Get pull history for a specific boss
+router.get("/:realm/:name/raids/:raidId/bosses/:bossId/pull-history", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const raidId = parseInt(req.params.raidId);
+    const bossId = parseInt(req.params.bossId);
+    const difficulty = req.query.difficulty as "mythic" | "heroic" | undefined;
+
+    if (!difficulty) {
+      return res.status(400).json({ error: "difficulty query parameter is required" });
+    }
+
+    const pullHistory = await guildService.getBossPullHistory(realm, name, raidId, bossId, difficulty);
+
+    if (pullHistory === null) {
+      return res.status(404).json({ error: "Guild or boss not found" });
+    }
+
+    res.json(pullHistory);
+  } catch (error) {
+    logger.error("Error fetching boss pull history:", error);
+    res.status(500).json({ error: "Failed to fetch boss pull history" });
+  }
+});
+
 // Get detailed boss progress for a specific guild and raid by realm/name (returns only progress array)
 router.get("/:realm/:name/raids/:raidId/bosses", async (req: Request, res: Response) => {
   try {

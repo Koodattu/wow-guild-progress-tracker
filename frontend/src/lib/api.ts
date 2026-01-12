@@ -80,6 +80,14 @@ export const api = {
     return response.json();
   },
 
+  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any[]> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses/${bossId}/pull-history?difficulty=${difficulty}`);
+    if (!response.ok) throw new Error("Failed to fetch boss pull history");
+    return response.json();
+  },
+
   async getGuild(id: string): Promise<Guild> {
     const response = await fetch(`${API_URL}/api/guilds/${id}`);
     if (!response.ok) throw new Error("Failed to fetch guild");

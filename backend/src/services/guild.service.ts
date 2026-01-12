@@ -2604,6 +2604,7 @@ class GuildService {
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
+  // Excludes pullHistory to reduce payload size
   async getGuildBossProgressForRaid(guildId: string, raidId: number): Promise<any[] | null> {
     const guild = await Guild.findById(guildId);
 
@@ -2613,13 +2614,22 @@ class GuildService {
 
     const guildObj = guild.toObject();
 
-    // Return only the progress array for the specified raid
-    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+    // Return only the progress array for the specified raid, excluding pullHistory
+    const raidProgress = guildObj.progress
+      .filter((p) => p.raidId === raidId)
+      .map((progress) => ({
+        ...progress,
+        bosses: progress.bosses.map((boss) => {
+          const { pullHistory, ...bossWithoutHistory } = boss;
+          return bossWithoutHistory;
+        }),
+      }));
 
     return raidProgress;
   }
 
   // Get detailed boss progress for a specific raid by realm and name (returns only progress array)
+  // Excludes pullHistory to reduce payload size
   async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<any[] | null> {
     const guild = await Guild.findOne({
       name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
@@ -2632,10 +2642,49 @@ class GuildService {
 
     const guildObj = guild.toObject();
 
-    // Return only the progress array for the specified raid
-    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+    // Return only the progress array for the specified raid, excluding pullHistory
+    const raidProgress = guildObj.progress
+      .filter((p) => p.raidId === raidId)
+      .map((progress) => ({
+        ...progress,
+        bosses: progress.bosses.map((boss) => {
+          const { pullHistory, ...bossWithoutHistory } = boss;
+          return bossWithoutHistory;
+        }),
+      }));
 
     return raidProgress;
+  }
+
+  // Get pull history for a specific boss (on-demand fetching)
+  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any[] | null> {
+    const guild = await Guild.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+    });
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Find the specific raid progress
+    const raidProgress = guildObj.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+
+    if (!raidProgress) {
+      return null;
+    }
+
+    // Find the specific boss
+    const boss = raidProgress.bosses.find((b) => b.bossId === bossId);
+
+    if (!boss) {
+      return null;
+    }
+
+    // Return the pull history array (or empty array if not available)
+    return boss.pullHistory || [];
   }
 
   // Get single guild by ID
