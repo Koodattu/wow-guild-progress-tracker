@@ -183,7 +183,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
             ) : hasPullHistory ? (
               <>
                 <PullProgressChart pullHistory={pullHistory!} />
-                {phaseDistribution && phaseDistribution.length > 0 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+                {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
               </>
             ) : (
               <div className="text-center py-4 text-gray-500">No pull history available</div>
@@ -276,9 +276,9 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
               {isLoading ? (
                 <div className="text-center py-4 text-gray-500">Loading pull history...</div>
               ) : hasPullHistory ? (
-                <div className="grid grid-cols-1 lg:grid-cols-[5fr_1fr] gap-2 items-start">
+                <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
                   <PullProgressChart pullHistory={pullHistory!} />
-                  {phaseDistribution && phaseDistribution.length > 0 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+                  {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
                 </div>
               ) : (
                 <div className="text-center py-4 text-gray-500">No pull history available</div>

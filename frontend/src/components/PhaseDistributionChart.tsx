@@ -11,14 +11,9 @@ export default function PhaseDistributionChart({ phaseDistribution }: PhaseDistr
     return null;
   }
 
-  // If only one phase, show a simple message instead of a pie chart
-  if (phaseDistribution.length === -1) {
-    return (
-      <div className="w-full bg-gray-800/30 rounded p-2 flex flex-col items-center justify-center">
-        <div className="text-white font-semibold">{phaseDistribution[0].phase}</div>
-        <div className="text-gray-500 text-sm">{phaseDistribution[0].count} pulls</div>
-      </div>
-    );
+  // If only one phase, don't show the pie chart
+  if (phaseDistribution.length === 1) {
+    return null;
   }
 
   const totalPulls = phaseDistribution.reduce((sum, item) => sum + item.count, 0);
@@ -91,7 +86,7 @@ export default function PhaseDistributionChart({ phaseDistribution }: PhaseDistr
               </title>
             </path>
             {/* Label with phase name inside the slice */}
-            {slice.percentage >= 8 && (
+            {slice.percentage >= 3 && (
               <text
                 x={polarToCartesian((slice.startAngle + slice.endAngle) / 2, labelRadius).x}
                 y={polarToCartesian((slice.startAngle + slice.endAngle) / 2, labelRadius).y}
