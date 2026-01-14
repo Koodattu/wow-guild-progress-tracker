@@ -99,12 +99,15 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
     // Store user ID in session (managed by express-session)
     req.session.userId = user._id.toString();
 
+    logger.info(`Discord OAuth: Session created for user ${user.discord.username} (${user._id})`);
+
     // Save session and redirect
     req.session.save((err) => {
       if (err) {
         logger.error("Error saving session:", err);
         return res.redirect(getFrontendUrl() + "?error=session_error");
       }
+      logger.info(`Session saved successfully, redirecting to profile. Session ID: ${req.sessionID}`);
       res.redirect(getFrontendUrl() + "/profile");
     });
   } catch (error) {
@@ -118,6 +121,8 @@ router.get("/me", async (req: Request, res: Response) => {
   try {
     const userId = req.session.userId;
 
+    logger.info(`GET /me request - Session ID: ${req.sessionID}, User ID in session: ${userId || "none"}`);
+
     if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
@@ -125,6 +130,7 @@ router.get("/me", async (req: Request, res: Response) => {
     const user = await discordService.getUserFromSession(userId);
 
     if (!user) {
+      logger.warn(`Session exists but user not found in DB: ${userId}`);
       return res.status(401).json({ error: "Session expired" });
     }
 
