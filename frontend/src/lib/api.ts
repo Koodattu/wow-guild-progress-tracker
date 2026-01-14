@@ -39,6 +39,10 @@ import {
   PickemDetails,
   PickemPrediction,
   SimpleGuild,
+  AdminPickemsResponse,
+  AdminPickem,
+  CreatePickemInput,
+  UpdatePickemInput,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -516,6 +520,79 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to submit predictions");
+    }
+    return response.json();
+  },
+
+  // Admin Pickem endpoints
+  async getAdminPickems(): Promise<AdminPickemsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/pickems`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickems");
+    return response.json();
+  },
+
+  async getAdminPickem(pickemId: string): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickem");
+    return response.json();
+  },
+
+  async createAdminPickem(input: CreatePickemInput): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to create pickem");
+    }
+    return response.json();
+  },
+
+  async updateAdminPickem(pickemId: string, input: UpdatePickemInput): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to update pickem");
+    }
+    return response.json();
+  },
+
+  async deleteAdminPickem(pickemId: string): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete pickem");
+    }
+    return response.json();
+  },
+
+  async toggleAdminPickem(pickemId: string): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/toggle`, {
+      method: "PATCH",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to toggle pickem");
     }
     return response.json();
   },

@@ -21,6 +21,7 @@ import analyticsRouter from "./routes/analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
 import pickemsRouter from "./routes/pickems";
+import pickemService from "./services/pickem.service";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 
 const app: Application = express();
@@ -77,6 +78,9 @@ const startServer = async () => {
 
     // Sync guild config data (parent_guild and streamers)
     await guildService.syncGuildConfigData();
+
+    // Seed pickems from config (only creates if they don't exist)
+    await pickemService.seedPickems();
 
     // Recalculate statistics for existing guilds if enabled
     const calculateOnStartup = process.env.CALCULATE_GUILD_STATISTICS_ON_STARTUP !== "false";

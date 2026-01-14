@@ -605,6 +605,21 @@ export interface AdminOverview {
 }
 
 // Pickems types
+export interface ScoringConfig {
+  exactMatch: number;
+  offByOne: number;
+  offByTwo: number;
+  offByThree: number;
+  offByFour: number;
+  offByFiveOrMore: number;
+}
+
+export interface StreakConfig {
+  enabled: boolean;
+  minLength: number;
+  bonusPerGuild: number;
+}
+
 export interface PickemSummary {
   id: string;
   name: string;
@@ -613,6 +628,8 @@ export interface PickemSummary {
   votingEnd: string;
   isVotingOpen: boolean;
   hasEnded: boolean;
+  scoringConfig?: ScoringConfig;
+  streakConfig?: StreakConfig;
 }
 
 export interface PickemPrediction {
@@ -639,10 +656,18 @@ export interface LeaderboardPrediction {
   points: number;
 }
 
+export interface StreakInfo {
+  length: number;
+  guilds: string[];
+}
+
 export interface LeaderboardEntry {
   username: string;
   avatarUrl: string;
   totalPoints: number;
+  positionPoints?: number;
+  streakBonus?: number;
+  streaks?: StreakInfo[];
   predictions: LeaderboardPrediction[];
 }
 
@@ -654,6 +679,8 @@ export interface PickemDetails {
   votingEnd: string;
   isVotingOpen: boolean;
   hasEnded: boolean;
+  scoringConfig?: ScoringConfig;
+  streakConfig?: StreakConfig;
   guildRankings: GuildRanking[];
   userPredictions: PickemPrediction[] | null;
   leaderboard: LeaderboardEntry[];
@@ -662,4 +689,52 @@ export interface PickemDetails {
 export interface SimpleGuild {
   name: string;
   realm: string;
+}
+
+// Admin Pickem types
+export interface AdminPickem {
+  _id: string;
+  pickemId: string;
+  name: string;
+  raidIds: number[];
+  votingStart: string;
+  votingEnd: string;
+  active: boolean;
+  scoringConfig: ScoringConfig;
+  streakConfig: StreakConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPickemStats {
+  total: number;
+  active: number;
+  votingOpen: number;
+  totalParticipants: number;
+}
+
+export interface AdminPickemsResponse {
+  pickems: AdminPickem[];
+  stats: AdminPickemStats;
+}
+
+export interface CreatePickemInput {
+  pickemId: string;
+  name: string;
+  raidIds: number[];
+  votingStart: string;
+  votingEnd: string;
+  active?: boolean;
+  scoringConfig?: Partial<ScoringConfig>;
+  streakConfig?: Partial<StreakConfig>;
+}
+
+export interface UpdatePickemInput {
+  name?: string;
+  raidIds?: number[];
+  votingStart?: string;
+  votingEnd?: string;
+  active?: boolean;
+  scoringConfig?: Partial<ScoringConfig>;
+  streakConfig?: Partial<StreakConfig>;
 }

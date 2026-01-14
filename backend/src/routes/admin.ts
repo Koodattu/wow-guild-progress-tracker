@@ -3,6 +3,7 @@ import { requireAdmin } from "../middleware/admin.middleware";
 import User from "../models/User";
 import Guild from "../models/Guild";
 import { RequestLog, HourlyStats } from "../models/Analytics";
+import pickemService from "../services/pickem.service";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -428,6 +429,169 @@ router.get("/overview", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error fetching admin overview:", error);
     res.status(500).json({ error: "Failed to fetch overview" });
+  }
+});
+
+// ============================================================
+// PICKEM MANAGEMENT
+// ============================================================
+
+// Get all pickems (including inactive ones)
+router.get("/pickems", async (req: Request, res: Response) => {
+  try {
+    const pickems = await pickemService.getAllPickems();
+    const stats = await pickemService.getPickemStats();
+
+    res.json({
+      pickems,
+      stats,
+    });
+  } catch (error) {
+    logger.error("Error fetching pickems:", error);
+    res.status(500).json({ error: "Failed to fetch pickems" });
+  }
+});
+
+// Get a specific pickem by ID
+router.get("/pickems/:pickemId", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+    const pickem = await pickemService.getPickemById(pickemId);
+
+    if (!pickem) {
+      return res.status(404).json({ error: "Pickem not found" });
+    }
+
+    res.json(pickem);
+  } catch (error) {
+    logger.error("Error fetching pickem:", error);
+    res.status(500).json({ error: "Failed to fetch pickem" });
+  }
+});
+
+// Create a new pickem
+router.post("/pickems", async (req: Request, res: Response) => {
+  try {
+    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig } = req.body;
+
+    // Validate required fields
+    if (!pickemId || !name || !raidIds || !votingStart || !votingEnd) {
+      return res.status(400).json({
+        error: "Missing required fields: pickemId, name, raidIds, votingStart, votingEnd",
+      });
+    }
+
+    // Validate pickemId format (alphanumeric with dashes)
+    if (!/^[a-z0-9-]+$/.test(pickemId)) {
+      return res.status(400).json({
+        error: "pickemId must contain only lowercase letters, numbers, and dashes",
+      });
+    }
+
+    // Validate dates
+    const startDate = new Date(votingStart);
+    const endDate = new Date(votingEnd);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: "Invalid date format" });
+    }
+    if (startDate >= endDate) {
+      return res.status(400).json({ error: "votingEnd must be after votingStart" });
+    }
+
+    // Validate raidIds
+    if (!Array.isArray(raidIds) || raidIds.length === 0) {
+      return res.status(400).json({ error: "raidIds must be a non-empty array" });
+    }
+
+    const pickem = await pickemService.createPickem({
+      pickemId,
+      name,
+      raidIds,
+      votingStart: startDate,
+      votingEnd: endDate,
+      active: active ?? true,
+      scoringConfig,
+      streakConfig,
+    });
+
+    res.status(201).json(pickem);
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: "A pickem with this ID already exists" });
+    }
+    logger.error("Error creating pickem:", error);
+    res.status(500).json({ error: "Failed to create pickem" });
+  }
+});
+
+// Update an existing pickem
+router.put("/pickems/:pickemId", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+    const updates = req.body;
+
+    // Don't allow changing the pickemId
+    delete updates.pickemId;
+
+    // Validate dates if provided
+    if (updates.votingStart) {
+      updates.votingStart = new Date(updates.votingStart);
+      if (isNaN(updates.votingStart.getTime())) {
+        return res.status(400).json({ error: "Invalid votingStart date format" });
+      }
+    }
+    if (updates.votingEnd) {
+      updates.votingEnd = new Date(updates.votingEnd);
+      if (isNaN(updates.votingEnd.getTime())) {
+        return res.status(400).json({ error: "Invalid votingEnd date format" });
+      }
+    }
+
+    const pickem = await pickemService.updatePickem(pickemId, updates);
+
+    if (!pickem) {
+      return res.status(404).json({ error: "Pickem not found" });
+    }
+
+    res.json(pickem);
+  } catch (error) {
+    logger.error("Error updating pickem:", error);
+    res.status(500).json({ error: "Failed to update pickem" });
+  }
+});
+
+// Delete a pickem
+router.delete("/pickems/:pickemId", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+    const result = await pickemService.deletePickem(pickemId);
+
+    if (!result) {
+      return res.status(404).json({ error: "Pickem not found" });
+    }
+
+    res.json({ success: true, message: "Pickem deleted" });
+  } catch (error) {
+    logger.error("Error deleting pickem:", error);
+    res.status(500).json({ error: "Failed to delete pickem" });
+  }
+});
+
+// Toggle pickem active status
+router.patch("/pickems/:pickemId/toggle", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+    const pickem = await pickemService.getPickemById(pickemId);
+
+    if (!pickem) {
+      return res.status(404).json({ error: "Pickem not found" });
+    }
+
+    const updated = await pickemService.updatePickem(pickemId, { active: !pickem.active });
+    res.json(updated);
+  } catch (error) {
+    logger.error("Error toggling pickem:", error);
+    res.status(500).json({ error: "Failed to toggle pickem" });
   }
 });
 

@@ -246,6 +246,7 @@
       "overview": "Yleiskatsaus",
       "users": "Käyttäjät",
       "guilds": "Killat",
+      "pickems": "Veikkaukset",
       "analytics": "Analytiikka"
     },
     "overview": {
@@ -286,6 +287,54 @@
       "last30d": "Viimeiset 30 päivää",
       "topEndpoints": "Suosituimmat päätepisteet",
       "requests": "pyyntöä"
+    },
+    "pickems": {
+      "total": "Veikkauksia yhteensä",
+      "active": "Aktiivisia veikkauksia",
+      "votingOpen": "Äänestys auki",
+      "participants": "Osallistujia yhteensä",
+      "create": "Luo veikkaus",
+      "edit": "Muokkaa veikkausta",
+      "form": {
+        "id": "Veikkauksen ID",
+        "idHelp": "Vain pienet kirjaimet, numerot ja viivat (esim. tww-s3)",
+        "name": "Näyttönimi",
+        "raids": "Valitse raidit",
+        "votingStart": "Äänestys alkaa",
+        "votingEnd": "Äänestys päättyy",
+        "active": "Aktiivinen (näkyy käyttäjille)",
+        "scoring": "Pisteytysmääritykset",
+        "scoringExactMatch": "Täsmällinen",
+        "scoringOffByOne": "1 ohi",
+        "scoringOffByTwo": "2 ohi",
+        "scoringOffByThree": "3 ohi",
+        "scoringOffByFour": "4 ohi",
+        "scoringOffByFiveOrMore": "5+ ohi",
+        "streak": "Putkiraja-asetukset",
+        "streakEnabled": "Ota käyttöön",
+        "streakMinLength": "Min. pituus",
+        "streakBonusPerGuild": "Bonus/kilta",
+        "create": "Luo",
+        "update": "Päivitä",
+        "cancel": "Peruuta"
+      },
+      "table": {
+        "id": "ID",
+        "name": "Nimi",
+        "raids": "Raidit",
+        "voting": "Äänestysaika",
+        "status": "Tila",
+        "actions": "Toiminnot",
+        "activeStatus": "Aktiivinen",
+        "inactiveStatus": "Ei aktiivinen",
+        "votingOpenStatus": "Äänestys auki",
+        "endedStatus": "Päättynyt",
+        "edit": "Muokkaa",
+        "activate": "Aktivoi",
+        "deactivate": "Deaktivoi",
+        "delete": "Poista",
+        "deleteConfirm": "Haluatko varmasti poistaa tämän veikkauksen? Tätä toimintoa ei voi perua."
+      }
     },
     "pagination": {
       "previous": "Edellinen",

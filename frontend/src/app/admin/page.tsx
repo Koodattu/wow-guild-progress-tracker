@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { AdminUser, AdminGuild, AdminUserStats, AdminGuildStats, AdminOverview } from "@/types";
+import { AdminUser, AdminGuild, AdminUserStats, AdminGuildStats, AdminOverview, AdminPickem, AdminPickemStats, ScoringConfig, StreakConfig, RaidInfo } from "@/types";
 
-type TabType = "overview" | "users" | "guilds";
+type TabType = "overview" | "users" | "guilds" | "pickems";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -32,6 +32,36 @@ export default function AdminPage() {
   const [guildStats, setGuildStats] = useState<AdminGuildStats | null>(null);
   const [guildsPage, setGuildsPage] = useState(1);
   const [guildsTotalPages, setGuildsTotalPages] = useState(1);
+
+  // Pickems data
+  const [pickems, setPickems] = useState<AdminPickem[]>([]);
+  const [pickemStats, setPickemStats] = useState<AdminPickemStats | null>(null);
+  const [showPickemForm, setShowPickemForm] = useState(false);
+  const [editingPickem, setEditingPickem] = useState<AdminPickem | null>(null);
+  const [raids, setRaids] = useState<RaidInfo[]>([]);
+
+  // Pickem form state
+  const [pickemForm, setPickemForm] = useState({
+    pickemId: "",
+    name: "",
+    raidIds: [] as number[],
+    votingStart: "",
+    votingEnd: "",
+    active: true,
+    scoringConfig: {
+      exactMatch: 10,
+      offByOne: 8,
+      offByTwo: 6,
+      offByThree: 4,
+      offByFour: 2,
+      offByFiveOrMore: 0,
+    } as ScoringConfig,
+    streakConfig: {
+      enabled: true,
+      minLength: 2,
+      bonusPerGuild: 3,
+    } as StreakConfig,
+  });
 
   // Redirect non-admin users
   useEffect(() => {
@@ -67,6 +97,13 @@ export default function AdminPage() {
             setGuilds(guildsData.guilds);
             setGuildsTotalPages(guildsData.pagination.totalPages);
             setGuildStats(guildStatsData);
+            break;
+
+          case "pickems":
+            const [pickemsData, raidsData] = await Promise.all([api.getAdminPickems(), api.getRaids()]);
+            setPickems(pickemsData.pickems);
+            setPickemStats(pickemsData.stats);
+            setRaids(raidsData);
             break;
         }
       } catch (err) {
@@ -126,7 +163,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
-          {(["overview", "users", "guilds"] as TabType[]).map((tab) => (
+          {(["overview", "users", "guilds", "pickems"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -323,6 +360,392 @@ export default function AdminPage() {
                   {t("pagination.next")}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pickems Tab */}
+        {!loading && activeTab === "pickems" && (
+          <div>
+            {/* Pickem Stats */}
+            {pickemStats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("pickems.total")}</h4>
+                  <p className="text-2xl font-bold text-white">{pickemStats.total}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("pickems.active")}</h4>
+                  <p className="text-2xl font-bold text-green-400">{pickemStats.active}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("pickems.votingOpen")}</h4>
+                  <p className="text-2xl font-bold text-amber-400">{pickemStats.votingOpen}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("pickems.participants")}</h4>
+                  <p className="text-2xl font-bold text-blue-400">{pickemStats.totalParticipants}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Create/Edit Button */}
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  setEditingPickem(null);
+                  setPickemForm({
+                    pickemId: "",
+                    name: "",
+                    raidIds: [],
+                    votingStart: "",
+                    votingEnd: "",
+                    active: true,
+                    scoringConfig: {
+                      exactMatch: 10,
+                      offByOne: 8,
+                      offByTwo: 6,
+                      offByThree: 4,
+                      offByFour: 2,
+                      offByFiveOrMore: 0,
+                    },
+                    streakConfig: {
+                      enabled: true,
+                      minLength: 2,
+                      bonusPerGuild: 3,
+                    },
+                  });
+                  setShowPickemForm(true);
+                }}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                + {t("pickems.create")}
+              </button>
+            </div>
+
+            {/* Pickem Form Modal */}
+            {showPickemForm && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  <h3 className="text-xl font-bold text-white mb-4">{editingPickem ? t("pickems.edit") : t("pickems.create")}</h3>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      try {
+                        if (editingPickem) {
+                          await api.updateAdminPickem(editingPickem.pickemId, {
+                            name: pickemForm.name,
+                            raidIds: pickemForm.raidIds,
+                            votingStart: pickemForm.votingStart,
+                            votingEnd: pickemForm.votingEnd,
+                            active: pickemForm.active,
+                            scoringConfig: pickemForm.scoringConfig,
+                            streakConfig: pickemForm.streakConfig,
+                          });
+                        } else {
+                          await api.createAdminPickem(pickemForm);
+                        }
+                        setShowPickemForm(false);
+                        // Refresh pickems
+                        const pickemsData = await api.getAdminPickems();
+                        setPickems(pickemsData.pickems);
+                        setPickemStats(pickemsData.stats);
+                      } catch (err: unknown) {
+                        setError(err instanceof Error ? err.message : "Failed to save pickem");
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    {/* Pickem ID (only for create) */}
+                    {!editingPickem && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.id")}</label>
+                        <input
+                          type="text"
+                          value={pickemForm.pickemId}
+                          onChange={(e) => setPickemForm({ ...pickemForm, pickemId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          placeholder="tww-s3"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{t("pickems.form.idHelp")}</p>
+                      </div>
+                    )}
+
+                    {/* Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.name")}</label>
+                      <input
+                        type="text"
+                        value={pickemForm.name}
+                        onChange={(e) => setPickemForm({ ...pickemForm, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                        placeholder="TWW Season 3: Manaforge Omega"
+                        required
+                      />
+                    </div>
+
+                    {/* Raid Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.raids")}</label>
+                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto bg-gray-700 p-3 rounded-lg">
+                        {raids.map((raid) => (
+                          <label key={raid.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={pickemForm.raidIds.includes(raid.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setPickemForm({ ...pickemForm, raidIds: [...pickemForm.raidIds, raid.id] });
+                                } else {
+                                  setPickemForm({ ...pickemForm, raidIds: pickemForm.raidIds.filter((id) => id !== raid.id) });
+                                }
+                              }}
+                              className="rounded border-gray-500"
+                            />
+                            {raid.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Voting Dates */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.votingStart")}</label>
+                        <input
+                          type="datetime-local"
+                          value={pickemForm.votingStart}
+                          onChange={(e) => setPickemForm({ ...pickemForm, votingStart: e.target.value })}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.votingEnd")}</label>
+                        <input
+                          type="datetime-local"
+                          value={pickemForm.votingEnd}
+                          onChange={(e) => setPickemForm({ ...pickemForm, votingEnd: e.target.value })}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Active Toggle */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="active"
+                        checked={pickemForm.active}
+                        onChange={(e) => setPickemForm({ ...pickemForm, active: e.target.checked })}
+                        className="rounded border-gray-500"
+                      />
+                      <label htmlFor="active" className="text-sm text-gray-300">
+                        {t("pickems.form.active")}
+                      </label>
+                    </div>
+
+                    {/* Scoring Config */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-300 mb-2">{t("pickems.form.scoring")}</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        {Object.entries(pickemForm.scoringConfig).map(([key, value]) => (
+                          <div key={key}>
+                            <label className="block text-xs text-gray-400 mb-1">{t(`pickems.form.scoring${key.charAt(0).toUpperCase() + key.slice(1)}`)}</label>
+                            <input
+                              type="number"
+                              value={value}
+                              onChange={(e) =>
+                                setPickemForm({
+                                  ...pickemForm,
+                                  scoringConfig: { ...pickemForm.scoringConfig, [key]: parseInt(e.target.value) || 0 },
+                                })
+                              }
+                              className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Streak Config */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-300 mb-2">{t("pickems.form.streak")}</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="streakEnabled"
+                            checked={pickemForm.streakConfig.enabled}
+                            onChange={(e) =>
+                              setPickemForm({
+                                ...pickemForm,
+                                streakConfig: { ...pickemForm.streakConfig, enabled: e.target.checked },
+                              })
+                            }
+                            className="rounded border-gray-500"
+                          />
+                          <label htmlFor="streakEnabled" className="text-xs text-gray-400">
+                            {t("pickems.form.streakEnabled")}
+                          </label>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">{t("pickems.form.streakMinLength")}</label>
+                          <input
+                            type="number"
+                            value={pickemForm.streakConfig.minLength}
+                            onChange={(e) =>
+                              setPickemForm({
+                                ...pickemForm,
+                                streakConfig: { ...pickemForm.streakConfig, minLength: parseInt(e.target.value) || 2 },
+                              })
+                            }
+                            className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            min="2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">{t("pickems.form.streakBonusPerGuild")}</label>
+                          <input
+                            type="number"
+                            value={pickemForm.streakConfig.bonusPerGuild}
+                            onChange={(e) =>
+                              setPickemForm({
+                                ...pickemForm,
+                                streakConfig: { ...pickemForm.streakConfig, bonusPerGuild: parseInt(e.target.value) || 3 },
+                              })
+                            }
+                            className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                            min="1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Form Actions */}
+                    <div className="flex gap-3 pt-4">
+                      <button type="submit" className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                        {editingPickem ? t("pickems.form.update") : t("pickems.form.create")}
+                      </button>
+                      <button type="button" onClick={() => setShowPickemForm(false)} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                        {t("pickems.form.cancel")}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Pickems Table */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-900">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.id")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.name")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.raids")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.voting")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.status")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.actions")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {pickems.map((pickem) => {
+                    const now = new Date();
+                    const start = new Date(pickem.votingStart);
+                    const end = new Date(pickem.votingEnd);
+                    const isVotingOpen = now >= start && now <= end;
+                    const hasEnded = now > end;
+
+                    return (
+                      <tr key={pickem.pickemId} className="hover:bg-gray-750">
+                        <td className="px-4 py-3 text-white font-mono text-sm">{pickem.pickemId}</td>
+                        <td className="px-4 py-3 text-white">{pickem.name}</td>
+                        <td className="px-4 py-3 text-gray-300 text-sm">{pickem.raidIds.map((id) => raids.find((r) => r.id === id)?.name || id).join(", ")}</td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">
+                          <div>{new Date(pickem.votingStart).toLocaleDateString()}</div>
+                          <div className="text-gray-500">→ {new Date(pickem.votingEnd).toLocaleDateString()}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            {pickem.active ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-green-900/50 text-green-400">{t("pickems.table.activeStatus")}</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-700 text-gray-400">{t("pickems.table.inactiveStatus")}</span>
+                            )}
+                            {isVotingOpen && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-amber-900/50 text-amber-400">
+                                {t("pickems.table.votingOpenStatus")}
+                              </span>
+                            )}
+                            {hasEnded && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-600 text-gray-300">{t("pickems.table.endedStatus")}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingPickem(pickem);
+                                setPickemForm({
+                                  pickemId: pickem.pickemId,
+                                  name: pickem.name,
+                                  raidIds: pickem.raidIds,
+                                  votingStart: new Date(pickem.votingStart).toISOString().slice(0, 16),
+                                  votingEnd: new Date(pickem.votingEnd).toISOString().slice(0, 16),
+                                  active: pickem.active,
+                                  scoringConfig: pickem.scoringConfig,
+                                  streakConfig: pickem.streakConfig,
+                                });
+                                setShowPickemForm(true);
+                              }}
+                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            >
+                              {t("pickems.table.edit")}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.toggleAdminPickem(pickem.pickemId);
+                                  const pickemsData = await api.getAdminPickems();
+                                  setPickems(pickemsData.pickems);
+                                  setPickemStats(pickemsData.stats);
+                                } catch (err) {
+                                  console.error("Failed to toggle pickem:", err);
+                                }
+                              }}
+                              className={`px-2 py-1 text-white text-xs rounded ${pickem.active ? "bg-orange-600 hover:bg-orange-700" : "bg-green-600 hover:bg-green-700"}`}
+                            >
+                              {pickem.active ? t("pickems.table.deactivate") : t("pickems.table.activate")}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm(t("pickems.table.deleteConfirm"))) {
+                                  try {
+                                    await api.deleteAdminPickem(pickem.pickemId);
+                                    const pickemsData = await api.getAdminPickems();
+                                    setPickems(pickemsData.pickems);
+                                    setPickemStats(pickemsData.stats);
+                                  } catch (err) {
+                                    console.error("Failed to delete pickem:", err);
+                                  }
+                                }
+                              }}
+                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                            >
+                              {t("pickems.table.delete")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

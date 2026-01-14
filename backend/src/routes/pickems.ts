@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import Guild from "../models/Guild";
 import User, { IPickemEntry, IPickemPrediction } from "../models/User";
+import { calculatePickemPoints, calculateStreakBonus, IPickem } from "../models/Pickem";
 import discordService from "../services/discord.service";
-import { PICKEMS_CONFIG, calculatePickemPoints, DIFFICULTIES } from "../config/guilds";
+import pickemService from "../services/pickem.service";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -18,17 +19,21 @@ async function getUserFromSession(req: Request) {
 router.get("/", async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const pickems = PICKEMS_CONFIG.filter((p) => p.active).map((p) => ({
-      id: p.id,
+    const pickems = await pickemService.getActivePickems();
+
+    const result = pickems.map((p) => ({
+      id: p.pickemId,
       name: p.name,
       raidIds: p.raidIds,
       votingStart: p.votingStart,
       votingEnd: p.votingEnd,
-      isVotingOpen: now >= p.votingStart && now <= p.votingEnd,
-      hasEnded: now > p.votingEnd,
+      isVotingOpen: now >= new Date(p.votingStart) && now <= new Date(p.votingEnd),
+      hasEnded: now > new Date(p.votingEnd),
+      scoringConfig: p.scoringConfig,
+      streakConfig: p.streakConfig,
     }));
 
-    res.json(pickems);
+    res.json(result);
   } catch (error) {
     logger.error("Error fetching pickems:", error);
     res.status(500).json({ error: "Failed to fetch pickems" });
@@ -50,15 +55,15 @@ router.get("/guilds", async (req: Request, res: Response) => {
 router.get("/:pickemId", async (req: Request, res: Response) => {
   try {
     const { pickemId } = req.params;
-    const pickem = PICKEMS_CONFIG.find((p) => p.id === pickemId && p.active);
+    const pickem = await pickemService.getPickemById(pickemId);
 
-    if (!pickem) {
+    if (!pickem || !pickem.active) {
       return res.status(404).json({ error: "Pickem not found" });
     }
 
     const now = new Date();
-    const isVotingOpen = now >= pickem.votingStart && now <= pickem.votingEnd;
-    const hasEnded = now > pickem.votingEnd;
+    const isVotingOpen = now >= new Date(pickem.votingStart) && now <= new Date(pickem.votingEnd);
+    const hasEnded = now > new Date(pickem.votingEnd);
 
     // Get actual guild rankings based on mythic progress for the raid(s)
     const guildRankings = await getGuildRankingsForPickem(pickem.raidIds);
@@ -74,19 +79,21 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
     }
 
     // Get leaderboard (all users' scores for this pickem)
-    const leaderboard = await getPickemLeaderboard(pickemId, guildRankings);
+    const leaderboard = await getPickemLeaderboard(pickemId, guildRankings, pickem);
 
     res.json({
-      id: pickem.id,
+      id: pickem.pickemId,
       name: pickem.name,
       raidIds: pickem.raidIds,
       votingStart: pickem.votingStart,
       votingEnd: pickem.votingEnd,
       isVotingOpen,
       hasEnded,
-      guildRankings, // Current actual rankings
-      userPredictions, // User's predictions (if logged in)
-      leaderboard, // Scoreboard of all participants
+      scoringConfig: pickem.scoringConfig,
+      streakConfig: pickem.streakConfig,
+      guildRankings,
+      userPredictions,
+      leaderboard,
     });
   } catch (error) {
     logger.error("Error fetching pickem details:", error);
@@ -107,13 +114,13 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
     }
 
     // Validate pickem exists and voting is open
-    const pickem = PICKEMS_CONFIG.find((p) => p.id === pickemId && p.active);
-    if (!pickem) {
+    const pickem = await pickemService.getPickemById(pickemId);
+    if (!pickem || !pickem.active) {
       return res.status(404).json({ error: "Pickem not found" });
     }
 
     const now = new Date();
-    if (now < pickem.votingStart || now > pickem.votingEnd) {
+    if (now < new Date(pickem.votingStart) || now > new Date(pickem.votingEnd)) {
       return res.status(400).json({ error: "Voting is not open for this pickem" });
     }
 
@@ -257,8 +264,8 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
   }));
 }
 
-// Helper function to get pickem leaderboard
-async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: number; name: string; realm: string }[]) {
+// Helper function to get pickem leaderboard with streak bonuses
+async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: number; name: string; realm: string }[], pickem: IPickem) {
   // Get all users who have made predictions for this pickem
   const users = await User.find({ "pickems.pickemId": pickemId }).lean();
 
@@ -273,6 +280,9 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
     username: string;
     avatarUrl: string;
     totalPoints: number;
+    positionPoints: number;
+    streakBonus: number;
+    streaks: { length: number; guilds: string[] }[];
     predictions: {
       guildName: string;
       realm: string;
@@ -286,16 +296,22 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
     const entry = user.pickems?.find((p: IPickemEntry) => p.pickemId === pickemId);
     if (!entry) continue;
 
-    let totalPoints = 0;
-    const predictionResults = [];
+    let positionPoints = 0;
+    const predictionResults: {
+      guildName: string;
+      realm: string;
+      predictedRank: number;
+      actualRank: number | null;
+      points: number;
+    }[] = [];
 
     for (const pred of entry.predictions) {
       const key = `${pred.guildName}-${pred.realm}`;
       const actualRank = actualRankMap.get(key) ?? null;
 
       // Only award points if guild is in top 50 (has a rank)
-      const points = actualRank !== null ? calculatePickemPoints(pred.position, actualRank) : 0;
-      totalPoints += points;
+      const points = actualRank !== null ? calculatePickemPoints(pred.position, actualRank, pickem.scoringConfig) : 0;
+      positionPoints += points;
 
       predictionResults.push({
         guildName: pred.guildName,
@@ -306,13 +322,19 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
       });
     }
 
+    // Calculate streak bonus
+    const { totalBonus: streakBonus, streaks } = calculateStreakBonus(predictionResults, pickem.streakConfig);
+
     // Sort predictions by predicted rank
     predictionResults.sort((a, b) => a.predictedRank - b.predictedRank);
 
     leaderboard.push({
       username: user.discord.username,
       avatarUrl: discordService.getAvatarUrl(user.discord.id, user.discord.avatar),
-      totalPoints,
+      totalPoints: positionPoints + streakBonus,
+      positionPoints,
+      streakBonus,
+      streaks,
       predictions: predictionResults,
     });
   }
