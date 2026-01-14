@@ -28,6 +28,11 @@ import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.midd
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust first proxy (nginx) in production for secure cookies
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // ============================================================================
 // STARTUP STATE TRACKING
 // ============================================================================
@@ -90,24 +95,31 @@ app.use(
 app.use(express.json());
 
 // Session configuration with MongoDB store
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI || "mongodb://localhost:27017/wow_guild_tracker",
-      collectionName: "sessions",
-      ttl: 7 * 24 * 60 * 60, // 7 days
-    }),
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    },
-  })
-);
+const sessionConfig: any = {
+  secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI || "mongodb://localhost:27017/wow_guild_tracker",
+    collectionName: "sessions",
+    ttl: 7 * 24 * 60 * 60, // 7 days
+  }),
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/",
+  },
+};
+
+// In production, don't set domain to allow cookies on all subdomains
+if (process.env.NODE_ENV === "production") {
+  // Domain will be automatically set by the browser
+  logger.info("Production session config: secure cookies with sameSite=none");
+}
+
+app.use(session(sessionConfig));
 
 // Analytics middleware - tracks all requests automatically
 app.use(analyticsMiddleware);
