@@ -14,6 +14,18 @@ export interface PullHistoryEntry {
   isKill: boolean;
 }
 
+// Phase distribution for pie chart
+export interface PhaseDistribution {
+  phase: string;
+  count: number;
+}
+
+// Response from getBossPullHistory API
+export interface BossPullHistoryResponse {
+  pullHistory: PullHistoryEntry[];
+  phaseDistribution: PhaseDistribution[];
+}
+
 export interface GuildCrest {
   emblem: {
     id: number;

@@ -43,6 +43,7 @@ import {
   AdminPickem,
   CreatePickemInput,
   UpdatePickemInput,
+  BossPullHistoryResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -88,7 +89,7 @@ export const api = {
     return response.json();
   },
 
-  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any[]> {
+  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<BossPullHistoryResponse> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses/${bossId}/pull-history?difficulty=${difficulty}`);

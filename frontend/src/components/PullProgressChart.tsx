@@ -13,7 +13,7 @@ export default function PullProgressChart({ pullHistory }: PullProgressChartProp
 
   // Use a wide aspect ratio viewBox for full width usage
   const viewBoxWidth = 1000;
-  const viewBoxHeight = 100;
+  const viewBoxHeight = 150;
   const padding = { top: 15, right: 15, bottom: 20, left: 35 };
   const chartWidth = viewBoxWidth - padding.left - padding.right;
   const chartHeight = viewBoxHeight - padding.top - padding.bottom;

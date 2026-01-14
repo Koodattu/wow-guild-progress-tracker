@@ -2215,18 +2215,45 @@ class GuildService {
         bossData.totalTime += duration;
 
         // Add to pull history for progress chart
-        // Convert phase name to short format (e.g., "Phase 3" -> "P3", "Intermission 1" -> "I1")
+        // Convert phase name to short format (e.g., "Stage Three" -> "P3", "Intermission One" -> "I1")
         let phaseShort: string | undefined;
         if (fight.lastPhaseName) {
           const phaseName = fight.lastPhaseName.toLowerCase();
+
+          // Helper to convert word numbers to digits
+          const wordToNumber: { [key: string]: string } = {
+            one: "1",
+            two: "2",
+            three: "3",
+            four: "4",
+            five: "5",
+            six: "6",
+            seven: "7",
+            eight: "8",
+            nine: "9",
+            ten: "10",
+          };
+
+          // Extract number from phase name (supports both "Stage 3" and "Stage Three")
+          const extractNumber = (name: string): string => {
+            // First try numeric match
+            const numMatch = name.match(/\b(\d+)\b/);
+            if (numMatch) return numMatch[1];
+
+            // Then try word match
+            for (const [word, num] of Object.entries(wordToNumber)) {
+              if (name.includes(word)) return num;
+            }
+            return "1"; // Default to 1 if no number found
+          };
+
           if (phaseName.includes("intermission")) {
-            const match = phaseName.match(/(\d+)/);
-            phaseShort = match ? `I${match[1]}` : "I1";
-          } else if (phaseName.includes("phase")) {
-            const match = phaseName.match(/(\d+)/);
-            phaseShort = match ? `P${match[1]}` : `P${fight.lastPhaseId || 1}`;
-          } else if (fight.lastPhaseId) {
-            phaseShort = `P${fight.lastPhaseId}`;
+            phaseShort = `I${extractNumber(phaseName)}`;
+          } else if (phaseName.includes("stage") || phaseName.includes("phase")) {
+            phaseShort = `P${extractNumber(phaseName)}`;
+          } else {
+            // Fallback: try to extract any number, treat as phase
+            phaseShort = `P${extractNumber(phaseName)}`;
           }
         }
 
@@ -2688,7 +2715,7 @@ class GuildService {
   }
 
   // Get pull history for a specific boss (on-demand fetching)
-  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any[] | null> {
+  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any | null> {
     const guild = await Guild.findOne({
       name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
       realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
@@ -2714,8 +2741,27 @@ class GuildService {
       return null;
     }
 
-    // Return the pull history array (or empty array if not available)
-    return boss.pullHistory || [];
+    const pullHistory = boss.pullHistory || [];
+
+    // Calculate phase distribution (pullHistory already stores phases as P1, P2, I1, I2 format)
+    const phaseCount = new Map<string, number>();
+    pullHistory.forEach((pull: any) => {
+      if (pull.phase) {
+        const count = phaseCount.get(pull.phase) || 0;
+        phaseCount.set(pull.phase, count + 1);
+      }
+    });
+
+    // Sort by pull count (descending)
+    const phaseDistribution = Array.from(phaseCount.entries())
+      .map(([phase, count]) => ({ phase, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Return both pull history and phase distribution
+    return {
+      pullHistory,
+      phaseDistribution,
+    };
   }
 
   // Get single guild by ID

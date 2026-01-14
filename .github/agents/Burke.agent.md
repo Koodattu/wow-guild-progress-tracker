@@ -1,6 +1,5 @@
 ---
 name: "LLM AI coding agent"
-model: Claude Opus 4.5 (copilot)
 description: "Optimize for model reasoning, regeneration, and debugging."
 ---
 

@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, PullHistoryEntry } from "@/types";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, PullHistoryEntry, PhaseDistribution } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import IconImage from "./IconImage";
 import PullProgressChart from "./PullProgressChart";
+import PhaseDistributionChart from "./PhaseDistributionChart";
 import { api } from "@/lib/api";
 
 interface RaidDetailModalProps {
@@ -22,6 +23,8 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   const [loadingPullHistory, setLoadingPullHistory] = useState<Set<number>>(new Set());
   // Cache pull history data for each boss (key: `${bossId}-${difficulty}`)
   const [pullHistoryCache, setPullHistoryCache] = useState<Map<string, PullHistoryEntry[]>>(new Map());
+  // Cache phase distribution data for each boss (key: `${bossId}-${difficulty}`)
+  const [phaseDistributionCache, setPhaseDistributionCache] = useState<Map<string, PhaseDistribution[]>>(new Map());
 
   const toggleBossExpanded = async (boss: BossProgress, difficulty: "mythic" | "heroic") => {
     const bossId = boss.bossId;
@@ -44,11 +47,17 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
       setLoadingPullHistory((prev) => new Set(prev).add(bossId));
 
       try {
-        const pullHistory = await api.getBossPullHistory(guild.realm, guild.name, selectedRaidId!, bossId, difficulty);
+        const response = await api.getBossPullHistory(guild.realm, guild.name, selectedRaidId!, bossId, difficulty);
 
         setPullHistoryCache((prev) => {
           const newCache = new Map(prev);
-          newCache.set(cacheKey, pullHistory);
+          newCache.set(cacheKey, response.pullHistory);
+          return newCache;
+        });
+
+        setPhaseDistributionCache((prev) => {
+          const newCache = new Map(prev);
+          newCache.set(cacheKey, response.phaseDistribution);
           return newCache;
         });
       } catch (error) {
@@ -75,6 +84,12 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     return pullHistoryCache.get(cacheKey) || boss.pullHistory;
   };
 
+  // Helper to get phase distribution from cache
+  const getPhaseDistribution = (boss: BossProgress, difficulty: "mythic" | "heroic"): PhaseDistribution[] | undefined => {
+    const cacheKey = `${boss.bossId}-${difficulty}`;
+    return phaseDistributionCache.get(cacheKey);
+  };
+
   const handleBossClick = (boss: BossProgress) => {
     if (boss.kills > 0) {
       // Boss is killed - use kill log
@@ -98,6 +113,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
     const bossIconFilename = getBossIconUrl(boss.bossName);
+    const phaseDistribution = getPhaseDistribution(boss, difficulty);
     const pullHistory = getPullHistory(boss, difficulty);
     const hasPullHistory = pullHistory && pullHistory.length > 0;
     const isExpanded = expandedBosses.has(boss.bossId);
@@ -159,13 +175,16 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
           </div>
         </div>
 
-        {/* Expanded chart */}
+        {/* Expanded charts */}
         {isExpanded && (
-          <div className="mt-2 pt-2 border-t border-gray-700">
+          <div className="mt-2 pt-2 border-t border-gray-700 space-y-4">
             {isLoading ? (
               <div className="text-center py-4 text-gray-500">Loading pull history...</div>
             ) : hasPullHistory ? (
-              <PullProgressChart pullHistory={pullHistory!} />
+              <>
+                <PullProgressChart pullHistory={pullHistory!} />
+                {phaseDistribution && phaseDistribution.length > 0 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+              </>
             ) : (
               <div className="text-center py-4 text-gray-500">No pull history available</div>
             )}
@@ -182,6 +201,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
     const bossIconFilename = getBossIconUrl(boss.bossName);
     const pullHistory = getPullHistory(boss, difficulty);
+    const phaseDistribution = getPhaseDistribution(boss, difficulty);
     const hasPullHistory = pullHistory && pullHistory.length > 0;
     const isExpanded = expandedBosses.has(boss.bossId);
     const isLoading = loadingPullHistory.has(boss.bossId);
@@ -256,7 +276,10 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
               {isLoading ? (
                 <div className="text-center py-4 text-gray-500">Loading pull history...</div>
               ) : hasPullHistory ? (
-                <PullProgressChart pullHistory={pullHistory!} />
+                <div className="grid grid-cols-1 lg:grid-cols-[5fr_1fr] gap-2 items-start">
+                  <PullProgressChart pullHistory={pullHistory!} />
+                  {phaseDistribution && phaseDistribution.length > 0 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+                </div>
               ) : (
                 <div className="text-center py-4 text-gray-500">No pull history available</div>
               )}
@@ -384,7 +407,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50 p-2 md:p-4" onClick={onClose}>
-      <div className="bg-gray-900 rounded-lg shadow-2xl max-w-5xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between rounded-t-lg">
           <div>
             <h2 className="text-lg md:text-2xl font-bold text-white">
