@@ -122,31 +122,36 @@ function SortablePredictionItem({
   disabled,
   excludeGuilds,
   onChange,
+  droppingIndex,
 }: {
   data: SortableItemData;
   guilds: SimpleGuild[];
   disabled: boolean;
   excludeGuilds: { guildName: string; realm: string }[];
   onChange: (position: number, guild: { guildName: string; realm: string } | null) => void;
+  droppingIndex: number | null;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: data.id,
     disabled: disabled || !data.prediction,
   });
 
+  // Apply high z-index if dragging or dropping
+  const isDropping = droppingIndex === data.position - 1;
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: isDragging ? "none" : transition,
-    zIndex: isDragging ? 1000 : undefined,
+    zIndex: isDragging || isDropping ? 1000 : undefined,
+    position: isDragging || isDropping ? "relative" : undefined,
     willChange: "transform",
   };
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={`flex items-stretch gap-2 bg-gray-800 rounded-lg border ${isDragging ? "" : "transition-all"} ${
-        isDragging ? "border-blue-500 shadow-2xl scale-105 bg-gray-750" : "border-gray-700 hover:border-gray-600"
+      style={style as React.CSSProperties}
+      className={`flex pr-2 items-stretch gap-2 bg-gray-800 rounded-lg border ${isDragging ? "" : "transition-all"} ${
+        isDragging ? "border-blue-500 shadow-2xl bg-gray-750" : "border-gray-700 hover:border-gray-600"
       } ${!disabled && data.prediction ? "hover:bg-gray-750" : ""}`}
     >
       {/* Position badge */}
@@ -155,7 +160,7 @@ function SortablePredictionItem({
       </div>
 
       {/* Autocomplete input - separate from drag handle */}
-      <div className="flex-1 py-2 pr-2 min-w-0">
+      <div className="flex-1 py-2 min-w-0">
         <GuildAutocomplete
           value={
             data.prediction
@@ -175,13 +180,13 @@ function SortablePredictionItem({
 
       {/* Separate drag handle */}
       {!disabled && data.prediction && (
-        <div className="flex items-center pr-2">
+        <div className="flex items-center">
           <button
             ref={setActivatorNodeRef}
             type="button"
             {...attributes}
             {...listeners}
-            className="text-gray-500 hover:text-white cursor-grab active:cursor-grabbing pr-2 touch-none transition-colors rounded hover:bg-gray-700"
+            className="text-gray-500 hover:text-white cursor-grab active:cursor-grabbing touch-none transition-colors rounded hover:bg-gray-700 w-12 h-8 flex items-center justify-center"
             title="Drag to reorder"
             aria-label="Drag to reorder"
           >
@@ -315,6 +320,8 @@ export default function PickemsPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+  // Dropping state: index of the item being dropped, or null
+  const [droppingIndex, setDroppingIndex] = useState<number | null>(null);
 
   // Configure dnd-kit sensors for both mouse and keyboard
   const sensors = useSensors(
@@ -403,7 +410,7 @@ export default function PickemsPage() {
     setSuccessMessage(null);
   }, []);
 
-  // Handle drag end with dnd-kit
+  // Handle drag end with dnd-kit, and set dropping state
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -413,6 +420,12 @@ export default function PickemsPage() {
         const newIndex = prev.findIndex((_, idx) => `prediction-${idx}` === over.id);
 
         if (oldIndex === -1 || newIndex === -1) return prev;
+
+        // Set dropping state to the new index
+        setDroppingIndex(newIndex);
+
+        // Clear dropping state after a short delay (e.g., 150ms)
+        setTimeout(() => setDroppingIndex(null), 150);
 
         const newPredictions = arrayMove(prev, oldIndex, newIndex);
 
@@ -555,22 +568,22 @@ export default function PickemsPage() {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={Array.from({ length: 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-2">
-                    {Array.from({ length: 10 }, (_, i) => i).map((index) => {
-                      const position = index + 1;
+                    {Array.from({ length: 10 }, (_, i) => {
+                      const position = i + 1;
                       const itemData: SortableItemData = {
-                        id: `prediction-${index}`,
+                        id: `prediction-${i}`,
                         position,
-                        prediction: predictions[index],
+                        prediction: predictions[i],
                       };
-
                       return (
                         <SortablePredictionItem
-                          key={`prediction-${index}`}
+                          key={`prediction-${i}`}
                           data={itemData}
                           guilds={sortedGuilds}
                           disabled={!user || !pickemDetails.isVotingOpen}
                           excludeGuilds={getExcludedGuilds(position)}
                           onChange={handlePredictionChange}
+                          droppingIndex={droppingIndex}
                         />
                       );
                     })}
