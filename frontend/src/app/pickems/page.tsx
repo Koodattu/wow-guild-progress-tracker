@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/context/AuthContext";
 import { PickemSummary, PickemDetails, PickemPrediction, SimpleGuild, LeaderboardEntry, GuildRanking } from "@/types";
 import { Combobox } from "@headlessui/react";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -136,16 +136,17 @@ function SortablePredictionItem({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? "none" : transition,
     zIndex: isDragging ? 1000 : undefined,
+    willChange: "transform",
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-stretch gap-2 bg-gray-800 rounded-lg border transition-all ${
-        isDragging ? "opacity-50 scale-95 border-blue-500 shadow-lg" : "border-gray-700 hover:border-gray-600"
+      className={`flex items-stretch gap-2 bg-gray-800 rounded-lg border ${isDragging ? "" : "transition-all"} ${
+        isDragging ? "border-blue-500 shadow-2xl scale-105 bg-gray-750" : "border-gray-700 hover:border-gray-600"
       } ${!disabled && data.prediction ? "hover:bg-gray-750" : ""}`}
     >
       {/* Position badge */}
@@ -190,21 +191,6 @@ function SortablePredictionItem({
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-// Drag overlay component for visual feedback
-function PredictionDragOverlay({ prediction, position }: { prediction: PickemPrediction | null; position?: number }) {
-  if (!prediction) return null;
-
-  return (
-    <div className="bg-gray-700 border-2 border-blue-500 rounded-lg px-4 py-3 shadow-2xl flex items-center gap-3 min-w-[280px] max-w-[400px] cursor-grabbing">
-      {position && <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold text-sm shrink-0">{position}</span>}
-      <div className="min-w-0">
-        <span className="text-white font-medium block truncate">{prediction.guildName}</span>
-        <span className="text-gray-400 text-sm truncate block">- {prediction.realm}</span>
-      </div>
     </div>
   );
 }
@@ -328,7 +314,6 @@ export default function PickemsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   // Configure dnd-kit sensors for both mouse and keyboard
@@ -418,11 +403,6 @@ export default function PickemsPage() {
     setSuccessMessage(null);
   }, []);
 
-  // Handle drag start
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
   // Handle drag end with dnd-kit
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -446,8 +426,6 @@ export default function PickemsPage() {
       });
       setSuccessMessage(null);
     }
-
-    setActiveId(null);
   };
 
   // Submit predictions
@@ -574,7 +552,7 @@ export default function PickemsPage() {
                 </div>
               )}
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={Array.from({ length: 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-2">
                     {Array.from({ length: 10 }, (_, i) => i).map((index) => {
@@ -598,9 +576,6 @@ export default function PickemsPage() {
                     })}
                   </div>
                 </SortableContext>
-                <DragOverlay dropAnimation={null}>
-                  {activeId ? <PredictionDragOverlay prediction={predictions[parseInt(activeId.split("-")[1])]} position={parseInt(activeId.split("-")[1]) + 1} /> : null}
-                </DragOverlay>
               </DndContext>
 
               {user && pickemDetails.isVotingOpen && (
