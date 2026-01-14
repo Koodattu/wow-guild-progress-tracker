@@ -8,11 +8,11 @@ import logger from "../utils/logger";
 
 const router = Router();
 
-// Helper to get user from session
+// Helper to get user from session (updated for express-session)
 async function getUserFromSession(req: Request) {
-  const sessionId = req.cookies?.session;
-  if (!sessionId) return null;
-  return discordService.getUserFromSession(sessionId);
+  const userId = req.session.userId;
+  if (!userId) return null;
+  return discordService.getUserFromSession(userId);
 }
 
 // Get all available pickems with their status

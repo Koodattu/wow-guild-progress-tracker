@@ -4,7 +4,8 @@ dotenv.config();
 
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser";
+import session from "express-session";
+import MongoStore from "connect-mongo";
 import path from "path";
 import logger from "./utils/logger";
 import connectDB from "./config/database";
@@ -35,7 +36,26 @@ app.use(
   })
 );
 app.use(express.json());
-app.use(cookieParser());
+
+// Session configuration with MongoDB store
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI || "mongodb://localhost:27017/wow_guild_tracker",
+      collectionName: "sessions",
+      ttl: 7 * 24 * 60 * 60, // 7 days
+    }),
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    },
+  })
+);
 
 // Analytics middleware - tracks all requests automatically
 app.use(analyticsMiddleware);

@@ -1,6 +1,5 @@
 import logger from "../utils/logger";
 import User, { IUser } from "../models/User";
-import crypto from "crypto";
 
 interface DiscordTokenResponse {
   access_token: string;
@@ -18,18 +17,8 @@ interface DiscordUserResponse {
   global_name?: string;
 }
 
-// Simple in-memory session store (consider Redis for production scaling)
-const sessions: Map<string, { userId: string; expiresAt: Date }> = new Map();
-
-// Clean up expired sessions periodically
-setInterval(() => {
-  const now = new Date();
-  for (const [sessionId, session] of sessions.entries()) {
-    if (session.expiresAt < now) {
-      sessions.delete(sessionId);
-    }
-  }
-}, 60 * 60 * 1000); // Clean up every hour
+// Note: Sessions are now managed by express-session with MongoDB store
+// No need for in-memory session storage
 
 class DiscordService {
   private clientId: string;
@@ -155,40 +144,10 @@ class DiscordService {
   }
 
   /**
-   * Create a session for a user
+   * Get user from session (session is managed by express-session)
    */
-  createSession(userId: string): string {
-    const sessionId = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-    sessions.set(sessionId, { userId, expiresAt });
-
-    return sessionId;
-  }
-
-  /**
-   * Get user from session
-   */
-  async getUserFromSession(sessionId: string): Promise<IUser | null> {
-    const session = sessions.get(sessionId);
-
-    if (!session) {
-      return null;
-    }
-
-    if (session.expiresAt < new Date()) {
-      sessions.delete(sessionId);
-      return null;
-    }
-
-    return User.findById(session.userId);
-  }
-
-  /**
-   * Delete a session (logout)
-   */
-  deleteSession(sessionId: string): void {
-    sessions.delete(sessionId);
+  async getUserFromSession(userId: string): Promise<IUser | null> {
+    return User.findById(userId);
   }
 
   /**

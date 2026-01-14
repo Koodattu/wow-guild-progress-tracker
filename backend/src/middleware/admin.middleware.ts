@@ -8,13 +8,13 @@ import logger from "../utils/logger";
  */
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const sessionId = req.cookies?.session;
+    const userId = req.session.userId;
 
-    if (!sessionId) {
+    if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await discordService.getUserFromSession(userId);
 
     if (!user) {
       return res.status(401).json({ error: "Session expired" });

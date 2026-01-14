@@ -5,8 +5,12 @@ import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/context/AuthContext";
 import { PickemSummary, PickemDetails, PickemPrediction, SimpleGuild, LeaderboardEntry, GuildRanking } from "@/types";
+import { Combobox } from "@headlessui/react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
-// Guild autocomplete input component
+// Guild autocomplete using Headless UI Combobox
 function GuildAutocomplete({
   value,
   onChange,
@@ -22,148 +26,156 @@ function GuildAutocomplete({
   disabled?: boolean;
   excludeGuilds?: { guildName: string; realm: string }[];
 }) {
-  const [inputValue, setInputValue] = useState(value ? `${value.guildName} - ${value.realm}` : "");
-  const [isOpen, setIsOpen] = useState(false);
-  const [filteredGuilds, setFilteredGuilds] = useState<SimpleGuild[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
 
-  // Filter guilds based on input and exclude already selected ones
-  useEffect(() => {
-    if (!inputValue.trim()) {
-      setFilteredGuilds([]);
-      return;
+  const excludeSet = useMemo(() => new Set(excludeGuilds.map((g) => `${g.guildName}-${g.realm}`)), [excludeGuilds]);
+
+  const filteredGuilds = useMemo(() => {
+    if (query === "") {
+      return guilds.filter((g) => !excludeSet.has(`${g.name}-${g.realm}`)).slice(0, 50);
     }
 
-    const searchTerm = inputValue.toLowerCase();
-    const excludeSet = new Set(excludeGuilds.map((g) => `${g.guildName}-${g.realm}`));
-
-    const filtered = guilds
+    const searchTerm = query.toLowerCase();
+    return guilds
       .filter((g) => {
         const key = `${g.name}-${g.realm}`;
         const matches = g.name.toLowerCase().includes(searchTerm) || g.realm.toLowerCase().includes(searchTerm) || `${g.name} - ${g.realm}`.toLowerCase().includes(searchTerm);
         return matches && !excludeSet.has(key);
       })
-      .slice(0, 10); // Limit results for performance
+      .slice(0, 50);
+  }, [query, guilds, excludeSet]);
 
-    setFilteredGuilds(filtered);
-    setSelectedIndex(0);
-  }, [inputValue, guilds, excludeGuilds]);
-
-  // Update input when value prop changes
-  useEffect(() => {
-    if (value) {
-      setInputValue(`${value.guildName} - ${value.realm}`);
+  const handleChange = (selectedGuild: SimpleGuild | null) => {
+    if (selectedGuild) {
+      onChange({ guildName: selectedGuild.name, realm: selectedGuild.realm });
+      setQuery("");
     } else {
-      setInputValue("");
-    }
-  }, [value]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) && inputRef.current && !inputRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (guild: SimpleGuild) => {
-    onChange({ guildName: guild.name, realm: guild.realm });
-    setInputValue(`${guild.name} - ${guild.realm}`);
-    setIsOpen(false);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-    setIsOpen(true);
-    // Clear selection if input changes
-    if (value && e.target.value !== `${value.guildName} - ${value.realm}`) {
       onChange(null);
+      setQuery("");
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen || filteredGuilds.length === 0) return;
+  const comboboxValue = useMemo(() => {
+    if (!value) return null;
+    // Convert back to SimpleGuild format for Combobox
+    return guilds.find((g) => g.name === value.guildName && g.realm === value.realm) || null;
+  }, [value, guilds]);
 
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % filteredGuilds.length);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filteredGuilds.length) % filteredGuilds.length);
-        break;
-      case "Enter":
-        e.preventDefault();
-        if (filteredGuilds[selectedIndex]) {
-          handleSelect(filteredGuilds[selectedIndex]);
-        }
-        break;
-      case "Escape":
-        e.preventDefault();
-        setIsOpen(false);
-        break;
-    }
-  };
+  return (
+    <Combobox value={comboboxValue} onChange={handleChange} disabled={disabled}>
+      <div className="relative">
+        <div className="relative">
+          <Combobox.Input
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
+            displayValue={(guild: SimpleGuild | null) => (guild ? `${guild.name} - ${guild.realm}` : "")}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={placeholder}
+          />
+          {value && !disabled && (
+            <button type="button" onClick={() => handleChange(null)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white z-10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+        <Combobox.Options className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+          {filteredGuilds.length === 0 && query !== "" ? (
+            <div className="px-3 py-2 text-gray-400 text-sm">No guilds found</div>
+          ) : (
+            filteredGuilds.map((guild) => (
+              <Combobox.Option key={`${guild.name}-${guild.realm}`} value={guild} className="cursor-pointer">
+                {({ active, selected }) => (
+                  <div className={`px-3 py-2 text-white ${active ? "bg-gray-700" : ""} ${selected ? "bg-gray-700" : ""}`}>
+                    <span className="font-medium">{guild.name}</span>
+                    <span className="text-gray-400 ml-2">- {guild.realm}</span>
+                  </div>
+                )}
+              </Combobox.Option>
+            ))
+          )}
+        </Combobox.Options>
+      </div>
+    </Combobox>
+  );
+}
 
-  const handleClear = () => {
-    setInputValue("");
-    onChange(null);
-    inputRef.current?.focus();
+// Sortable prediction item component
+interface SortableItemData {
+  id: string;
+  position: number;
+  prediction: PickemPrediction | null;
+}
+
+function SortablePredictionItem({
+  data,
+  guilds,
+  disabled,
+  excludeGuilds,
+  onChange,
+}: {
+  data: SortableItemData;
+  guilds: SimpleGuild[];
+  disabled: boolean;
+  excludeGuilds: { guildName: string; realm: string }[];
+  onChange: (position: number, guild: { guildName: string; realm: string } | null) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: data.id,
+    disabled: disabled || !data.prediction,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
   };
 
   return (
-    <div className="relative">
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setIsOpen(true)}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
-        />
-        {inputValue && !disabled && (
-          <button type="button" onClick={handleClear} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                clipRule="evenodd"
-              />
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm shrink-0">{data.position}</span>
+        {!disabled && data.prediction && (
+          <button type="button" {...attributes} {...listeners} className="text-gray-400 hover:text-white cursor-grab active:cursor-grabbing p-1 touch-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
             </svg>
           </button>
         )}
       </div>
+      <div className="flex-1">
+        <GuildAutocomplete
+          value={
+            data.prediction
+              ? {
+                  guildName: data.prediction.guildName,
+                  realm: data.prediction.realm,
+                }
+              : null
+          }
+          onChange={(guild) => onChange(data.position, guild)}
+          guilds={guilds}
+          placeholder="Select a guild"
+          disabled={disabled}
+          excludeGuilds={excludeGuilds}
+        />
+      </div>
+    </div>
+  );
+}
 
-      {isOpen && filteredGuilds.length > 0 && !disabled && (
-        <div ref={dropdownRef} className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
-          {filteredGuilds.map((guild, index) => (
-            <button
-              key={`${guild.name}-${guild.realm}-${index}`}
-              type="button"
-              onClick={() => handleSelect(guild)}
-              className={`w-full px-3 py-2 text-left text-white hover:bg-gray-700 focus:bg-gray-700 focus:outline-none ${index === selectedIndex ? "bg-gray-700" : ""}`}
-            >
-              <span className="font-medium">{guild.name}</span>
-              <span className="text-gray-400 ml-2">- {guild.realm}</span>
-            </button>
-          ))}
-        </div>
-      )}
+// Drag overlay component for visual feedback
+function PredictionDragOverlay({ prediction }: { prediction: PickemPrediction | null }) {
+  if (!prediction) return null;
 
-      {isOpen && inputValue && filteredGuilds.length === 0 && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg p-3 text-gray-400 text-sm">No guilds found</div>
-      )}
+  return (
+    <div className="bg-gray-700 border-2 border-blue-500 rounded-md px-3 py-2 shadow-lg">
+      <span className="text-white font-medium">{prediction.guildName}</span>
+      <span className="text-gray-400 ml-2">- {prediction.realm}</span>
     </div>
   );
 }
@@ -287,8 +299,20 @@ export default function PickemsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+
+  // Configure dnd-kit sensors for both mouse and keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px of movement required to start drag
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Fetch pickems list and guilds on mount
   useEffect(() => {
@@ -366,45 +390,35 @@ export default function PickemsPage() {
   }, []);
 
   // Handle drag start
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
   };
 
-  // Handle drag over
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-  };
+  // Handle drag end with dnd-kit
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
 
-  // Handle drop
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      return;
+    if (over && active.id !== over.id) {
+      setPredictions((prev) => {
+        const oldIndex = prev.findIndex((_, idx) => `prediction-${idx}` === active.id);
+        const newIndex = prev.findIndex((_, idx) => `prediction-${idx}` === over.id);
+
+        if (oldIndex === -1 || newIndex === -1) return prev;
+
+        const newPredictions = arrayMove(prev, oldIndex, newIndex);
+
+        // Update positions after reordering
+        return newPredictions.map((pred, idx) => {
+          if (pred) {
+            return { ...pred, position: idx + 1 };
+          }
+          return null;
+        });
+      });
+      setSuccessMessage(null);
     }
 
-    setPredictions((prev) => {
-      const newPredictions = [...prev];
-      const draggedItem = newPredictions[draggedIndex];
-      const droppedItem = newPredictions[dropIndex];
-
-      // Swap the items
-      newPredictions[draggedIndex] = droppedItem;
-      newPredictions[dropIndex] = draggedItem;
-
-      // Update positions
-      if (newPredictions[draggedIndex]) {
-        newPredictions[draggedIndex]!.position = draggedIndex + 1;
-      }
-      if (newPredictions[dropIndex]) {
-        newPredictions[dropIndex]!.position = dropIndex + 1;
-      }
-
-      return newPredictions;
-    });
-
-    setDraggedIndex(null);
-    setSuccessMessage(null);
+    setActiveId(null);
   };
 
   // Submit predictions
@@ -509,119 +523,110 @@ export default function PickemsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Prediction Form */}
           <div className="space-y-6">
-            <>
-              {/* Prediction Form */}
-              <div className="bg-gray-800 rounded-lg p-4 md:p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
+            {/* Prediction Form */}
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
 
-                {!user && !authLoading && (
-                  <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-700 rounded-md">
-                    <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
-                  </div>
-                )}
+              {!user && !authLoading && (
+                <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-700 rounded-md">
+                  <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
+                </div>
+              )}
 
-                {error && (
-                  <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
-                    <p className="text-red-300 text-sm">{error}</p>
-                  </div>
-                )}
+              {error && (
+                <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
+                  <p className="text-red-300 text-sm">{error}</p>
+                </div>
+              )}
 
-                {successMessage && (
-                  <div className="mb-4 p-3 bg-green-900/50 border border-green-700 rounded-md">
-                    <p className="text-green-300 text-sm">{successMessage}</p>
-                  </div>
-                )}
+              {successMessage && (
+                <div className="mb-4 p-3 bg-green-900/50 border border-green-700 rounded-md">
+                  <p className="text-green-300 text-sm">{successMessage}</p>
+                </div>
+              )}
 
-                <div className="space-y-3">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((position) => (
-                    <div
-                      key={position}
-                      draggable={!!(user && pickemDetails.isVotingOpen && predictions[position - 1])}
-                      onDragStart={() => handleDragStart(position - 1)}
-                      onDragOver={(e) => handleDragOver(e, position - 1)}
-                      onDrop={(e) => handleDrop(e, position - 1)}
-                      className={`flex items-center gap-3 ${draggedIndex === position - 1 ? "opacity-50" : ""} ${
-                        predictions[position - 1] !== null && user && pickemDetails.isVotingOpen ? "cursor-move" : ""
-                      }`}
-                    >
-                      <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm shrink-0">{position}</span>
-                      <div className="flex-1">
-                        <GuildAutocomplete
-                          value={
-                            predictions[position - 1]
-                              ? {
-                                  guildName: predictions[position - 1]!.guildName,
-                                  realm: predictions[position - 1]!.realm,
-                                }
-                              : null
-                          }
-                          onChange={(guild) => handlePredictionChange(position, guild)}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={Array.from({ length: 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-3">
+                    {Array.from({ length: 10 }, (_, i) => i).map((index) => {
+                      const position = index + 1;
+                      const itemData: SortableItemData = {
+                        id: `prediction-${index}`,
+                        position,
+                        prediction: predictions[index],
+                      };
+
+                      return (
+                        <SortablePredictionItem
+                          key={`prediction-${index}`}
+                          data={itemData}
                           guilds={sortedGuilds}
-                          placeholder={t("selectGuild")}
                           disabled={!user || !pickemDetails.isVotingOpen}
                           excludeGuilds={getExcludedGuilds(position)}
+                          onChange={handlePredictionChange}
                         />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {user && pickemDetails.isVotingOpen && (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
-                  >
-                    {submitting ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        {t("submitting")}
-                      </span>
-                    ) : (
-                      t("submitPredictions")
-                    )}
-                  </button>
-                )}
-              </div>
-
-              {/* Scoring Info - Collapsible */}
-              <div className="bg-gray-800 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setShowScoringInfo(!showScoringInfo)}
-                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
-                >
-                  <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
-                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {showScoringInfo && (
-                  <div className="px-4 pb-4 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
-                    <p>
-                      • <strong className="text-green-400">10 points:</strong> Exact position match
-                    </p>
-                    <p>
-                      • <strong className="text-yellow-400">6 points:</strong> Within ±1 position
-                    </p>
-                    <p>
-                      • <strong className="text-orange-400">4 points:</strong> Within ±2 positions
-                    </p>
-                    <p>
-                      • <strong className="text-orange-500">3 points:</strong> Within ±3 positions
-                    </p>
-                    <p>
-                      • <strong className="text-red-400">2 points:</strong> Within ±4 positions
-                    </p>
-                    <p>
-                      • <strong className="text-red-500">1 point:</strong> Within ±5 positions
-                    </p>
-                    <p>
-                      • <strong className="text-gray-500">0 points:</strong> More than 5 positions off or not in top 10
-                    </p>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            </>
+                </SortableContext>
+                <DragOverlay>{activeId ? <PredictionDragOverlay prediction={predictions[parseInt(activeId.split("-")[1])]} /> : null}</DragOverlay>
+              </DndContext>
+
+              {user && pickemDetails.isVotingOpen && (
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+                >
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      {t("submitting")}
+                    </span>
+                  ) : (
+                    t("submitPredictions")
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Scoring Info - Collapsible */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowScoringInfo(!showScoringInfo)}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
+              >
+                <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showScoringInfo && (
+                <div className="px-4 pb-4 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
+                  <p>
+                    • <strong className="text-green-400">10 points:</strong> Exact position match
+                  </p>
+                  <p>
+                    • <strong className="text-yellow-400">6 points:</strong> Within ±1 position
+                  </p>
+                  <p>
+                    • <strong className="text-orange-400">4 points:</strong> Within ±2 positions
+                  </p>
+                  <p>
+                    • <strong className="text-orange-500">3 points:</strong> Within ±3 positions
+                  </p>
+                  <p>
+                    • <strong className="text-red-400">2 points:</strong> Within ±4 positions
+                  </p>
+                  <p>
+                    • <strong className="text-red-500">1 point:</strong> Within ±5 positions
+                  </p>
+                  <p>
+                    • <strong className="text-gray-500">0 points:</strong> More than 5 positions off or not in top 10
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right Column: Current Rankings & Leaderboard */}

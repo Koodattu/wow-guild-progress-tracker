@@ -4,8 +4,27 @@ import discordService from "../services/discord.service";
 import twitchAuthService from "../services/twitch-auth.service";
 import battlenetAuthService from "../services/battlenet-auth.service";
 import logger from "../utils/logger";
+import { IUser } from "../models/User";
+
+// Extend express-session types
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
+  }
+}
 
 const router = Router();
+
+/**
+ * Helper function to get authenticated user from session
+ */
+async function getAuthenticatedUser(req: Request): Promise<IUser | null> {
+  const userId = req.session.userId;
+  if (!userId) {
+    return null;
+  }
+  return discordService.getUserFromSession(userId);
+}
 
 // State store for OAuth state validation (prevents CSRF)
 // In production, consider using Redis for distributed state
@@ -77,22 +96,17 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
     // Find or create user in database
     const user = await discordService.findOrCreateUser(discordUser, tokens);
 
-    // Create session
-    const sessionId = discordService.createSession(user._id.toString());
+    // Store user ID in session (managed by express-session)
+    req.session.userId = user._id.toString();
 
-    // Redirect to frontend with session cookie
-    const frontendUrl = getFrontendUrl();
-
-    // Set cookie and redirect
-    res.cookie("session", sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: "/",
+    // Save session and redirect
+    req.session.save((err) => {
+      if (err) {
+        logger.error("Error saving session:", err);
+        return res.redirect(getFrontendUrl() + "?error=session_error");
+      }
+      res.redirect(getFrontendUrl() + "/profile");
     });
-
-    res.redirect(frontendUrl + "/profile");
   } catch (error) {
     logger.error("Error in Discord OAuth callback:", error);
     res.redirect(getFrontendUrl() + "?error=auth_failed");
@@ -102,13 +116,13 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
 // Get current user
 router.get("/me", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
+    const userId = req.session.userId;
 
-    if (!sessionId) {
+    if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await discordService.getUserFromSession(userId);
 
     if (!user) {
       return res.status(401).json({ error: "Session expired" });
@@ -169,20 +183,14 @@ router.get("/me", async (req: Request, res: Response) => {
 // Logout
 router.post("/logout", (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-
-    if (sessionId) {
-      discordService.deleteSession(sessionId);
-    }
-
-    res.clearCookie("session", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
+    // Destroy the session
+    req.session.destroy((err) => {
+      if (err) {
+        logger.error("Error destroying session:", err);
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.json({ success: true });
     });
-
-    res.json({ success: true });
   } catch (error) {
     logger.error("Error logging out:", error);
     res.status(500).json({ error: "Failed to logout" });
@@ -196,14 +204,9 @@ router.post("/logout", (req: Request, res: Response) => {
 // Get Twitch OAuth authorization URL (requires authentication)
 router.get("/twitch/connect", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     if (!twitchAuthService.isEnabled()) {
@@ -265,14 +268,9 @@ router.get("/twitch/callback", async (req: Request, res: Response) => {
 // Disconnect Twitch account
 router.post("/twitch/disconnect", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     // Optionally revoke token before disconnecting
@@ -295,14 +293,9 @@ router.post("/twitch/disconnect", async (req: Request, res: Response) => {
 // Get Battle.net OAuth authorization URL (requires authentication)
 router.get("/battlenet/connect", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     if (!battlenetAuthService.isEnabled()) {
@@ -367,14 +360,9 @@ router.get("/battlenet/callback", async (req: Request, res: Response) => {
 // Disconnect Battle.net account
 router.post("/battlenet/disconnect", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     await battlenetAuthService.disconnectBattleNetAccount(user._id.toString());
@@ -388,14 +376,9 @@ router.post("/battlenet/disconnect", async (req: Request, res: Response) => {
 // Get all WoW characters (for character selection dialog)
 router.get("/battlenet/characters", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     if (!user.battlenet) {
@@ -427,14 +410,9 @@ router.get("/battlenet/characters", async (req: Request, res: Response) => {
 // Update WoW character selection
 router.post("/battlenet/characters", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     const { characterIds } = req.body;
@@ -472,14 +450,9 @@ router.post("/battlenet/characters", async (req: Request, res: Response) => {
 // Refresh WoW characters from Battle.net
 router.post("/battlenet/characters/refresh", async (req: Request, res: Response) => {
   try {
-    const sessionId = req.cookies?.session;
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const user = await discordService.getUserFromSession(sessionId);
+    const user = await getAuthenticatedUser(req);
     if (!user) {
-      return res.status(401).json({ error: "Session expired" });
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     const characters = await battlenetAuthService.refreshCharacters(user._id.toString());
