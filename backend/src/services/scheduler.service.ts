@@ -4,6 +4,7 @@ import Guild from "../models/Guild";
 import guildService from "./guild.service";
 import twitchService from "./twitch.service";
 import tierListService from "./tierlist.service";
+import cacheService from "./cache.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger, { getGuildLogger } from "../utils/logger";
 
@@ -334,6 +335,9 @@ class UpdateScheduler {
       }
 
       logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
+
+      // Invalidate guild caches after updates
+      cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
     } finally {
@@ -364,6 +368,9 @@ class UpdateScheduler {
       }
 
       logger.info(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
+
+      // Invalidate guild caches after updates
+      cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
     } finally {
@@ -397,6 +404,9 @@ class UpdateScheduler {
       for (let i = 0; i < guilds.length; i++) {
         logger.info(`[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
+
+        // Invalidate guild caches after updates
+        cacheService.invalidateGuildCaches();
       }
 
       logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
@@ -432,6 +442,9 @@ class UpdateScheduler {
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
 
         // Small delay to avoid overwhelming the API
+
+        // Invalidate guild caches after updates
+        cacheService.invalidateGuildCaches();
         if (i < guilds.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
         }

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
 import logger from "../utils/logger";
+import cacheService from "../services/cache.service";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -39,23 +41,36 @@ router.get("/list", async (req: Request, res: Response) => {
 
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
-
-    let guilds;
-    if (raidId) {
-      guilds = await guildService.getAllGuildsForRaid(raidId);
-    } else {
-      guilds = await guildService.getAllGuilds();
+router.get(
+  "/",
+  cacheMiddleware(
+    (req) => {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+      return cacheService.getGuildsKey(raidId);
+    },
+    (req) => {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+      return cacheService.getTTLForRaid(raidId);
     }
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
 
-    res.json(guilds);
-  } catch (error) {
-    logger.error("Error fetching guilds:", error);
-    res.status(500).json({ error: "Failed to fetch guilds" });
+      let guilds;
+      if (raidId) {
+        guilds = await guildService.getAllGuildsForRaid(raidId);
+      } else {
+        guilds = await guildService.getAllGuilds();
+      }
+
+      res.json(guilds);
+    } catch (error) {
+      logger.error("Error fetching guilds:", error);
+      res.status(500).json({ error: "Failed to fetch guilds" });
+    }
   }
-});
+);
 
 // Get pull history for a specific boss
 router.get("/:realm/:name/raids/:raidId/bosses/:bossId/pull-history", async (req: Request, res: Response) => {

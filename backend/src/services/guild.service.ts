@@ -7,6 +7,7 @@ import TierList from "../models/TierList";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
+import cacheService from "./cache.service";
 import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -2394,6 +2395,8 @@ class GuildService {
   }
 
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
+    let eventCreated = false;
+
     // Check for first kill
     if (oldBoss.kills === 0 && newBoss.kills > 0) {
       await Event.create({
@@ -2411,6 +2414,8 @@ class GuildService {
         },
         timestamp: newBoss.firstKillTime || new Date(),
       });
+
+      eventCreated = true;
 
       // Update world rank after boss kill event (only for current raids)
       if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
@@ -2439,11 +2444,18 @@ class GuildService {
         timestamp: new Date(),
       });
 
+      eventCreated = true;
+
       // Update world rank after significant progress event (only for current raids)
       if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
         getGuildLogger(guild.name, guild.realm).info("Best pull event created, updating world rank for current raids...");
         await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
         await this.calculateGuildRankingsForRaid(raidProgress.raidId);
+
+        // Invalidate event caches if any event was created
+        if (eventCreated) {
+          cacheService.invalidateEventCaches();
+        }
       }
     }
   }
@@ -2600,6 +2612,25 @@ class GuildService {
       .filter((guild) => {
         // Only include guilds that have killed at least one boss (on any difficulty) for this raid
         return guild.progress.some((p) => p.bossesDefeated > 0);
+      })
+      .sort((a, b) => {
+        // Sort guilds by guild rank (mythic first, then heroic)
+        const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
+        const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
+        const aHeroic = a.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
+        const bHeroic = b.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
+
+        const aProgress = aMythic || aHeroic;
+        const bProgress = bMythic || bHeroic;
+
+        if (!aProgress && !bProgress) return 0;
+        if (!aProgress) return 1;
+        if (!bProgress) return -1;
+
+        const aRank = aProgress.guildRank ?? 999;
+        const bRank = bProgress.guildRank ?? 999;
+
+        return aRank - bRank;
       });
   }
 

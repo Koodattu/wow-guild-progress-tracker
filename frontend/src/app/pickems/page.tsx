@@ -13,20 +13,23 @@ function GuildAutocomplete({
   guilds,
   placeholder,
   disabled,
+  excludeGuilds = [],
 }: {
   value: { guildName: string; realm: string } | null;
   onChange: (guild: { guildName: string; realm: string } | null) => void;
   guilds: SimpleGuild[];
   placeholder: string;
   disabled?: boolean;
+  excludeGuilds?: { guildName: string; realm: string }[];
 }) {
   const [inputValue, setInputValue] = useState(value ? `${value.guildName} - ${value.realm}` : "");
   const [isOpen, setIsOpen] = useState(false);
   const [filteredGuilds, setFilteredGuilds] = useState<SimpleGuild[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filter guilds based on input
+  // Filter guilds based on input and exclude already selected ones
   useEffect(() => {
     if (!inputValue.trim()) {
       setFilteredGuilds([]);
@@ -34,12 +37,19 @@ function GuildAutocomplete({
     }
 
     const searchTerm = inputValue.toLowerCase();
+    const excludeSet = new Set(excludeGuilds.map((g) => `${g.guildName}-${g.realm}`));
+
     const filtered = guilds
-      .filter((g) => g.name.toLowerCase().includes(searchTerm) || g.realm.toLowerCase().includes(searchTerm) || `${g.name} - ${g.realm}`.toLowerCase().includes(searchTerm))
+      .filter((g) => {
+        const key = `${g.name}-${g.realm}`;
+        const matches = g.name.toLowerCase().includes(searchTerm) || g.realm.toLowerCase().includes(searchTerm) || `${g.name} - ${g.realm}`.toLowerCase().includes(searchTerm);
+        return matches && !excludeSet.has(key);
+      })
       .slice(0, 10); // Limit results for performance
 
     setFilteredGuilds(filtered);
-  }, [inputValue, guilds]);
+    setSelectedIndex(0);
+  }, [inputValue, guilds, excludeGuilds]);
 
   // Update input when value prop changes
   useEffect(() => {
@@ -77,6 +87,31 @@ function GuildAutocomplete({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen || filteredGuilds.length === 0) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % filteredGuilds.length);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + filteredGuilds.length) % filteredGuilds.length);
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (filteredGuilds[selectedIndex]) {
+          handleSelect(filteredGuilds[selectedIndex]);
+        }
+        break;
+      case "Escape":
+        e.preventDefault();
+        setIsOpen(false);
+        break;
+    }
+  };
+
   const handleClear = () => {
     setInputValue("");
     onChange(null);
@@ -91,6 +126,7 @@ function GuildAutocomplete({
           type="text"
           value={inputValue}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           disabled={disabled}
@@ -116,7 +152,7 @@ function GuildAutocomplete({
               key={`${guild.name}-${guild.realm}-${index}`}
               type="button"
               onClick={() => handleSelect(guild)}
-              className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 focus:bg-gray-700 focus:outline-none"
+              className={`w-full px-3 py-2 text-left text-white hover:bg-gray-700 focus:bg-gray-700 focus:outline-none ${index === selectedIndex ? "bg-gray-700" : ""}`}
             >
               <span className="font-medium">{guild.name}</span>
               <span className="text-gray-400 ml-2">- {guild.realm}</span>
@@ -127,6 +163,100 @@ function GuildAutocomplete({
 
       {isOpen && inputValue && filteredGuilds.length === 0 && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg p-3 text-gray-400 text-sm">No guilds found</div>
+      )}
+    </div>
+  );
+}
+
+// Custom Pickem Selector component
+function PickemSelector({
+  pickems,
+  selectedId,
+  onSelect,
+  getTimeRemaining,
+}: {
+  pickems: PickemSummary[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  getTimeRemaining: (endDate: string) => string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const t = useTranslations("pickemsPage");
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedPickem = pickems.find((p) => p.id === selectedId);
+
+  const getStatusInfo = (pickem: PickemSummary) => {
+    const now = new Date();
+    const start = new Date(pickem.votingStart);
+    const end = new Date(pickem.votingEnd);
+
+    if (now < start) {
+      return { status: t("notStarted"), color: "text-gray-400", bgColor: "bg-gray-700" };
+    } else if (now > end) {
+      return { status: t("ended"), color: "text-red-400", bgColor: "bg-red-900/30" };
+    } else {
+      return { status: getTimeRemaining(pickem.votingEnd), color: "text-green-400", bgColor: "bg-green-900/30" };
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label htmlFor="pickem-select" className="text-xs text-gray-400 mb-1 block">
+        {t("selectPickem")}
+      </label>
+      <button
+        id="pickem-select"
+        onClick={() => setIsOpen(!isOpen)}
+        className="bg-gray-800 text-white px-4 py-3 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-3 min-w-[350px] justify-between hover:bg-gray-750 transition-colors w-full"
+      >
+        {selectedPickem ? (
+          <div className="flex flex-col items-start gap-1 flex-1">
+            <span className="font-semibold">{selectedPickem.name}</span>
+            <span className={`text-xs ${getStatusInfo(selectedPickem).color}`}>{getStatusInfo(selectedPickem).status}</span>
+          </div>
+        ) : (
+          <span>{t("selectPickem")}</span>
+        )}
+        <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-96 overflow-y-auto">
+          {pickems.map((pickem) => {
+            const statusInfo = getStatusInfo(pickem);
+            return (
+              <button
+                key={pickem.id}
+                onClick={() => {
+                  onSelect(pickem.id);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-4 py-3 text-left hover:bg-gray-700 transition-colors flex items-center justify-between ${pickem.id === selectedId ? "bg-gray-700" : ""} ${
+                  statusInfo.bgColor
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium">{pickem.name}</span>
+                  <span className={`text-xs ${statusInfo.color}`}>{statusInfo.status}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -157,6 +287,8 @@ export default function PickemsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   // Fetch pickems list and guilds on mount
   useEffect(() => {
@@ -233,6 +365,48 @@ export default function PickemsPage() {
     setSuccessMessage(null);
   }, []);
 
+  // Handle drag start
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  // Handle drag over
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  // Handle drop
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      return;
+    }
+
+    setPredictions((prev) => {
+      const newPredictions = [...prev];
+      const draggedItem = newPredictions[draggedIndex];
+      const droppedItem = newPredictions[dropIndex];
+
+      // Swap the items
+      newPredictions[draggedIndex] = droppedItem;
+      newPredictions[dropIndex] = draggedItem;
+
+      // Update positions
+      if (newPredictions[draggedIndex]) {
+        newPredictions[draggedIndex]!.position = draggedIndex + 1;
+      }
+      if (newPredictions[dropIndex]) {
+        newPredictions[dropIndex]!.position = dropIndex + 1;
+      }
+
+      return newPredictions;
+    });
+
+    setDraggedIndex(null);
+    setSuccessMessage(null);
+  };
+
   // Submit predictions
   const handleSubmit = async () => {
     if (!selectedPickemId) return;
@@ -293,6 +467,14 @@ export default function PickemsPage() {
     return [...guilds].sort((a, b) => a.name.localeCompare(b.name));
   }, [guilds]);
 
+  // Get list of already selected guilds to exclude from dropdowns
+  const getExcludedGuilds = useCallback(
+    (currentPosition: number) => {
+      return predictions.filter((p, idx) => p !== null && idx !== currentPosition - 1).map((p) => ({ guildName: p!.guildName, realm: p!.realm }));
+    },
+    [predictions]
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -314,25 +496,10 @@ export default function PickemsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4">
-      <h1 className="text-2xl md:text-3xl font-bold text-white mb-6">{t("title")}</h1>
-
       {/* Pickem Selector */}
-      {pickems.length > 1 && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">{t("selectPickem")}</label>
-          <select
-            value={selectedPickemId || ""}
-            onChange={(e) => setSelectedPickemId(e.target.value)}
-            className="w-full md:w-auto px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {pickems.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div className="mb-6">
+        <PickemSelector pickems={pickems} selectedId={selectedPickemId} onSelect={setSelectedPickemId} getTimeRemaining={getTimeRemaining} />
+      </div>
 
       {detailsLoading ? (
         <div className="flex justify-center items-center min-h-[300px]">
@@ -342,95 +509,119 @@ export default function PickemsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Prediction Form */}
           <div className="space-y-6">
-            {/* Status Banner */}
-            <div className={`rounded-lg p-4 ${pickemDetails.isVotingOpen ? "bg-green-900/50 border border-green-700" : "bg-gray-800 border border-gray-700"}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">{pickemDetails.name}</h2>
-                  <p className="text-sm text-gray-400">
-                    {pickemDetails.isVotingOpen ? getTimeRemaining(pickemDetails.votingEnd) : pickemDetails.hasEnded ? t("votingEnded") : t("votingNotStarted")}
-                  </p>
-                </div>
-                {pickemDetails.isVotingOpen && <span className="px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-full">{t("votingOpen")}</span>}
-              </div>
-            </div>
+            <>
+              {/* Prediction Form */}
+              <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
 
-            {/* Prediction Form */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
-
-              {!user && !authLoading && (
-                <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-700 rounded-md">
-                  <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
-                </div>
-              )}
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
-                  <p className="text-red-300 text-sm">{error}</p>
-                </div>
-              )}
-
-              {successMessage && (
-                <div className="mb-4 p-3 bg-green-900/50 border border-green-700 rounded-md">
-                  <p className="text-green-300 text-sm">{successMessage}</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((position) => (
-                  <div key={position} className="flex items-center gap-3">
-                    <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm">{position}</span>
-                    <div className="flex-1">
-                      <GuildAutocomplete
-                        value={
-                          predictions[position - 1]
-                            ? {
-                                guildName: predictions[position - 1]!.guildName,
-                                realm: predictions[position - 1]!.realm,
-                              }
-                            : null
-                        }
-                        onChange={(guild) => handlePredictionChange(position, guild)}
-                        guilds={sortedGuilds}
-                        placeholder={t("selectGuild")}
-                        disabled={!user || !pickemDetails.isVotingOpen}
-                      />
-                    </div>
+                {!user && !authLoading && (
+                  <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-700 rounded-md">
+                    <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
                   </div>
-                ))}
+                )}
+
+                {error && (
+                  <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
+                    <p className="text-red-300 text-sm">{error}</p>
+                  </div>
+                )}
+
+                {successMessage && (
+                  <div className="mb-4 p-3 bg-green-900/50 border border-green-700 rounded-md">
+                    <p className="text-green-300 text-sm">{successMessage}</p>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((position) => (
+                    <div
+                      key={position}
+                      draggable={!!(user && pickemDetails.isVotingOpen && predictions[position - 1])}
+                      onDragStart={() => handleDragStart(position - 1)}
+                      onDragOver={(e) => handleDragOver(e, position - 1)}
+                      onDrop={(e) => handleDrop(e, position - 1)}
+                      className={`flex items-center gap-3 ${draggedIndex === position - 1 ? "opacity-50" : ""} ${
+                        predictions[position - 1] !== null && user && pickemDetails.isVotingOpen ? "cursor-move" : ""
+                      }`}
+                    >
+                      <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm shrink-0">{position}</span>
+                      <div className="flex-1">
+                        <GuildAutocomplete
+                          value={
+                            predictions[position - 1]
+                              ? {
+                                  guildName: predictions[position - 1]!.guildName,
+                                  realm: predictions[position - 1]!.realm,
+                                }
+                              : null
+                          }
+                          onChange={(guild) => handlePredictionChange(position, guild)}
+                          guilds={sortedGuilds}
+                          placeholder={t("selectGuild")}
+                          disabled={!user || !pickemDetails.isVotingOpen}
+                          excludeGuilds={getExcludedGuilds(position)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {user && pickemDetails.isVotingOpen && (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        {t("submitting")}
+                      </span>
+                    ) : (
+                      t("submitPredictions")
+                    )}
+                  </button>
+                )}
               </div>
 
-              {user && pickemDetails.isVotingOpen && (
+              {/* Scoring Info - Collapsible */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden">
                 <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+                  onClick={() => setShowScoringInfo(!showScoringInfo)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
                 >
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {t("submitting")}
-                    </span>
-                  ) : (
-                    t("submitPredictions")
-                  )}
+                  <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </button>
-              )}
-            </div>
-
-            {/* Scoring Info */}
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">{t("scoringSystem")}</h3>
-              <div className="text-xs text-gray-400 space-y-1">
-                <p>{t("scoringExact")}</p>
-                <p>{t("scoringOff1")}</p>
-                <p>{t("scoringOff2")}</p>
-                <p>{t("scoringOff3")}</p>
-                <p>{t("scoringOff4")}</p>
-                <p>{t("scoringOff5")}</p>
+                {showScoringInfo && (
+                  <div className="px-4 pb-4 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
+                    <p>
+                      • <strong className="text-green-400">10 points:</strong> Exact position match
+                    </p>
+                    <p>
+                      • <strong className="text-yellow-400">6 points:</strong> Within ±1 position
+                    </p>
+                    <p>
+                      • <strong className="text-orange-400">4 points:</strong> Within ±2 positions
+                    </p>
+                    <p>
+                      • <strong className="text-orange-500">3 points:</strong> Within ±3 positions
+                    </p>
+                    <p>
+                      • <strong className="text-red-400">2 points:</strong> Within ±4 positions
+                    </p>
+                    <p>
+                      • <strong className="text-red-500">1 point:</strong> Within ±5 positions
+                    </p>
+                    <p>
+                      • <strong className="text-gray-500">0 points:</strong> More than 5 positions off or not in top 10
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           </div>
 
           {/* Right Column: Current Rankings & Leaderboard */}
@@ -479,7 +670,7 @@ export default function PickemsPage() {
                   {pickemDetails.leaderboard.slice(0, 20).map((entry, index) => (
                     <div
                       key={entry.username}
-                      className={`p-3 rounded-lg ${
+                      className={`rounded-lg ${
                         index === 0
                           ? "bg-yellow-900/30 border border-yellow-700/50"
                           : index === 1
@@ -489,21 +680,21 @@ export default function PickemsPage() {
                           : "bg-gray-700/30"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg font-bold text-gray-400 w-6">{index + 1}</span>
-                        <img src={entry.avatarUrl} alt={entry.username} className="w-8 h-8 rounded-full" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white font-medium truncate block">{entry.username}</span>
-                        </div>
-                        <span className="text-xl font-bold text-blue-400">{entry.totalPoints}</span>
-                      </div>
-
-                      {/* Show prediction details on expand (optional) */}
-                      <details className="mt-2">
-                        <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">{t("showPredictions")}</summary>
-                        <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
+                      <details className="group">
+                        <summary className="p-3 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold text-gray-400 w-6">{index + 1}</span>
+                            <img src={entry.avatarUrl} alt={entry.username} className="w-8 h-8 rounded-full" />
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              <span className="text-white font-medium truncate">{entry.username}</span>
+                              <span className="text-xs text-gray-500 group-open:text-blue-400 transition-colors">{t("showPredictions")}</span>
+                            </div>
+                            <span className="text-xl font-bold text-blue-400">{entry.totalPoints}</span>
+                          </div>
+                        </summary>
+                        <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-1 text-xs border-t border-gray-700/50 mt-2">
                           {entry.predictions.map((pred) => (
-                            <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300">
+                            <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-1">
                               <span className="text-gray-500">#{pred.predictedRank}:</span>
                               <span className="truncate">{pred.guildName}</span>
                               <PointsBadge points={pred.points} />
