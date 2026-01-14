@@ -57,40 +57,45 @@ function GuildAutocomplete({
 
   const comboboxValue = useMemo(() => {
     if (!value) return null;
-    // Convert back to SimpleGuild format for Combobox
     return guilds.find((g) => g.name === value.guildName && g.realm === value.realm) || null;
   }, [value, guilds]);
 
   return (
     <Combobox value={comboboxValue} onChange={handleChange} disabled={disabled}>
-      <div className="relative">
-        <div className="relative">
-          <Combobox.Input
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
-            displayValue={(guild: SimpleGuild | null) => (guild ? `${guild.name} - ${guild.realm}` : "")}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={placeholder}
-          />
-          {value && !disabled && (
-            <button type="button" onClick={() => handleChange(null)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white z-10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
-        <Combobox.Options className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+      <div className="relative w-full">
+        <Combobox.Input
+          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
+          displayValue={(guild: SimpleGuild | null) => (guild ? `${guild.name} - ${guild.realm}` : "")}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={placeholder}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            onClick={() => handleChange(null)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white z-10"
+            aria-label="Clear selection"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        )}
+        <Combobox.Options
+          anchor="bottom start"
+          className="w-[--input-width] bg-gray-800 border border-gray-600 rounded-md shadow-xl max-h-60 overflow-auto empty:invisible [--anchor-gap:4px] z-50"
+        >
           {filteredGuilds.length === 0 && query !== "" ? (
             <div className="px-3 py-2 text-gray-400 text-sm">No guilds found</div>
           ) : (
             filteredGuilds.map((guild) => (
               <Combobox.Option key={`${guild.name}-${guild.realm}`} value={guild} className="cursor-pointer">
-                {({ active, selected }) => (
-                  <div className={`px-3 py-2 text-white ${active ? "bg-gray-700" : ""} ${selected ? "bg-gray-700" : ""}`}>
+                {({ focus, selected }) => (
+                  <div className={`px-3 py-2 text-white ${focus ? "bg-gray-700" : ""} ${selected ? "font-semibold" : ""}`}>
                     <span className="font-medium">{guild.name}</span>
                     <span className="text-gray-400 ml-2">- {guild.realm}</span>
                   </div>
@@ -124,7 +129,7 @@ function SortablePredictionItem({
   excludeGuilds: { guildName: string; realm: string }[];
   onChange: (position: number, guild: { guildName: string; realm: string } | null) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: data.id,
     disabled: disabled || !data.prediction,
   });
@@ -132,22 +137,24 @@ function SortablePredictionItem({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : undefined,
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3">
-      <div className="flex items-center gap-2">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-stretch gap-2 bg-gray-800 rounded-lg border transition-all ${
+        isDragging ? "opacity-50 scale-95 border-blue-500 shadow-lg" : "border-gray-700 hover:border-gray-600"
+      } ${!disabled && data.prediction ? "hover:bg-gray-750" : ""}`}
+    >
+      {/* Position badge */}
+      <div className="flex items-center pl-3 py-2">
         <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm shrink-0">{data.position}</span>
-        {!disabled && data.prediction && (
-          <button type="button" {...attributes} {...listeners} className="text-gray-400 hover:text-white cursor-grab active:cursor-grabbing p-1 touch-none">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-            </svg>
-          </button>
-        )}
       </div>
-      <div className="flex-1">
+
+      {/* Autocomplete input - separate from drag handle */}
+      <div className="flex-1 py-2 pr-2 min-w-0">
         <GuildAutocomplete
           value={
             data.prediction
@@ -164,18 +171,40 @@ function SortablePredictionItem({
           excludeGuilds={excludeGuilds}
         />
       </div>
+
+      {/* Separate drag handle */}
+      {!disabled && data.prediction && (
+        <div className="flex items-center pr-2">
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="text-gray-500 hover:text-white cursor-grab active:cursor-grabbing pr-2 touch-none transition-colors rounded hover:bg-gray-700"
+            title="Drag to reorder"
+            aria-label="Drag to reorder"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 // Drag overlay component for visual feedback
-function PredictionDragOverlay({ prediction }: { prediction: PickemPrediction | null }) {
+function PredictionDragOverlay({ prediction, position }: { prediction: PickemPrediction | null; position?: number }) {
   if (!prediction) return null;
 
   return (
-    <div className="bg-gray-700 border-2 border-blue-500 rounded-md px-3 py-2 shadow-lg">
-      <span className="text-white font-medium">{prediction.guildName}</span>
-      <span className="text-gray-400 ml-2">- {prediction.realm}</span>
+    <div className="bg-gray-700 border-2 border-blue-500 rounded-lg px-4 py-3 shadow-2xl flex items-center gap-3 min-w-[280px] max-w-[400px] cursor-grabbing">
+      {position && <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold text-sm shrink-0">{position}</span>}
+      <div className="min-w-0">
+        <span className="text-white font-medium block truncate">{prediction.guildName}</span>
+        <span className="text-gray-400 text-sm truncate block">- {prediction.realm}</span>
+      </div>
     </div>
   );
 }
@@ -306,7 +335,7 @@ export default function PickemsPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px of movement required to start drag
+        distance: 8, // Requires 8px of movement to start drag
       },
     }),
     useSensor(KeyboardSensor, {
@@ -509,7 +538,7 @@ export default function PickemsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4">
+    <div className="max-w-6xl mx-auto px-4 py-4 pb-8">
       {/* Pickem Selector */}
       <div className="mb-6">
         <PickemSelector pickems={pickems} selectedId={selectedPickemId} onSelect={setSelectedPickemId} getTimeRemaining={getTimeRemaining} />
@@ -524,7 +553,7 @@ export default function PickemsPage() {
           {/* Left Column: Prediction Form */}
           <div className="space-y-6">
             {/* Prediction Form */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
               <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
 
               {!user && !authLoading && (
@@ -547,7 +576,7 @@ export default function PickemsPage() {
 
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={Array.from({ length: 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {Array.from({ length: 10 }, (_, i) => i).map((index) => {
                       const position = index + 1;
                       const itemData: SortableItemData = {
@@ -569,7 +598,9 @@ export default function PickemsPage() {
                     })}
                   </div>
                 </SortableContext>
-                <DragOverlay>{activeId ? <PredictionDragOverlay prediction={predictions[parseInt(activeId.split("-")[1])]} /> : null}</DragOverlay>
+                <DragOverlay dropAnimation={null}>
+                  {activeId ? <PredictionDragOverlay prediction={predictions[parseInt(activeId.split("-")[1])]} position={parseInt(activeId.split("-")[1]) + 1} /> : null}
+                </DragOverlay>
               </DndContext>
 
               {user && pickemDetails.isVotingOpen && (
@@ -591,7 +622,7 @@ export default function PickemsPage() {
             </div>
 
             {/* Scoring Info - Collapsible */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
+            <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
               <button
                 onClick={() => setShowScoringInfo(!showScoringInfo)}
                 className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
@@ -632,41 +663,43 @@ export default function PickemsPage() {
           {/* Right Column: Current Rankings & Leaderboard */}
           <div className="space-y-6">
             {/* Current Guild Rankings */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
               <h3 className="text-lg font-semibold text-white mb-4">{t("currentRankings")}</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-gray-400 border-b border-gray-700">
-                      <th className="text-left py-2 px-2">#</th>
-                      <th className="text-left py-2 px-2">{t("guild")}</th>
-                      <th className="text-right py-2 px-2">{t("progress")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
-                      <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
-                        <td className="py-2 px-2 text-gray-300 font-medium">{guild.rank}</td>
-                        <td className="py-2 px-2">
-                          <div>
-                            <span className="text-white font-medium">{guild.name}</span>
-                            <span className="text-gray-400 text-xs ml-2">{guild.realm}</span>
-                          </div>
-                        </td>
-                        <td className="py-2 px-2 text-right">
-                          <span className={`${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
-                            {guild.bossesKilled}/{guild.totalBosses}
-                          </span>
-                        </td>
+              <div className="overflow-x-auto -mx-4 md:mx-0">
+                <div className="inline-block min-w-full align-middle">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-700">
+                        <th className="text-left py-2 px-2 md:px-3">#</th>
+                        <th className="text-left py-2 px-2 md:px-3">{t("guild")}</th>
+                        <th className="text-right py-2 px-2 md:px-3">{t("progress")}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
+                        <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
+                          <td className="py-2 px-2 md:px-3 text-gray-300 font-medium">{guild.rank}</td>
+                          <td className="py-2 px-2 md:px-3">
+                            <div className="min-w-0">
+                              <span className="text-white font-medium block truncate">{guild.name}</span>
+                              <span className="text-gray-400 text-xs block truncate">{guild.realm}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 md:px-3 text-right whitespace-nowrap">
+                            <span className={`${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
+                              {guild.bossesKilled}/{guild.totalBosses}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
             {/* Leaderboard */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
               <h3 className="text-lg font-semibold text-white mb-4">{t("leaderboard")}</h3>
               {pickemDetails.leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>
@@ -687,21 +720,21 @@ export default function PickemsPage() {
                     >
                       <details className="group">
                         <summary className="p-3 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
-                          <div className="flex items-center gap-3">
-                            <span className="text-lg font-bold text-gray-400 w-6">{index + 1}</span>
-                            <img src={entry.avatarUrl} alt={entry.username} className="w-8 h-8 rounded-full" />
+                          <div className="flex items-center gap-2 md:gap-3">
+                            <span className="text-base md:text-lg font-bold text-gray-400 w-5 md:w-6 shrink-0">{index + 1}</span>
+                            <img src={entry.avatarUrl} alt={entry.username} className="w-7 h-7 md:w-8 md:h-8 rounded-full shrink-0" />
                             <div className="flex-1 min-w-0 flex items-center gap-2">
-                              <span className="text-white font-medium truncate">{entry.username}</span>
-                              <span className="text-xs text-gray-500 group-open:text-blue-400 transition-colors">{t("showPredictions")}</span>
+                              <span className="text-white font-medium truncate text-sm md:text-base">{entry.username}</span>
+                              <span className="text-xs text-gray-500 group-open:text-blue-400 transition-colors hidden sm:inline">{t("showPredictions")}</span>
                             </div>
-                            <span className="text-xl font-bold text-blue-400">{entry.totalPoints}</span>
+                            <span className="text-lg md:text-xl font-bold text-blue-400 shrink-0">{entry.totalPoints}</span>
                           </div>
                         </summary>
-                        <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-1 text-xs border-t border-gray-700/50 mt-2">
+                        <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs border-t border-gray-700/50 mt-2">
                           {entry.predictions.map((pred) => (
-                            <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-1">
-                              <span className="text-gray-500">#{pred.predictedRank}:</span>
-                              <span className="truncate">{pred.guildName}</span>
+                            <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-1 min-w-0">
+                              <span className="text-gray-500 shrink-0">#{pred.predictedRank}:</span>
+                              <span className="truncate flex-1">{pred.guildName}</span>
                               <PointsBadge points={pred.points} />
                             </div>
                           ))}
