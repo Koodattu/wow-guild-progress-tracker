@@ -6,6 +6,7 @@
     "raidTimetable": "Raid Timetable",
     "livestreams": "Livestreams",
     "tierLists": "Tier Lists",
+    "pickems": "Pickems",
     "latestEvents": "Latest Events",
     "info": "Info",
     "contact": "Contact",
@@ -312,5 +313,31 @@
       "page": "Page",
       "of": "of"
     }
+  },
+  "pickemsPage": {
+    "title": "Pickems",
+    "selectPickem": "Select Season",
+    "noPickems": "No pickems available at this time.",
+    "votingOpen": "Voting Open",
+    "votingEnded": "Voting has ended",
+    "votingNotStarted": "Voting has not started yet",
+    "yourPredictions": "Your Predictions",
+    "loginToVote": "Please log in with Discord to submit your predictions.",
+    "selectGuild": "Search for a guild...",
+    "submitPredictions": "Submit Predictions",
+    "submitting": "Submitting...",
+    "currentRankings": "Current Guild Rankings",
+    "guild": "Guild",
+    "progress": "Progress",
+    "leaderboard": "Leaderboard",
+    "noParticipants": "No participants yet. Be the first to submit your predictions!",
+    "showPredictions": "Show predictions",
+    "scoringSystem": "Scoring System",
+    "scoringExact": "Exact match: 10 points",
+    "scoringOff1": "Off by 1: 8 points",
+    "scoringOff2": "Off by 2: 6 points",
+    "scoringOff3": "Off by 3: 4 points",
+    "scoringOff4": "Off by 4: 2 points",
+    "scoringOff5": "Off by 5+: 0 points"
   }
 }

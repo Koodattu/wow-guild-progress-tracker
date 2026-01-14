@@ -140,3 +140,73 @@ export const PICKEMS_RAID_IDS = [
   [33, 35], // Aberrus + Amirdrassil
   [26, 28, 29], // All shadowlands raids
 ];
+
+// Pickem configuration
+// Each pickem season can have multiple raids - guilds are ranked by combined completion
+// A guild is "done" when they have all bosses killed on mythic across all raids in the season
+export interface PickemConfig {
+  id: string; // Unique identifier for this pickem (e.g., "s1-undermine")
+  name: string; // Display name
+  raidIds: number[]; // Array of raid IDs - if multiple, completion is combined
+  votingStart: Date; // When voting opens
+  votingEnd: Date; // When voting closes (should be around raid release)
+  active: boolean; // Whether this pickem is currently active/visible
+}
+
+// Scoring system for pickems
+// Points are awarded based on how close the prediction was to actual rank
+// Exact match = 10 points, off by 1 = 8 points, off by 2 = 6, etc.
+export const PICKEM_POINTS = {
+  EXACT_MATCH: 10,
+  OFF_BY_ONE: 8,
+  OFF_BY_TWO: 6,
+  OFF_BY_THREE: 4,
+  OFF_BY_FOUR: 2,
+  OFF_BY_FIVE_OR_MORE: 0,
+};
+
+// Calculate points for a single prediction
+export function calculatePickemPoints(predictedRank: number, actualRank: number): number {
+  const diff = Math.abs(predictedRank - actualRank);
+  switch (diff) {
+    case 0:
+      return PICKEM_POINTS.EXACT_MATCH;
+    case 1:
+      return PICKEM_POINTS.OFF_BY_ONE;
+    case 2:
+      return PICKEM_POINTS.OFF_BY_TWO;
+    case 3:
+      return PICKEM_POINTS.OFF_BY_THREE;
+    case 4:
+      return PICKEM_POINTS.OFF_BY_FOUR;
+    default:
+      return PICKEM_POINTS.OFF_BY_FIVE_OR_MORE;
+  }
+}
+
+export const PICKEMS_CONFIG: PickemConfig[] = [
+  {
+    id: "tww-s3",
+    name: "TWW Season 3: Manaforge Omega",
+    raidIds: [44],
+    votingStart: new Date("2025-01-01T00:00:00Z"),
+    votingEnd: new Date("2026-03-04T16:00:00Z"), // Extended for testing
+    active: true,
+  },
+  {
+    id: "tww-s2",
+    name: "TWW Season 2: Liberation of Undermine",
+    raidIds: [42], // Liberation of Undermine
+    votingStart: new Date("2025-01-01T00:00:00Z"),
+    votingEnd: new Date("2026-03-04T16:00:00Z"), // Extended for testing
+    active: true,
+  },
+  {
+    id: "tww-all",
+    name: "TWW All Raids: Nerubar Palace + Liberation of Undermine + Manaforge Omega",
+    raidIds: [38, 42, 44], // Liberation of Undermine
+    votingStart: new Date("2024-01-01T00:00:00Z"),
+    votingEnd: new Date("2025-03-04T16:00:00Z"), // Extended for testing
+    active: true,
+  },
+];

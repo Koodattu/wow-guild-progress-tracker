@@ -6,6 +6,7 @@
     "raidTimetable": "Raidi-aikataulu",
     "livestreams": "Suoratoistot",
     "tierLists": "Tier Listat",
+    "pickems": "Veikkaukset",
     "latestEvents": "Viimeisimmät Tapahtumat",
     "info": "Tietoa",
     "contact": "Yhteystiedot",
@@ -292,5 +293,31 @@
       "page": "Sivu",
       "of": "/"
     }
+  },
+  "pickemsPage": {
+    "title": "Veikkaukset",
+    "selectPickem": "Valitse kausi",
+    "noPickems": "Ei veikkauksia saatavilla tällä hetkellä.",
+    "votingOpen": "Äänestys auki",
+    "votingEnded": "Äänestys päättynyt",
+    "votingNotStarted": "Äänestys ei ole vielä alkanut",
+    "yourPredictions": "Sinun veikkauksesi",
+    "loginToVote": "Kirjaudu sisään Discordilla lähettääksesi veikkauksesi.",
+    "selectGuild": "Etsi kilta...",
+    "submitPredictions": "Lähetä veikkaukset",
+    "submitting": "Lähetetään...",
+    "currentRankings": "Nykyiset sijoitukset",
+    "guild": "Kilta",
+    "progress": "Edistyminen",
+    "leaderboard": "Tulostaulukko",
+    "noParticipants": "Ei osallistujia vielä. Ole ensimmäinen ja lähetä veikkauksesi!",
+    "showPredictions": "Näytä veikkaukset",
+    "scoringSystem": "Pisteytysjärjestelmä",
+    "scoringExact": "Täsmällinen: 10 pistettä",
+    "scoringOff1": "1 paikka ohi: 8 pistettä",
+    "scoringOff2": "2 paikkaa ohi: 6 pistettä",
+    "scoringOff3": "3 paikkaa ohi: 4 pistettä",
+    "scoringOff4": "4 paikkaa ohi: 2 pistettä",
+    "scoringOff5": "5+ paikkaa ohi: 0 pistettä"
   }
 }

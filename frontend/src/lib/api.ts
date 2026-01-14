@@ -35,6 +35,10 @@ import {
   AdminGuildStats,
   AdminOverview,
   HomePageData,
+  PickemSummary,
+  PickemDetails,
+  PickemPrediction,
+  SimpleGuild,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -476,6 +480,43 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch realtime analytics");
+    return response.json();
+  },
+
+  // Pickems endpoints
+  async getPickems(): Promise<PickemSummary[]> {
+    const response = await fetch(`${API_URL}/api/pickems`);
+    if (!response.ok) throw new Error("Failed to fetch pickems");
+    return response.json();
+  },
+
+  async getPickemsGuilds(): Promise<SimpleGuild[]> {
+    const response = await fetch(`${API_URL}/api/pickems/guilds`);
+    if (!response.ok) throw new Error("Failed to fetch guilds for pickems");
+    return response.json();
+  },
+
+  async getPickemDetails(pickemId: string): Promise<PickemDetails> {
+    const response = await fetch(`${API_URL}/api/pickems/${pickemId}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickem details");
+    return response.json();
+  },
+
+  async submitPickemPredictions(pickemId: string, predictions: PickemPrediction[]): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/pickems/${pickemId}/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ predictions }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to submit predictions");
+    }
     return response.json();
   },
 };

@@ -48,10 +48,26 @@ export interface IBattleNetAccount {
   lastCharacterSync: Date | null;
 }
 
+// Pickem prediction for a single guild
+export interface IPickemPrediction {
+  guildName: string;
+  realm: string;
+  position: number; // 1-10, the predicted rank
+}
+
+// User's pickem entry for a specific season
+export interface IPickemEntry {
+  pickemId: string; // References PickemConfig.id
+  predictions: IPickemPrediction[];
+  submittedAt: Date;
+  updatedAt: Date;
+}
+
 export interface IUser extends Document {
   discord: IDiscordAccount;
   twitch?: ITwitchAccount;
   battlenet?: IBattleNetAccount;
+  pickems: IPickemEntry[];
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date;
@@ -117,11 +133,31 @@ const BattleNetAccountSchema = new Schema<IBattleNetAccount>(
   { _id: false }
 );
 
+const PickemPredictionSchema = new Schema<IPickemPrediction>(
+  {
+    guildName: { type: String, required: true },
+    realm: { type: String, required: true },
+    position: { type: Number, required: true, min: 1, max: 10 },
+  },
+  { _id: false }
+);
+
+const PickemEntrySchema = new Schema<IPickemEntry>(
+  {
+    pickemId: { type: String, required: true },
+    predictions: { type: [PickemPredictionSchema], default: [] },
+    submittedAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const UserSchema = new Schema<IUser>(
   {
     discord: { type: DiscordAccountSchema, required: true },
     twitch: { type: TwitchAccountSchema, required: false },
     battlenet: { type: BattleNetAccountSchema, required: false },
+    pickems: { type: [PickemEntrySchema], default: [] },
     lastLoginAt: { type: Date, default: Date.now },
   },
   {

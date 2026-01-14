@@ -20,6 +20,7 @@ import tierlistsRouter from "./routes/tierlists";
 import analyticsRouter from "./routes/analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
+import pickemsRouter from "./routes/pickems";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 
 const app: Application = express();
@@ -51,6 +52,7 @@ app.use("/api/tierlists", tierlistsRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/pickems", pickemsRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {

@@ -603,3 +603,63 @@ export interface AdminOverview {
     updatedToday: number;
   };
 }
+
+// Pickems types
+export interface PickemSummary {
+  id: string;
+  name: string;
+  raidIds: number[];
+  votingStart: string;
+  votingEnd: string;
+  isVotingOpen: boolean;
+  hasEnded: boolean;
+}
+
+export interface PickemPrediction {
+  guildName: string;
+  realm: string;
+  position: number;
+}
+
+export interface GuildRanking {
+  rank: number;
+  name: string;
+  realm: string;
+  bossesKilled: number;
+  totalBosses: number;
+  isComplete: boolean;
+  lastKillTime: string | null;
+}
+
+export interface LeaderboardPrediction {
+  guildName: string;
+  realm: string;
+  predictedRank: number;
+  actualRank: number | null;
+  points: number;
+}
+
+export interface LeaderboardEntry {
+  username: string;
+  avatarUrl: string;
+  totalPoints: number;
+  predictions: LeaderboardPrediction[];
+}
+
+export interface PickemDetails {
+  id: string;
+  name: string;
+  raidIds: number[];
+  votingStart: string;
+  votingEnd: string;
+  isVotingOpen: boolean;
+  hasEnded: boolean;
+  guildRankings: GuildRanking[];
+  userPredictions: PickemPrediction[] | null;
+  leaderboard: LeaderboardEntry[];
+}
+
+export interface SimpleGuild {
+  name: string;
+  realm: string;
+}
