@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, PullHistoryEntry, PhaseDistribution } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import IconImage from "./IconImage";
+import GuildCrest from "./GuildCrest";
 import PullProgressChart from "./PullProgressChart";
 import PhaseDistributionChart from "./PhaseDistributionChart";
 import { api } from "@/lib/api";
@@ -412,7 +413,12 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between rounded-t-lg">
-          <div>
+          <div className="flex items-center gap-3">
+            {guild.crest && (
+              <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">
+                <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] md:scale-[0.375] origin-top-left" />
+              </div>
+            )}
             <h2 className="text-lg md:text-2xl font-bold text-white">
               {guild.name}
               <span className="text-gray-400 font-normal"> - {guild.realm}</span>
