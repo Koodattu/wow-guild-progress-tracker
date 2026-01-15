@@ -115,10 +115,10 @@ function ProgressionChart({
         <div className="flex-1 flex items-end gap-1 h-24">
           {data.map((entry, index) => {
             const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
-            const heightPercent = maxValue > 0 ? (value / maxValue) * 100 : 0;
+            const heightPx = maxValue > 0 ? (value / maxValue) * 96 : 0; // 96px = h-24
             return (
               <div key={index} className="flex-1 flex flex-col items-center group relative">
-                <div className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors" style={{ height: `${heightPercent}%`, minHeight: value > 0 ? "4px" : "0" }} />
+                <div className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors" style={{ height: `${heightPx}px`, minHeight: value > 0 ? "4px" : "0" }} />
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
                   <div className="text-white font-medium">{value} guilds</div>
