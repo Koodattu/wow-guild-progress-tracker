@@ -75,30 +75,64 @@ function ProgressionChart({
 
   const maxValue = Math.max(...data.map((d) => (valueKey === "killCount" ? d.killCount || 0 : d.clearCount || 0)));
 
+  // Calculate nice y-axis steps
+  const getYAxisSteps = (max: number): number[] => {
+    if (max === 0) return [0];
+    if (max <= 5) return Array.from({ length: max + 1 }, (_, i) => i);
+    if (max <= 10) return [0, Math.ceil(max / 2), max];
+
+    // For larger values, show ~4-5 labels
+    const step = Math.ceil(max / 4);
+    const steps: number[] = [];
+    for (let i = 0; i <= max; i += step) {
+      steps.push(i);
+    }
+    if (steps[steps.length - 1] !== max) {
+      steps.push(max);
+    }
+    return steps;
+  };
+
+  const yAxisSteps = getYAxisSteps(maxValue);
+
   return (
     <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
       <div className="text-sm text-gray-400 mb-3">{label}</div>
-      <div className="flex items-end gap-1 h-24">
-        {data.map((entry, index) => {
-          const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
-          const heightPercent = maxValue > 0 ? (value / maxValue) * 100 : 0;
-          return (
-            <div key={index} className="flex-1 flex flex-col items-center group relative">
-              <div className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors" style={{ height: `${heightPercent}%`, minHeight: value > 0 ? "4px" : "0" }} />
-              {/* Tooltip */}
-              <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
-                <div className="text-white font-medium">{value} guilds</div>
-                <div className="text-gray-400">{formatDate(entry.date)}</div>
+      <div className="flex gap-2">
+        {/* Y-axis */}
+        <div className="flex flex-col justify-between h-24 text-xs text-gray-500 pr-2 border-r border-gray-700">
+          {yAxisSteps
+            .slice()
+            .reverse()
+            .map((step, index) => (
+              <div key={index} className="leading-none">
+                {step}
               </div>
-            </div>
-          );
-        })}
+            ))}
+        </div>
+
+        {/* Chart bars */}
+        <div className="flex-1 flex items-end gap-1 h-24">
+          {data.map((entry, index) => {
+            const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
+            const heightPercent = maxValue > 0 ? (value / maxValue) * 100 : 0;
+            return (
+              <div key={index} className="flex-1 flex flex-col items-center group relative">
+                <div className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors" style={{ height: `${heightPercent}%`, minHeight: value > 0 ? "4px" : "0" }} />
+                {/* Tooltip */}
+                <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
+                  <div className="text-white font-medium">{value} guilds</div>
+                  <div className="text-gray-400">{formatDate(entry.date)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="flex justify-between mt-2 text-xs text-gray-500">
+      <div className="flex justify-between mt-2 text-xs text-gray-500 pl-8">
         <span>{data.length > 0 ? formatDate(data[0].date) : ""}</span>
         <span>{data.length > 0 ? formatDate(data[data.length - 1].date) : ""}</span>
       </div>
-      <div className="text-center mt-1 text-xs text-gray-400">Total: {maxValue} guilds</div>
     </div>
   );
 }
