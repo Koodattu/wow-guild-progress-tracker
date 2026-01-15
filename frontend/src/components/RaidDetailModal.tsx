@@ -17,8 +17,8 @@ interface RaidDetailModalProps {
 }
 
 export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses }: RaidDetailModalProps) {
-  // Track which bosses have their charts expanded
-  const [expandedBosses, setExpandedBosses] = useState<Set<number>>(new Set());
+  // Track which bosses have their charts expanded (key: "${bossId}-${difficulty}")
+  const [expandedBosses, setExpandedBosses] = useState<Set<string>>(new Set());
   // Track loading state for each boss pull history
   const [loadingPullHistory, setLoadingPullHistory] = useState<Set<number>>(new Set());
   // Cache pull history data for each boss (key: `${bossId}-${difficulty}`)
@@ -29,15 +29,16 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   const toggleBossExpanded = async (boss: BossProgress, difficulty: "mythic" | "heroic") => {
     const bossId = boss.bossId;
     const cacheKey = `${bossId}-${difficulty}`;
-    const isExpanding = !expandedBosses.has(bossId);
+    const expandedKey = cacheKey; // Use composite key for expanded state
+    const isExpanding = !expandedBosses.has(expandedKey);
 
     // Toggle expanded state
     setExpandedBosses((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(bossId)) {
-        newSet.delete(bossId);
+      if (newSet.has(expandedKey)) {
+        newSet.delete(expandedKey);
       } else {
-        newSet.add(bossId);
+        newSet.add(expandedKey);
       }
       return newSet;
     });
@@ -116,7 +117,8 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const phaseDistribution = getPhaseDistribution(boss, difficulty);
     const pullHistory = getPullHistory(boss, difficulty);
     const hasPullHistory = pullHistory && pullHistory.length > 0;
-    const isExpanded = expandedBosses.has(boss.bossId);
+    const expandedKey = `${boss.bossId}-${difficulty}`;
+    const isExpanded = expandedBosses.has(expandedKey);
     const isLoading = loadingPullHistory.has(boss.bossId);
 
     return (
@@ -203,7 +205,8 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const pullHistory = getPullHistory(boss, difficulty);
     const phaseDistribution = getPhaseDistribution(boss, difficulty);
     const hasPullHistory = pullHistory && pullHistory.length > 0;
-    const isExpanded = expandedBosses.has(boss.bossId);
+    const expandedKey = `${boss.bossId}-${difficulty}`;
+    const isExpanded = expandedBosses.has(expandedKey);
     const isLoading = loadingPullHistory.has(boss.bossId);
 
     return (
@@ -406,7 +409,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50 p-2 md:p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between rounded-t-lg">
           <div>
