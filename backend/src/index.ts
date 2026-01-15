@@ -19,6 +19,7 @@ import eventsRouter from "./routes/events";
 import raidsRouter from "./routes/raids";
 import tierlistsRouter from "./routes/tierlists";
 import analyticsRouter from "./routes/analytics";
+import raidAnalyticsRouter from "./routes/raid-analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
 import pickemsRouter from "./routes/pickems";
@@ -137,6 +138,7 @@ app.use("/api/events", eventsRouter);
 app.use("/api/raids", raidsRouter);
 app.use("/api/tierlists", tierlistsRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/raid-analytics", raidAnalyticsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/pickems", pickemsRouter);
@@ -353,6 +355,18 @@ async function runBackgroundInitialization(): Promise<void> {
     );
   } else {
     logger.info("CALCULATE_TIER_LISTS_ON_STARTUP is disabled, skipping startup tier list calculation");
+  }
+
+  // Calculate raid analytics on startup
+  if (process.env.CALCULATE_RAID_ANALYTICS_ON_STARTUP === "true") {
+    logger.info("CALCULATE_RAID_ANALYTICS_ON_STARTUP is enabled");
+    optionalTasks.push(
+      runStartupTask("Calculate raid analytics", async () => {
+        await scheduler.calculateRaidAnalyticsOnStartup();
+      }).then(() => {})
+    );
+  } else {
+    logger.info("CALCULATE_RAID_ANALYTICS_ON_STARTUP is disabled, skipping startup raid analytics calculation");
   }
 
   // Wait for all optional tasks to complete

@@ -4,6 +4,7 @@ import Guild from "../models/Guild";
 import guildService from "./guild.service";
 import twitchService from "./twitch.service";
 import tierListService from "./tierlist.service";
+import raidAnalyticsService from "./raid-analytics.service";
 import cacheService from "./cache.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -23,6 +24,7 @@ class UpdateScheduler {
   private isUpdatingGuildCrests: boolean = false;
   private isUpdatingRefetchRecentReports: boolean = false;
   private isUpdatingTierLists: boolean = false;
+  private isUpdatingRaidAnalytics: boolean = false;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -173,6 +175,22 @@ class UpdateScheduler {
       }
     );
 
+    // NIGHTLY: Calculate raid analytics (at 6 AM Finnish time, after tier lists)
+    // Provides aggregated statistics across all guilds for each raid
+    cron.schedule(
+      "0 6 * * *",
+      async () => {
+        if (this.isUpdatingRaidAnalytics) {
+          logger.info("[Nightly/RaidAnalytics] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.calculateRaidAnalytics();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      }
+    );
+
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info("    * Active guilds: every 15 minutes");
@@ -187,6 +205,7 @@ class UpdateScheduler {
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Guild crests update: daily at 04:00");
     logger.info("    * Tier lists calculation: daily at 05:00");
+    logger.info("    * Raid analytics calculation: daily at 06:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -249,6 +268,13 @@ class UpdateScheduler {
     logger.info("Startup tier lists calculation completed");
   }
 
+  // Calculate raid analytics on startup (if enabled)
+  async calculateRaidAnalyticsOnStartup(): Promise<void> {
+    logger.info("Calculating raid analytics on startup...");
+    await this.calculateRaidAnalytics();
+    logger.info("Startup raid analytics calculation completed");
+  }
+
   // NIGHTLY: Calculate tier lists
   private async calculateTierLists(): Promise<void> {
     this.isUpdatingTierLists = true;
@@ -261,6 +287,23 @@ class UpdateScheduler {
       logger.error("[Nightly/TierLists] Error:", error);
     } finally {
       this.isUpdatingTierLists = false;
+    }
+  }
+
+  // NIGHTLY: Calculate raid analytics
+  private async calculateRaidAnalytics(): Promise<void> {
+    this.isUpdatingRaidAnalytics = true;
+
+    try {
+      logger.info("[Nightly/RaidAnalytics] Starting raid analytics calculation...");
+      await raidAnalyticsService.calculateAllRaidAnalytics();
+      // Invalidate raid analytics cache
+      cacheService.invalidatePattern(/^raid-analytics:/);
+      logger.info("[Nightly/RaidAnalytics] Raid analytics calculation completed");
+    } catch (error) {
+      logger.error("[Nightly/RaidAnalytics] Error:", error);
+    } finally {
+      this.isUpdatingRaidAnalytics = false;
     }
   }
 

@@ -44,6 +44,8 @@ import {
   CreatePickemInput,
   UpdatePickemInput,
   BossPullHistoryResponse,
+  RaidAnalytics,
+  RaidAnalyticsListItem,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -594,6 +596,29 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to toggle pickem");
+    }
+    return response.json();
+  },
+
+  // ============================================================================
+  // RAID ANALYTICS
+  // ============================================================================
+
+  async getRaidAnalyticsRaids(): Promise<RaidAnalyticsListItem[]> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/raids`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch raid analytics raids");
+    }
+    return response.json();
+  },
+
+  async getRaidAnalytics(raidId: number): Promise<RaidAnalytics> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/${raidId}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("No analytics available for this raid");
+      }
+      throw new Error("Failed to fetch raid analytics");
     }
     return response.json();
   },

@@ -750,3 +750,84 @@ export interface UpdatePickemInput {
   scoringConfig?: Partial<ScoringConfig>;
   streakConfig?: Partial<StreakConfig>;
 }
+
+// ============================================================================
+// RAID ANALYTICS TYPES
+// ============================================================================
+
+// Guild reference for analytics stats
+export interface AnalyticsGuildRef {
+  name: string;
+  realm: string;
+  count?: number;
+  time?: number;
+}
+
+// Pull count statistics
+export interface AnalyticsPullStats {
+  average: number;
+  lowest: number;
+  highest: number;
+  lowestGuild?: AnalyticsGuildRef;
+  highestGuild?: AnalyticsGuildRef;
+}
+
+// Time spent statistics
+export interface AnalyticsTimeStats {
+  average: number; // in seconds
+  lowest: number;
+  highest: number;
+  lowestGuild?: AnalyticsGuildRef;
+  highestGuild?: AnalyticsGuildRef;
+}
+
+// Kill progression entry (for cumulative charts)
+export interface KillProgressionEntry {
+  date: string;
+  killCount: number;
+}
+
+// Clear progression entry (for cumulative charts)
+export interface ClearProgressionEntry {
+  date: string;
+  clearCount: number;
+}
+
+// Boss analytics
+export interface BossAnalytics {
+  bossId: number;
+  bossName: string;
+  guildsKilled: number;
+  guildsProgressing: number;
+  pullCount: AnalyticsPullStats;
+  timeSpent: AnalyticsTimeStats;
+  killProgression: KillProgressionEntry[];
+}
+
+// Overall raid analytics
+export interface RaidOverallAnalytics {
+  guildsCleared: number;
+  guildsProgressing: number;
+  pullCount: AnalyticsPullStats;
+  timeSpent: AnalyticsTimeStats;
+  clearProgression: ClearProgressionEntry[];
+}
+
+// Full raid analytics response
+export interface RaidAnalytics {
+  raidId: number;
+  raidName: string;
+  difficulty: "mythic";
+  overall: RaidOverallAnalytics;
+  bosses: BossAnalytics[];
+  raidStart?: string;
+  raidEnd?: string;
+  lastCalculated: string;
+}
+
+// Available raid for analytics
+export interface RaidAnalyticsListItem {
+  raidId: number;
+  raidName: string;
+  lastCalculated: string;
+}

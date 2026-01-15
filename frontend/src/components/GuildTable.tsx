@@ -127,18 +127,17 @@ const GuildTableRow = memo(
             {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">{t("raiding")}</span>}
           </div>
         </td>
+        {/* Second clickable area: Schedule and Raid Progress columns */}
         <td
-          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredGuildInfoRow ? "bg-gray-800/30" : ""}`}
-          onClick={() => onGuildClick(guild)}
-          onMouseEnter={() => setHoveredGuildInfoRow(true)}
-          onMouseLeave={() => setHoveredGuildInfoRow(false)}
+          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          onClick={() => onRaidProgressClick(guild)}
+          onMouseEnter={() => setHoveredRaidProgressRow(true)}
+          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           {guild.scheduleDisplay ? `${guild.scheduleDisplay.totalDays}D x ${guild.scheduleDisplay.averageHours}h` : "-"}
         </td>
-
-        {/* Second clickable area: Raid Progress columns */}
         <td
-          className={`px-4 py-3 text-center cursor-pointer transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
           onClick={() => onRaidProgressClick(guild)}
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
@@ -300,8 +299,8 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("rank")}</th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">{t("world")}</th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">{t("guild")}</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("schedule")}</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500 border-l-2 border-gray-700">{t("mythic")}</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300 border-l-2 border-gray-700">{t("schedule")}</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">{t("mythic")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">{t("heroic")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("pulls")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("progress")}</th>

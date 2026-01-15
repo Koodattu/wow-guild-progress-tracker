@@ -128,6 +128,14 @@ export default function Navigation() {
                   {t("tierLists")}
                 </Link>
                 <Link
+                  href="/raid-analytics"
+                  className={`text-sm font-medium transition-colors ${
+                    isActive("/raid-analytics") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
+                  } py-5`}
+                >
+                  {t("raidAnalytics")}
+                </Link>
+                <Link
                   href="/pickems"
                   className={`text-sm font-medium transition-colors ${isActive("/pickems") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
@@ -428,6 +436,14 @@ export default function Navigation() {
                 }`}
               >
                 {t("tierLists")}
+              </Link>
+              <Link
+                href="/raid-analytics"
+                className={`block px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive("/raid-analytics") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                {t("raidAnalytics")}
               </Link>
               <Link
                 href="/pickems"
