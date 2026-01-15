@@ -5,7 +5,6 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Event, RaidInfo, RaidDates, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
 import GuildTable from "@/components/GuildTable";
-import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import RaidDetailModal from "@/components/RaidDetailModal";
 
@@ -208,11 +207,6 @@ function ProgressContent() {
     <main className=" text-white min-h-screen">
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
-
-        {/* Horizontal Events Feed at the top */}
-        <div className="mb-2">
-          <HorizontalEventsFeed events={events} />
-        </div>
 
         {/* Guild Leaderboard in the middle */}
         <div>
