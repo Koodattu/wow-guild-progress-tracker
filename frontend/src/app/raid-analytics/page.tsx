@@ -52,19 +52,21 @@ function GuildRefDisplay({ guild, label }: { guild?: { name: string; realm: stri
   );
 }
 
-// Cumulative progression chart (simple bar representation)
+// Cumulative progression chart with weekly buckets
 function ProgressionChart({
   data,
   valueKey,
   raidStart,
+  raidEnd,
   label,
 }: {
   data: { date: string; killCount?: number; clearCount?: number }[];
   valueKey: "killCount" | "clearCount";
   raidStart?: string;
+  raidEnd?: string;
   label: string;
 }) {
-  if (!data || data.length === 0) {
+  if (!data || data.length === 0 || !raidStart) {
     return (
       <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
         <div className="text-sm text-gray-400 mb-2">{label}</div>
@@ -73,7 +75,45 @@ function ProgressionChart({
     );
   }
 
-  const maxValue = Math.max(...data.map((d) => (valueKey === "killCount" ? d.killCount || 0 : d.clearCount || 0)));
+  // Calculate weekly buckets from raidStart to raidEnd (or current date)
+  const startDate = new Date(raidStart);
+  const endDate = raidEnd ? new Date(raidEnd) : new Date();
+
+  // Calculate number of weeks
+  const millisecondsPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const totalWeeks = Math.ceil((endDate.getTime() - startDate.getTime()) / millisecondsPerWeek);
+
+  // Create weekly buckets
+  const weeklyData: { weekNumber: number; value: number; weekStart: Date; weekEnd: Date }[] = [];
+
+  for (let week = 1; week <= totalWeeks; week++) {
+    const weekStart = new Date(startDate.getTime() + (week - 1) * millisecondsPerWeek);
+    const weekEnd = new Date(Math.min(weekStart.getTime() + millisecondsPerWeek, endDate.getTime()));
+
+    // Find the latest value in this week (cumulative data, so we want the last entry)
+    let weekValue = 0;
+    for (const entry of data) {
+      const entryDate = new Date(entry.date);
+      if (entryDate >= weekStart && entryDate < weekEnd) {
+        const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
+        weekValue = Math.max(weekValue, value); // Take the highest cumulative value in the week
+      }
+    }
+
+    // If no data in this week, carry forward the previous week's value
+    if (weekValue === 0 && week > 1) {
+      weekValue = weeklyData[week - 2].value;
+    }
+
+    weeklyData.push({
+      weekNumber: week,
+      value: weekValue,
+      weekStart,
+      weekEnd,
+    });
+  }
+
+  const maxValue = Math.max(...weeklyData.map((d) => d.value));
 
   // Calculate nice y-axis steps
   const getYAxisSteps = (max: number): number[] => {
@@ -113,25 +153,32 @@ function ProgressionChart({
 
         {/* Chart bars */}
         <div className="flex-1 flex items-end gap-1 h-24">
-          {data.map((entry, index) => {
-            const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
-            const heightPx = maxValue > 0 ? (value / maxValue) * 96 : 0; // 96px = h-24
+          {weeklyData.map((weekData) => {
+            const heightPx = maxValue > 0 ? (weekData.value / maxValue) * 96 : 0; // 96px = h-24
             return (
-              <div key={index} className="flex-1 flex flex-col items-center group relative">
-                <div className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors" style={{ height: `${heightPx}px`, minHeight: value > 0 ? "4px" : "0" }} />
+              <div key={weekData.weekNumber} className="flex-1 flex flex-col items-center group relative">
+                <div
+                  className="w-full bg-blue-500/70 hover:bg-blue-500 rounded-t transition-colors"
+                  style={{ height: `${heightPx}px`, minHeight: weekData.value > 0 ? "4px" : "0" }}
+                />
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs whitespace-nowrap z-10">
-                  <div className="text-white font-medium">{value} guilds</div>
-                  <div className="text-gray-400">{formatDate(entry.date)}</div>
+                  <div className="text-white font-medium">{weekData.value} guilds</div>
+                  <div className="text-gray-400">Week {weekData.weekNumber}</div>
+                  <div className="text-gray-500 text-[10px]">
+                    {formatDate(weekData.weekStart.toISOString())} - {formatDate(weekData.weekEnd.toISOString())}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+      {/* X-axis labels */}
       <div className="flex justify-between mt-2 text-xs text-gray-500 pl-8">
-        <span>{data.length > 0 ? formatDate(data[0].date) : ""}</span>
-        <span>{data.length > 0 ? formatDate(data[data.length - 1].date) : ""}</span>
+        <span>Week 1</span>
+        {totalWeeks > 2 && <span>Week {Math.ceil(totalWeeks / 2)}</span>}
+        <span>Week {totalWeeks}</span>
       </div>
     </div>
   );
@@ -145,6 +192,8 @@ function StatsSection({
   progression,
   progressionLabel,
   progressionKey,
+  raidStart,
+  raidEnd,
 }: {
   title: string;
   pullStats: {
@@ -164,6 +213,8 @@ function StatsSection({
   progression?: { date: string; killCount?: number; clearCount?: number }[];
   progressionLabel: string;
   progressionKey: "killCount" | "clearCount";
+  raidStart?: string;
+  raidEnd?: string;
 }) {
   const t = useTranslations("raidAnalyticsPage");
 
@@ -200,7 +251,7 @@ function StatsSection({
       </div>
 
       {/* Progression chart */}
-      {progression && <ProgressionChart data={progression} valueKey={progressionKey} label={progressionLabel} />}
+      {progression && <ProgressionChart data={progression} valueKey={progressionKey} raidStart={raidStart} raidEnd={raidEnd} label={progressionLabel} />}
     </div>
   );
 }
@@ -343,6 +394,8 @@ export default function RaidAnalyticsPage() {
               progression={analytics.overall.clearProgression}
               progressionLabel={t("clearProgression")}
               progressionKey="clearCount"
+              raidStart={analytics.raidStart}
+              raidEnd={analytics.raidEnd}
             />
           </div>
 
@@ -380,6 +433,8 @@ export default function RaidAnalyticsPage() {
                         pullStats={boss.pullCount}
                         timeStats={boss.timeSpent}
                         progression={boss.killProgression}
+                        raidStart={analytics.raidStart}
+                        raidEnd={analytics.raidEnd}
                         progressionLabel={t("killProgression")}
                         progressionKey="killCount"
                       />
