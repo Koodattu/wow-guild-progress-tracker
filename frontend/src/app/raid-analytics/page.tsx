@@ -63,6 +63,8 @@ function DistributionChart({
     );
   }
 
+  // Always render chart, even with single guild
+
   // Find min and max values
   const values = data.map((guild) => guild[valueKey]);
   const minValue = Math.min(...values);
@@ -164,7 +166,7 @@ function ProgressionChart({
   raidEnd?: string;
   label: string;
 }) {
-  if (!data || data.length === 0 || !raidStart) {
+  if (!raidStart) {
     return (
       <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
@@ -172,6 +174,8 @@ function ProgressionChart({
       </div>
     );
   }
+
+  // Always render chart, even with no progression data yet
 
   // Calculate weekly buckets
   const startDate = new Date(raidStart);
