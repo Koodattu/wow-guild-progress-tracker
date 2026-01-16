@@ -126,7 +126,7 @@ function DistributionChart({
                   <div className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs max-w-xs">
                     <div className="text-white font-bold mb-1">{data.label}</div>
                     <div className="text-blue-400 mb-1">{data.count} guilds</div>
-                    {data.guilds && data.guilds.length > 0 && (
+                    {data.guilds && Array.isArray(data.guilds) && data.guilds.length > 0 && (
                       <div className="text-gray-400 text-[10px] max-h-32 overflow-y-auto">
                         {data.guilds.map((guild: GuildDistributionEntry, idx: number) => (
                           <div key={idx} className="truncate">
@@ -176,6 +176,7 @@ function ProgressionChart({
   }
 
   // Always render chart, even with no progression data yet
+  const safeData = data || [];
 
   // Calculate weekly buckets
   const startDate = new Date(raidStart);
@@ -190,7 +191,7 @@ function ProgressionChart({
     const weekEnd = new Date(Math.min(weekStart.getTime() + millisecondsPerWeek, endDate.getTime()));
 
     let weekValue = 0;
-    for (const entry of data) {
+    for (const entry of safeData) {
       const entryDate = new Date(entry.date);
       if (entryDate >= weekStart && entryDate < weekEnd) {
         const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
@@ -289,7 +290,9 @@ function StatsSection({
       )}
 
       {/* Progression Chart */}
-      {progression && <ProgressionChart data={progression} valueKey={progressionKey} raidStart={raidStart} raidEnd={raidEnd} label={progressionLabel} />}
+      {progression && Array.isArray(progression) && (
+        <ProgressionChart data={progression} valueKey={progressionKey} raidStart={raidStart} raidEnd={raidEnd} label={progressionLabel} />
+      )}
     </div>
   );
 }
