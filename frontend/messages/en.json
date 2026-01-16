@@ -165,7 +165,8 @@
   },
   "raidSelector": {
     "selectRaid": "Select Raid",
-    "allRaids": "All Raids"
+    "allRaids": "All Raids",
+    "overall": "Overall"
   },
   "tierListsPage": {
     "title": "Guild Tier Lists",
@@ -419,6 +420,7 @@
     "killProgression": "Kill Progression Over Time",
     "killed": "killed",
     "progressing": "progressing",
-    "noBossKills": "No guilds have killed this boss yet"
+    "noBossKills": "No guilds have killed this boss yet",
+    "showingOverallStatsForAllRaids": "Showing overall statistics for all raids"
   }
 }

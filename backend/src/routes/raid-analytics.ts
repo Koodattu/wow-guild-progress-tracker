@@ -24,6 +24,27 @@ router.get("/raids", async (req: Request, res: Response) => {
 });
 
 /**
+ * Get analytics for all raids in a single request
+ * GET /api/raid-analytics/all
+ */
+router.get(
+  "/all",
+  cacheMiddleware(
+    () => "raid-analytics:all",
+    () => RAID_ANALYTICS_TTL
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const allAnalytics = await raidAnalyticsService.getAllRaidAnalytics();
+      res.json(allAnalytics);
+    } catch (error) {
+      logger.error("Error fetching all raid analytics:", error);
+      res.status(500).json({ error: "Failed to fetch all raid analytics" });
+    }
+  }
+);
+
+/**
  * Get analytics for a specific raid
  * GET /api/raid-analytics/:raidId
  */

@@ -622,4 +622,12 @@ export const api = {
     }
     return response.json();
   },
+
+  async getAllRaidAnalytics(): Promise<RaidAnalytics[]> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/all`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch all raid analytics");
+    }
+    return response.json();
+  },
 };

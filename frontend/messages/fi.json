@@ -165,7 +165,8 @@
   },
   "raidSelector": {
     "selectRaid": "Valitse Raidi",
-    "allRaids": "Kaikki Raidit"
+    "allRaids": "Kaikki Raidit",
+    "overall": "Yleiskatsaus"
   },
   "tierListsPage": {
     "title": "Kiltojen Tier Listat",
@@ -399,6 +400,7 @@
     "killProgression": "Tappojen kehitys ajan myötä",
     "killed": "tappanut",
     "progressing": "edistymässä",
-    "noBossKills": "Yksikään kilta ei ole vielä tappanut tätä bossia"
+    "noBossKills": "Yksikään kilta ei ole vielä tappanut tätä bossia",
+    "showingOverallStatsForAllRaids": "Näytetään kokonaistilastot kaikille raideille"
   }
 }

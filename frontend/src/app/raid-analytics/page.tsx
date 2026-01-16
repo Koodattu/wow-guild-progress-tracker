@@ -259,6 +259,7 @@ function StatsSection({
 export default function RaidAnalyticsPage() {
   const t = useTranslations("raidAnalyticsPage");
   const [analytics, setAnalytics] = useState<RaidAnalytics | null>(null);
+  const [allAnalytics, setAllAnalytics] = useState<RaidAnalytics[] | null>(null);
   const [raids, setRaids] = useState<RaidInfo[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
@@ -272,10 +273,8 @@ export default function RaidAnalyticsPage() {
       try {
         const raidsData = await api.getRaids();
         setRaids(raidsData);
-        // Default to first (most recent) raid
-        if (raidsData.length > 0) {
-          setSelectedRaidId(raidsData[0].id);
-        }
+        // Default to "overall" view (null)
+        setSelectedRaidId(null);
       } catch (err) {
         setError("Failed to load raids");
         console.error("Failed to fetch raids:", err);
@@ -288,16 +287,25 @@ export default function RaidAnalyticsPage() {
 
   // Fetch analytics when raid selection changes
   const fetchAnalytics = useCallback(
-    async (raidId: number) => {
+    async (raidId: number | null) => {
       try {
         setDataLoading(true);
         setError(null);
 
-        // Fetch analytics and bosses in parallel
-        const [analyticsData, bossesData] = await Promise.all([api.getRaidAnalytics(raidId), api.getBosses(raidId)]);
+        if (raidId === null) {
+          // Fetch all analytics
+          const allAnalyticsData = await api.getAllRaidAnalytics();
+          setAllAnalytics(allAnalyticsData);
+          setAnalytics(null);
+          setBosses([]);
+        } else {
+          // Fetch analytics and bosses for specific raid
+          const [analyticsData, bossesData] = await Promise.all([api.getRaidAnalytics(raidId), api.getBosses(raidId)]);
 
-        setAnalytics(analyticsData);
-        setBosses(bossesData);
+          setAnalytics(analyticsData);
+          setAllAnalytics(null);
+          setBosses(bossesData);
+        }
       } catch (err) {
         if (err instanceof Error && err.message.includes("No analytics")) {
           setError(t("noAnalyticsAvailable"));
@@ -305,6 +313,7 @@ export default function RaidAnalyticsPage() {
           setError(t("failedToLoad"));
         }
         setAnalytics(null);
+        setAllAnalytics(null);
         console.error("Failed to fetch raid analytics:", err);
       } finally {
         setDataLoading(false);
@@ -314,19 +323,26 @@ export default function RaidAnalyticsPage() {
   );
 
   useEffect(() => {
-    if (selectedRaidId) {
+    if (selectedRaidId !== undefined) {
       fetchAnalytics(selectedRaidId);
     }
   }, [selectedRaidId, fetchAnalytics]);
 
-  const handleRaidSelect = (raidId: number) => {
+  const handleRaidSelect = (raidId: number | null) => {
     setSelectedRaidId(raidId);
   };
 
-  // Get boss icon URL
+  // Get boss icon URL for single raid view
   const getBossIconUrl = (bossName: string): string | undefined => {
     const boss = bosses.find((b) => b.name === bossName);
     return boss?.iconUrl;
+  };
+
+  // Get boss icon URL for all raids view (need to search within raid data)
+  const getBossIconUrlFromRaid = (raidAnalytics: RaidAnalytics, bossName: string): string | undefined => {
+    // For the overall view, we don't have bosses loaded, so we'll skip icons for now
+    // Could be enhanced later by loading all bosses
+    return undefined;
   };
 
   if (loading) {
@@ -345,7 +361,7 @@ export default function RaidAnalyticsPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-white">{t("title")}</h1>
           <p className="text-gray-400 text-sm mt-1">{t("subtitle")}</p>
         </div>
-        <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} />
+        <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} showOverall={true} />
       </div>
 
       {/* Error state */}
@@ -446,6 +462,56 @@ export default function RaidAnalyticsPage() {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* All raids overall view */}
+      {!dataLoading && allAnalytics && allAnalytics.length > 0 && (
+        <div className="space-y-8">
+          <div className="text-sm text-gray-400 mb-4">
+            {t("showingOverallStatsForAllRaids")} ({allAnalytics.length} raids)
+          </div>
+
+          {allAnalytics.map((raidAnalytics) => (
+            <div key={raidAnalytics.raidId} className="bg-gray-900 rounded-lg p-4 md:p-6 border border-gray-700">
+              {/* Raid header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-white">{raidAnalytics.raidName}</h2>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {t("lastCalculated")}: {formatDate(raidAnalytics.lastCalculated)}
+                    {raidAnalytics.raidStart && (
+                      <>
+                        {" • "}
+                        {formatDate(raidAnalytics.raidStart)}
+                        {raidAnalytics.raidEnd ? ` - ${formatDate(raidAnalytics.raidEnd)}` : ` - ${t("ongoing")}`}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+                <StatCard label={t("guildsCleared")} value={raidAnalytics.overall.guildsCleared} />
+                <StatCard label={t("guildsProgressing")} value={raidAnalytics.overall.guildsProgressing} />
+                <StatCard label={t("avgPullsToClean")} value={raidAnalytics.overall.pullCount.average || "-"} />
+                <StatCard label={t("avgTimeToClean")} value={formatTime(raidAnalytics.overall.timeSpent.average)} />
+              </div>
+
+              {/* Overall raid statistics */}
+              <StatsSection
+                title={t("overallStatistics")}
+                pullStats={raidAnalytics.overall.pullCount}
+                timeStats={raidAnalytics.overall.timeSpent}
+                progression={raidAnalytics.overall.clearProgression}
+                progressionLabel={t("clearProgression")}
+                progressionKey="clearCount"
+                raidStart={raidAnalytics.raidStart}
+                raidEnd={raidAnalytics.raidEnd}
+              />
+            </div>
+          ))}
         </div>
       )}
 

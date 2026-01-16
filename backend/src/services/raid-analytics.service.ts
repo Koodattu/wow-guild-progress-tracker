@@ -391,6 +391,14 @@ class RaidAnalyticsService {
   }
 
   /**
+   * Get analytics for all raids in a single call
+   * Sorted by raidId descending (newest to oldest)
+   */
+  async getAllRaidAnalytics(): Promise<IRaidAnalytics[]> {
+    return RaidAnalytics.find({}).sort({ raidId: -1 });
+  }
+
+  /**
    * Get list of raids that have analytics available
    */
   async getAvailableRaids(): Promise<{ raidId: number; raidName: string; lastCalculated: Date }[]> {
