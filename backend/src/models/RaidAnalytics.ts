@@ -25,6 +25,13 @@ export interface IBossAnalytics {
     date: Date;
     killCount: number; // Cumulative kills up to this date
   }[];
+  // Guild distribution for visualization (only guilds that killed)
+  guildDistribution: {
+    name: string;
+    realm: string;
+    pullCount: number;
+    timeSpent: number; // in seconds
+  }[];
 }
 
 // Overall raid statistics
@@ -49,6 +56,13 @@ export interface IRaidOverallAnalytics {
   clearProgression: {
     date: Date;
     clearCount: number; // Cumulative clears up to this date
+  }[];
+  // Guild distribution for visualization (only guilds that cleared)
+  guildDistribution: {
+    name: string;
+    realm: string;
+    pullCount: number;
+    timeSpent: number; // in seconds
   }[];
 }
 
@@ -107,6 +121,14 @@ const BossAnalyticsSchema = new Schema(
         killCount: { type: Number, required: true },
       },
     ],
+    guildDistribution: [
+      {
+        name: { type: String, required: true },
+        realm: { type: String, required: true },
+        pullCount: { type: Number, required: true },
+        timeSpent: { type: Number, required: true },
+      },
+    ],
   },
   { _id: false }
 );
@@ -149,6 +171,14 @@ const RaidOverallAnalyticsSchema = new Schema(
       {
         date: { type: Date, required: true },
         clearCount: { type: Number, required: true },
+      },
+    ],
+    guildDistribution: [
+      {
+        name: { type: String, required: true },
+        realm: { type: String, required: true },
+        pullCount: { type: Number, required: true },
+        timeSpent: { type: Number, required: true },
       },
     ],
   },

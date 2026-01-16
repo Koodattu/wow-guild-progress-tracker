@@ -793,6 +793,14 @@ export interface ClearProgressionEntry {
   clearCount: number;
 }
 
+// Guild distribution entry (for distribution charts)
+export interface GuildDistributionEntry {
+  name: string;
+  realm: string;
+  pullCount: number;
+  timeSpent: number; // in seconds
+}
+
 // Boss analytics
 export interface BossAnalytics {
   bossId: number;
@@ -802,6 +810,7 @@ export interface BossAnalytics {
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
   killProgression: KillProgressionEntry[];
+  guildDistribution: GuildDistributionEntry[];
 }
 
 // Overall raid analytics
@@ -811,6 +820,7 @@ export interface RaidOverallAnalytics {
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
   clearProgression: ClearProgressionEntry[];
+  guildDistribution: GuildDistributionEntry[];
 }
 
 // Full raid analytics response

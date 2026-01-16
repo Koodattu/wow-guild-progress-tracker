@@ -172,6 +172,14 @@ class RaidAnalyticsService {
         // Calculate kill progression over time
         const killProgression = this.calculateKillProgression(killedGuilds);
 
+        // Create guild distribution (only for guilds that killed, limit to essential data)
+        const guildDistribution = killedGuilds.map((g) => ({
+          name: g.guildName,
+          realm: g.guildRealm,
+          pullCount: g.pullCount,
+          timeSpent: g.timeSpent,
+        }));
+
         bossAnalytics.push({
           bossId: boss.id,
           bossName: boss.name,
@@ -180,6 +188,7 @@ class RaidAnalyticsService {
           pullCount: pullStats,
           timeSpent: timeStats,
           killProgression,
+          guildDistribution,
         });
       }
 
@@ -317,12 +326,21 @@ class RaidAnalyticsService {
     // Clear progression (cumulative clears over time)
     const clearProgression = this.calculateClearProgression(clearedGuilds);
 
+    // Create guild distribution (only for guilds that cleared, limit to essential data)
+    const guildDistribution = clearedGuilds.map((g) => ({
+      name: g.guildName,
+      realm: g.guildRealm,
+      pullCount: g.totalPulls,
+      timeSpent: g.totalTimeSpent,
+    }));
+
     return {
       guildsCleared: clearedGuilds.length,
       guildsProgressing: progressingGuilds.length,
       pullCount: pullStats,
       timeSpent: timeStats,
       clearProgression,
+      guildDistribution,
     };
   }
 
