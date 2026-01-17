@@ -95,11 +95,12 @@ function DistributionChart({
     .map((key) => {
       const bucketStart = parseInt(key);
       const bucketEnd = bucketStart + finalBucketSize - 1;
+      const bucket = buckets[bucketStart] || [];
       return {
         bucket: bucketStart,
-        count: buckets[parseInt(key)].length,
+        count: bucket.length,
         label: valueKey === "timeSpent" ? formatTime(bucketStart) : `${bucketStart}-${bucketEnd}`,
-        guilds: buckets[parseInt(key)],
+        guilds: bucket,
       };
     })
     .sort((a, b) => a.bucket - b.bucket);
@@ -356,7 +357,7 @@ export default function RaidAnalyticsPage() {
         setDataLoading(false);
       }
     },
-    [t]
+    [t],
   );
 
   useEffect(() => {
