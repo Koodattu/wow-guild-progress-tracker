@@ -93,13 +93,13 @@ function DistributionChart({
   // Convert to array and sort
   const chartData = Object.keys(buckets)
     .map((key) => {
-      const bucketStart = parseInt(key);
-      const bucketEnd = bucketStart + finalBucketSize - 1;
+      const bucketStart = parseFloat(key);
+      const bucketEnd = bucketStart + finalBucketSize;
       const bucket = buckets[bucketStart] || [];
       return {
         bucket: bucketStart,
         count: bucket.length,
-        label: valueKey === "timeSpent" ? formatTime(bucketStart) : `${bucketStart}-${bucketEnd}`,
+        label: valueKey === "timeSpent" ? formatTime(Math.floor(bucketStart)) : `${Math.floor(bucketStart)}-${Math.floor(bucketEnd)}`,
         guilds: bucket,
       };
     })
