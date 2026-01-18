@@ -56,6 +56,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Karanteeni", realm: "Ravencrest", region: "EU" },
   { name: "Intervention", realm: "Stormreaver", region: "EU" },
   { name: "Saunan Taakse", realm: "Stormreaver", region: "EU" },
+  { name: "Northern", realm: "Frostmane", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
