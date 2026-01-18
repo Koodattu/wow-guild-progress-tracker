@@ -513,50 +513,33 @@ export default function RaidAnalyticsPage() {
           </div>
 
           {/* Overall stats section with summary */}
-          <div className="bg-gray-900/60 rounded border border-gray-800/50 p-4">
-            {/* Raid header with icon */}
-            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800/50">
+          <div className="bg-gray-900/60 rounded border border-gray-800/50 p-2">
+            {/* Raid header with icon and inline stats */}
+            <div className="flex items-center gap-4 mb-2 pb-2 border-b border-gray-800/50">
               {getRaidIconUrl(analytics.raidId) && (
                 <IconImage iconFilename={getRaidIconUrl(analytics.raidId)} alt={analytics.raidName} width={40} height={40} className="rounded" />
               )}
-              <div>
+              <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-bold text-white">{analytics.raidName}</h2>
                 <p className="text-xs text-gray-500">{t("overallStatistics")}</p>
               </div>
-            </div>
-
-            {/* Summary stats - single row with 4 equal columns */}
-            <div className="grid grid-cols-4 gap-4 mb-4">
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 mb-1">Cleared</span>
-                <span className="text-2xl font-bold text-green-400">{analytics.overall.guildsCleared}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 mb-1">Progressing</span>
-                <span className="text-2xl font-bold text-yellow-400">{analytics.overall.guildsProgressing}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 mb-1">Pull Count</span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold text-white">{analytics.overall.pullCount.average || "-"}</span>
-                  <span className="text-xs text-gray-600">avg</span>
+              {/* Summary stats - inline with header */}
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Cleared</span>
+                  <span className="text-xl font-bold text-green-400">{analytics.overall.guildsCleared}</span>
                 </div>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xs text-green-400">{analytics.overall.pullCount.lowest}</span>
-                  <span className="text-xs text-gray-700">-</span>
-                  <span className="text-xs text-amber-400">{analytics.overall.pullCount.highest}</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Progressing</span>
+                  <span className="text-xl font-bold text-yellow-400">{analytics.overall.guildsProgressing}</span>
                 </div>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 mb-1">Time Spent</span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold text-white">{formatTime(analytics.overall.timeSpent.average)}</span>
-                  <span className="text-xs text-gray-600">avg</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Avg Pulls</span>
+                  <span className="text-xl font-bold text-white">{analytics.overall.pullCount.average || "-"}</span>
                 </div>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-xs text-green-400">{formatTime(analytics.overall.timeSpent.lowest)}</span>
-                  <span className="text-xs text-gray-700">-</span>
-                  <span className="text-xs text-amber-400">{formatTime(analytics.overall.timeSpent.highest)}</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Avg Time</span>
+                  <span className="text-xl font-bold text-white">{formatTime(analytics.overall.timeSpent.average)}</span>
                 </div>
               </div>
             </div>
@@ -581,55 +564,39 @@ export default function RaidAnalyticsPage() {
                 const bossIcon = getBossIconUrl(boss.bossName);
                 return (
                   <div key={boss.bossId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden hover:border-gray-700/50 transition-colors">
-                    {/* Boss header - compact */}
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/30 border-b border-gray-800/50">
+                    {/* Boss header with inline stats */}
+                    <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/30 border-b border-gray-800/50">
                       <span className="text-gray-600 font-mono text-xs w-5">#{index + 1}</span>
                       <IconImage iconFilename={bossIcon} alt={boss.bossName} width={28} height={28} className="rounded" />
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-bold text-white truncate">{boss.bossName}</h3>
                       </div>
+                      {boss.guildsKilled > 0 && (
+                        <div className="flex items-center gap-5">
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-gray-500">Killed</span>
+                            <span className="text-base font-bold text-green-400">{boss.guildsKilled}</span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-gray-500">Progressing</span>
+                            <span className="text-base font-bold text-yellow-400">{boss.guildsProgressing}</span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-gray-500">Avg Pulls</span>
+                            <span className="text-base font-bold text-white">{boss.pullCount.average || "-"}</span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-gray-500">Avg Time</span>
+                            <span className="text-base font-bold text-white">{formatTime(boss.timeSpent.average)}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Boss stats */}
                     <div className="px-3 py-3">
                       {boss.guildsKilled > 0 ? (
                         <>
-                          {/* Summary stats - single row with 4 equal columns */}
-                          <div className="grid grid-cols-4 gap-4 mb-3">
-                            <div className="flex flex-col">
-                              <span className="text-xs text-gray-500 mb-1">Killed</span>
-                              <span className="text-xl font-bold text-green-400">{boss.guildsKilled}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs text-gray-500 mb-1">Progressing</span>
-                              <span className="text-xl font-bold text-yellow-400">{boss.guildsProgressing}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs text-gray-500 mb-1">Pull Count</span>
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-xl font-bold text-white">{boss.pullCount.average || "-"}</span>
-                                <span className="text-xs text-gray-600">avg</span>
-                              </div>
-                              <div className="flex items-baseline gap-1 mt-0.5">
-                                <span className="text-xs text-green-400">{boss.pullCount.lowest}</span>
-                                <span className="text-xs text-gray-700">-</span>
-                                <span className="text-xs text-amber-400">{boss.pullCount.highest}</span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs text-gray-500 mb-1">Time Spent</span>
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-xl font-bold text-white">{formatTime(boss.timeSpent.average)}</span>
-                                <span className="text-xs text-gray-600">avg</span>
-                              </div>
-                              <div className="flex items-baseline gap-1 mt-0.5">
-                                <span className="text-xs text-green-400">{formatTime(boss.timeSpent.lowest)}</span>
-                                <span className="text-xs text-gray-700">-</span>
-                                <span className="text-xs text-amber-400">{formatTime(boss.timeSpent.highest)}</span>
-                              </div>
-                            </div>
-                          </div>
-
                           <StatsSection
                             pullStats={boss.pullCount}
                             timeStats={boss.timeSpent}
@@ -662,54 +629,46 @@ export default function RaidAnalyticsPage() {
 
           {allAnalytics.map((raidAnalytics) => (
             <div key={raidAnalytics.raidId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden">
-              {/* Raid header */}
+              {/* Raid header with inline stats */}
               <div className="px-4 py-3 bg-gray-800/30 border-b border-gray-800/50">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   {getRaidIconUrl(raidAnalytics.raidId) && (
                     <IconImage iconFilename={getRaidIconUrl(raidAnalytics.raidId)} alt={raidAnalytics.raidName} width={32} height={32} className="rounded" />
                   )}
-                  <h2 className="text-lg font-bold text-white">{raidAnalytics.raidName}</h2>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
-                  <span>
-                    {t("lastCalculated")}: {formatDate(raidAnalytics.lastCalculated)}
-                  </span>
-                  {raidAnalytics.raidStart && (
-                    <>
-                      <span>•</span>
-                      <span>
-                        {formatDate(raidAnalytics.raidStart)}
-                        {raidAnalytics.raidEnd ? ` - ${formatDate(raidAnalytics.raidEnd)}` : ` - ${t("ongoing")}`}
-                      </span>
-                    </>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3">
+                      <h2 className="text-lg font-bold text-white">{raidAnalytics.raidName}</h2>
+                      {raidAnalytics.raidStart && (
+                        <span className="text-xs text-gray-500">
+                          {formatDate(raidAnalytics.raidStart)}
+                          {raidAnalytics.raidEnd ? ` - ${formatDate(raidAnalytics.raidEnd)}` : ` - ${t("ongoing")}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Summary stats - inline with header */}
+                  <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Cleared</span>
+                      <span className="text-xl font-bold text-green-400">{raidAnalytics.overall.guildsCleared}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Progressing</span>
+                      <span className="text-xl font-bold text-yellow-400">{raidAnalytics.overall.guildsProgressing}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Avg Pulls</span>
+                      <span className="text-xl font-bold text-white">{raidAnalytics.overall.pullCount.average || "-"}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Avg Time</span>
+                      <span className="text-xl font-bold text-white">{formatTime(raidAnalytics.overall.timeSpent.average)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="p-4 space-y-4">
-                {/* Summary - inline */}
-                <div className="flex flex-wrap items-center gap-6 text-sm">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">Cleared</span>
-                    <span className="text-xl font-bold text-green-400">{raidAnalytics.overall.guildsCleared}</span>
-                  </div>
-                  <span className="text-gray-700">•</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">Progressing</span>
-                    <span className="text-xl font-bold text-yellow-400">{raidAnalytics.overall.guildsProgressing}</span>
-                  </div>
-                  <span className="text-gray-700">•</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">Avg Pulls</span>
-                    <span className="text-xl font-bold text-white">{raidAnalytics.overall.pullCount.average || "-"}</span>
-                  </div>
-                  <span className="text-gray-700">•</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">Avg Time</span>
-                    <span className="text-xl font-bold text-white">{formatTime(raidAnalytics.overall.timeSpent.average)}</span>
-                  </div>
-                </div>
-
                 {/* Stats */}
                 <StatsSection
                   pullStats={raidAnalytics.overall.pullCount}
