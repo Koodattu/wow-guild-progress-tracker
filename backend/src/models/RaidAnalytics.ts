@@ -1,5 +1,32 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+// Guild entry for distribution bucket tooltips
+export interface IGuildEntry {
+  name: string;
+  realm: string;
+  pullCount: number;
+  timeSpent: number; // in seconds
+}
+
+// Pre-calculated distribution bucket
+export interface IDistributionBucket {
+  label: string;
+  count: number;
+  guilds: IGuildEntry[];
+}
+
+// Pre-calculated distribution data
+export interface IDistribution {
+  buckets: IDistributionBucket[];
+}
+
+// Pre-calculated weekly progression entry
+export interface IWeeklyProgressionEntry {
+  weekNumber: number;
+  value: number;
+  label: string; // "W1", "W2", etc.
+}
+
 // Statistics for a single boss
 export interface IBossAnalytics {
   bossId: number;
@@ -20,18 +47,11 @@ export interface IBossAnalytics {
     lowestGuild?: { name: string; realm: string; time: number };
     highestGuild?: { name: string; realm: string; time: number };
   };
-  // Kill progression over time (for cumulative chart)
-  killProgression: {
-    date: Date;
-    killCount: number; // Cumulative kills up to this date
-  }[];
-  // Guild distribution for visualization (only guilds that killed)
-  guildDistribution: {
-    name: string;
-    realm: string;
-    pullCount: number;
-    timeSpent: number; // in seconds
-  }[];
+  // Pre-calculated distributions
+  pullDistribution: IDistribution;
+  timeDistribution: IDistribution;
+  // Pre-calculated weekly progression
+  weeklyProgression: IWeeklyProgressionEntry[];
 }
 
 // Overall raid statistics
@@ -52,18 +72,11 @@ export interface IRaidOverallAnalytics {
     lowestGuild?: { name: string; realm: string; time: number };
     highestGuild?: { name: string; realm: string; time: number };
   };
-  // Clear progression over time (guilds that cleared the full raid)
-  clearProgression: {
-    date: Date;
-    clearCount: number; // Cumulative clears up to this date
-  }[];
-  // Guild distribution for visualization (only guilds that cleared)
-  guildDistribution: {
-    name: string;
-    realm: string;
-    pullCount: number;
-    timeSpent: number; // in seconds
-  }[];
+  // Pre-calculated distributions
+  pullDistribution: IDistribution;
+  timeDistribution: IDistribution;
+  // Pre-calculated weekly progression
+  weeklyProgression: IWeeklyProgressionEntry[];
 }
 
 export interface IRaidAnalytics extends Document {
@@ -78,6 +91,41 @@ export interface IRaidAnalytics extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const GuildEntrySchema = new Schema(
+  {
+    name: { type: String, required: true },
+    realm: { type: String, required: true },
+    pullCount: { type: Number, required: true },
+    timeSpent: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
+const DistributionBucketSchema = new Schema(
+  {
+    label: { type: String, required: true },
+    count: { type: Number, required: true },
+    guilds: [GuildEntrySchema],
+  },
+  { _id: false },
+);
+
+const DistributionSchema = new Schema(
+  {
+    buckets: [DistributionBucketSchema],
+  },
+  { _id: false },
+);
+
+const WeeklyProgressionEntrySchema = new Schema(
+  {
+    weekNumber: { type: Number, required: true },
+    value: { type: Number, required: true },
+    label: { type: String, required: true },
+  },
+  { _id: false },
+);
 
 const BossAnalyticsSchema = new Schema(
   {
@@ -115,22 +163,11 @@ const BossAnalyticsSchema = new Schema(
         time: Number,
       },
     },
-    killProgression: [
-      {
-        date: { type: Date, required: true },
-        killCount: { type: Number, required: true },
-      },
-    ],
-    guildDistribution: [
-      {
-        name: { type: String, required: true },
-        realm: { type: String, required: true },
-        pullCount: { type: Number, required: true },
-        timeSpent: { type: Number, required: true },
-      },
-    ],
+    pullDistribution: { type: DistributionSchema, default: { buckets: [] } },
+    timeDistribution: { type: DistributionSchema, default: { buckets: [] } },
+    weeklyProgression: [WeeklyProgressionEntrySchema],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const RaidOverallAnalyticsSchema = new Schema(
@@ -167,22 +204,11 @@ const RaidOverallAnalyticsSchema = new Schema(
         time: Number,
       },
     },
-    clearProgression: [
-      {
-        date: { type: Date, required: true },
-        clearCount: { type: Number, required: true },
-      },
-    ],
-    guildDistribution: [
-      {
-        name: { type: String, required: true },
-        realm: { type: String, required: true },
-        pullCount: { type: Number, required: true },
-        timeSpent: { type: Number, required: true },
-      },
-    ],
+    pullDistribution: { type: DistributionSchema, default: { buckets: [] } },
+    timeDistribution: { type: DistributionSchema, default: { buckets: [] } },
+    weeklyProgression: [WeeklyProgressionEntrySchema],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const RaidAnalyticsSchema: Schema = new Schema(
@@ -198,7 +224,7 @@ const RaidAnalyticsSchema: Schema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 export default mongoose.model<IRaidAnalytics>("RaidAnalytics", RaidAnalyticsSchema);

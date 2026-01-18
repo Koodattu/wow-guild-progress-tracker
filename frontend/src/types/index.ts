@@ -793,12 +793,31 @@ export interface ClearProgressionEntry {
   clearCount: number;
 }
 
-// Guild distribution entry (for distribution charts)
+// Guild entry for distribution bucket tooltips
 export interface GuildDistributionEntry {
   name: string;
   realm: string;
   pullCount: number;
   timeSpent: number; // in seconds
+}
+
+// Pre-calculated distribution bucket
+export interface DistributionBucket {
+  label: string;
+  count: number;
+  guilds: GuildDistributionEntry[];
+}
+
+// Pre-calculated distribution data
+export interface Distribution {
+  buckets: DistributionBucket[];
+}
+
+// Pre-calculated weekly progression entry
+export interface WeeklyProgressionEntry {
+  weekNumber: number;
+  value: number;
+  label: string; // "W1", "W2", etc.
 }
 
 // Boss analytics
@@ -809,8 +828,9 @@ export interface BossAnalytics {
   guildsProgressing: number;
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
-  killProgression: KillProgressionEntry[];
-  guildDistribution: GuildDistributionEntry[];
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
 }
 
 // Overall raid analytics
@@ -819,8 +839,9 @@ export interface RaidOverallAnalytics {
   guildsProgressing: number;
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
-  clearProgression: ClearProgressionEntry[];
-  guildDistribution: GuildDistributionEntry[];
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
 }
 
 // Full raid analytics response

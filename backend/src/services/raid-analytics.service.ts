@@ -1,6 +1,6 @@
 import Guild from "../models/Guild";
 import Raid from "../models/Raid";
-import RaidAnalytics, { IRaidAnalytics, IBossAnalytics, IRaidOverallAnalytics } from "../models/RaidAnalytics";
+import RaidAnalytics, { IRaidAnalytics, IBossAnalytics, IRaidOverallAnalytics, IGuildEntry, IDistribution, IWeeklyProgressionEntry } from "../models/RaidAnalytics";
 import { TRACKED_RAIDS } from "../config/guilds";
 import logger from "../utils/logger";
 
@@ -20,7 +20,18 @@ interface GuildRaidData {
   totalTimeSpent: number;
   bossesKilled: number;
   totalBosses: number;
-  lastBossKillTime?: Date; // Time of the final boss kill (raid clear)
+  lastBossKillTime?: Date;
+}
+
+/**
+ * Format seconds to hours and minutes for display labels
+ */
+function formatTime(seconds: number): string {
+  if (seconds === 0) return "-";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
 }
 
 class RaidAnalyticsService {
@@ -29,7 +40,6 @@ class RaidAnalyticsService {
    */
   async calculateRaidAnalytics(raidId: number): Promise<IRaidAnalytics | null> {
     try {
-      // Get raid info
       const raid = await Raid.findOne({ id: raidId });
       if (!raid) {
         logger.warn(`[RaidAnalytics] Raid ${raidId} not found`);
@@ -39,7 +49,6 @@ class RaidAnalyticsService {
       const totalBosses = raid.bosses.length;
       logger.info(`[RaidAnalytics] Calculating analytics for ${raid.name} (${totalBosses} bosses)`);
 
-      // Get all guilds with progress for this raid (mythic only)
       const guilds = await Guild.find({
         "progress.raidId": raidId,
         "progress.difficulty": "mythic",
@@ -50,13 +59,11 @@ class RaidAnalyticsService {
         return null;
       }
 
-      // Collect data per boss
       const bossDataMap = new Map<number, GuildBossData[]>();
       raid.bosses.forEach((boss) => {
         bossDataMap.set(boss.id, []);
       });
 
-      // Collect overall raid data
       const guildRaidDataList: GuildRaidData[] = [];
 
       for (const guild of guilds) {
@@ -86,7 +93,6 @@ class RaidAnalyticsService {
 
           if (boss.kills > 0) {
             bossesKilled++;
-            // Track last boss kill for cleared guilds
             if (boss.firstKillTime) {
               const killTime = new Date(boss.firstKillTime);
               if (!lastBossKillTime || killTime > lastBossKillTime) {
@@ -96,7 +102,6 @@ class RaidAnalyticsService {
           }
         }
 
-        // Only include guilds that have pulled at least once
         if (totalPulls > 0) {
           guildRaidDataList.push({
             guildName: guild.name,
@@ -105,24 +110,31 @@ class RaidAnalyticsService {
             totalTimeSpent,
             bossesKilled,
             totalBosses,
-            // Only set clear time if guild actually cleared the raid
             lastBossKillTime: bossesKilled === totalBosses ? lastBossKillTime : undefined,
           });
         }
       }
+
+      const raidStart = raid.starts?.eu ? new Date(raid.starts.eu) : undefined;
+      const raidEnd = raid.ends?.eu ? new Date(raid.ends.eu) : undefined;
 
       // Calculate boss analytics
       const bossAnalytics: IBossAnalytics[] = [];
 
       for (const boss of raid.bosses) {
         const bossDataList = bossDataMap.get(boss.id) || [];
-
-        // Filter to guilds that have actually pulled this boss
         const pulledGuilds = bossDataList.filter((g) => g.pullCount > 0);
         const killedGuilds = pulledGuilds.filter((g) => g.kills > 0);
 
-        // Calculate pull count stats (only for guilds that killed)
-        let pullStats = { average: 0, lowest: 0, highest: 0, lowestGuild: undefined, highestGuild: undefined } as IBossAnalytics["pullCount"];
+        // Calculate pull count stats
+        let pullStats = {
+          average: 0,
+          lowest: 0,
+          highest: 0,
+          lowestGuild: undefined,
+          highestGuild: undefined,
+        } as IBossAnalytics["pullCount"];
+
         if (killedGuilds.length > 0) {
           const counts = killedGuilds.map((g) => g.pullCount);
           const lowestIdx = counts.indexOf(Math.min(...counts));
@@ -145,8 +157,15 @@ class RaidAnalyticsService {
           };
         }
 
-        // Calculate time spent stats (only for guilds that killed)
-        let timeStats = { average: 0, lowest: 0, highest: 0, lowestGuild: undefined, highestGuild: undefined } as IBossAnalytics["timeSpent"];
+        // Calculate time spent stats
+        let timeStats = {
+          average: 0,
+          lowest: 0,
+          highest: 0,
+          lowestGuild: undefined,
+          highestGuild: undefined,
+        } as IBossAnalytics["timeSpent"];
+
         if (killedGuilds.length > 0) {
           const times = killedGuilds.map((g) => g.timeSpent);
           const lowestIdx = times.indexOf(Math.min(...times));
@@ -169,16 +188,21 @@ class RaidAnalyticsService {
           };
         }
 
-        // Calculate kill progression over time
-        const killProgression = this.calculateKillProgression(killedGuilds);
-
-        // Create guild distribution (only for guilds that killed, limit to essential data)
-        const guildDistribution = killedGuilds.map((g) => ({
+        // Create guild entries for distribution
+        const guildEntries: IGuildEntry[] = killedGuilds.map((g) => ({
           name: g.guildName,
           realm: g.guildRealm,
           pullCount: g.pullCount,
           timeSpent: g.timeSpent,
         }));
+
+        // Calculate pre-bucketed distributions
+        const pullDistribution = this.calculateDistribution(guildEntries, "pullCount");
+        const timeDistribution = this.calculateDistribution(guildEntries, "timeSpent");
+
+        // Calculate weekly progression from kill dates
+        const killDates = killedGuilds.filter((g) => g.firstKillTime).map((g) => new Date(g.firstKillTime!));
+        const weeklyProgression = this.calculateWeeklyProgression(killDates, raidStart, raidEnd);
 
         bossAnalytics.push({
           bossId: boss.id,
@@ -187,19 +211,15 @@ class RaidAnalyticsService {
           guildsProgressing: pulledGuilds.length - killedGuilds.length,
           pullCount: pullStats,
           timeSpent: timeStats,
-          killProgression,
-          guildDistribution,
+          pullDistribution,
+          timeDistribution,
+          weeklyProgression,
         });
       }
 
       // Calculate overall raid analytics
-      const overallAnalytics = this.calculateOverallAnalytics(guildRaidDataList, totalBosses);
+      const overallAnalytics = this.calculateOverallAnalytics(guildRaidDataList, totalBosses, raidStart, raidEnd);
 
-      // Get raid start/end dates
-      const raidStart = raid.starts?.eu ? new Date(raid.starts.eu) : undefined;
-      const raidEnd = raid.ends?.eu ? new Date(raid.ends.eu) : undefined;
-
-      // Upsert the analytics document
       const analytics = await RaidAnalytics.findOneAndUpdate(
         { raidId },
         {
@@ -212,7 +232,7 @@ class RaidAnalyticsService {
           raidEnd,
           lastCalculated: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       logger.info(`[RaidAnalytics] Completed analytics for ${raid.name}: ${overallAnalytics.guildsCleared} cleared, ${overallAnalytics.guildsProgressing} progressing`);
@@ -225,58 +245,169 @@ class RaidAnalyticsService {
   }
 
   /**
-   * Calculate kill progression over time (cumulative kills per day)
+   * Calculate quantile-based distribution buckets
+   * Mirrors the frontend bucketing logic exactly
    */
-  private calculateKillProgression(killedGuilds: GuildBossData[]): IBossAnalytics["killProgression"] {
-    const killDates: Date[] = [];
-
-    for (const guild of killedGuilds) {
-      if (guild.firstKillTime) {
-        killDates.push(new Date(guild.firstKillTime));
-      }
+  private calculateDistribution(guilds: IGuildEntry[], valueKey: "pullCount" | "timeSpent"): IDistribution {
+    if (guilds.length === 0) {
+      return { buckets: [] };
     }
 
-    if (killDates.length === 0) {
+    const values = guilds.map((g) => g[valueKey]);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = maxValue - minValue;
+
+    const numGuilds = guilds.length;
+    const targetBuckets = numGuilds < 5 ? numGuilds : 5;
+
+    // Single bucket case: all guilds have same value or few guilds
+    if (range === 0 || targetBuckets === 1) {
+      const label = valueKey === "timeSpent" ? formatTime(Math.floor(minValue)) : `${Math.floor(minValue)}`;
+
+      return {
+        buckets: [
+          {
+            label,
+            count: guilds.length,
+            guilds,
+          },
+        ],
+      };
+    }
+
+    // Sort guilds by value for quantile calculation
+    const sortedGuilds = [...guilds].sort((a, b) => a[valueKey] - b[valueKey]);
+
+    // Calculate quantile boundaries
+    const bucketBoundaries: number[] = [minValue];
+    for (let i = 1; i < targetBuckets; i++) {
+      const quantileIndex = Math.floor((i / targetBuckets) * sortedGuilds.length);
+      bucketBoundaries.push(sortedGuilds[quantileIndex][valueKey]);
+    }
+    bucketBoundaries.push(maxValue + 1);
+
+    // Create buckets based on quantile boundaries
+    const buckets: { min: number; max: number; guilds: IGuildEntry[] }[] = [];
+
+    for (let i = 0; i < targetBuckets; i++) {
+      const bucketMin = bucketBoundaries[i];
+      const bucketMax = bucketBoundaries[i + 1];
+
+      const guildsInBucket = sortedGuilds.filter((guild) => guild[valueKey] >= bucketMin && guild[valueKey] < bucketMax);
+
+      // For last bucket, include guilds at max boundary
+      if (i === targetBuckets - 1) {
+        guildsInBucket.push(...sortedGuilds.filter((guild) => guild[valueKey] === bucketMax - 1 && !guildsInBucket.includes(guild)));
+      }
+
+      buckets.push({
+        min: bucketMin,
+        max: bucketMax - 1,
+        guilds: guildsInBucket,
+      });
+    }
+
+    // Convert to final format with labels
+    const resultBuckets = buckets
+      .filter((bucket) => bucket.guilds.length > 0)
+      .map((bucket) => {
+        let label: string;
+        if (valueKey === "timeSpent") {
+          const bucketAverage = (bucket.min + bucket.max) / 2;
+          label = formatTime(Math.floor(bucketAverage));
+        } else {
+          label = `${Math.floor(bucket.min)}-${Math.floor(bucket.max)}`;
+        }
+
+        return {
+          label,
+          count: bucket.guilds.length,
+          guilds: bucket.guilds,
+        };
+      })
+      .sort((a, b) => {
+        const aVal = a.guilds[0]?.[valueKey] ?? 0;
+        const bVal = b.guilds[0]?.[valueKey] ?? 0;
+        return aVal - bVal;
+      });
+
+    return { buckets: resultBuckets };
+  }
+
+  /**
+   * Calculate weekly progression from dates
+   * Converts daily data to weekly buckets
+   */
+  private calculateWeeklyProgression(dates: Date[], raidStart?: Date, raidEnd?: Date): IWeeklyProgressionEntry[] {
+    if (!raidStart) {
       return [];
     }
 
-    // Sort by date
-    killDates.sort((a, b) => a.getTime() - b.getTime());
+    const startDate = raidStart;
+    const endDate = raidEnd || new Date();
+    const millisecondsPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const totalWeeks = Math.ceil((endDate.getTime() - startDate.getTime()) / millisecondsPerWeek);
 
-    // Group by day and create cumulative count
-    const progression: { date: Date; killCount: number }[] = [];
+    // Sort dates
+    const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
+
+    // Build cumulative count per day first
+    const cumulativeByDate = new Map<string, number>();
     let cumulativeCount = 0;
-    let lastDateStr = "";
 
-    for (const date of killDates) {
+    for (const date of sortedDates) {
       cumulativeCount++;
-      const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
-
-      // Only add a new entry if it's a different day
-      if (dateStr !== lastDateStr) {
-        progression.push({
-          date: new Date(dateStr), // Normalize to start of day
-          killCount: cumulativeCount,
-        });
-        lastDateStr = dateStr;
-      } else {
-        // Update the existing entry for this day
-        progression[progression.length - 1].killCount = cumulativeCount;
-      }
+      const dateStr = date.toISOString().split("T")[0];
+      cumulativeByDate.set(dateStr, cumulativeCount);
     }
 
-    return progression;
+    const weeklyData: IWeeklyProgressionEntry[] = [];
+
+    for (let week = 1; week <= totalWeeks; week++) {
+      const weekStart = new Date(startDate.getTime() + (week - 1) * millisecondsPerWeek);
+      const weekEnd = new Date(Math.min(weekStart.getTime() + millisecondsPerWeek, endDate.getTime()));
+
+      // Find max cumulative value within this week
+      let weekValue = 0;
+      cumulativeByDate.forEach((count, dateStr) => {
+        const entryDate = new Date(dateStr);
+        if (entryDate >= weekStart && entryDate < weekEnd) {
+          weekValue = Math.max(weekValue, count);
+        }
+      });
+
+      // Carry forward from previous week if no new kills
+      if (weekValue === 0 && week > 1) {
+        weekValue = weeklyData[week - 2].value;
+      }
+
+      weeklyData.push({
+        weekNumber: week,
+        value: weekValue,
+        label: `W${week}`,
+      });
+    }
+
+    return weeklyData;
   }
 
   /**
    * Calculate overall raid analytics
    */
-  private calculateOverallAnalytics(guildRaidDataList: GuildRaidData[], totalBosses: number): IRaidOverallAnalytics {
+  private calculateOverallAnalytics(guildRaidDataList: GuildRaidData[], totalBosses: number, raidStart?: Date, raidEnd?: Date): IRaidOverallAnalytics {
     const clearedGuilds = guildRaidDataList.filter((g) => g.bossesKilled === totalBosses);
     const progressingGuilds = guildRaidDataList.filter((g) => g.bossesKilled > 0 && g.bossesKilled < totalBosses);
 
-    // Pull count stats (only for guilds that cleared)
-    let pullStats = { average: 0, lowest: 0, highest: 0, lowestGuild: undefined, highestGuild: undefined } as IRaidOverallAnalytics["pullCount"];
+    // Pull count stats
+    let pullStats = {
+      average: 0,
+      lowest: 0,
+      highest: 0,
+      lowestGuild: undefined,
+      highestGuild: undefined,
+    } as IRaidOverallAnalytics["pullCount"];
+
     if (clearedGuilds.length > 0) {
       const counts = clearedGuilds.map((g) => g.totalPulls);
       const lowestIdx = counts.indexOf(Math.min(...counts));
@@ -299,8 +430,15 @@ class RaidAnalyticsService {
       };
     }
 
-    // Time spent stats (only for guilds that cleared)
-    let timeStats = { average: 0, lowest: 0, highest: 0, lowestGuild: undefined, highestGuild: undefined } as IRaidOverallAnalytics["timeSpent"];
+    // Time spent stats
+    let timeStats = {
+      average: 0,
+      lowest: 0,
+      highest: 0,
+      lowestGuild: undefined,
+      highestGuild: undefined,
+    } as IRaidOverallAnalytics["timeSpent"];
+
     if (clearedGuilds.length > 0) {
       const times = clearedGuilds.map((g) => g.totalTimeSpent);
       const lowestIdx = times.indexOf(Math.min(...times));
@@ -323,67 +461,31 @@ class RaidAnalyticsService {
       };
     }
 
-    // Clear progression (cumulative clears over time)
-    const clearProgression = this.calculateClearProgression(clearedGuilds);
-
-    // Create guild distribution (only for guilds that cleared, limit to essential data)
-    const guildDistribution = clearedGuilds.map((g) => ({
+    // Create guild entries for distribution
+    const guildEntries: IGuildEntry[] = clearedGuilds.map((g) => ({
       name: g.guildName,
       realm: g.guildRealm,
       pullCount: g.totalPulls,
       timeSpent: g.totalTimeSpent,
     }));
 
+    // Calculate distributions
+    const pullDistribution = this.calculateDistribution(guildEntries, "pullCount");
+    const timeDistribution = this.calculateDistribution(guildEntries, "timeSpent");
+
+    // Calculate weekly clear progression
+    const clearDates = clearedGuilds.filter((g) => g.lastBossKillTime).map((g) => g.lastBossKillTime!);
+    const weeklyProgression = this.calculateWeeklyProgression(clearDates, raidStart, raidEnd);
+
     return {
       guildsCleared: clearedGuilds.length,
       guildsProgressing: progressingGuilds.length,
       pullCount: pullStats,
       timeSpent: timeStats,
-      clearProgression,
-      guildDistribution,
+      pullDistribution,
+      timeDistribution,
+      weeklyProgression,
     };
-  }
-
-  /**
-   * Calculate clear progression over time (cumulative clears per day)
-   */
-  private calculateClearProgression(clearedGuilds: GuildRaidData[]): IRaidOverallAnalytics["clearProgression"] {
-    const clearDates: Date[] = [];
-
-    for (const guild of clearedGuilds) {
-      if (guild.lastBossKillTime) {
-        clearDates.push(guild.lastBossKillTime);
-      }
-    }
-
-    if (clearDates.length === 0) {
-      return [];
-    }
-
-    // Sort by date
-    clearDates.sort((a, b) => a.getTime() - b.getTime());
-
-    // Group by day and create cumulative count
-    const progression: { date: Date; clearCount: number }[] = [];
-    let cumulativeCount = 0;
-    let lastDateStr = "";
-
-    for (const date of clearDates) {
-      cumulativeCount++;
-      const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
-
-      if (dateStr !== lastDateStr) {
-        progression.push({
-          date: new Date(dateStr),
-          clearCount: cumulativeCount,
-        });
-        lastDateStr = dateStr;
-      } else {
-        progression[progression.length - 1].clearCount = cumulativeCount;
-      }
-    }
-
-    return progression;
   }
 
   /**
@@ -402,25 +504,47 @@ class RaidAnalyticsService {
   }
 
   /**
-   * Get analytics for a specific raid
+   * Get analytics for a specific raid (full data with bosses)
    */
   async getRaidAnalytics(raidId: number): Promise<IRaidAnalytics | null> {
     return RaidAnalytics.findOne({ raidId });
   }
 
   /**
-   * Get analytics for all raids in a single call
-   * Sorted by raidId descending (newest to oldest)
+   * Get overall analytics for all raids (raid-level only, no boss data)
+   * Returns minimal data for overview display
    */
-  async getAllRaidAnalytics(): Promise<IRaidAnalytics[]> {
-    return RaidAnalytics.find({}).sort({ raidId: -1 });
+  async getAllRaidAnalyticsOverview(): Promise<
+    {
+      raidId: number;
+      raidName: string;
+      difficulty: string;
+      overall: IRaidOverallAnalytics;
+      raidStart?: Date;
+      raidEnd?: Date;
+      lastCalculated: Date;
+    }[]
+  > {
+    const analytics = await RaidAnalytics.find({}).select("raidId raidName difficulty overall raidStart raidEnd lastCalculated").sort({ raidId: -1 });
+
+    return analytics.map((a) => ({
+      raidId: a.raidId,
+      raidName: a.raidName,
+      difficulty: a.difficulty,
+      overall: a.overall,
+      raidStart: a.raidStart,
+      raidEnd: a.raidEnd,
+      lastCalculated: a.lastCalculated,
+    }));
   }
 
   /**
    * Get list of raids that have analytics available
    */
   async getAvailableRaids(): Promise<{ raidId: number; raidName: string; lastCalculated: Date }[]> {
-    const analytics = await RaidAnalytics.find({}, { raidId: 1, raidName: 1, lastCalculated: 1 }).sort({ raidId: -1 });
+    const analytics = await RaidAnalytics.find({}, { raidId: 1, raidName: 1, lastCalculated: 1 }).sort({
+      raidId: -1,
+    });
 
     return analytics.map((a) => ({
       raidId: a.raidId,

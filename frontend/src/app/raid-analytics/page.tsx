@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { RaidAnalytics, RaidInfo, Boss, GuildDistributionEntry } from "@/types";
+import { RaidAnalytics, RaidInfo, Boss, GuildDistributionEntry, Distribution, WeeklyProgressionEntry } from "@/types";
 import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import RaidSelector from "@/components/RaidSelector";
@@ -26,6 +26,12 @@ function formatDate(dateString: string): string {
   });
 }
 
+// Generate gradient colors for chart bars
+function getColor(index: number, total: number): string {
+  const hue = 200 + (index / Math.max(total - 1, 1)) * 60; // Blue to cyan
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
 // Compact inline stat - single line with label, average (large), min (small green), max (small amber)
 function CompactStat({ label, average, min, max, formatValue }: { label: string; average: number; min: number; max: number; formatValue: (val: number) => string }) {
   return (
@@ -40,21 +46,15 @@ function CompactStat({ label, average, min, max, formatValue }: { label: string;
   );
 }
 
-// Distribution chart - bar chart showing guild count in buckets
+// Distribution chart - bar chart showing guild count in pre-calculated buckets
 function DistributionChart({
-  data,
+  buckets,
   title,
-  valueKey,
-  bucketSize,
-  formatLabel,
 }: {
-  data: GuildDistributionEntry[];
+  buckets: { label: string; count: number; guilds: GuildDistributionEntry[] }[];
   title: string;
-  valueKey: "pullCount" | "timeSpent";
-  bucketSize: number;
-  formatLabel: (val: number) => string;
 }) {
-  if (!data || data.length === 0) {
+  if (!buckets || buckets.length === 0) {
     return (
       <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
@@ -63,155 +63,11 @@ function DistributionChart({
     );
   }
 
-  // Always render chart, even with single guild
-
-  // Find min and max values
-  const values = data.map((guild) => guild[valueKey]);
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const range = maxValue - minValue;
-
-  // Determine number of buckets based on number of guilds
-  const numGuilds = data.length;
-  const targetBuckets = numGuilds < 5 ? numGuilds : 5;
-
-  // If no range (all guilds have same value), use single bucket
-  if (range === 0 || targetBuckets === 1) {
-    const singleBucket = minValue;
-    const chartData = [
-      {
-        bucket: singleBucket,
-        count: data.length,
-        label: valueKey === "timeSpent" ? formatTime(Math.floor(singleBucket)) : `${Math.floor(singleBucket)}`,
-        guilds: data,
-      },
-    ];
-
-    // Render chart with single bucket
-    const getColor = (index: number, total: number) => {
-      const hue = 200 + (index / total) * 60;
-      return `hsl(${hue}, 70%, 50%)`;
-    };
-
-    return (
-      <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
-        <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-            <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
-            <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
-            <Tooltip
-              cursor={false}
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return (
-                    <div className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs max-w-xs">
-                      <div className="text-white font-bold mb-1">{data.label}</div>
-                      <div className="text-blue-400 mb-1">{data.count} guilds</div>
-                      {data.guilds && Array.isArray(data.guilds) && data.guilds.length > 0 && (
-                        <div className="text-gray-400 text-[10px] max-h-32 overflow-y-auto">
-                          {data.guilds.map((guild: GuildDistributionEntry, idx: number) => (
-                            <div key={idx} className="truncate">
-                              {guild.name}-{guild.realm}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getColor(index, chartData.length)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  }
-
-  // Use quantile-based bucketing for better distribution
-  // This creates buckets with roughly equal numbers of guilds in each
-  // More buckets where data is dense, fewer where sparse
-
-  // Sort guilds by value
-  const sortedData = [...data].sort((a, b) => a[valueKey] - b[valueKey]);
-
-  // Calculate quantile boundaries for targetBuckets
-  const bucketBoundaries: number[] = [minValue];
-  for (let i = 1; i < targetBuckets; i++) {
-    const quantileIndex = Math.floor((i / targetBuckets) * sortedData.length);
-    bucketBoundaries.push(sortedData[quantileIndex][valueKey]);
-  }
-  bucketBoundaries.push(maxValue + 1); // Add upper boundary (exclusive)
-
-  // Create buckets based on quantile boundaries
-  const buckets: { min: number; max: number; guilds: GuildDistributionEntry[] }[] = [];
-
-  for (let i = 0; i < targetBuckets; i++) {
-    const bucketMin = bucketBoundaries[i];
-    const bucketMax = bucketBoundaries[i + 1];
-
-    // Find all guilds in this range
-    const guildsInBucket = sortedData.filter(
-      (guild) => guild[valueKey] >= bucketMin && guild[valueKey] < bucketMax
-    );
-
-    // For the last bucket, include guilds at the max boundary
-    if (i === targetBuckets - 1) {
-      guildsInBucket.push(
-        ...sortedData.filter((guild) => guild[valueKey] === bucketMax - 1)
-      );
-    }
-
-    buckets.push({
-      min: bucketMin,
-      max: bucketMax - 1, // Make it inclusive for display
-      guilds: guildsInBucket,
-    });
-  }
-
-  // Convert to chart data format
-  const chartData = buckets
-    .filter((bucket) => bucket.guilds.length > 0) // Only include non-empty buckets
-    .map((bucket) => {
-      // Format labels
-      let label: string;
-      if (valueKey === "timeSpent") {
-        // For time, show the average (middle point) of the bucket
-        const bucketAverage = (bucket.min + bucket.max) / 2;
-        label = formatTime(Math.floor(bucketAverage));
-      } else {
-        // For pulls, show the range
-        label = `${Math.floor(bucket.min)}-${Math.floor(bucket.max)}`;
-      }
-
-      return {
-        bucket: bucket.min,
-        count: bucket.guilds.length,
-        label,
-        guilds: bucket.guilds,
-      };
-    })
-    .sort((a, b) => a.bucket - b.bucket);
-
-  // Generate gradient colors
-  const getColor = (index: number, total: number) => {
-    const hue = 200 + (index / total) * 60; // Blue to cyan
-    return `hsl(${hue}, 70%, 50%)`;
-  };
-
   return (
     <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
       <ResponsiveContainer width="100%" height={160}>
-        <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+        <BarChart data={buckets} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
           <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
           <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
@@ -239,9 +95,9 @@ function DistributionChart({
               return null;
             }}
           />
-          <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={getColor(index, chartData.length)} />
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: "brightness(1.3)" }}>
+            {buckets.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={getColor(index, buckets.length)} />
             ))}
           </Bar>
         </BarChart>
@@ -250,21 +106,15 @@ function DistributionChart({
   );
 }
 
-// Compact progression chart using Recharts
+// Compact progression chart using pre-calculated weekly data
 function ProgressionChart({
-  data,
-  valueKey,
-  raidStart,
-  raidEnd,
+  weeklyData,
   label,
 }: {
-  data: { date: string; killCount?: number; clearCount?: number }[];
-  valueKey: "killCount" | "clearCount";
-  raidStart?: string;
-  raidEnd?: string;
+  weeklyData: WeeklyProgressionEntry[];
   label: string;
 }) {
-  if (!raidStart) {
+  if (!weeklyData || weeklyData.length === 0) {
     return (
       <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
@@ -272,47 +122,6 @@ function ProgressionChart({
       </div>
     );
   }
-
-  // Always render chart, even with no progression data yet
-  const safeData = data || [];
-
-  // Calculate weekly buckets
-  const startDate = new Date(raidStart);
-  const endDate = raidEnd ? new Date(raidEnd) : new Date();
-  const millisecondsPerWeek = 7 * 24 * 60 * 60 * 1000;
-  const totalWeeks = Math.ceil((endDate.getTime() - startDate.getTime()) / millisecondsPerWeek);
-
-  const weeklyData: { weekNumber: number; value: number; label: string }[] = [];
-
-  for (let week = 1; week <= totalWeeks; week++) {
-    const weekStart = new Date(startDate.getTime() + (week - 1) * millisecondsPerWeek);
-    const weekEnd = new Date(Math.min(weekStart.getTime() + millisecondsPerWeek, endDate.getTime()));
-
-    let weekValue = 0;
-    for (const entry of safeData) {
-      const entryDate = new Date(entry.date);
-      if (entryDate >= weekStart && entryDate < weekEnd) {
-        const value = valueKey === "killCount" ? entry.killCount || 0 : entry.clearCount || 0;
-        weekValue = Math.max(weekValue, value);
-      }
-    }
-
-    if (weekValue === 0 && week > 1) {
-      weekValue = weeklyData[week - 2].value;
-    }
-
-    weeklyData.push({
-      weekNumber: week,
-      value: weekValue,
-      label: `W${week}`,
-    });
-  }
-
-  // Generate gradient colors
-  const getColor = (index: number, total: number) => {
-    const hue = 200 + (index / total) * 60; // Blue to cyan
-    return `hsl(${hue}, 70%, 50%)`;
-  };
 
   return (
     <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
@@ -337,8 +146,8 @@ function ProgressionChart({
               return null;
             }}
           />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
-            {weeklyData.map((entry, index) => (
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} activeBar={{ filter: "brightness(1.3)" }}>
+            {weeklyData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={getColor(index, weeklyData.length)} />
             ))}
           </Bar>
@@ -350,48 +159,26 @@ function ProgressionChart({
 
 // Stats section with 3 charts in a single row
 function StatsSection({
-  pullStats,
-  timeStats,
-  progression,
+  pullDistribution,
+  timeDistribution,
+  weeklyProgression,
   progressionLabel,
-  progressionKey,
-  raidStart,
-  raidEnd,
-  guildDistribution,
 }: {
-  pullStats: {
-    average: number;
-    lowest: number;
-    highest: number;
-  };
-  timeStats: {
-    average: number;
-    lowest: number;
-    highest: number;
-  };
-  progression?: { date: string; killCount?: number; clearCount?: number }[];
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
   progressionLabel: string;
-  progressionKey: "killCount" | "clearCount";
-  raidStart?: string;
-  raidEnd?: string;
-  guildDistribution?: GuildDistributionEntry[];
 }) {
   return (
     <div className="grid grid-cols-3 gap-4">
       {/* Pull Distribution Chart */}
-      {guildDistribution && guildDistribution.length > 0 && (
-        <DistributionChart data={guildDistribution} title="Pull Distribution" valueKey="pullCount" bucketSize={10} formatLabel={(val) => `${val}-${val + 9}`} />
-      )}
+      <DistributionChart buckets={pullDistribution.buckets} title="Pull Distribution" />
 
       {/* Time Distribution Chart */}
-      {guildDistribution && guildDistribution.length > 0 && (
-        <DistributionChart data={guildDistribution} title="Time Distribution" valueKey="timeSpent" bucketSize={1800} formatLabel={(val) => formatTime(val)} />
-      )}
+      <DistributionChart buckets={timeDistribution.buckets} title="Time Distribution" />
 
       {/* Progression Chart */}
-      {progression && Array.isArray(progression) && (
-        <ProgressionChart data={progression} valueKey={progressionKey} raidStart={raidStart} raidEnd={raidEnd} label={progressionLabel} />
-      )}
+      <ProgressionChart weeklyData={weeklyProgression} label={progressionLabel} />
     </div>
   );
 }
@@ -567,14 +354,10 @@ export default function RaidAnalyticsPage() {
             </div>
 
             <StatsSection
-              pullStats={analytics.overall.pullCount}
-              timeStats={analytics.overall.timeSpent}
-              progression={analytics.overall.clearProgression}
+              pullDistribution={analytics.overall.pullDistribution}
+              timeDistribution={analytics.overall.timeDistribution}
+              weeklyProgression={analytics.overall.weeklyProgression}
               progressionLabel={t("clearProgression")}
-              progressionKey="clearCount"
-              raidStart={analytics.raidStart}
-              raidEnd={analytics.raidEnd}
-              guildDistribution={analytics.overall.guildDistribution}
             />
           </div>
 
@@ -620,14 +403,10 @@ export default function RaidAnalyticsPage() {
                       {boss.guildsKilled > 0 ? (
                         <>
                           <StatsSection
-                            pullStats={boss.pullCount}
-                            timeStats={boss.timeSpent}
-                            progression={boss.killProgression}
-                            raidStart={analytics.raidStart}
-                            raidEnd={analytics.raidEnd}
+                            pullDistribution={boss.pullDistribution}
+                            timeDistribution={boss.timeDistribution}
+                            weeklyProgression={boss.weeklyProgression}
                             progressionLabel={t("killProgression")}
-                            progressionKey="killCount"
-                            guildDistribution={boss.guildDistribution}
                           />
                         </>
                       ) : (
@@ -693,14 +472,10 @@ export default function RaidAnalyticsPage() {
               <div className="p-4 space-y-4">
                 {/* Stats */}
                 <StatsSection
-                  pullStats={raidAnalytics.overall.pullCount}
-                  timeStats={raidAnalytics.overall.timeSpent}
-                  progression={raidAnalytics.overall.clearProgression}
+                  pullDistribution={raidAnalytics.overall.pullDistribution}
+                  timeDistribution={raidAnalytics.overall.timeDistribution}
+                  weeklyProgression={raidAnalytics.overall.weeklyProgression}
                   progressionLabel={t("clearProgression")}
-                  progressionKey="clearCount"
-                  raidStart={raidAnalytics.raidStart}
-                  raidEnd={raidAnalytics.raidEnd}
-                  guildDistribution={raidAnalytics.overall.guildDistribution}
                 />
               </div>
             </div>
