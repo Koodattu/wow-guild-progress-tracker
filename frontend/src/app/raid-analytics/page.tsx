@@ -47,16 +47,10 @@ function CompactStat({ label, average, min, max, formatValue }: { label: string;
 }
 
 // Distribution chart - bar chart showing guild count in pre-calculated buckets
-function DistributionChart({
-  buckets,
-  title,
-}: {
-  buckets: { label: string; count: number; guilds: GuildDistributionEntry[] }[];
-  title: string;
-}) {
+function DistributionChart({ buckets, title }: { buckets: { label: string; count: number; guilds: GuildDistributionEntry[] }[]; title: string }) {
   if (!buckets || buckets.length === 0) {
     return (
-      <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
+      <div className="p-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
         <div className="text-xs text-gray-600">No data</div>
       </div>
@@ -64,7 +58,7 @@ function DistributionChart({
   }
 
   return (
-    <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
+    <div className="p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={buckets} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -107,16 +101,10 @@ function DistributionChart({
 }
 
 // Compact progression chart using pre-calculated weekly data
-function ProgressionChart({
-  weeklyData,
-  label,
-}: {
-  weeklyData: WeeklyProgressionEntry[];
-  label: string;
-}) {
+function ProgressionChart({ weeklyData, label }: { weeklyData: WeeklyProgressionEntry[]; label: string }) {
   if (!weeklyData || weeklyData.length === 0) {
     return (
-      <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
+      <div className="p-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
         <div className="text-xs text-gray-600">No data available</div>
       </div>
@@ -124,7 +112,7 @@ function ProgressionChart({
   }
 
   return (
-    <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
+    <div className=" border-gray-800/50 p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={weeklyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -363,62 +351,62 @@ export default function RaidAnalyticsPage() {
 
           {/* Boss breakdown */}
           {analytics.bosses && analytics.bosses.length > 0 && (
-          <div>
-            <h2 className="text-base font-bold text-white mb-3">{t("bossBreakdown")}</h2>
-            <div className="space-y-2">
-              {analytics.bosses.map((boss, index) => {
-                const bossIcon = getBossIconUrl(boss.bossName);
-                return (
-                  <div key={boss.bossId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden hover:border-gray-700/50 transition-colors">
-                    {/* Boss header with inline stats */}
-                    <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/30 border-b border-gray-800/50">
-                      <span className="text-gray-600 font-mono text-xs w-5">#{index + 1}</span>
-                      <IconImage iconFilename={bossIcon} alt={boss.bossName} width={28} height={28} className="rounded" />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-bold text-white truncate">{boss.bossName}</h3>
-                      </div>
-                      {boss.guildsKilled > 0 && (
-                        <div className="flex items-center gap-5">
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs text-gray-500">Killed</span>
-                            <span className="text-base font-bold text-green-400">{boss.guildsKilled}</span>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs text-gray-500">Progressing</span>
-                            <span className="text-base font-bold text-yellow-400">{boss.guildsProgressing}</span>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs text-gray-500">Avg Pulls</span>
-                            <span className="text-base font-bold text-white">{boss.pullCount.average || "-"}</span>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs text-gray-500">Avg Time</span>
-                            <span className="text-base font-bold text-white">{formatTime(boss.timeSpent.average)}</span>
-                          </div>
+            <div>
+              <h2 className="text-base font-bold text-white mb-3">{t("bossBreakdown")}</h2>
+              <div className="space-y-2">
+                {analytics.bosses.map((boss, index) => {
+                  const bossIcon = getBossIconUrl(boss.bossName);
+                  return (
+                    <div key={boss.bossId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden hover:border-gray-700/50 transition-colors">
+                      {/* Boss header with inline stats */}
+                      <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/30 border-b border-gray-800/50">
+                        <span className="text-gray-600 font-mono text-xs w-5">#{index + 1}</span>
+                        <IconImage iconFilename={bossIcon} alt={boss.bossName} width={28} height={28} className="rounded" />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-bold text-white truncate">{boss.bossName}</h3>
                         </div>
-                      )}
-                    </div>
+                        {boss.guildsKilled > 0 && (
+                          <div className="flex items-center gap-5">
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Killed</span>
+                              <span className="text-base font-bold text-green-400">{boss.guildsKilled}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Progressing</span>
+                              <span className="text-base font-bold text-yellow-400">{boss.guildsProgressing}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Avg Pulls</span>
+                              <span className="text-base font-bold text-white">{boss.pullCount.average || "-"}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Avg Time</span>
+                              <span className="text-base font-bold text-white">{formatTime(boss.timeSpent.average)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Boss stats */}
-                    <div className="px-3 py-3">
-                      {boss.guildsKilled > 0 ? (
-                        <>
-                          <StatsSection
-                            pullDistribution={boss.pullDistribution}
-                            timeDistribution={boss.timeDistribution}
-                            weeklyProgression={boss.weeklyProgression}
-                            progressionLabel={t("killProgression")}
-                          />
-                        </>
-                      ) : (
-                        <div className="text-gray-600 text-xs">{t("noBossKills")}</div>
-                      )}
+                      {/* Boss stats */}
+                      <div className="px-3 py-3">
+                        {boss.guildsKilled > 0 ? (
+                          <>
+                            <StatsSection
+                              pullDistribution={boss.pullDistribution}
+                              timeDistribution={boss.timeDistribution}
+                              weeklyProgression={boss.weeklyProgression}
+                              progressionLabel={t("killProgression")}
+                            />
+                          </>
+                        ) : (
+                          <div className="text-gray-600 text-xs">{t("noBossKills")}</div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
           )}
         </div>
       )}
