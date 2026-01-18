@@ -71,13 +71,89 @@ function DistributionChart({
   const maxValue = Math.max(...values);
   const range = maxValue - minValue;
 
-  // Calculate optimal bucket size for max 5 buckets
-  const maxBuckets = 5;
-  const optimalBucketSize = range > 0 ? Math.ceil(range / maxBuckets) : 1;
+  // If no range, use single bucket
+  if (range === 0) {
+    const singleBucket = minValue;
+    const chartData = [
+      {
+        bucket: singleBucket,
+        count: data.length,
+        label: valueKey === "timeSpent" ? formatTime(Math.floor(singleBucket)) : `${Math.floor(singleBucket)}`,
+        guilds: data,
+      },
+    ];
 
-  // Round bucket size to a nice number
-  const niceNumbers = [1, 2, 5, 10, 15, 20, 25, 30, 50, 100, 200, 300, 500, 1000, 1800, 3600];
-  const finalBucketSize = niceNumbers.find((n) => n >= optimalBucketSize) || optimalBucketSize;
+    // Render chart with single bucket
+    const getColor = (index: number, total: number) => {
+      const hue = 200 + (index / total) * 60;
+      return `hsl(${hue}, 70%, 50%)`;
+    };
+
+    return (
+      <div className="bg-gray-800/30 rounded border border-gray-800/50 p-3">
+        <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+            <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+            <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
+                  return (
+                    <div className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs max-w-xs">
+                      <div className="text-white font-bold mb-1">{data.label}</div>
+                      <div className="text-blue-400 mb-1">{data.count} guilds</div>
+                      {data.guilds && Array.isArray(data.guilds) && data.guilds.length > 0 && (
+                        <div className="text-gray-400 text-[10px] max-h-32 overflow-y-auto">
+                          {data.guilds.map((guild: GuildDistributionEntry, idx: number) => (
+                            <div key={idx} className="truncate">
+                              {guild.name}-{guild.realm}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={getColor(index, chartData.length)} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  // Target minimum 5 buckets when possible
+  const targetBuckets = 5;
+  const idealBucketSize = range / targetBuckets;
+
+  // Nice numbers to round to, ordered by size
+  const niceNumbers = [1, 2, 5, 10, 15, 20, 25, 30, 50, 100, 150, 200, 250, 300, 500, 600, 900, 1000, 1200, 1500, 1800, 2400, 3000, 3600, 7200];
+
+  // Find the largest nice number that keeps us at or above target buckets
+  let finalBucketSize = niceNumbers[0];
+  for (const niceNum of niceNumbers) {
+    const resultingBuckets = Math.ceil(range / niceNum);
+    if (resultingBuckets >= targetBuckets) {
+      finalBucketSize = niceNum;
+    } else {
+      break;
+    }
+  }
+
+  // If we still don't have enough buckets, use the ideal size rounded down
+  if (Math.ceil(range / finalBucketSize) < targetBuckets) {
+    finalBucketSize = Math.floor(idealBucketSize);
+    if (finalBucketSize < 1) finalBucketSize = 1;
+  }
 
   // Create buckets starting from min value
   const buckets: { [key: number]: GuildDistributionEntry[] } = {};
