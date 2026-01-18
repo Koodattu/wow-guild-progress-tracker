@@ -4,8 +4,6 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IGuildEntry {
   name: string;
   realm: string;
-  pullCount: number;
-  timeSpent: number; // in seconds
 }
 
 // Pre-calculated distribution bucket
@@ -37,15 +35,11 @@ export interface IBossAnalytics {
     average: number;
     lowest: number;
     highest: number;
-    lowestGuild?: { name: string; realm: string; count: number };
-    highestGuild?: { name: string; realm: string; count: number };
   };
   timeSpent: {
     average: number; // in seconds
     lowest: number;
     highest: number;
-    lowestGuild?: { name: string; realm: string; time: number };
-    highestGuild?: { name: string; realm: string; time: number };
   };
   // Pre-calculated distributions
   pullDistribution: IDistribution;
@@ -62,15 +56,11 @@ export interface IRaidOverallAnalytics {
     average: number;
     lowest: number;
     highest: number;
-    lowestGuild?: { name: string; realm: string; count: number };
-    highestGuild?: { name: string; realm: string; count: number };
   };
   timeSpent: {
     average: number; // in seconds
     lowest: number;
     highest: number;
-    lowestGuild?: { name: string; realm: string; time: number };
-    highestGuild?: { name: string; realm: string; time: number };
   };
   // Pre-calculated distributions
   pullDistribution: IDistribution;
@@ -96,8 +86,6 @@ const GuildEntrySchema = new Schema(
   {
     name: { type: String, required: true },
     realm: { type: String, required: true },
-    pullCount: { type: Number, required: true },
-    timeSpent: { type: Number, required: true },
   },
   { _id: false },
 );
@@ -137,31 +125,11 @@ const BossAnalyticsSchema = new Schema(
       average: { type: Number, default: 0 },
       lowest: { type: Number, default: 0 },
       highest: { type: Number, default: 0 },
-      lowestGuild: {
-        name: String,
-        realm: String,
-        count: Number,
-      },
-      highestGuild: {
-        name: String,
-        realm: String,
-        count: Number,
-      },
     },
     timeSpent: {
       average: { type: Number, default: 0 },
       lowest: { type: Number, default: 0 },
       highest: { type: Number, default: 0 },
-      lowestGuild: {
-        name: String,
-        realm: String,
-        time: Number,
-      },
-      highestGuild: {
-        name: String,
-        realm: String,
-        time: Number,
-      },
     },
     pullDistribution: { type: DistributionSchema, default: { buckets: [] } },
     timeDistribution: { type: DistributionSchema, default: { buckets: [] } },
@@ -178,31 +146,11 @@ const RaidOverallAnalyticsSchema = new Schema(
       average: { type: Number, default: 0 },
       lowest: { type: Number, default: 0 },
       highest: { type: Number, default: 0 },
-      lowestGuild: {
-        name: String,
-        realm: String,
-        count: Number,
-      },
-      highestGuild: {
-        name: String,
-        realm: String,
-        count: Number,
-      },
     },
     timeSpent: {
       average: { type: Number, default: 0 },
       lowest: { type: Number, default: 0 },
       highest: { type: Number, default: 0 },
-      lowestGuild: {
-        name: String,
-        realm: String,
-        time: Number,
-      },
-      highestGuild: {
-        name: String,
-        realm: String,
-        time: Number,
-      },
     },
     pullDistribution: { type: DistributionSchema, default: { buckets: [] } },
     timeDistribution: { type: DistributionSchema, default: { buckets: [] } },

@@ -23,6 +23,14 @@ interface GuildRaidData {
   lastBossKillTime?: Date;
 }
 
+/** Internal type for distribution calculation that includes values */
+interface IGuildEntryWithValues {
+  name: string;
+  realm: string;
+  pullCount: number;
+  timeSpent: number;
+}
+
 /**
  * Format seconds to hours and minutes for display labels
  */
@@ -131,29 +139,15 @@ class RaidAnalyticsService {
           average: 0,
           lowest: 0,
           highest: 0,
-          lowestGuild: undefined,
-          highestGuild: undefined,
         } as IBossAnalytics["pullCount"];
 
         if (killedGuilds.length > 0) {
           const counts = killedGuilds.map((g) => g.pullCount);
-          const lowestIdx = counts.indexOf(Math.min(...counts));
-          const highestIdx = counts.indexOf(Math.max(...counts));
 
           pullStats = {
             average: Math.round(counts.reduce((a, b) => a + b, 0) / counts.length),
-            lowest: counts[lowestIdx],
-            highest: counts[highestIdx],
-            lowestGuild: {
-              name: killedGuilds[lowestIdx].guildName,
-              realm: killedGuilds[lowestIdx].guildRealm,
-              count: counts[lowestIdx],
-            },
-            highestGuild: {
-              name: killedGuilds[highestIdx].guildName,
-              realm: killedGuilds[highestIdx].guildRealm,
-              count: counts[highestIdx],
-            },
+            lowest: Math.min(...counts),
+            highest: Math.max(...counts),
           };
         }
 
@@ -162,34 +156,20 @@ class RaidAnalyticsService {
           average: 0,
           lowest: 0,
           highest: 0,
-          lowestGuild: undefined,
-          highestGuild: undefined,
         } as IBossAnalytics["timeSpent"];
 
         if (killedGuilds.length > 0) {
           const times = killedGuilds.map((g) => g.timeSpent);
-          const lowestIdx = times.indexOf(Math.min(...times));
-          const highestIdx = times.indexOf(Math.max(...times));
 
           timeStats = {
             average: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
-            lowest: times[lowestIdx],
-            highest: times[highestIdx],
-            lowestGuild: {
-              name: killedGuilds[lowestIdx].guildName,
-              realm: killedGuilds[lowestIdx].guildRealm,
-              time: times[lowestIdx],
-            },
-            highestGuild: {
-              name: killedGuilds[highestIdx].guildName,
-              realm: killedGuilds[highestIdx].guildRealm,
-              time: times[highestIdx],
-            },
+            lowest: Math.min(...times),
+            highest: Math.max(...times),
           };
         }
 
-        // Create guild entries for distribution
-        const guildEntries: IGuildEntry[] = killedGuilds.map((g) => ({
+        // Create internal guild entries with values for distribution calculation
+        const guildEntriesWithValues = killedGuilds.map((g) => ({
           name: g.guildName,
           realm: g.guildRealm,
           pullCount: g.pullCount,
@@ -197,8 +177,8 @@ class RaidAnalyticsService {
         }));
 
         // Calculate pre-bucketed distributions
-        const pullDistribution = this.calculateDistribution(guildEntries, "pullCount");
-        const timeDistribution = this.calculateDistribution(guildEntries, "timeSpent");
+        const pullDistribution = this.calculateDistribution(guildEntriesWithValues, "pullCount");
+        const timeDistribution = this.calculateDistribution(guildEntriesWithValues, "timeSpent");
 
         // Calculate weekly progression from kill dates
         const killDates = killedGuilds.filter((g) => g.firstKillTime).map((g) => new Date(g.firstKillTime!));
@@ -247,8 +227,9 @@ class RaidAnalyticsService {
   /**
    * Calculate quantile-based distribution buckets
    * Mirrors the frontend bucketing logic exactly
+   * Takes guilds with values for calculation, outputs stripped guild entries (name/realm only)
    */
-  private calculateDistribution(guilds: IGuildEntry[], valueKey: "pullCount" | "timeSpent"): IDistribution {
+  private calculateDistribution(guilds: IGuildEntryWithValues[], valueKey: "pullCount" | "timeSpent"): IDistribution {
     if (guilds.length === 0) {
       return { buckets: [] };
     }
@@ -261,6 +242,9 @@ class RaidAnalyticsService {
     const numGuilds = guilds.length;
     const targetBuckets = numGuilds < 5 ? numGuilds : 5;
 
+    // Helper to strip guild entries to name/realm only
+    const stripGuilds = (guildList: IGuildEntryWithValues[]): IGuildEntry[] => guildList.map((g) => ({ name: g.name, realm: g.realm }));
+
     // Single bucket case: all guilds have same value or few guilds
     if (range === 0 || targetBuckets === 1) {
       const label = valueKey === "timeSpent" ? formatTime(Math.floor(minValue)) : `${Math.floor(minValue)}`;
@@ -270,7 +254,7 @@ class RaidAnalyticsService {
           {
             label,
             count: guilds.length,
-            guilds,
+            guilds: stripGuilds(guilds),
           },
         ],
       };
@@ -288,7 +272,7 @@ class RaidAnalyticsService {
     bucketBoundaries.push(maxValue + 1);
 
     // Create buckets based on quantile boundaries
-    const buckets: { min: number; max: number; guilds: IGuildEntry[] }[] = [];
+    const buckets: { min: number; max: number; guilds: IGuildEntryWithValues[]; sortValue: number }[] = [];
 
     for (let i = 0; i < targetBuckets; i++) {
       const bucketMin = bucketBoundaries[i];
@@ -305,10 +289,11 @@ class RaidAnalyticsService {
         min: bucketMin,
         max: bucketMax - 1,
         guilds: guildsInBucket,
+        sortValue: guildsInBucket[0]?.[valueKey] ?? 0,
       });
     }
 
-    // Convert to final format with labels
+    // Convert to final format with labels and stripped guilds
     const resultBuckets = buckets
       .filter((bucket) => bucket.guilds.length > 0)
       .map((bucket) => {
@@ -323,14 +308,12 @@ class RaidAnalyticsService {
         return {
           label,
           count: bucket.guilds.length,
-          guilds: bucket.guilds,
+          guilds: stripGuilds(bucket.guilds),
+          sortValue: bucket.sortValue,
         };
       })
-      .sort((a, b) => {
-        const aVal = a.guilds[0]?.[valueKey] ?? 0;
-        const bVal = b.guilds[0]?.[valueKey] ?? 0;
-        return aVal - bVal;
-      });
+      .sort((a, b) => a.sortValue - b.sortValue)
+      .map(({ label, count, guilds }) => ({ label, count, guilds }));
 
     return { buckets: resultBuckets };
   }
@@ -404,29 +387,15 @@ class RaidAnalyticsService {
       average: 0,
       lowest: 0,
       highest: 0,
-      lowestGuild: undefined,
-      highestGuild: undefined,
     } as IRaidOverallAnalytics["pullCount"];
 
     if (clearedGuilds.length > 0) {
       const counts = clearedGuilds.map((g) => g.totalPulls);
-      const lowestIdx = counts.indexOf(Math.min(...counts));
-      const highestIdx = counts.indexOf(Math.max(...counts));
 
       pullStats = {
         average: Math.round(counts.reduce((a, b) => a + b, 0) / counts.length),
-        lowest: counts[lowestIdx],
-        highest: counts[highestIdx],
-        lowestGuild: {
-          name: clearedGuilds[lowestIdx].guildName,
-          realm: clearedGuilds[lowestIdx].guildRealm,
-          count: counts[lowestIdx],
-        },
-        highestGuild: {
-          name: clearedGuilds[highestIdx].guildName,
-          realm: clearedGuilds[highestIdx].guildRealm,
-          count: counts[highestIdx],
-        },
+        lowest: Math.min(...counts),
+        highest: Math.max(...counts),
       };
     }
 
@@ -435,34 +404,20 @@ class RaidAnalyticsService {
       average: 0,
       lowest: 0,
       highest: 0,
-      lowestGuild: undefined,
-      highestGuild: undefined,
     } as IRaidOverallAnalytics["timeSpent"];
 
     if (clearedGuilds.length > 0) {
       const times = clearedGuilds.map((g) => g.totalTimeSpent);
-      const lowestIdx = times.indexOf(Math.min(...times));
-      const highestIdx = times.indexOf(Math.max(...times));
 
       timeStats = {
         average: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
-        lowest: times[lowestIdx],
-        highest: times[highestIdx],
-        lowestGuild: {
-          name: clearedGuilds[lowestIdx].guildName,
-          realm: clearedGuilds[lowestIdx].guildRealm,
-          time: times[lowestIdx],
-        },
-        highestGuild: {
-          name: clearedGuilds[highestIdx].guildName,
-          realm: clearedGuilds[highestIdx].guildRealm,
-          time: times[highestIdx],
-        },
+        lowest: Math.min(...times),
+        highest: Math.max(...times),
       };
     }
 
-    // Create guild entries for distribution
-    const guildEntries: IGuildEntry[] = clearedGuilds.map((g) => ({
+    // Create internal guild entries with values for distribution calculation
+    const guildEntriesWithValues: IGuildEntryWithValues[] = clearedGuilds.map((g) => ({
       name: g.guildName,
       realm: g.guildRealm,
       pullCount: g.totalPulls,
@@ -470,8 +425,8 @@ class RaidAnalyticsService {
     }));
 
     // Calculate distributions
-    const pullDistribution = this.calculateDistribution(guildEntries, "pullCount");
-    const timeDistribution = this.calculateDistribution(guildEntries, "timeSpent");
+    const pullDistribution = this.calculateDistribution(guildEntriesWithValues, "pullCount");
+    const timeDistribution = this.calculateDistribution(guildEntriesWithValues, "timeSpent");
 
     // Calculate weekly clear progression
     const clearDates = clearedGuilds.filter((g) => g.lastBossKillTime).map((g) => g.lastBossKillTime!);
@@ -507,7 +462,7 @@ class RaidAnalyticsService {
    * Get analytics for a specific raid (full data with bosses)
    */
   async getRaidAnalytics(raidId: number): Promise<IRaidAnalytics | null> {
-    return RaidAnalytics.findOne({ raidId });
+    return RaidAnalytics.findOne({ raidId }).lean();
   }
 
   /**
@@ -525,7 +480,7 @@ class RaidAnalyticsService {
       lastCalculated: Date;
     }[]
   > {
-    const analytics = await RaidAnalytics.find({}).select("raidId raidName difficulty overall raidStart raidEnd lastCalculated").sort({ raidId: -1 });
+    const analytics = await RaidAnalytics.find({}).select("raidId raidName difficulty overall raidStart raidEnd lastCalculated").sort({ raidId: -1 }).lean();
 
     return analytics.map((a) => ({
       raidId: a.raidId,

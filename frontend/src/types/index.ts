@@ -755,50 +755,36 @@ export interface UpdatePickemInput {
 // RAID ANALYTICS TYPES
 // ============================================================================
 
-// Guild reference for analytics stats
-export interface AnalyticsGuildRef {
-  name: string;
-  realm: string;
-  count?: number;
-  time?: number;
-}
-
-// Pull count statistics
+// Pull count statistics (stripped - no guild references)
 export interface AnalyticsPullStats {
   average: number;
   lowest: number;
   highest: number;
-  lowestGuild?: AnalyticsGuildRef;
-  highestGuild?: AnalyticsGuildRef;
 }
 
-// Time spent statistics
+// Time spent statistics (stripped - no guild references)
 export interface AnalyticsTimeStats {
   average: number; // in seconds
   lowest: number;
   highest: number;
-  lowestGuild?: AnalyticsGuildRef;
-  highestGuild?: AnalyticsGuildRef;
 }
 
-// Kill progression entry (for cumulative charts)
+// Kill progression entry (for cumulative charts) - legacy, kept for compatibility
 export interface KillProgressionEntry {
   date: string;
   killCount: number;
 }
 
-// Clear progression entry (for cumulative charts)
+// Clear progression entry (for cumulative charts) - legacy, kept for compatibility
 export interface ClearProgressionEntry {
   date: string;
   clearCount: number;
 }
 
-// Guild entry for distribution bucket tooltips
+// Guild entry for distribution bucket tooltips (stripped - name and realm only)
 export interface GuildDistributionEntry {
   name: string;
   realm: string;
-  pullCount: number;
-  timeSpent: number; // in seconds
 }
 
 // Pre-calculated distribution bucket
@@ -844,13 +830,12 @@ export interface RaidOverallAnalytics {
   weeklyProgression: WeeklyProgressionEntry[];
 }
 
-// Full raid analytics response
+// Full raid analytics response (stripped - no difficulty, _id, __v, etc.)
 export interface RaidAnalytics {
   raidId: number;
   raidName: string;
-  difficulty: "mythic";
   overall: RaidOverallAnalytics;
-  bosses: BossAnalytics[];
+  bosses?: BossAnalytics[]; // Optional since /all endpoint doesn't include bosses
   raidStart?: string;
   raidEnd?: string;
   lastCalculated: string;

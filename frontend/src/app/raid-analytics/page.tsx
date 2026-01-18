@@ -362,6 +362,7 @@ export default function RaidAnalyticsPage() {
           </div>
 
           {/* Boss breakdown */}
+          {analytics.bosses && analytics.bosses.length > 0 && (
           <div>
             <h2 className="text-base font-bold text-white mb-3">{t("bossBreakdown")}</h2>
             <div className="space-y-2">
@@ -418,6 +419,7 @@ export default function RaidAnalyticsPage() {
               })}
             </div>
           </div>
+          )}
         </div>
       )}
 
