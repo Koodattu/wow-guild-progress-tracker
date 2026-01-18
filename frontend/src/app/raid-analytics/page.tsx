@@ -136,84 +136,67 @@ function DistributionChart({
     );
   }
 
-  // Helper function to round a number to a "nice" value based on its magnitude
-  const roundToNice = (value: number): number => {
-    if (value <= 0) return 1;
+  // Use quantile-based bucketing for better distribution
+  // This creates buckets with roughly equal numbers of guilds in each
+  // More buckets where data is dense, fewer where sparse
 
-    // Get the order of magnitude
-    const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
-    const normalized = value / magnitude; // This will be between 1 and 10
+  // Sort guilds by value
+  const sortedData = [...data].sort((a, b) => a[valueKey] - b[valueKey]);
 
-    // Round to nice values: 1, 2, 2.5, 5, or 10
-    let niceNormalized: number;
-    if (normalized <= 1) niceNormalized = 1;
-    else if (normalized <= 2) niceNormalized = 2;
-    else if (normalized <= 2.5) niceNormalized = 2.5;
-    else if (normalized <= 5) niceNormalized = 5;
-    else niceNormalized = 10;
-
-    return niceNormalized * magnitude;
-  };
-
-  // Calculate ideal bucket size for exactly targetBuckets buckets
-  const idealBucketSize = range / targetBuckets;
-
-  // Round to a nice number
-  let finalBucketSize = roundToNice(idealBucketSize);
-
-  // Verify we get close to target buckets, adjust if needed
-  let actualBuckets = Math.ceil(range / finalBucketSize);
-
-  // If we're getting too many buckets, increase bucket size
-  while (actualBuckets > targetBuckets + 1 && finalBucketSize < range) {
-    finalBucketSize = roundToNice(finalBucketSize * 1.1);
-    actualBuckets = Math.ceil(range / finalBucketSize);
+  // Calculate quantile boundaries for targetBuckets
+  const bucketBoundaries: number[] = [minValue];
+  for (let i = 1; i < targetBuckets; i++) {
+    const quantileIndex = Math.floor((i / targetBuckets) * sortedData.length);
+    bucketBoundaries.push(sortedData[quantileIndex][valueKey]);
   }
+  bucketBoundaries.push(maxValue + 1); // Add upper boundary (exclusive)
 
-  // If we're getting too few buckets, decrease bucket size
-  while (actualBuckets < targetBuckets - 1 && finalBucketSize > 1) {
-    const smallerSize = roundToNice(finalBucketSize * 0.9);
-    if (smallerSize === finalBucketSize) break; // Prevent infinite loop
-    finalBucketSize = smallerSize;
-    actualBuckets = Math.ceil(range / finalBucketSize);
-  }
+  // Create buckets based on quantile boundaries
+  const buckets: { min: number; max: number; guilds: GuildDistributionEntry[] }[] = [];
 
-  // Create buckets starting from a rounded-down min value
-  const bucketStart = Math.floor(minValue / finalBucketSize) * finalBucketSize;
-  const buckets: { [key: number]: GuildDistributionEntry[] } = {};
+  for (let i = 0; i < targetBuckets; i++) {
+    const bucketMin = bucketBoundaries[i];
+    const bucketMax = bucketBoundaries[i + 1];
 
-  data.forEach((guild) => {
-    const value = guild[valueKey];
-    const bucketKey = Math.floor((value - bucketStart) / finalBucketSize) * finalBucketSize + bucketStart;
-    if (!buckets[bucketKey]) {
-      buckets[bucketKey] = [];
+    // Find all guilds in this range
+    const guildsInBucket = sortedData.filter(
+      (guild) => guild[valueKey] >= bucketMin && guild[valueKey] < bucketMax
+    );
+
+    // For the last bucket, include guilds at the max boundary
+    if (i === targetBuckets - 1) {
+      guildsInBucket.push(
+        ...sortedData.filter((guild) => guild[valueKey] === bucketMax - 1)
+      );
     }
-    buckets[bucketKey].push(guild);
-  });
 
-  // Convert to array and sort
-  const chartData = Object.keys(buckets)
-    .map((key) => {
-      const bucketMin = parseFloat(key);
-      const bucketMax = bucketMin + finalBucketSize;
-      const bucket = buckets[bucketMin] || [];
+    buckets.push({
+      min: bucketMin,
+      max: bucketMax - 1, // Make it inclusive for display
+      guilds: guildsInBucket,
+    });
+  }
 
+  // Convert to chart data format
+  const chartData = buckets
+    .filter((bucket) => bucket.guilds.length > 0) // Only include non-empty buckets
+    .map((bucket) => {
       // Format labels
       let label: string;
       if (valueKey === "timeSpent") {
         // For time, show the average (middle point) of the bucket
-        const bucketAverage = (bucketMin + bucketMax) / 2;
+        const bucketAverage = (bucket.min + bucket.max) / 2;
         label = formatTime(Math.floor(bucketAverage));
       } else {
         // For pulls, show the range
-        label = `${Math.floor(bucketMin)}-${Math.floor(bucketMax)}`;
+        label = `${Math.floor(bucket.min)}-${Math.floor(bucket.max)}`;
       }
 
       return {
-        bucket: bucketMin,
-        count: bucket.length,
+        bucket: bucket.min,
+        count: bucket.guilds.length,
         label,
-        guilds: bucket,
+        guilds: bucket.guilds,
       };
     })
     .sort((a, b) => a.bucket - b.bucket);
