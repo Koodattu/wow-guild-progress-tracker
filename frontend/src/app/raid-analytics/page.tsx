@@ -98,6 +98,7 @@ function DistributionChart({
             <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
             <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
             <Tooltip
+              cursor={false}
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
@@ -120,7 +121,7 @@ function DistributionChart({
                 return null;
               }}
             />
-            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getColor(index, chartData.length)} />
               ))}
@@ -196,6 +197,7 @@ function DistributionChart({
           <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
           <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
           <Tooltip
+            cursor={false}
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
                 const data = payload[0].payload;
@@ -218,7 +220,7 @@ function DistributionChart({
               return null;
             }}
           />
-          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
             {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={getColor(index, chartData.length)} />
             ))}
@@ -302,6 +304,7 @@ function ProgressionChart({
           <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
           <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
           <Tooltip
+            cursor={false}
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
                 const data = payload[0].payload;
@@ -315,7 +318,7 @@ function ProgressionChart({
               return null;
             }}
           />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} activeBar={{ filter: 'brightness(1.3)' }}>
             {weeklyData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={getColor(index, weeklyData.length)} />
             ))}
