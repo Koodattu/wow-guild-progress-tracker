@@ -451,6 +451,15 @@ export default function RaidAnalyticsPage() {
     return boss?.iconUrl;
   };
 
+  const getRaidIconUrl = (raidId: number): string | undefined => {
+    const raid = raids.find((r) => r.id === raidId);
+    return raid?.iconUrl;
+  };
+
+  const getRaidInfo = (raidId: number): RaidInfo | undefined => {
+    return raids.find((r) => r.id === raidId);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-64">
@@ -505,7 +514,16 @@ export default function RaidAnalyticsPage() {
 
           {/* Overall stats section with summary */}
           <div className="bg-gray-900/60 rounded border border-gray-800/50 p-4">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wide mb-3">{t("overallStatistics")}</h2>
+            {/* Raid header with icon */}
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800/50">
+              {getRaidIconUrl(analytics.raidId) && (
+                <IconImage iconFilename={getRaidIconUrl(analytics.raidId)} alt={analytics.raidName} width={40} height={40} className="rounded" />
+              )}
+              <div>
+                <h2 className="text-lg font-bold text-white">{analytics.raidName}</h2>
+                <p className="text-xs text-gray-500">{t("overallStatistics")}</p>
+              </div>
+            </div>
 
             {/* Summary stats - single row with 4 equal columns */}
             <div className="grid grid-cols-4 gap-4 mb-4">
@@ -646,7 +664,12 @@ export default function RaidAnalyticsPage() {
             <div key={raidAnalytics.raidId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden">
               {/* Raid header */}
               <div className="px-4 py-3 bg-gray-800/30 border-b border-gray-800/50">
-                <h2 className="text-lg font-bold text-white">{raidAnalytics.raidName}</h2>
+                <div className="flex items-center gap-3">
+                  {getRaidIconUrl(raidAnalytics.raidId) && (
+                    <IconImage iconFilename={getRaidIconUrl(raidAnalytics.raidId)} alt={raidAnalytics.raidName} width={32} height={32} className="rounded" />
+                  )}
+                  <h2 className="text-lg font-bold text-white">{raidAnalytics.raidName}</h2>
+                </div>
                 <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
                   <span>
                     {t("lastCalculated")}: {formatDate(raidAnalytics.lastCalculated)}
