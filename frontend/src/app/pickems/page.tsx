@@ -116,6 +116,42 @@ interface SortableItemData {
   prediction: PickemPrediction | null;
 }
 
+// Simple sortable RWF guild item (no autocomplete, just drag to reorder)
+function SortableRwfGuildItem({ id, rank, disabled, isDragging: parentIsDragging }: { id: string; rank: number; disabled: boolean; isDragging?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? "none" : transition,
+    zIndex: isDragging ? 1000 : undefined,
+    position: isDragging ? "relative" : undefined,
+    willChange: "transform",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style as React.CSSProperties}
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-3 p-3 bg-gray-800 rounded-lg border ${isDragging ? "" : "transition-all"} ${
+        isDragging ? "border-blue-500 shadow-2xl bg-gray-750 cursor-grabbing" : "border-gray-700 hover:border-gray-600"
+      } ${!disabled ? "cursor-grab hover:bg-gray-750" : "opacity-60"}`}
+    >
+      <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold text-sm shrink-0">{rank}</span>
+      <span className="text-white font-medium flex-1">{id}</span>
+      {!disabled && (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+        </svg>
+      )}
+    </div>
+  );
+}
+
 function SortablePredictionItem({
   data,
   guilds,
@@ -313,7 +349,10 @@ export default function PickemsPage() {
   const [selectedPickemId, setSelectedPickemId] = useState<string | null>(null);
   const [pickemDetails, setPickemDetails] = useState<PickemDetails | null>(null);
   const [guilds, setGuilds] = useState<SimpleGuild[]>([]);
-  const [predictions, setPredictions] = useState<(PickemPrediction | null)[]>(Array(10).fill(null));
+  const [rwfGuilds, setRwfGuilds] = useState<SimpleGuild[]>([]);
+  const [predictions, setPredictions] = useState<(PickemPrediction | null)[]>([]);
+  // RWF-specific: ordered list of guild names for simple drag-and-drop
+  const [rwfRankings, setRwfRankings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -332,7 +371,7 @@ export default function PickemsPage() {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   // Fetch pickems list and guilds on mount
@@ -340,9 +379,10 @@ export default function PickemsPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [pickemsData, guildsData] = await Promise.all([api.getPickems(), api.getPickemsGuilds()]);
+        const [pickemsData, guildsData, rwfGuildsData] = await Promise.all([api.getPickems(), api.getPickemsGuilds(), api.getPickemsRwfGuilds()]);
         setPickems(pickemsData);
         setGuilds(guildsData);
+        setRwfGuilds(rwfGuildsData);
 
         // Auto-select first pickem if available
         if (pickemsData.length > 0) {
@@ -369,17 +409,35 @@ export default function PickemsPage() {
         const details = await api.getPickemDetails(selectedPickemId);
         setPickemDetails(details);
 
-        // Initialize predictions from user's existing predictions
-        if (details.userPredictions) {
-          const newPredictions: (PickemPrediction | null)[] = Array(10).fill(null);
-          details.userPredictions.forEach((p) => {
-            if (p.position >= 1 && p.position <= 10) {
-              newPredictions[p.position - 1] = p;
-            }
-          });
-          setPredictions(newPredictions);
+        const guildCount = details.guildCount || 10;
+
+        // For RWF pickems, use simple ordered rankings
+        if (details.type === "rwf") {
+          // Initialize from user's existing predictions or default order
+          if (details.userPredictions && details.userPredictions.length > 0) {
+            // Sort by position and extract guild names
+            const sorted = [...details.userPredictions].sort((a, b) => a.position - b.position);
+            setRwfRankings(sorted.map((p) => p.guildName));
+          } else {
+            // Default order from RWF guilds
+            const rwfGuildsData = await api.getPickemsRwfGuilds();
+            setRwfRankings(rwfGuildsData.slice(0, guildCount).map((g) => g.name));
+          }
+          setPredictions([]);
         } else {
-          setPredictions(Array(10).fill(null));
+          // Regular pickems: Initialize predictions from user's existing predictions
+          if (details.userPredictions) {
+            const newPredictions: (PickemPrediction | null)[] = Array(guildCount).fill(null);
+            details.userPredictions.forEach((p) => {
+              if (p.position >= 1 && p.position <= guildCount) {
+                newPredictions[p.position - 1] = p;
+              }
+            });
+            setPredictions(newPredictions);
+          } else {
+            setPredictions(Array(guildCount).fill(null));
+          }
+          setRwfRankings([]);
         }
       } catch (err) {
         setError("Failed to load pickem details");
@@ -441,32 +499,65 @@ export default function PickemsPage() {
     }
   };
 
+  // Handle RWF drag end - simpler, just reorder the guild names
+  const handleRwfDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setRwfRankings((items) => {
+        const oldIndex = items.indexOf(active.id as string);
+        const newIndex = items.indexOf(over.id as string);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+      setSuccessMessage(null);
+    }
+  };
+
   // Submit predictions
   const handleSubmit = async () => {
-    if (!selectedPickemId) return;
+    if (!selectedPickemId || !pickemDetails) return;
 
-    // Validate all positions are filled
-    const filledPredictions = predictions.filter((p): p is PickemPrediction => p !== null);
-    if (filledPredictions.length !== 10) {
-      setError("Please fill all 10 positions");
-      return;
-    }
+    const guildCount = pickemDetails.guildCount || 10;
 
-    // Check for duplicates
-    const guildKeys = new Set<string>();
-    for (const pred of filledPredictions) {
-      const key = `${pred.guildName}-${pred.realm}`;
-      if (guildKeys.has(key)) {
-        setError(`Duplicate guild: ${pred.guildName} - ${pred.realm}`);
+    let predictionsToSubmit: PickemPrediction[];
+
+    // Handle RWF pickems differently
+    if (pickemDetails.type === "rwf") {
+      // Convert rwfRankings to predictions format
+      if (rwfRankings.length !== guildCount) {
+        setError(t("fillAllPositions", { count: guildCount }));
         return;
       }
-      guildKeys.add(key);
+      predictionsToSubmit = rwfRankings.map((guildName, idx) => ({
+        guildName,
+        realm: "RWF",
+        position: idx + 1,
+      }));
+    } else {
+      // Regular pickems: Validate all positions are filled
+      const filledPredictions = predictions.filter((p): p is PickemPrediction => p !== null);
+      if (filledPredictions.length !== guildCount) {
+        setError(t("fillAllPositions", { count: guildCount }));
+        return;
+      }
+
+      // Check for duplicates
+      const guildKeys = new Set<string>();
+      for (const pred of filledPredictions) {
+        const key = `${pred.guildName}-${pred.realm}`;
+        if (guildKeys.has(key)) {
+          setError(`Duplicate guild: ${pred.guildName} - ${pred.realm}`);
+          return;
+        }
+        guildKeys.add(key);
+      }
+      predictionsToSubmit = filledPredictions;
     }
 
     try {
       setSubmitting(true);
       setError(null);
-      const result = await api.submitPickemPredictions(selectedPickemId, filledPredictions);
+      const result = await api.submitPickemPredictions(selectedPickemId, predictionsToSubmit);
       setSuccessMessage(result.message);
 
       // Refresh details to get updated leaderboard
@@ -496,17 +587,20 @@ export default function PickemsPage() {
     return `${minutes}m remaining`;
   };
 
-  // Memoize sorted guilds for performance
+  // Memoize sorted guilds for performance - use RWF guilds for RWF pickems
   const sortedGuilds = useMemo(() => {
-    return [...guilds].sort((a, b) => a.name.localeCompare(b.name));
-  }, [guilds]);
+    const selectedPickem = pickems.find((p) => p.id === selectedPickemId);
+    const isRwf = selectedPickem?.type === "rwf";
+    const guildList = isRwf ? rwfGuilds : guilds;
+    return [...guildList].sort((a, b) => a.name.localeCompare(b.name));
+  }, [guilds, rwfGuilds, pickems, selectedPickemId]);
 
   // Get list of already selected guilds to exclude from dropdowns
   const getExcludedGuilds = useCallback(
     (currentPosition: number) => {
       return predictions.filter((p, idx) => p !== null && idx !== currentPosition - 1).map((p) => ({ guildName: p!.guildName, realm: p!.realm }));
     },
-    [predictions]
+    [predictions],
   );
 
   if (loading) {
@@ -565,31 +659,45 @@ export default function PickemsPage() {
                 </div>
               )}
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={Array.from({ length: 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-2">
-                    {Array.from({ length: 10 }, (_, i) => {
-                      const position = i + 1;
-                      const itemData: SortableItemData = {
-                        id: `prediction-${i}`,
-                        position,
-                        prediction: predictions[i],
-                      };
-                      return (
-                        <SortablePredictionItem
-                          key={`prediction-${i}`}
-                          data={itemData}
-                          guilds={sortedGuilds}
-                          disabled={!user || !pickemDetails.isVotingOpen}
-                          excludeGuilds={getExcludedGuilds(position)}
-                          onChange={handlePredictionChange}
-                          droppingIndex={droppingIndex}
-                        />
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
+              {/* RWF Pickems: Simple drag-and-drop ranking */}
+              {pickemDetails.type === "rwf" ? (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRwfDragEnd}>
+                  <SortableContext items={rwfRankings} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {rwfRankings.map((guildName, index) => (
+                        <SortableRwfGuildItem key={guildName} id={guildName} rank={index + 1} disabled={!user || !pickemDetails.isVotingOpen} />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                /* Regular Pickems: Autocomplete with drag-and-drop */
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => {
+                        const position = i + 1;
+                        const itemData: SortableItemData = {
+                          id: `prediction-${i}`,
+                          position,
+                          prediction: predictions[i],
+                        };
+                        return (
+                          <SortablePredictionItem
+                            key={`prediction-${i}`}
+                            data={itemData}
+                            guilds={sortedGuilds}
+                            disabled={!user || !pickemDetails.isVotingOpen}
+                            excludeGuilds={getExcludedGuilds(position)}
+                            onChange={handlePredictionChange}
+                            droppingIndex={droppingIndex}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
 
               {user && pickemDetails.isVotingOpen && (
                 <button
@@ -650,41 +758,43 @@ export default function PickemsPage() {
 
           {/* Right Column: Current Rankings & Leaderboard */}
           <div className="space-y-6">
-            {/* Current Guild Rankings */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
-              <h3 className="text-lg font-semibold text-white mb-4">{t("currentRankings")}</h3>
-              <div className="overflow-x-auto -mx-4 md:mx-0">
-                <div className="inline-block min-w-full align-middle">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-gray-400 border-b border-gray-700">
-                        <th className="text-left py-2 px-2 md:px-3">#</th>
-                        <th className="text-left py-2 px-2 md:px-3">{t("guild")}</th>
-                        <th className="text-right py-2 px-2 md:px-3">{t("progress")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
-                        <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
-                          <td className="py-2 px-2 md:px-3 text-gray-300 font-medium">{guild.rank}</td>
-                          <td className="py-2 px-2 md:px-3">
-                            <div className="min-w-0">
-                              <span className="text-white font-medium block truncate">{guild.name}</span>
-                              <span className="text-gray-400 text-xs block truncate">{guild.realm}</span>
-                            </div>
-                          </td>
-                          <td className="py-2 px-2 md:px-3 text-right whitespace-nowrap">
-                            <span className={`${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
-                              {guild.bossesKilled}/{guild.totalBosses}
-                            </span>
-                          </td>
+            {/* Current Guild Rankings - Only show for regular pickems */}
+            {pickemDetails.type !== "rwf" && (
+              <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
+                <h3 className="text-lg font-semibold text-white mb-4">{t("currentRankings")}</h3>
+                <div className="overflow-x-auto -mx-4 md:mx-0">
+                  <div className="inline-block min-w-full align-middle">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-gray-700">
+                          <th className="text-left py-2 px-2 md:px-3">#</th>
+                          <th className="text-left py-2 px-2 md:px-3">{t("guild")}</th>
+                          <th className="text-right py-2 px-2 md:px-3">{t("progress")}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
+                          <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
+                            <td className="py-2 px-2 md:px-3 text-gray-300 font-medium">{guild.rank}</td>
+                            <td className="py-2 px-2 md:px-3">
+                              <div className="min-w-0">
+                                <span className="text-white font-medium block truncate">{guild.name}</span>
+                                <span className="text-gray-400 text-xs block truncate">{guild.realm}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 md:px-3 text-right whitespace-nowrap">
+                              <span className={`${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
+                                {guild.bossesKilled}/{guild.totalBosses}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Leaderboard */}
             <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
@@ -700,10 +810,10 @@ export default function PickemsPage() {
                         index === 0
                           ? "bg-yellow-900/30 border border-yellow-700/50"
                           : index === 1
-                          ? "bg-gray-700/50 border border-gray-600/50"
-                          : index === 2
-                          ? "bg-orange-900/30 border border-orange-700/50"
-                          : "bg-gray-700/30"
+                            ? "bg-gray-700/50 border border-gray-600/50"
+                            : index === 2
+                              ? "bg-orange-900/30 border border-orange-700/50"
+                              : "bg-gray-700/30"
                       }`}
                     >
                       <details className="group">

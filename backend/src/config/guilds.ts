@@ -32,7 +32,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Nave", realm: "Kazzak", region: "EU" },
   { name: "Pohjoinen", realm: "Kazzak", region: "EU" },
   { name: "Marras", realm: "Kazzak", region: "EU" },
-  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["persecticus", "diskopallo"] },
+  { name: "LkaksP Issue", realm: "Stormreaver", region: "EU", streamers: ["diskopallo"] },
   { name: "TURTLES KIMBLE", realm: "Tarren-Mill", region: "EU", streamers: ["baldoora", "heiqs"] },
   { name: "Beyond Harmless", realm: "Sylvanas", region: "EU", streamers: ["jonim0", "deeheals"] },
   { name: "HinausYhtiö", realm: "Twisting-Nether", region: "EU", streamers: ["aamunkajo_", "rrrrage"] },
@@ -57,6 +57,8 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Intervention", realm: "Stormreaver", region: "EU" },
   { name: "Saunan Taakse", realm: "Stormreaver", region: "EU" },
   { name: "Northern", realm: "Frostmane", region: "EU" },
+  { name: "Anatidaephobia", realm: "Stormreaver", region: "EU" },
+  { name: "ei ollu safe", realm: "Stormreaver", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
@@ -132,3 +134,6 @@ export const MANUAL_RAID_DATES = [
     euEndDate: "2016-07-20",
   },
 ];
+
+// Custom PickEms, pick world first guild, top 3, this is hardcoded to: options being: Liquid, Echo, Method, 火 锅 英 雄, FatSharkYes
+export const PICK_EM_RWF_GUILDS = ["Liquid", "Echo", "Method", "火 锅 英 雄", "FatSharkYes"];

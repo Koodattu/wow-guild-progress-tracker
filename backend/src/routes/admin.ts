@@ -472,13 +472,23 @@ router.get("/pickems/:pickemId", async (req: Request, res: Response) => {
 // Create a new pickem
 router.post("/pickems", async (req: Request, res: Response) => {
   try {
-    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig } = req.body;
+    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig, type, guildCount } = req.body;
 
-    // Validate required fields
-    if (!pickemId || !name || !raidIds || !votingStart || !votingEnd) {
+    // Determine pickem type (default to 'regular' for backwards compatibility)
+    const pickemType = type === "rwf" ? "rwf" : "regular";
+
+    // Validate required fields (raidIds only required for regular pickems)
+    if (!pickemId || !name || !votingStart || !votingEnd) {
       return res.status(400).json({
-        error: "Missing required fields: pickemId, name, raidIds, votingStart, votingEnd",
+        error: "Missing required fields: pickemId, name, votingStart, votingEnd",
       });
+    }
+
+    // Validate raidIds for regular pickems
+    if (pickemType === "regular") {
+      if (!raidIds || !Array.isArray(raidIds) || raidIds.length === 0) {
+        return res.status(400).json({ error: "raidIds must be a non-empty array for regular pickems" });
+      }
     }
 
     // Validate pickemId format (alphanumeric with dashes)
@@ -498,20 +508,23 @@ router.post("/pickems", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "votingEnd must be after votingStart" });
     }
 
-    // Validate raidIds
-    if (!Array.isArray(raidIds) || raidIds.length === 0) {
-      return res.status(400).json({ error: "raidIds must be a non-empty array" });
+    // Validate guildCount if provided
+    const finalGuildCount = guildCount ?? (pickemType === "rwf" ? 5 : 10);
+    if (typeof finalGuildCount !== "number" || finalGuildCount < 1 || finalGuildCount > 20) {
+      return res.status(400).json({ error: "guildCount must be a number between 1 and 20" });
     }
 
     const pickem = await pickemService.createPickem({
       pickemId,
       name,
-      raidIds,
+      raidIds: pickemType === "regular" ? raidIds : [],
       votingStart: startDate,
       votingEnd: endDate,
       active: active ?? true,
       scoringConfig,
       streakConfig,
+      type: pickemType,
+      guildCount: finalGuildCount,
     });
 
     res.status(201).json(pickem);
@@ -530,8 +543,9 @@ router.put("/pickems/:pickemId", async (req: Request, res: Response) => {
     const { pickemId } = req.params;
     const updates = req.body;
 
-    // Don't allow changing the pickemId
+    // Don't allow changing the pickemId or type (type changes could break existing predictions)
     delete updates.pickemId;
+    delete updates.type;
 
     // Validate dates if provided
     if (updates.votingStart) {
@@ -544,6 +558,13 @@ router.put("/pickems/:pickemId", async (req: Request, res: Response) => {
       updates.votingEnd = new Date(updates.votingEnd);
       if (isNaN(updates.votingEnd.getTime())) {
         return res.status(400).json({ error: "Invalid votingEnd date format" });
+      }
+    }
+
+    // Validate guildCount if provided
+    if (updates.guildCount !== undefined) {
+      if (typeof updates.guildCount !== "number" || updates.guildCount < 1 || updates.guildCount > 20) {
+        return res.status(400).json({ error: "guildCount must be a number between 1 and 20" });
       }
     }
 
@@ -592,6 +613,52 @@ router.patch("/pickems/:pickemId/toggle", async (req: Request, res: Response) =>
   } catch (error) {
     logger.error("Error toggling pickem:", error);
     res.status(500).json({ error: "Failed to toggle pickem" });
+  }
+});
+
+// Finalize an RWF pickem with final rankings
+router.post("/pickems/:pickemId/finalize", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+    const { finalRankings } = req.body;
+
+    // Validate finalRankings is an array of strings
+    if (!Array.isArray(finalRankings) || finalRankings.length === 0) {
+      return res.status(400).json({ error: "finalRankings must be a non-empty array of guild names" });
+    }
+
+    if (!finalRankings.every((g: unknown) => typeof g === "string")) {
+      return res.status(400).json({ error: "All items in finalRankings must be strings" });
+    }
+
+    const result = await pickemService.finalizeRwfPickem(pickemId, finalRankings);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true, pickem: result.pickem });
+  } catch (error) {
+    logger.error("Error finalizing pickem:", error);
+    res.status(500).json({ error: "Failed to finalize pickem" });
+  }
+});
+
+// Unfinalize an RWF pickem (admin correction)
+router.post("/pickems/:pickemId/unfinalize", async (req: Request, res: Response) => {
+  try {
+    const { pickemId } = req.params;
+
+    const result = await pickemService.unfinalizeRwfPickem(pickemId);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true, pickem: result.pickem });
+  } catch (error) {
+    logger.error("Error unfinalizing pickem:", error);
+    res.status(500).json({ error: "Failed to unfinalize pickem" });
   }
 });
 

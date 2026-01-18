@@ -503,6 +503,12 @@ export const api = {
     return response.json();
   },
 
+  async getPickemsRwfGuilds(): Promise<SimpleGuild[]> {
+    const response = await fetch(`${API_URL}/api/pickems/guilds/rwf`);
+    if (!response.ok) throw new Error("Failed to fetch RWF guilds for pickems");
+    return response.json();
+  },
+
   async getPickemDetails(pickemId: string): Promise<PickemDetails> {
     const response = await fetch(`${API_URL}/api/pickems/${pickemId}`, {
       credentials: "include",
@@ -596,6 +602,32 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to toggle pickem");
+    }
+    return response.json();
+  },
+
+  async finalizeRwfPickem(pickemId: string, finalRankings: string[]): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ finalRankings }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to finalize pickem");
+    }
+    return response.json();
+  },
+
+  async unfinalizeRwfPickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/unfinalize`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to unfinalize pickem");
     }
     return response.json();
   },

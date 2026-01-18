@@ -3,11 +3,37 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { AdminUser, AdminGuild, AdminUserStats, AdminGuildStats, AdminOverview, AdminPickem, AdminPickemStats, ScoringConfig, StreakConfig, RaidInfo } from "@/types";
+import { AdminUser, AdminGuild, AdminUserStats, AdminGuildStats, AdminOverview, AdminPickem, AdminPickemStats, ScoringConfig, StreakConfig, RaidInfo, PickemType } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "pickems";
+
+// Sortable item for finalization ranking
+function SortableRankingItem({ id, rank }: { id: string; rank: number }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex items-center gap-3 p-3 bg-gray-700 rounded-lg cursor-grab active:cursor-grabbing border border-gray-600 hover:border-gray-500"
+    >
+      <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold">{rank}</span>
+      <span className="text-white font-medium">{id}</span>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -44,7 +70,9 @@ export default function AdminPage() {
   const [pickemForm, setPickemForm] = useState({
     pickemId: "",
     name: "",
+    type: "regular" as PickemType,
     raidIds: [] as number[],
+    guildCount: 10,
     votingStart: "",
     votingEnd: "",
     active: true,
@@ -62,6 +90,15 @@ export default function AdminPage() {
       bonusPerGuild: 3,
     } as StreakConfig,
   });
+
+  // RWF Finalization state
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [finalizingPickem, setFinalizingPickem] = useState<AdminPickem | null>(null);
+  const [finalizationRankings, setFinalizationRankings] = useState<string[]>([]);
+  const [isFinalizingLoading, setIsFinalizingLoading] = useState(false);
+
+  // DnD sensors for finalization modal
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   // Redirect non-admin users
   useEffect(() => {
@@ -397,7 +434,9 @@ export default function AdminPage() {
                   setPickemForm({
                     pickemId: "",
                     name: "",
+                    type: "regular",
                     raidIds: [],
+                    guildCount: 10,
                     votingStart: "",
                     votingEnd: "",
                     active: true,
@@ -436,7 +475,9 @@ export default function AdminPage() {
                         if (editingPickem) {
                           await api.updateAdminPickem(editingPickem.pickemId, {
                             name: pickemForm.name,
-                            raidIds: pickemForm.raidIds,
+                            type: pickemForm.type,
+                            raidIds: pickemForm.type === "regular" ? pickemForm.raidIds : [],
+                            guildCount: pickemForm.guildCount,
                             votingStart: pickemForm.votingStart,
                             votingEnd: pickemForm.votingEnd,
                             active: pickemForm.active,
@@ -444,7 +485,10 @@ export default function AdminPage() {
                             streakConfig: pickemForm.streakConfig,
                           });
                         } else {
-                          await api.createAdminPickem(pickemForm);
+                          await api.createAdminPickem({
+                            ...pickemForm,
+                            raidIds: pickemForm.type === "regular" ? pickemForm.raidIds : [],
+                          });
                         }
                         setShowPickemForm(false);
                         // Refresh pickems
@@ -486,29 +530,67 @@ export default function AdminPage() {
                       />
                     </div>
 
-                    {/* Raid Selection */}
+                    {/* Pickem Type */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.raids")}</label>
-                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto bg-gray-700 p-3 rounded-lg">
-                        {raids.map((raid) => (
-                          <label key={raid.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={pickemForm.raidIds.includes(raid.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setPickemForm({ ...pickemForm, raidIds: [...pickemForm.raidIds, raid.id] });
-                                } else {
-                                  setPickemForm({ ...pickemForm, raidIds: pickemForm.raidIds.filter((id) => id !== raid.id) });
-                                }
-                              }}
-                              className="rounded border-gray-500"
-                            />
-                            {raid.name}
-                          </label>
-                        ))}
-                      </div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.type")}</label>
+                      <select
+                        value={pickemForm.type}
+                        onChange={(e) => {
+                          const newType = e.target.value as PickemType;
+                          setPickemForm({
+                            ...pickemForm,
+                            type: newType,
+                            guildCount: newType === "rwf" ? 5 : 10,
+                            raidIds: newType === "rwf" ? [] : pickemForm.raidIds,
+                          });
+                        }}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      >
+                        <option value="regular">{t("pickems.form.typeRegular")}</option>
+                        <option value="rwf">{t("pickems.form.typeRwf")}</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">{pickemForm.type === "regular" ? t("pickems.form.typeRegularHelp") : t("pickems.form.typeRwfHelp")}</p>
                     </div>
+
+                    {/* Guild Count */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.guildCount")}</label>
+                      <input
+                        type="number"
+                        value={pickemForm.guildCount}
+                        onChange={(e) => setPickemForm({ ...pickemForm, guildCount: parseInt(e.target.value) || (pickemForm.type === "rwf" ? 5 : 10) })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                        min="1"
+                        max={pickemForm.type === "rwf" ? 5 : 10}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">{t("pickems.form.guildCountHelp")}</p>
+                    </div>
+
+                    {/* Raid Selection - only for regular type */}
+                    {pickemForm.type === "regular" && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">{t("pickems.form.raids")}</label>
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto bg-gray-700 p-3 rounded-lg">
+                          {raids.map((raid) => (
+                            <label key={raid.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={pickemForm.raidIds.includes(raid.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setPickemForm({ ...pickemForm, raidIds: [...pickemForm.raidIds, raid.id] });
+                                  } else {
+                                    setPickemForm({ ...pickemForm, raidIds: pickemForm.raidIds.filter((id) => id !== raid.id) });
+                                  }
+                                }}
+                                className="rounded border-gray-500"
+                              />
+                              {raid.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Voting Dates */}
                     <div className="grid grid-cols-2 gap-4">
@@ -639,6 +721,73 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* RWF Finalization Modal */}
+            {showFinalizeModal && finalizingPickem && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+                  <h3 className="text-xl font-bold text-white mb-4">{t("pickems.finalize.title", { name: finalizingPickem.name })}</h3>
+                  <p className="text-gray-400 mb-4">{t("pickems.finalize.description")}</p>
+
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event: DragEndEvent) => {
+                      const { active, over } = event;
+                      if (over && active.id !== over.id) {
+                        setFinalizationRankings((items) => {
+                          const oldIndex = items.indexOf(active.id as string);
+                          const newIndex = items.indexOf(over.id as string);
+                          return arrayMove(items, oldIndex, newIndex);
+                        });
+                      }
+                    }}
+                  >
+                    <SortableContext items={finalizationRankings} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2 mb-6">
+                        {finalizationRankings.map((guild, index) => (
+                          <SortableRankingItem key={guild} id={guild} rank={index + 1} />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={async () => {
+                        setIsFinalizingLoading(true);
+                        try {
+                          await api.finalizeRwfPickem(finalizingPickem.pickemId, finalizationRankings);
+                          const pickemsData = await api.getAdminPickems();
+                          setPickems(pickemsData.pickems);
+                          setPickemStats(pickemsData.stats);
+                          setShowFinalizeModal(false);
+                          setFinalizingPickem(null);
+                        } catch (err) {
+                          console.error("Failed to finalize pickem:", err);
+                          alert(err instanceof Error ? err.message : "Failed to finalize pickem");
+                        } finally {
+                          setIsFinalizingLoading(false);
+                        }
+                      }}
+                      disabled={isFinalizingLoading}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                      {isFinalizingLoading ? t("pickems.finalize.loading") : t("pickems.finalize.confirm")}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowFinalizeModal(false);
+                        setFinalizingPickem(null);
+                      }}
+                      className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+                    >
+                      {t("pickems.finalize.cancel")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Pickems Table */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">
               <table className="w-full">
@@ -646,6 +795,7 @@ export default function AdminPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.id")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.name")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.type")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.raids")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.voting")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("pickems.table.status")}</th>
@@ -664,7 +814,18 @@ export default function AdminPage() {
                       <tr key={pickem.pickemId} className="hover:bg-gray-750">
                         <td className="px-4 py-3 text-white font-mono text-sm">{pickem.pickemId}</td>
                         <td className="px-4 py-3 text-white">{pickem.name}</td>
-                        <td className="px-4 py-3 text-gray-300 text-sm">{pickem.raidIds.map((id) => raids.find((r) => r.id === id)?.name || id).join(", ")}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${pickem.type === "rwf" ? "bg-purple-900/50 text-purple-400" : "bg-blue-900/50 text-blue-400"}`}
+                          >
+                            {pickem.type === "rwf" ? t("pickems.table.typeRwf") : t("pickems.table.typeRegular")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 text-sm">
+                          {pickem.type === "rwf"
+                            ? t("pickems.table.rwfGuilds", { count: pickem.guildCount })
+                            : pickem.raidIds.map((id) => raids.find((r) => r.id === id)?.name || id).join(", ")}
+                        </td>
                         <td className="px-4 py-3 text-gray-400 text-sm">
                           <div>{new Date(pickem.votingStart).toLocaleDateString()}</div>
                           <div className="text-gray-500">→ {new Date(pickem.votingEnd).toLocaleDateString()}</div>
@@ -684,6 +845,11 @@ export default function AdminPage() {
                             {hasEnded && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-600 text-gray-300">{t("pickems.table.endedStatus")}</span>
                             )}
+                            {pickem.type === "rwf" && pickem.finalized && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-900/50 text-emerald-400">
+                                {t("pickems.table.finalizedStatus")}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -694,7 +860,9 @@ export default function AdminPage() {
                                 setPickemForm({
                                   pickemId: pickem.pickemId,
                                   name: pickem.name,
+                                  type: pickem.type || "regular",
                                   raidIds: pickem.raidIds,
+                                  guildCount: pickem.guildCount || (pickem.type === "rwf" ? 5 : 10),
                                   votingStart: new Date(pickem.votingStart).toISOString().slice(0, 16),
                                   votingEnd: new Date(pickem.votingEnd).toISOString().slice(0, 16),
                                   active: pickem.active,
@@ -739,6 +907,44 @@ export default function AdminPage() {
                             >
                               {t("pickems.table.delete")}
                             </button>
+                            {/* RWF Finalization buttons */}
+                            {pickem.type === "rwf" && !pickem.finalized && (
+                              <button
+                                onClick={async () => {
+                                  // Fetch RWF guilds to populate the ranking order
+                                  try {
+                                    const rwfGuilds = await api.getPickemsRwfGuilds();
+                                    setFinalizingPickem(pickem);
+                                    setFinalizationRankings(rwfGuilds.map((g) => g.name));
+                                    setShowFinalizeModal(true);
+                                  } catch (err) {
+                                    console.error("Failed to get RWF guilds:", err);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700"
+                              >
+                                {t("pickems.table.finalize")}
+                              </button>
+                            )}
+                            {pickem.type === "rwf" && pickem.finalized && (
+                              <button
+                                onClick={async () => {
+                                  if (confirm(t("pickems.table.unfinalizeConfirm"))) {
+                                    try {
+                                      await api.unfinalizeRwfPickem(pickem.pickemId);
+                                      const pickemsData = await api.getAdminPickems();
+                                      setPickems(pickemsData.pickems);
+                                      setPickemStats(pickemsData.stats);
+                                    } catch (err) {
+                                      console.error("Failed to unfinalize pickem:", err);
+                                    }
+                                  }
+                                }}
+                                className="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700"
+                              >
+                                {t("pickems.table.unfinalize")}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

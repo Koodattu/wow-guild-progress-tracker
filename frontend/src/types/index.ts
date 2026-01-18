@@ -617,6 +617,8 @@ export interface AdminOverview {
 }
 
 // Pickems types
+export type PickemType = "regular" | "rwf";
+
 export interface ScoringConfig {
   exactMatch: number;
   offByOne: number;
@@ -635,13 +637,18 @@ export interface StreakConfig {
 export interface PickemSummary {
   id: string;
   name: string;
+  type: PickemType;
   raidIds: number[];
+  guildCount: number;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
   hasEnded: boolean;
   scoringConfig?: ScoringConfig;
   streakConfig?: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
 }
 
 export interface PickemPrediction {
@@ -654,10 +661,10 @@ export interface GuildRanking {
   rank: number;
   name: string;
   realm: string;
-  bossesKilled: number;
-  totalBosses: number;
-  isComplete: boolean;
-  lastKillTime: string | null;
+  bossesKilled?: number;
+  totalBosses?: number;
+  isComplete?: boolean;
+  lastKillTime?: string | null;
 }
 
 export interface LeaderboardPrediction {
@@ -686,13 +693,18 @@ export interface LeaderboardEntry {
 export interface PickemDetails {
   id: string;
   name: string;
+  type: PickemType;
   raidIds: number[];
+  guildCount: number;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
   hasEnded: boolean;
   scoringConfig?: ScoringConfig;
   streakConfig?: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
   guildRankings: GuildRanking[];
   userPredictions: PickemPrediction[] | null;
   leaderboard: LeaderboardEntry[];
@@ -708,12 +720,17 @@ export interface AdminPickem {
   _id: string;
   pickemId: string;
   name: string;
+  type: PickemType;
   raidIds: number[];
+  guildCount: number;
   votingStart: string;
   votingEnd: string;
   active: boolean;
   scoringConfig: ScoringConfig;
   streakConfig: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -733,7 +750,9 @@ export interface AdminPickemsResponse {
 export interface CreatePickemInput {
   pickemId: string;
   name: string;
-  raidIds: number[];
+  type?: PickemType;
+  raidIds?: number[];
+  guildCount?: number;
   votingStart: string;
   votingEnd: string;
   active?: boolean;
@@ -743,7 +762,9 @@ export interface CreatePickemInput {
 
 export interface UpdatePickemInput {
   name?: string;
+  type?: PickemType;
   raidIds?: number[];
+  guildCount?: number;
   votingStart?: string;
   votingEnd?: string;
   active?: boolean;

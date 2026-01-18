@@ -17,16 +17,25 @@ export interface IStreakConfig {
   bonusPerGuild: number; // Bonus points per guild in streak (e.g., 2 extra per guild)
 }
 
+// Pickem type: regular (Finnish guilds from DB) or rwf (Race to World First guilds from config)
+export type PickemType = "regular" | "rwf";
+
 // Pickem document interface
 export interface IPickem extends Document {
   pickemId: string; // Unique identifier (e.g., "tww-s2")
   name: string; // Display name
-  raidIds: number[]; // Array of raid IDs included in this pickem
+  type: PickemType; // Type of pickem: "regular" for Finnish guilds, "rwf" for Race to World First
+  raidIds: number[]; // Array of raid IDs included in this pickem (only used for regular type)
+  guildCount: number; // Number of guilds to predict (10 for regular, 5 for rwf)
   votingStart: Date; // When voting opens
   votingEnd: Date; // When voting closes
   active: boolean; // Whether this pickem is visible/active
   scoringConfig: IScoringConfig; // Point configuration
   streakConfig: IStreakConfig; // Streak bonus configuration
+  // RWF-specific finalization fields
+  finalized: boolean; // Whether this RWF pickem has been finalized with results
+  finalRankings: string[]; // Final guild rankings (in order, index 0 = 1st place) - only for RWF
+  finalizedAt: Date | null; // When the pickem was finalized
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,7 +66,7 @@ const ScoringConfigSchema = new Schema<IScoringConfig>(
     offByFour: { type: Number, required: true, default: 2 },
     offByFiveOrMore: { type: Number, required: true, default: 0 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const StreakConfigSchema = new Schema<IStreakConfig>(
@@ -66,23 +75,35 @@ const StreakConfigSchema = new Schema<IStreakConfig>(
     minStreak: { type: Number, required: true, default: 2 },
     bonusPerGuild: { type: Number, required: true, default: 2 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const PickemSchema = new Schema<IPickem>(
   {
     pickemId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    raidIds: { type: [Number], required: true },
+    type: { type: String, enum: ["regular", "rwf"], required: true, default: "regular" },
+    raidIds: {
+      type: [Number],
+      required: function (this: IPickem) {
+        return this.type === "regular";
+      },
+      default: [],
+    },
+    guildCount: { type: Number, required: true, default: 10 },
     votingStart: { type: Date, required: true },
     votingEnd: { type: Date, required: true },
     active: { type: Boolean, required: true, default: true },
     scoringConfig: { type: ScoringConfigSchema, required: true, default: () => DEFAULT_SCORING_CONFIG },
     streakConfig: { type: StreakConfigSchema, required: true, default: () => DEFAULT_STREAK_CONFIG },
+    // RWF-specific finalization fields
+    finalized: { type: Boolean, required: true, default: false },
+    finalRankings: { type: [String], required: false, default: [] },
+    finalizedAt: { type: Date, required: false, default: null },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index for fast lookup by pickemId
@@ -120,7 +141,7 @@ export function calculatePickemPoints(predictedRank: number, actualRank: number,
  */
 export function calculateStreakBonus(
   predictions: { guildName: string; realm: string; predictedRank: number; actualRank: number | null }[],
-  streakConfig: IStreakConfig = DEFAULT_STREAK_CONFIG
+  streakConfig: IStreakConfig = DEFAULT_STREAK_CONFIG,
 ): { totalBonus: number; streaks: { length: number; guilds: string[] }[] } {
   if (!streakConfig.enabled) {
     return { totalBonus: 0, streaks: [] };
