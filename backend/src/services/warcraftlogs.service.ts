@@ -30,7 +30,9 @@ class WarcraftLogsService {
       throw new Error("WCL credentials not configured");
     }
 
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString(
+      "base64",
+    );
 
     const response = await fetch("https://www.warcraftlogs.com/oauth/token", {
       method: "POST",
@@ -79,7 +81,11 @@ class WarcraftLogsService {
     await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay = max 600 requests/minute
   }
 
-  async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false): Promise<T> {
+  async query<T>(
+    query: string,
+    variables?: any,
+    retryOnGatewayTimeout: boolean = false,
+  ): Promise<T> {
     await this.rateLimitCheck();
     const token = await this.authenticate();
 
@@ -96,14 +102,23 @@ class WarcraftLogsService {
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default to 60s if not specified
-      logger.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
+      logger.warn(
+        `⚠️  Rate limited by WCL API! Waiting ${Math.floor(
+          waitTime / 1000,
+        )}s before retry...`,
+      );
       await new Promise((resolve) => setTimeout(resolve, waitTime));
       return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
     }
 
     // Handle gateway timeouts with infinite retry (only for initial fetch)
-    if (retryOnGatewayTimeout && (response.status === 504 || response.statusText === "Gateway Time-out")) {
-      logger.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
+    if (
+      retryOnGatewayTimeout &&
+      (response.status === 504 || response.statusText === "Gateway Time-out")
+    ) {
+      logger.warn(
+        `⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 15000)); // Wait 15 seconds
       return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
     }
@@ -121,16 +136,23 @@ class WarcraftLogsService {
     // Log rate limit info if available
     if (result.data?.rateLimitData) {
       const rateLimit = result.data.rateLimitData;
-      const percentUsed = ((rateLimit.pointsSpentThisHour / rateLimit.limitPerHour) * 100).toFixed(1);
+      const percentUsed = (
+        (rateLimit.pointsSpentThisHour / rateLimit.limitPerHour) *
+        100
+      ).toFixed(1);
       logger.info(
-        `[WCL Rate Limit] ${rateLimit.pointsSpentThisHour.toFixed(0)}/${rateLimit.limitPerHour} points used (${percentUsed}%), resets in ${Math.floor(
-          rateLimit.pointsResetIn / 60
-        )}m ${rateLimit.pointsResetIn % 60}s`
+        `[WCL Rate Limit] ${rateLimit.pointsSpentThisHour.toFixed(0)}/${
+          rateLimit.limitPerHour
+        } points used (${percentUsed}%), resets in ${Math.floor(
+          rateLimit.pointsResetIn / 60,
+        )}m ${rateLimit.pointsResetIn % 60}s`,
       );
 
       // Warn if we're getting close to the limit
       if (rateLimit.pointsSpentThisHour / rateLimit.limitPerHour > 0.8) {
-        logger.warn(`⚠️  WARNING: Approaching rate limit! Consider slowing down requests.`);
+        logger.warn(
+          `⚠️  WARNING: Approaching rate limit! Consider slowing down requests.`,
+        );
       }
     }
 
@@ -138,7 +160,12 @@ class WarcraftLogsService {
   }
 
   // Get guild reports without zone filter to see all available reports
-  async getGuildReportsAll(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10) {
+  async getGuildReportsAll(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    limit: number = 10,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         reportData {
@@ -170,7 +197,14 @@ class WarcraftLogsService {
 
   // Get guild reports with full fight data - NO zone filter (for initial fetch)
   // This fetches all reports across all content (raids, dungeons, etc.)
-  async getGuildReportsWithFights(guildName: string, serverSlug: string, serverRegion: string, limit: number = 10, page: number = 1, retryOnGatewayTimeout: boolean = false) {
+  async getGuildReportsWithFights(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    limit: number = 10,
+    page: number = 1,
+    retryOnGatewayTimeout: boolean = false,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -238,7 +272,13 @@ class WarcraftLogsService {
 
   // Lightweight check for new reports - only fetches codes and timestamps, no fights data
   // This is much cheaper (uses fewer points) than fetching full report data
-  async checkForNewReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 5) {
+  async checkForNewReports(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    zoneId: number,
+    limit: number = 5,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!) {
         rateLimitData {
@@ -271,7 +311,12 @@ class WarcraftLogsService {
 
   // Get recent reports for a guild WITHOUT filtering by zone
   // This ensures we catch all reports even if WCL tags them with a different zone
-  async getRecentReports(guildName: string, serverSlug: string, serverRegion: string, limit: number = 3) {
+  async getRecentReports(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    limit: number = 3,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         rateLimitData {
@@ -390,7 +435,14 @@ class WarcraftLogsService {
 
   // Get guild info and recent reports for a specific raid - ALL difficulties (not filtered)
   // Note: Limit kept low (10) to avoid WCL query complexity limits when fetching phase data
-  async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 10, page: number = 1) {
+  async getGuildReportsAllDifficulties(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    zoneId: number,
+    limit: number = 10,
+    page: number = 1,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -454,7 +506,15 @@ class WarcraftLogsService {
   }
 
   // Get zone (raid) information - with caching
-  async getGuildReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, difficultyId: number, limit: number = 50, page: number = 1) {
+  async getGuildReports(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    zoneId: number,
+    difficultyId: number,
+    limit: number = 50,
+    page: number = 1,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $difficulty: Int!, $page: Int!) {
         rateLimitData {
@@ -580,15 +640,27 @@ class WarcraftLogsService {
    */
   determinePhaseInfo(
     fight: any,
-    encounterPhases: any[]
+    encounterPhases: any[],
   ): {
     lastPhase?: { phaseId: number; phaseName: string; isIntermission: boolean };
-    allPhases: Array<{ phaseId: number; phaseName: string; isIntermission: boolean }>;
+    allPhases: Array<{
+      phaseId: number;
+      phaseName: string;
+      isIntermission: boolean;
+    }>;
     progressDisplay: string;
   } {
     const result: {
-      lastPhase?: { phaseId: number; phaseName: string; isIntermission: boolean };
-      allPhases: Array<{ phaseId: number; phaseName: string; isIntermission: boolean }>;
+      lastPhase?: {
+        phaseId: number;
+        phaseName: string;
+        isIntermission: boolean;
+      };
+      allPhases: Array<{
+        phaseId: number;
+        phaseName: string;
+        isIntermission: boolean;
+      }>;
       progressDisplay: string;
     } = {
       allPhases: [],
@@ -596,7 +668,9 @@ class WarcraftLogsService {
     };
 
     // Find phase metadata for this encounter
-    const encounterMeta = encounterPhases?.find((ep: any) => ep.encounterID === fight.encounterID);
+    const encounterMeta = encounterPhases?.find(
+      (ep: any) => ep.encounterID === fight.encounterID,
+    );
 
     if (!encounterMeta?.phases || encounterMeta.phases.length === 0) {
       // No phase data available, use simple display
@@ -609,7 +683,10 @@ class WarcraftLogsService {
     }
 
     // Build phase map for lookup
-    const phaseMap = new Map<number, { phaseId: number; phaseName: string; isIntermission: boolean }>();
+    const phaseMap = new Map<
+      number,
+      { phaseId: number; phaseName: string; isIntermission: boolean }
+    >();
     encounterMeta.phases.forEach((p: any) => {
       phaseMap.set(p.id, {
         phaseId: p.id,
@@ -621,7 +698,9 @@ class WarcraftLogsService {
     // Determine which phases occurred
     if (fight.phaseTransitions && fight.phaseTransitions.length > 0) {
       // Sort transitions by time
-      const transitions = [...fight.phaseTransitions].sort((a: any, b: any) => a.startTime - b.startTime);
+      const transitions = [...fight.phaseTransitions].sort(
+        (a: any, b: any) => a.startTime - b.startTime,
+      );
 
       // Build all phases that occurred
       transitions.forEach((trans: any) => {
@@ -681,7 +760,12 @@ class WarcraftLogsService {
    * Fetch guild zone rankings for a specific zone
    * Returns world progress ranking (always uses highest difficulty - Mythic)
    */
-  async getGuildZoneRanking(guildName: string, serverSlug: string, serverRegion: string, zoneId: number) {
+  async getGuildZoneRanking(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+    zoneId: number,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!) {
         rateLimitData {
@@ -717,10 +801,59 @@ class WarcraftLogsService {
   }
 
   /**
+   * Fetch characters who participated in a specific fight
+   * Used for leaderboard character discovery
+   */
+  async getFightCharacters(reportCode: string, fightId: number) {
+    const query = `
+      query($reportCode: String!, $fightId: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            rankedCharacters {
+              canonicalID
+              name
+              hidden
+              server {
+                slug
+                region {
+                  slug
+                }
+              }
+            }
+            fights(fightIDs: [$fightId]) {
+              id
+              encounterID
+              name
+              difficulty
+              kill
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      reportCode,
+      fightId,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
+  /**
    * Fetch guild details including WarcraftLogs guild ID
    * This should only be called once during initial fetch
    */
-  async getGuildDetails(guildName: string, serverSlug: string, serverRegion: string) {
+  async getGuildDetails(
+    guildName: string,
+    serverSlug: string,
+    serverRegion: string,
+  ) {
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!) {
         rateLimitData {
