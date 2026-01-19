@@ -817,6 +817,7 @@ class WarcraftLogsService {
             rankedCharacters {
               canonicalID
               name
+              classID
               hidden
               server {
                 slug

@@ -4,6 +4,7 @@ import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
 import TierList from "../models/TierList";
+import TrackedCharacter from "../models/TrackedCharacter";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
@@ -1332,8 +1333,12 @@ class GuildService {
               { upsert: true, new: true },
             );
 
-            // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in raid 44
-            if (fight.kill && difficulty === 5 && zoneId === 44) {
+            // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in current raids
+            if (
+              fight.kill &&
+              difficulty === 5 &&
+              CURRENT_RAID_IDS.includes(zoneId || 0)
+            ) {
               try {
                 const charData = await wclService.getFightCharacters(
                   report.code,
@@ -1343,12 +1348,28 @@ class GuildService {
                   charData?.reportData?.report?.rankedCharacters || [];
 
                 for (const char of rankedChars) {
-                  // TODO: Create TrackedCharacter model and upsert here
-                  // Fields: canonicalID, name, serverSlug, region, lastMythicSeenAt, etc.
-                  console.log(
-                    `Discovered character: ${char.name} (${char.canonicalID})`,
+                  await TrackedCharacter.findOneAndUpdate(
+                    { warcraftlogsId: char.canonicalID },
+                    {
+                      name: char.name,
+                      realm: char.server.slug,
+                      region: char.server.region.slug,
+                      classID: char.classID,
+                      hidden: char.hidden,
+                      lastSeenAt: new Date(),
+                      lastMythicSeenAt: new Date(),
+                      rankingsAvailable: "unknown",
+                      nextEligibleRefreshAt: new Date(
+                        Date.now() + 24 * 60 * 60 * 1000,
+                      ),
+                    },
+                    { upsert: true, new: true },
                   );
                 }
+
+                guildLog.info(
+                  `Saved ${rankedChars.length} characters from fight ${fight.id} in report ${report.code}`,
+                );
               } catch (error) {
                 guildLog.error(
                   `Failed to fetch characters for fight ${fight.id}:`,
@@ -1955,8 +1976,12 @@ class GuildService {
             { upsert: true, new: true },
           );
 
-          // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in raid 44
-          if (fight.kill && difficulty === 5 && fightZoneId === 44) {
+          // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in current raids
+          if (
+            fight.kill &&
+            difficulty === 5 &&
+            CURRENT_RAID_IDS.includes(fightZoneId || 0)
+          ) {
             try {
               const charData = await wclService.getFightCharacters(
                 report.code,
@@ -1966,12 +1991,28 @@ class GuildService {
                 charData?.reportData?.report?.rankedCharacters || [];
 
               for (const char of rankedChars) {
-                // Upsert character to TrackedCharacter model
-                // Fields: canonicalID, name, serverSlug, region, lastMythicSeenAt, etc.
-                console.log(
-                  `Discovered character: ${char.name} (${char.canonicalID})`,
+                await TrackedCharacter.findOneAndUpdate(
+                  { warcraftlogsId: char.canonicalID },
+                  {
+                    name: char.name,
+                    realm: char.server.slug,
+                    region: char.server.region.slug,
+                    classID: char.classID,
+                    hidden: char.hidden,
+                    lastSeenAt: new Date(),
+                    lastMythicSeenAt: new Date(),
+                    rankingsAvailable: "unknown",
+                    nextEligibleRefreshAt: new Date(
+                      Date.now() + 24 * 60 * 60 * 1000,
+                    ),
+                  },
+                  { upsert: true, new: true },
                 );
               }
+
+              guildLog.info(
+                `Saved ${rankedChars.length} characters from fight ${fight.id} in report ${report.code}`,
+              );
             } catch (error) {
               guildLog.error(
                 `Failed to fetch characters for fight ${fight.id}:`,

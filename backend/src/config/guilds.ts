@@ -65,6 +65,11 @@ export const GUILDS: TrackedGuild[] = [
     region: "EU",
     streamers: ["xofe"],
   },
+  {
+    name: "LkaksP Issue",
+    realm: "Stormreaver",
+    region: "EU",
+  },
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [

@@ -36,6 +36,10 @@ export interface ITrackedCharacter extends Document {
   hidden: boolean;
   zoneRanking?: IZoneRanking;
   rankings?: IRanking[];
+  lastSeenAt: Date;
+  lastMythicSeenAt: Date;
+  rankingsAvailable: "unknown" | "true" | "false";
+  nextEligibleRefreshAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +82,15 @@ const TrackedCharacterSchema: Schema = new Schema(
     hidden: { type: Boolean, required: false, default: false },
     zoneRanking: { type: ZoneRankingSchema, required: false },
     rankings: { type: [RankingSchema], required: false },
+    lastSeenAt: { type: Date, required: true },
+    lastMythicSeenAt: { type: Date, required: true },
+    rankingsAvailable: {
+      type: String,
+      enum: ["unknown", "true", "false"],
+      required: true,
+      default: "unknown",
+    },
+    nextEligibleRefreshAt: { type: Date, required: true },
   },
   { timestamps: true },
 );
