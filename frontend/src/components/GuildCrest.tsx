@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { GuildCrest as GuildCrestType } from "@/types";
 
 // Layer positioning and scaling configuration
@@ -31,7 +31,7 @@ interface GuildCrestProps {
  * 5. Emblem image from API (colored with emblem color using multiply blend)
  * 6. Rings (top layer)
  */
-export default function GuildCrest({ crest, faction, size = 48, className = "", drawFactionCircle = false }: GuildCrestProps) {
+const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCircle = false }: GuildCrestProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -219,4 +219,8 @@ export default function GuildCrest({ crest, faction, size = 48, className = "", 
       {isLoading && <div className="absolute inset-0 bg-gray-700 rounded animate-pulse" />}
     </div>
   );
-}
+};
+
+// Memoize the component to prevent unnecessary re-renders when parent re-renders
+// This is crucial for performance when used in lists/tables
+export default memo(GuildCrest);

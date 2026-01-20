@@ -119,18 +119,18 @@ deploy() {
     log "Successfully pulled changes"
 
     # Stop all running containers
-    log "Stopping running containers..."
-    RUNNING_CONTAINERS=$(docker ps -q)
-    if [ -n "$RUNNING_CONTAINERS" ]; then
-        docker stop $RUNNING_CONTAINERS || warn "Failed to stop some containers"
-        log "Containers stopped"
-    else
-        log "No running containers to stop"
-    fi
+    # log "Stopping running containers..."
+    # RUNNING_CONTAINERS=$(docker ps -q)
+    # if [ -n "$RUNNING_CONTAINERS" ]; then
+    #     docker stop $RUNNING_CONTAINERS || warn "Failed to stop some containers"
+    #     log "Containers stopped"
+    # else
+    #     log "No running containers to stop"
+    # fi
 
     # Build and start containers with extended timeout
     log "Building and starting containers (this may take up to 10 minutes)..."
-    COMPOSE_HTTP_TIMEOUT=600 DOCKER_CLIENT_TIMEOUT=600 docker compose -f "$COMPOSE_FILE" up --build -d || {
+    COMPOSE_HTTP_TIMEOUT=720 DOCKER_CLIENT_TIMEOUT=720 docker compose -f "$COMPOSE_FILE" up --build -d || {
         error "Failed to build and start containers"
         exit 1
     }

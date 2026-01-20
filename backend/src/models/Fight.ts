@@ -6,6 +6,13 @@ export interface IPhaseTransition {
   name?: string; // Phase name if available
 }
 
+export interface IPlayerDeath {
+  name: string; // Character name
+  server: string; // Server/realm name (normalized)
+  timestamp: number; // When death occurred (ms, relative to report start)
+  deathTime: number; // Fight time when death occurred (ms, relative to fight start)
+}
+
 export interface IFight extends Document {
   reportCode: string; // WCL report code this fight belongs to
   guildId: mongoose.Types.ObjectId;
@@ -28,6 +35,8 @@ export interface IFight extends Document {
   lastPhaseName?: string; // Name of last phase (e.g., "Phase 3", "Intermission")
   phaseTransitions?: IPhaseTransition[]; // All phases that occurred
   progressDisplay?: string; // Human-readable like "45% P3"
+  // Player deaths
+  deaths?: IPlayerDeath[]; // All player deaths in chronological order
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +70,15 @@ const FightSchema: Schema = new Schema(
       },
     ],
     progressDisplay: { type: String },
+    // Player deaths
+    deaths: [
+      {
+        name: { type: String, required: true },
+        server: { type: String, required: true },
+        timestamp: { type: Number, required: true },
+        deathTime: { type: Number, required: true },
+      },
+    ],
   },
   {
     timestamps: true,

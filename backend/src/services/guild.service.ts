@@ -8,8 +8,9 @@ import TrackedCharacter from "../models/TrackedCharacter";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
+import cacheService from "./cache.service";
 import {
-  GUILDS,
+  GUILDS_DEV,
   TRACKED_RAIDS,
   CURRENT_RAID_IDS,
   DIFFICULTIES,
@@ -20,6 +21,9 @@ import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 
 class GuildService {
+  // Configuration for death events fetching
+  private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
+
   // Sync raid information from WarcraftLogs to database
   async syncRaidsFromWCL(): Promise<void> {
     logger.info("Syncing raid data from WarcraftLogs...");
@@ -408,7 +412,7 @@ class GuildService {
     logger.info("Initializing guilds from config...");
 
     const guildsToTrack =
-      process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+      process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
     logger.info(
       `Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`,
     );
@@ -490,7 +494,7 @@ class GuildService {
     logger.info("Syncing guild config data (parent_guild, streamers)...");
 
     const guildsToTrack =
-      process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS;
+      process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
 
     for (const guildConfig of guildsToTrack) {
       try {
@@ -1279,6 +1283,38 @@ class GuildService {
         if (report.fights && report.fights.length > 0) {
           const encounterPhases = report.phases || [];
 
+          // Get fight IDs for tracked raid bosses only
+          const trackedFightIds: number[] = [];
+          for (const fight of report.fights) {
+            if (validBossIds.has(fight.encounterID)) {
+              trackedFightIds.push(fight.id);
+            }
+          }
+
+          // Fetch death events for all tracked fights in this report (single API call)
+          let deathsByFight = new Map<number, any[]>();
+          if (this.fetchDeathEvents && trackedFightIds.length > 0) {
+            try {
+              const deathData = await wclService.getDeathEventsForReport(
+                report.code,
+                trackedFightIds,
+              );
+              if (deathData.reportData?.report) {
+                const actors =
+                  deathData.reportData.report.masterData?.actors || [];
+                deathsByFight = wclService.parseDeathEventsByFight(
+                  deathData.reportData.report,
+                  actors,
+                  report.fights,
+                );
+              }
+            } catch (error: any) {
+              guildLog.warn(
+                `Failed to fetch deaths for report ${report.code}: ${error.message}`,
+              );
+            }
+          }
+
           for (const fight of report.fights) {
             const encounterId = fight.encounterID;
 
@@ -1297,6 +1333,9 @@ class GuildService {
               fight,
               encounterPhases,
             );
+
+            // Get deaths for this fight
+            const deaths = deathsByFight.get(fight.id) || [];
 
             // Save fight to database
             const fightTimestamp = new Date(report.startTime + fight.startTime);
@@ -1323,6 +1362,7 @@ class GuildService {
                     ?.phases?.find((p: any) => p.id === pt.id)?.name,
                 })),
                 progressDisplay: phaseInfo.progressDisplay,
+                deaths: deaths,
                 reportStartTime: report.startTime,
                 reportEndTime: report.endTime || 0,
                 fightStartTime: fight.startTime,
@@ -1514,6 +1554,38 @@ class GuildService {
         const encounterPhases = report.phases || [];
         let newFightsInThisReport = 0;
 
+        // Get fight IDs for tracked raid bosses only
+        const trackedFightIds: number[] = [];
+        for (const fight of report.fights) {
+          if (validBossIds.has(fight.encounterID)) {
+            trackedFightIds.push(fight.id);
+          }
+        }
+
+        // Fetch death events for all tracked fights in this report (single API call)
+        let deathsByFight = new Map<number, any[]>();
+        if (this.fetchDeathEvents && trackedFightIds.length > 0) {
+          try {
+            const deathData = await wclService.getDeathEventsForReport(
+              report.code,
+              trackedFightIds,
+            );
+            if (deathData.reportData?.report) {
+              const actors =
+                deathData.reportData.report.masterData?.actors || [];
+              deathsByFight = wclService.parseDeathEventsByFight(
+                deathData.reportData.report,
+                actors,
+                report.fights,
+              );
+            }
+          } catch (error: any) {
+            guildLog.warn(
+              `Failed to fetch deaths for report ${report.code}: ${error.message}`,
+            );
+          }
+        }
+
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
 
@@ -1553,6 +1625,9 @@ class GuildService {
             encounterPhases,
           );
 
+          // Get deaths for this fight
+          const deaths = deathsByFight.get(fight.id) || [];
+
           // Save fight to database
           const fightTimestamp = new Date(report.startTime + fight.startTime);
           await Fight.findOneAndUpdate(
@@ -1578,6 +1653,7 @@ class GuildService {
                   ?.phases?.find((p: any) => p.id === pt.id)?.name,
               })),
               progressDisplay: phaseInfo.progressDisplay,
+              deaths: deaths,
               reportStartTime: report.startTime,
               reportEndTime: reportEndTime,
               fightStartTime: fight.startTime,
@@ -1902,6 +1978,38 @@ class GuildService {
         const encounterPhases = report.phases || [];
         let newFightsInThisReport = 0;
 
+        // Get fight IDs for tracked raid bosses only
+        const trackedFightIds: number[] = [];
+        for (const fight of report.fights) {
+          if (validBossIds.has(fight.encounterID)) {
+            trackedFightIds.push(fight.id);
+          }
+        }
+
+        // Fetch death events for all tracked fights in this report (single API call)
+        let deathsByFight = new Map<number, any[]>();
+        if (this.fetchDeathEvents && trackedFightIds.length > 0) {
+          try {
+            const deathData = await wclService.getDeathEventsForReport(
+              report.code,
+              trackedFightIds,
+            );
+            if (deathData.reportData?.report) {
+              const actors =
+                deathData.reportData.report.masterData?.actors || [];
+              deathsByFight = wclService.parseDeathEventsByFight(
+                deathData.reportData.report,
+                actors,
+                report.fights,
+              );
+            }
+          } catch (error: any) {
+            guildLog.warn(
+              `Failed to fetch deaths for report ${report.code}: ${error.message}`,
+            );
+          }
+        }
+
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
 
@@ -1941,6 +2049,9 @@ class GuildService {
             encounterPhases,
           );
 
+          // Get deaths for this fight
+          const deaths = deathsByFight.get(fight.id) || [];
+
           // Save fight to database
           const fightTimestamp = new Date(report.startTime + fight.startTime);
           await Fight.findOneAndUpdate(
@@ -1966,6 +2077,7 @@ class GuildService {
                   ?.phases?.find((p: any) => p.id === pt.id)?.name,
               })),
               progressDisplay: phaseInfo.progressDisplay,
+              deaths: deaths,
               reportStartTime: report.startTime,
               reportEndTime: reportEndTime,
               fightStartTime: fight.startTime,
@@ -2705,18 +2817,48 @@ class GuildService {
         bossData.totalTime += duration;
 
         // Add to pull history for progress chart
-        // Convert phase name to short format (e.g., "Phase 3" -> "P3", "Intermission 1" -> "I1")
+        // Convert phase name to short format (e.g., "Stage Three" -> "P3", "Intermission One" -> "I1")
         let phaseShort: string | undefined;
         if (fight.lastPhaseName) {
           const phaseName = fight.lastPhaseName.toLowerCase();
+
+          // Helper to convert word numbers to digits
+          const wordToNumber: { [key: string]: string } = {
+            one: "1",
+            two: "2",
+            three: "3",
+            four: "4",
+            five: "5",
+            six: "6",
+            seven: "7",
+            eight: "8",
+            nine: "9",
+            ten: "10",
+          };
+
+          // Extract number from phase name (supports both "Stage 3" and "Stage Three")
+          const extractNumber = (name: string): string => {
+            // First try numeric match
+            const numMatch = name.match(/\b(\d+)\b/);
+            if (numMatch) return numMatch[1];
+
+            // Then try word match
+            for (const [word, num] of Object.entries(wordToNumber)) {
+              if (name.includes(word)) return num;
+            }
+            return "1"; // Default to 1 if no number found
+          };
+
           if (phaseName.includes("intermission")) {
-            const match = phaseName.match(/(\d+)/);
-            phaseShort = match ? `I${match[1]}` : "I1";
-          } else if (phaseName.includes("phase")) {
-            const match = phaseName.match(/(\d+)/);
-            phaseShort = match ? `P${match[1]}` : `P${fight.lastPhaseId || 1}`;
-          } else if (fight.lastPhaseId) {
-            phaseShort = `P${fight.lastPhaseId}`;
+            phaseShort = `I${extractNumber(phaseName)}`;
+          } else if (
+            phaseName.includes("stage") ||
+            phaseName.includes("phase")
+          ) {
+            phaseShort = `P${extractNumber(phaseName)}`;
+          } else {
+            // Fallback: try to extract any number, treat as phase
+            phaseShort = `P${extractNumber(phaseName)}`;
           }
         }
 
@@ -2920,6 +3062,8 @@ class GuildService {
     oldBoss: IBossProgress,
     newBoss: IBossProgress,
   ): Promise<void> {
+    let eventCreated = false;
+
     // Check for first kill
     if (oldBoss.kills === 0 && newBoss.kills > 0) {
       await Event.create({
@@ -2937,6 +3081,8 @@ class GuildService {
         },
         timestamp: newBoss.firstKillTime || new Date(),
       });
+
+      eventCreated = true;
 
       // Update world rank after boss kill event (only for current raids)
       if (
@@ -2972,6 +3118,8 @@ class GuildService {
         timestamp: new Date(),
       });
 
+      eventCreated = true;
+
       // Update world rank after significant progress event (only for current raids)
       if (
         CURRENT_RAID_IDS.includes(raidProgress.raidId) &&
@@ -2984,6 +3132,11 @@ class GuildService {
           (guild._id as mongoose.Types.ObjectId).toString(),
         );
         await this.calculateGuildRankingsForRaid(raidProgress.raidId);
+
+        // Invalidate event caches if any event was created
+        if (eventCreated) {
+          cacheService.invalidateEventCaches();
+        }
       }
     }
   }
@@ -3172,10 +3325,38 @@ class GuildService {
       .filter((guild) => {
         // Only include guilds that have killed at least one boss (on any difficulty) for this raid
         return guild.progress.some((p) => p.bossesDefeated > 0);
+      })
+      .sort((a, b) => {
+        // Sort guilds by guild rank (mythic first, then heroic)
+        const aMythic = a.progress.find(
+          (p) => p.difficulty === "mythic" && p.raidId === raidId,
+        );
+        const bMythic = b.progress.find(
+          (p) => p.difficulty === "mythic" && p.raidId === raidId,
+        );
+        const aHeroic = a.progress.find(
+          (p) => p.difficulty === "heroic" && p.raidId === raidId,
+        );
+        const bHeroic = b.progress.find(
+          (p) => p.difficulty === "heroic" && p.raidId === raidId,
+        );
+
+        const aProgress = aMythic || aHeroic;
+        const bProgress = bMythic || bHeroic;
+
+        if (!aProgress && !bProgress) return 0;
+        if (!aProgress) return 1;
+        if (!bProgress) return -1;
+
+        const aRank = aProgress.guildRank ?? 999;
+        const bRank = bProgress.guildRank ?? 999;
+
+        return aRank - bRank;
       });
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
+  // Excludes pullHistory to reduce payload size
   async getGuildBossProgressForRaid(
     guildId: string,
     raidId: number,
@@ -3188,13 +3369,22 @@ class GuildService {
 
     const guildObj = guild.toObject();
 
-    // Return only the progress array for the specified raid
-    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+    // Return only the progress array for the specified raid, excluding pullHistory
+    const raidProgress = guildObj.progress
+      .filter((p) => p.raidId === raidId)
+      .map((progress) => ({
+        ...progress,
+        bosses: progress.bosses.map((boss) => {
+          const { pullHistory, ...bossWithoutHistory } = boss;
+          return bossWithoutHistory;
+        }),
+      }));
 
     return raidProgress;
   }
 
   // Get detailed boss progress for a specific raid by realm and name (returns only progress array)
+  // Excludes pullHistory to reduce payload size
   async getGuildBossProgressForRaidByRealmName(
     realm: string,
     name: string,
@@ -3211,10 +3401,76 @@ class GuildService {
 
     const guildObj = guild.toObject();
 
-    // Return only the progress array for the specified raid
-    const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+    // Return only the progress array for the specified raid, excluding pullHistory
+    const raidProgress = guildObj.progress
+      .filter((p) => p.raidId === raidId)
+      .map((progress) => ({
+        ...progress,
+        bosses: progress.bosses.map((boss) => {
+          const { pullHistory, ...bossWithoutHistory } = boss;
+          return bossWithoutHistory;
+        }),
+      }));
 
     return raidProgress;
+  }
+
+  // Get pull history for a specific boss (on-demand fetching)
+  async getBossPullHistory(
+    realm: string,
+    name: string,
+    raidId: number,
+    bossId: number,
+    difficulty: "mythic" | "heroic",
+  ): Promise<any | null> {
+    const guild = await Guild.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+    });
+
+    if (!guild) {
+      return null;
+    }
+
+    const guildObj = guild.toObject();
+
+    // Find the specific raid progress
+    const raidProgress = guildObj.progress.find(
+      (p) => p.raidId === raidId && p.difficulty === difficulty,
+    );
+
+    if (!raidProgress) {
+      return null;
+    }
+
+    // Find the specific boss
+    const boss = raidProgress.bosses.find((b) => b.bossId === bossId);
+
+    if (!boss) {
+      return null;
+    }
+
+    const pullHistory = boss.pullHistory || [];
+
+    // Calculate phase distribution (pullHistory already stores phases as P1, P2, I1, I2 format)
+    const phaseCount = new Map<string, number>();
+    pullHistory.forEach((pull: any) => {
+      if (pull.phase) {
+        const count = phaseCount.get(pull.phase) || 0;
+        phaseCount.set(pull.phase, count + 1);
+      }
+    });
+
+    // Sort by pull count (descending)
+    const phaseDistribution = Array.from(phaseCount.entries())
+      .map(([phase, count]) => ({ phase, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Return both pull history and phase distribution
+    return {
+      pullHistory,
+      phaseDistribution,
+    };
   }
 
   // Get single guild by ID

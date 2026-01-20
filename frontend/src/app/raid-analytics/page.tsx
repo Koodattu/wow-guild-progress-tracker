@@ -1,0 +1,484 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { RaidAnalytics, RaidInfo, Boss, GuildDistributionEntry, Distribution, WeeklyProgressionEntry } from "@/types";
+import { api } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import RaidSelector from "@/components/RaidSelector";
+import IconImage from "@/components/IconImage";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+
+// Format seconds to hours and minutes
+function formatTime(seconds: number): string {
+  if (seconds === 0) return "-";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
+}
+
+// Format date for display
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// Generate gradient colors for chart bars
+function getColor(index: number, total: number): string {
+  const hue = 200 + (index / Math.max(total - 1, 1)) * 60; // Blue to cyan
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
+// Compact inline stat - single line with label, average (large), min (small green), max (small amber)
+function CompactStat({ label, average, min, max, formatValue }: { label: string; average: number; min: number; max: number; formatValue: (val: number) => string }) {
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className="text-gray-500 min-w-[100px]">{label}</span>
+      <span className="text-2xl font-bold text-white">{formatValue(average)}</span>
+      <span className="text-xs text-gray-600">•</span>
+      <span className="text-sm text-green-400">{formatValue(min)}</span>
+      <span className="text-xs text-gray-600">to</span>
+      <span className="text-sm text-amber-400">{formatValue(max)}</span>
+    </div>
+  );
+}
+
+// Distribution chart - bar chart showing guild count in pre-calculated buckets
+function DistributionChart({ buckets, title }: { buckets: { label: string; count: number; guilds: GuildDistributionEntry[] }[]; title: string }) {
+  if (!buckets || buckets.length === 0) {
+    return (
+      <div className="p-3">
+        <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
+        <div className="text-xs text-gray-600">No data</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3">
+      <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{title}</div>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={buckets} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+          <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+          <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+          <Tooltip
+            cursor={false}
+            content={({ active, payload }) => {
+              if (active && payload && payload.length) {
+                const data = payload[0].payload;
+                return (
+                  <div className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs max-w-xs">
+                    <div className="text-white font-bold mb-1">{data.label}</div>
+                    <div className="text-blue-400 mb-1">{data.count} guilds</div>
+                    {data.guilds && Array.isArray(data.guilds) && data.guilds.length > 0 && (
+                      <div className="text-gray-400 text-[10px] max-h-32 overflow-y-auto">
+                        {data.guilds.map((guild: GuildDistributionEntry, idx: number) => (
+                          <div key={idx} className="truncate">
+                            {guild.name}-{guild.realm}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} activeBar={{ filter: "brightness(1.3)" }}>
+            {buckets.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={getColor(index, buckets.length)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Compact progression chart using pre-calculated weekly data
+function ProgressionChart({ weeklyData, label }: { weeklyData: WeeklyProgressionEntry[]; label: string }) {
+  if (!weeklyData || weeklyData.length === 0) {
+    return (
+      <div className="p-3">
+        <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
+        <div className="text-xs text-gray-600">No data available</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className=" border-gray-800/50 p-3">
+      <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</div>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={weeklyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+          <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+          <YAxis tick={{ fill: "#9CA3AF", fontSize: 10 }} />
+          <Tooltip
+            cursor={false}
+            content={({ active, payload }) => {
+              if (active && payload && payload.length) {
+                const data = payload[0].payload;
+                return (
+                  <div className="bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-xs">
+                    <div className="text-white font-bold">Week {data.weekNumber}</div>
+                    <div className="text-blue-400">{data.value} guilds</div>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} activeBar={{ filter: "brightness(1.3)" }}>
+            {weeklyData.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={getColor(index, weeklyData.length)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Stats section with 3 charts in a single row
+function StatsSection({
+  pullDistribution,
+  timeDistribution,
+  weeklyProgression,
+  progressionLabel,
+}: {
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
+  progressionLabel: string;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      {/* Pull Distribution Chart */}
+      <DistributionChart buckets={pullDistribution.buckets} title="Pull Distribution" />
+
+      {/* Time Distribution Chart */}
+      <DistributionChart buckets={timeDistribution.buckets} title="Time Distribution" />
+
+      {/* Progression Chart */}
+      <ProgressionChart weeklyData={weeklyProgression} label={progressionLabel} />
+    </div>
+  );
+}
+
+export default function RaidAnalyticsPage() {
+  const t = useTranslations("raidAnalyticsPage");
+  const [analytics, setAnalytics] = useState<RaidAnalytics | null>(null);
+  const [allAnalytics, setAllAnalytics] = useState<RaidAnalytics[] | null>(null);
+  const [raids, setRaids] = useState<RaidInfo[]>([]);
+  const [bosses, setBosses] = useState<Boss[]>([]);
+  const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initial load - fetch raids
+  useEffect(() => {
+    const fetchRaids = async () => {
+      try {
+        const raidsData = await api.getRaids();
+        setRaids(raidsData);
+        setSelectedRaidId(null);
+      } catch (err) {
+        setError("Failed to load raids");
+        console.error("Failed to fetch raids:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRaids();
+  }, []);
+
+  // Fetch analytics when raid selection changes
+  const fetchAnalytics = useCallback(
+    async (raidId: number | null) => {
+      try {
+        setDataLoading(true);
+        setError(null);
+
+        if (raidId === null) {
+          const allAnalyticsData = await api.getAllRaidAnalytics();
+          setAllAnalytics(allAnalyticsData);
+          setAnalytics(null);
+          setBosses([]);
+        } else {
+          const [analyticsData, bossesData] = await Promise.all([api.getRaidAnalytics(raidId), api.getBosses(raidId)]);
+          setAnalytics(analyticsData);
+          setAllAnalytics(null);
+          setBosses(bossesData);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("No analytics")) {
+          setError(t("noAnalyticsAvailable"));
+        } else {
+          setError(t("failedToLoad"));
+        }
+        setAnalytics(null);
+        setAllAnalytics(null);
+        console.error("Failed to fetch raid analytics:", err);
+      } finally {
+        setDataLoading(false);
+      }
+    },
+    [t],
+  );
+
+  useEffect(() => {
+    if (selectedRaidId !== undefined) {
+      fetchAnalytics(selectedRaidId);
+    }
+  }, [selectedRaidId, fetchAnalytics]);
+
+  const handleRaidSelect = (raidId: number | null) => {
+    setSelectedRaidId(raidId);
+  };
+
+  const getBossIconUrl = (bossName: string): string | undefined => {
+    const boss = bosses.find((b) => b.name === bossName);
+    return boss?.iconUrl;
+  };
+
+  const getRaidIconUrl = (raidId: number): string | undefined => {
+    const raid = raids.find((r) => r.id === raidId);
+    return raid?.iconUrl;
+  };
+
+  const getRaidInfo = (raidId: number): RaidInfo | undefined => {
+    return raids.find((r) => r.id === raidId);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-64">
+        <div className="text-gray-400">{t("loading")}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full px-4 md:px-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-white">{t("title")}</h1>
+          <p className="text-gray-500 text-sm">{t("subtitle")}</p>
+        </div>
+        <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} showOverall={true} />
+      </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-800/50 rounded px-3 py-2 mb-4">
+          <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {dataLoading && (
+        <div className="flex justify-center items-center min-h-64">
+          <div className="text-gray-500">{t("loadingAnalytics")}</div>
+        </div>
+      )}
+
+      {/* Single raid analytics */}
+      {!dataLoading && analytics && (
+        <div className="space-y-4">
+          {/* Meta info - inline */}
+          <div className="flex items-center gap-4 text-xs text-gray-600">
+            <span>
+              {t("lastCalculated")}: {formatDate(analytics.lastCalculated)}
+            </span>
+            {analytics.raidStart && (
+              <>
+                <span>•</span>
+                <span>
+                  {formatDate(analytics.raidStart)}
+                  {analytics.raidEnd ? ` - ${formatDate(analytics.raidEnd)}` : ` - ${t("ongoing")}`}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Overall stats section with summary */}
+          <div className="bg-gray-900/60 rounded border border-gray-800/50 p-2">
+            {/* Raid header with icon and inline stats */}
+            <div className="flex items-center gap-4 mb-2 pb-2 border-b border-gray-800/50">
+              {getRaidIconUrl(analytics.raidId) && (
+                <IconImage iconFilename={getRaidIconUrl(analytics.raidId)} alt={analytics.raidName} width={40} height={40} className="rounded" />
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white">{analytics.raidName}</h2>
+                <p className="text-xs text-gray-500">{t("overallStatistics")}</p>
+              </div>
+              {/* Summary stats - inline with header */}
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Cleared</span>
+                  <span className="text-xl font-bold text-green-400">{analytics.overall.guildsCleared}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Progressing</span>
+                  <span className="text-xl font-bold text-yellow-400">{analytics.overall.guildsProgressing}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Avg Pulls</span>
+                  <span className="text-xl font-bold text-white">{analytics.overall.pullCount.average || "-"}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-gray-500">Avg Time</span>
+                  <span className="text-xl font-bold text-white">{formatTime(analytics.overall.timeSpent.average)}</span>
+                </div>
+              </div>
+            </div>
+
+            <StatsSection
+              pullDistribution={analytics.overall.pullDistribution}
+              timeDistribution={analytics.overall.timeDistribution}
+              weeklyProgression={analytics.overall.weeklyProgression}
+              progressionLabel={t("clearProgression")}
+            />
+          </div>
+
+          {/* Boss breakdown */}
+          {analytics.bosses && analytics.bosses.length > 0 && (
+            <div>
+              <h2 className="text-base font-bold text-white mb-3">{t("bossBreakdown")}</h2>
+              <div className="space-y-2">
+                {analytics.bosses.map((boss, index) => {
+                  const bossIcon = getBossIconUrl(boss.bossName);
+                  return (
+                    <div key={boss.bossId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden hover:border-gray-700/50 transition-colors">
+                      {/* Boss header with inline stats */}
+                      <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/30 border-b border-gray-800/50">
+                        <span className="text-gray-600 font-mono text-xs w-5">#{index + 1}</span>
+                        <IconImage iconFilename={bossIcon} alt={boss.bossName} width={28} height={28} className="rounded" />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-bold text-white truncate">{boss.bossName}</h3>
+                        </div>
+                        {boss.guildsKilled > 0 && (
+                          <div className="flex items-center gap-5">
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Killed</span>
+                              <span className="text-base font-bold text-green-400">{boss.guildsKilled}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Progressing</span>
+                              <span className="text-base font-bold text-yellow-400">{boss.guildsProgressing}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Avg Pulls</span>
+                              <span className="text-base font-bold text-white">{boss.pullCount.average || "-"}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-500">Avg Time</span>
+                              <span className="text-base font-bold text-white">{formatTime(boss.timeSpent.average)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Boss stats */}
+                      <div className="px-3 py-3">
+                        {boss.guildsKilled > 0 ? (
+                          <>
+                            <StatsSection
+                              pullDistribution={boss.pullDistribution}
+                              timeDistribution={boss.timeDistribution}
+                              weeklyProgression={boss.weeklyProgression}
+                              progressionLabel={t("killProgression")}
+                            />
+                          </>
+                        ) : (
+                          <div className="text-gray-600 text-xs">{t("noBossKills")}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All raids view */}
+      {!dataLoading && allAnalytics && allAnalytics.length > 0 && (
+        <div className="space-y-4">
+          <div className="text-sm text-gray-500">
+            {t("showingOverallStatsForAllRaids")} ({allAnalytics.length} raids)
+          </div>
+
+          {allAnalytics.map((raidAnalytics) => (
+            <div key={raidAnalytics.raidId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden">
+              {/* Raid header with inline stats */}
+              <div className="px-4 py-3 bg-gray-800/30 border-b border-gray-800/50">
+                <div className="flex items-center gap-4">
+                  {getRaidIconUrl(raidAnalytics.raidId) && (
+                    <IconImage iconFilename={getRaidIconUrl(raidAnalytics.raidId)} alt={raidAnalytics.raidName} width={32} height={32} className="rounded" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3">
+                      <h2 className="text-lg font-bold text-white">{raidAnalytics.raidName}</h2>
+                      {raidAnalytics.raidStart && (
+                        <span className="text-xs text-gray-500">
+                          {formatDate(raidAnalytics.raidStart)}
+                          {raidAnalytics.raidEnd ? ` - ${formatDate(raidAnalytics.raidEnd)}` : ` - ${t("ongoing")}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Summary stats - inline with header */}
+                  <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Cleared</span>
+                      <span className="text-xl font-bold text-green-400">{raidAnalytics.overall.guildsCleared}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Progressing</span>
+                      <span className="text-xl font-bold text-yellow-400">{raidAnalytics.overall.guildsProgressing}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Avg Pulls</span>
+                      <span className="text-xl font-bold text-white">{raidAnalytics.overall.pullCount.average || "-"}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-gray-500">Avg Time</span>
+                      <span className="text-xl font-bold text-white">{formatTime(raidAnalytics.overall.timeSpent.average)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Stats */}
+                <StatsSection
+                  pullDistribution={raidAnalytics.overall.pullDistribution}
+                  timeDistribution={raidAnalytics.overall.timeDistribution}
+                  weeklyProgression={raidAnalytics.overall.weeklyProgression}
+                  progressionLabel={t("clearProgression")}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No data state */}
+      {!dataLoading && !analytics && !allAnalytics && !error && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">{t("selectRaidToView")}</p>
+        </div>
+      )}
+    </div>
+  );
+}

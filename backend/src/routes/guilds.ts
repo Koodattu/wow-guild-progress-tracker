@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
 import logger from "../utils/logger";
+import cacheService from "../services/cache.service";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -39,21 +41,60 @@ router.get("/list", async (req: Request, res: Response) => {
 
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+router.get(
+  "/",
+  cacheMiddleware(
+    (req) => {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+      return cacheService.getGuildsKey(raidId);
+    },
+    (req) => {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+      return cacheService.getTTLForRaid(raidId);
+    }
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
 
-    let guilds;
-    if (raidId) {
-      guilds = await guildService.getAllGuildsForRaid(raidId);
-    } else {
-      guilds = await guildService.getAllGuilds();
+      let guilds;
+      if (raidId) {
+        guilds = await guildService.getAllGuildsForRaid(raidId);
+      } else {
+        guilds = await guildService.getAllGuilds();
+      }
+
+      res.json(guilds);
+    } catch (error) {
+      logger.error("Error fetching guilds:", error);
+      res.status(500).json({ error: "Failed to fetch guilds" });
+    }
+  }
+);
+
+// Get pull history for a specific boss
+router.get("/:realm/:name/raids/:raidId/bosses/:bossId/pull-history", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const raidId = parseInt(req.params.raidId);
+    const bossId = parseInt(req.params.bossId);
+    const difficulty = req.query.difficulty as "mythic" | "heroic" | undefined;
+
+    if (!difficulty) {
+      return res.status(400).json({ error: "difficulty query parameter is required" });
     }
 
-    res.json(guilds);
+    const pullHistory = await guildService.getBossPullHistory(realm, name, raidId, bossId, difficulty);
+
+    if (pullHistory === null) {
+      return res.status(404).json({ error: "Guild or boss not found" });
+    }
+
+    res.json(pullHistory);
   } catch (error) {
-    logger.error("Error fetching guilds:", error);
-    res.status(500).json({ error: "Failed to fetch guilds" });
+    logger.error("Error fetching boss pull history:", error);
+    res.status(500).json({ error: "Failed to fetch boss pull history" });
   }
 });
 

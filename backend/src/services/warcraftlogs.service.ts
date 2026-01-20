@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import logger from "../utils/logger";
+import { log } from "console";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -23,6 +24,8 @@ class WarcraftLogsService {
       return this.accessToken;
     }
 
+    logger.info("Authenticating with Warcraft Logs API...");
+
     const clientId = process.env.WCL_CLIENT_ID;
     const clientSecret = process.env.WCL_CLIENT_SECRET;
 
@@ -34,6 +37,7 @@ class WarcraftLogsService {
       "base64",
     );
 
+    logger.info(`[API REQUEST] POST https://www.warcraftlogs.com/oauth/token`);
     const response = await fetch("https://www.warcraftlogs.com/oauth/token", {
       method: "POST",
       headers: {
@@ -52,6 +56,7 @@ class WarcraftLogsService {
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min early
 
     logger.info("WCL authenticated successfully");
+
     return this.accessToken;
   }
 
@@ -166,6 +171,9 @@ class WarcraftLogsService {
     serverRegion: string,
     limit: number = 10,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReportsAll - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         reportData {
@@ -205,6 +213,9 @@ class WarcraftLogsService {
     page: number = 1,
     retryOnGatewayTimeout: boolean = false,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReportsWithFights - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, page: ${page})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -279,6 +290,9 @@ class WarcraftLogsService {
     zoneId: number,
     limit: number = 5,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.checkForNewReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!) {
         rateLimitData {
@@ -317,6 +331,9 @@ class WarcraftLogsService {
     serverRegion: string,
     limit: number = 3,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getRecentReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $limit: Int!) {
         rateLimitData {
@@ -348,6 +365,9 @@ class WarcraftLogsService {
 
   // Get a single report by code with all fight details
   async getReportByCode(reportCode: string, difficultyId: number) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getReportByCode - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode})`,
+    );
     const query = `
       query($reportCode: String!, $difficulty: Int!) {
         rateLimitData {
@@ -385,6 +405,9 @@ class WarcraftLogsService {
 
   // Get a single report by code with fights - ALL difficulties (not filtered)
   async getReportByCodeAllDifficulties(reportCode: string) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getReportByCodeAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode})`,
+    );
     const query = `
       query($reportCode: String!) {
         rateLimitData {
@@ -443,6 +466,9 @@ class WarcraftLogsService {
     limit: number = 10,
     page: number = 1,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReportsAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $page: Int!) {
         rateLimitData {
@@ -515,6 +541,9 @@ class WarcraftLogsService {
     limit: number = 50,
     page: number = 1,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $difficulty: Int!, $page: Int!) {
         rateLimitData {
@@ -569,6 +598,9 @@ class WarcraftLogsService {
     // Don't use cache here because we need detailed encounter data
     // The getZones() cache only has id and name, not encounters
 
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getZone - POST https://www.warcraftlogs.com/api/v2/client (zone: ${zoneId})`,
+    );
     // Fetch fresh data with encounters
     const query = `
       query($zoneId: Int!) {
@@ -607,6 +639,9 @@ class WarcraftLogsService {
     }
 
     logger.info("Fetching fresh zones data...");
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getZones - POST https://www.warcraftlogs.com/api/v2/client`,
+    );
     const query = `
       query {
         rateLimitData {
@@ -766,6 +801,9 @@ class WarcraftLogsService {
     serverRegion: string,
     zoneId: number,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildZoneRanking - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!) {
         rateLimitData {
@@ -855,6 +893,9 @@ class WarcraftLogsService {
     serverSlug: string,
     serverRegion: string,
   ) {
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getGuildDetails - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug})`,
+    );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!) {
         rateLimitData {
@@ -881,6 +922,212 @@ class WarcraftLogsService {
     };
 
     return this.query<any>(query, variables);
+  }
+
+  /**
+   * Fetch death events for a specific fight
+   * Returns all player deaths with character name, server, and timestamps
+   */
+  async getDeathEventsForFight(reportCode: string, fightId: number) {
+    // Use maximum API limit to fetch all deaths
+    const queryLimit = 10000;
+
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getDeathEventsForFight - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, fight: ${fightId})`,
+    );
+    const query = `
+      query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            code
+            startTime
+            masterData {
+              actors(type: "Player") {
+                id
+                name
+                server
+              }
+            }
+            events(
+              fightIDs: $fightIds,
+              dataType: Deaths,
+              hostilityType: Friendlies,
+              limit: $limit
+            ) {
+              data
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      reportCode,
+      fightIds: [fightId],
+      limit: queryLimit,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
+  /**
+   * Fetch death events for multiple fights in a report (more efficient)
+   * Returns all deaths grouped by fight ID
+   */
+  async getDeathEventsForReport(reportCode: string, fightIds: number[]) {
+    // Use maximum API limit to fetch all deaths
+    const queryLimit = 10000;
+
+    logger.info(
+      `[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, ${fightIds.length} fights)`,
+    );
+    const query = `
+      query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            code
+            startTime
+            masterData {
+              actors(type: "Player") {
+                id
+                name
+                server
+              }
+            }
+            events(
+              fightIDs: $fightIds,
+              dataType: Deaths,
+              hostilityType: Friendlies,
+              limit: $limit
+            ) {
+              data
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      reportCode,
+      fightIds,
+      limit: queryLimit,
+    };
+
+    return this.query<any>(query, variables);
+  }
+
+  /**
+   * Parse death events from WCL response and group by fight
+   * Death events contain: timestamp, type: "death", targetID (the player who died), fight
+   */
+  parseDeathEventsByFight(deathEventsData: any, actors: any[], fights: any[]) {
+    if (!deathEventsData?.events?.data) {
+      return new Map();
+    }
+
+    const events = JSON.parse(JSON.stringify(deathEventsData.events.data));
+
+    // Create a map of actor IDs to actor info
+    const actorMap = new Map();
+    if (actors) {
+      for (const actor of actors) {
+        actorMap.set(actor.id, { name: actor.name, server: actor.server });
+      }
+    }
+
+    // Create a map of fight IDs to fight start times
+    const fightMap = new Map();
+    if (fights) {
+      for (const fight of fights) {
+        fightMap.set(fight.id, fight.startTime);
+      }
+    }
+
+    // Group deaths by fight ID
+    const deathsByFight = new Map<number, any[]>();
+
+    for (const event of events) {
+      if (event.type === "death" && event.targetID && event.fight) {
+        const actor = actorMap.get(event.targetID);
+        const fightStartTime = fightMap.get(event.fight);
+
+        if (actor && fightStartTime !== undefined) {
+          if (!deathsByFight.has(event.fight)) {
+            deathsByFight.set(event.fight, []);
+          }
+
+          deathsByFight.get(event.fight)!.push({
+            name: actor.name,
+            server: actor.server || "Unknown",
+            timestamp: event.timestamp, // Absolute timestamp relative to report start
+            deathTime: event.timestamp - fightStartTime, // Time relative to fight start
+          });
+        }
+      }
+    }
+
+    // Sort each fight's deaths by timestamp (chronological order)
+    for (const [fightId, deaths] of deathsByFight.entries()) {
+      deaths.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    return deathsByFight;
+  }
+
+  /**
+   * Parse death events from WCL response
+   * Death events contain: timestamp, type: "death", sourceID (the player who died)
+   */
+  parseDeathEvents(
+    deathEventsData: any,
+    actors: any[],
+    fightStartTime: number,
+  ) {
+    if (!deathEventsData?.events?.data) {
+      return [];
+    }
+
+    const events = JSON.parse(JSON.stringify(deathEventsData.events.data));
+
+    // Create a map of actor IDs to actor info
+    const actorMap = new Map();
+    if (actors) {
+      for (const actor of actors) {
+        actorMap.set(actor.id, { name: actor.name, server: actor.server });
+      }
+    }
+
+    // Parse death events
+    const deaths = [];
+    for (const event of events) {
+      if (event.type === "death" && event.targetID) {
+        const actor = actorMap.get(event.targetID);
+        if (actor) {
+          deaths.push({
+            name: actor.name,
+            server: actor.server || "Unknown",
+            timestamp: event.timestamp, // Absolute timestamp relative to report start
+            deathTime: event.timestamp - fightStartTime, // Time relative to fight start
+          });
+        }
+      }
+    }
+
+    // Sort by timestamp (chronological order)
+    deaths.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Keep only the first N deaths
+    return deaths;
   }
 }
 

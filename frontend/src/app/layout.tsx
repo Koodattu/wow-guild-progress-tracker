@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { usePathname } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useState, useMemo } from "react";
+import { AuthProvider } from "@/context/AuthContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,6 +57,10 @@ const getPageMetadata = (pathname: string, locale: "en" | "fi") => {
     "/terms": {
       title: isEnglish ? "Terms of Service" : "Käyttöehdot",
       description: isEnglish ? "Terms of service for Finnish WoW Progress." : "Finnish WoW Progressin käyttöehdot.",
+    },
+    "/profile": {
+      title: isEnglish ? "Profile" : "Profiili",
+      description: isEnglish ? "View and manage your profile." : "Näytä ja hallitse profiiliasi.",
     },
   };
 
@@ -148,11 +153,13 @@ export default function RootLayout({
         <meta property="twitter:image" content={`${SITE_URL}/logo.png`} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <Navigation />
-          {children}
-          {!isLivestreamsPage && <Footer />}
-        </NextIntlClientProvider>
+        <AuthProvider>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <Navigation />
+            {children}
+            {!isLivestreamsPage && <Footer />}
+          </NextIntlClientProvider>
+        </AuthProvider>
       </body>
     </html>
   );

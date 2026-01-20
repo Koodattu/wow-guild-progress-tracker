@@ -13,17 +13,22 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "connect-mongo": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-session": "^1.18.2",
     "mongoose": "^9.0.1",
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "winston": "^3.18.3"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
     "@types/node": "^24.10.1",
     "@types/node-cron": "^3.0.11",
     "@types/node-fetch": "^2.6.13",

@@ -14,6 +14,18 @@ export interface PullHistoryEntry {
   isKill: boolean;
 }
 
+// Phase distribution for pie chart
+export interface PhaseDistribution {
+  phase: string;
+  count: number;
+}
+
+// Response from getBossPullHistory API
+export interface BossPullHistoryResponse {
+  pullHistory: PullHistoryEntry[];
+  phaseDistribution: PhaseDistribution[];
+}
+
 export interface GuildCrest {
   emblem: {
     id: number;
@@ -244,6 +256,20 @@ export interface RaidDates {
   ends?: RegionDates;
 }
 
+// Home page data response (single endpoint with all data)
+export interface HomePageData {
+  raid: {
+    id: number;
+    name: string;
+    slug: string;
+    expansion: string;
+    iconUrl?: string;
+  };
+  dates: RaidDates;
+  guilds: GuildListItem[];
+  events: Event[];
+}
+
 // Minimal raid info (without bosses or dates) - used in raid selector
 export interface RaidInfo {
   id: number;
@@ -459,4 +485,386 @@ export interface AnalyticsErrorSummary {
 export interface AnalyticsErrors {
   details: AnalyticsErrorDetail[];
   summary: AnalyticsErrorSummary[];
+}
+
+// User/Auth types
+export interface DiscordUserInfo {
+  username: string;
+  avatarUrl: string;
+}
+
+export interface TwitchUserInfo {
+  displayName: string;
+  profileImageUrl: string | null;
+  connectedAt: string;
+}
+
+export interface WoWCharacter {
+  id: number;
+  name: string;
+  realm: string;
+  realmSlug?: string; // Only present when fetching all characters
+  class: string;
+  race: string;
+  level: number;
+  faction: "ALLIANCE" | "HORDE";
+  guild?: string;
+  selected: boolean;
+  inactive?: boolean;
+}
+
+export interface BattleNetUserInfo {
+  battletag: string;
+  connectedAt: string;
+  characters: WoWCharacter[];
+  lastCharacterSync: string | null;
+}
+
+export interface User {
+  discord: DiscordUserInfo;
+  twitch?: TwitchUserInfo;
+  battlenet?: BattleNetUserInfo;
+  isAdmin: boolean;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+// Admin Panel types
+export interface AdminUser {
+  id: string;
+  discord: {
+    id: string;
+    username: string;
+    hasAvatar: boolean;
+  };
+  twitch: {
+    displayName: string;
+    connectedAt: string;
+  } | null;
+  battlenet: {
+    battletag: string;
+    connectedAt: string;
+  } | null;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface AdminGuild {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  warcraftlogsId?: number;
+  parentGuild?: string;
+  isCurrentlyRaiding: boolean;
+  lastFetched?: string;
+  createdAt?: string;
+  progress?: {
+    raidName: string;
+    difficulty: string;
+    bossesDefeated: number;
+    totalBosses: number;
+  }[];
+}
+
+export interface AdminPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  pagination: AdminPagination;
+}
+
+export interface AdminGuildsResponse {
+  guilds: AdminGuild[];
+  pagination: AdminPagination;
+}
+
+export interface AdminUserStats {
+  total: number;
+  active: {
+    last24Hours: number;
+    last7Days: number;
+    last30Days: number;
+  };
+  connections: {
+    twitch: number;
+    battlenet: number;
+  };
+}
+
+export interface AdminGuildStats {
+  total: number;
+  currentlyRaiding: number;
+  withWarcraftlogsId: number;
+  factions: Record<string, number>;
+}
+
+export interface AdminOverview {
+  users: {
+    total: number;
+    activeToday: number;
+  };
+  guilds: {
+    total: number;
+    updatedToday: number;
+  };
+}
+
+// Pickems types
+export type PickemType = "regular" | "rwf";
+
+export interface ScoringConfig {
+  exactMatch: number;
+  offByOne: number;
+  offByTwo: number;
+  offByThree: number;
+  offByFour: number;
+  offByFiveOrMore: number;
+}
+
+export interface StreakConfig {
+  enabled: boolean;
+  minLength: number;
+  bonusPerGuild: number;
+}
+
+export interface PickemSummary {
+  id: string;
+  name: string;
+  type: PickemType;
+  raidIds: number[];
+  guildCount: number;
+  votingStart: string;
+  votingEnd: string;
+  isVotingOpen: boolean;
+  hasEnded: boolean;
+  scoringConfig?: ScoringConfig;
+  streakConfig?: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
+}
+
+export interface PickemPrediction {
+  guildName: string;
+  realm: string;
+  position: number;
+}
+
+export interface GuildRanking {
+  rank: number;
+  name: string;
+  realm: string;
+  bossesKilled?: number;
+  totalBosses?: number;
+  isComplete?: boolean;
+  lastKillTime?: string | null;
+}
+
+export interface LeaderboardPrediction {
+  guildName: string;
+  realm: string;
+  predictedRank: number;
+  actualRank: number | null;
+  points: number;
+}
+
+export interface StreakInfo {
+  length: number;
+  guilds: string[];
+}
+
+export interface LeaderboardEntry {
+  username: string;
+  avatarUrl: string;
+  totalPoints: number;
+  positionPoints?: number;
+  streakBonus?: number;
+  streaks?: StreakInfo[];
+  predictions: LeaderboardPrediction[];
+}
+
+export interface PickemDetails {
+  id: string;
+  name: string;
+  type: PickemType;
+  raidIds: number[];
+  guildCount: number;
+  votingStart: string;
+  votingEnd: string;
+  isVotingOpen: boolean;
+  hasEnded: boolean;
+  scoringConfig?: ScoringConfig;
+  streakConfig?: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
+  guildRankings: GuildRanking[];
+  userPredictions: PickemPrediction[] | null;
+  leaderboard: LeaderboardEntry[];
+}
+
+export interface SimpleGuild {
+  name: string;
+  realm: string;
+}
+
+// Admin Pickem types
+export interface AdminPickem {
+  _id: string;
+  pickemId: string;
+  name: string;
+  type: PickemType;
+  raidIds: number[];
+  guildCount: number;
+  votingStart: string;
+  votingEnd: string;
+  active: boolean;
+  scoringConfig: ScoringConfig;
+  streakConfig: StreakConfig;
+  finalized: boolean;
+  finalRankings: string[];
+  finalizedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPickemStats {
+  total: number;
+  active: number;
+  votingOpen: number;
+  totalParticipants: number;
+}
+
+export interface AdminPickemsResponse {
+  pickems: AdminPickem[];
+  stats: AdminPickemStats;
+}
+
+export interface CreatePickemInput {
+  pickemId: string;
+  name: string;
+  type?: PickemType;
+  raidIds?: number[];
+  guildCount?: number;
+  votingStart: string;
+  votingEnd: string;
+  active?: boolean;
+  scoringConfig?: Partial<ScoringConfig>;
+  streakConfig?: Partial<StreakConfig>;
+}
+
+export interface UpdatePickemInput {
+  name?: string;
+  type?: PickemType;
+  raidIds?: number[];
+  guildCount?: number;
+  votingStart?: string;
+  votingEnd?: string;
+  active?: boolean;
+  scoringConfig?: Partial<ScoringConfig>;
+  streakConfig?: Partial<StreakConfig>;
+}
+
+// ============================================================================
+// RAID ANALYTICS TYPES
+// ============================================================================
+
+// Pull count statistics (stripped - no guild references)
+export interface AnalyticsPullStats {
+  average: number;
+  lowest: number;
+  highest: number;
+}
+
+// Time spent statistics (stripped - no guild references)
+export interface AnalyticsTimeStats {
+  average: number; // in seconds
+  lowest: number;
+  highest: number;
+}
+
+// Kill progression entry (for cumulative charts) - legacy, kept for compatibility
+export interface KillProgressionEntry {
+  date: string;
+  killCount: number;
+}
+
+// Clear progression entry (for cumulative charts) - legacy, kept for compatibility
+export interface ClearProgressionEntry {
+  date: string;
+  clearCount: number;
+}
+
+// Guild entry for distribution bucket tooltips (stripped - name and realm only)
+export interface GuildDistributionEntry {
+  name: string;
+  realm: string;
+}
+
+// Pre-calculated distribution bucket
+export interface DistributionBucket {
+  label: string;
+  count: number;
+  guilds: GuildDistributionEntry[];
+}
+
+// Pre-calculated distribution data
+export interface Distribution {
+  buckets: DistributionBucket[];
+}
+
+// Pre-calculated weekly progression entry
+export interface WeeklyProgressionEntry {
+  weekNumber: number;
+  value: number;
+  label: string; // "W1", "W2", etc.
+}
+
+// Boss analytics
+export interface BossAnalytics {
+  bossId: number;
+  bossName: string;
+  guildsKilled: number;
+  guildsProgressing: number;
+  pullCount: AnalyticsPullStats;
+  timeSpent: AnalyticsTimeStats;
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
+}
+
+// Overall raid analytics
+export interface RaidOverallAnalytics {
+  guildsCleared: number;
+  guildsProgressing: number;
+  pullCount: AnalyticsPullStats;
+  timeSpent: AnalyticsTimeStats;
+  pullDistribution: Distribution;
+  timeDistribution: Distribution;
+  weeklyProgression: WeeklyProgressionEntry[];
+}
+
+// Full raid analytics response (stripped - no difficulty, _id, __v, etc.)
+export interface RaidAnalytics {
+  raidId: number;
+  raidName: string;
+  overall: RaidOverallAnalytics;
+  bosses?: BossAnalytics[]; // Optional since /all endpoint doesn't include bosses
+  raidStart?: string;
+  raidEnd?: string;
+  lastCalculated: string;
+}
+
+// Available raid for analytics
+export interface RaidAnalyticsListItem {
+  raidId: number;
+  raidName: string;
+  lastCalculated: string;
 }

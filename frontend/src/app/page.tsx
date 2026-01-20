@@ -1,24 +1,19 @@
 "use client";
 
 import { useEffect, useState, useCallback, Suspense } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { GuildListItem, Event, RaidInfo, RaidDates, Guild, Boss } from "@/types";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { GuildListItem, Event, Guild, Boss, HomePageData } from "@/types";
 import { api } from "@/lib/api";
+import { getIconUrl } from "@/lib/utils";
 import GuildTable from "@/components/GuildTable";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
-import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import RaidDetailModal from "@/components/RaidDetailModal";
 
 function HomeContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const pathname = usePathname();
 
-  const [guilds, setGuilds] = useState<GuildListItem[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [raids, setRaids] = useState<RaidInfo[]>([]);
-  const [raidDates, setRaidDates] = useState<RaidDates | null>(null);
-  const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
+  const [homeData, setHomeData] = useState<HomePageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,110 +21,24 @@ function HomeContent() {
   const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
 
-  // Helper function to update URL with query parameters
-  const updateURL = useCallback(
-    (raidId: number | null) => {
-      const params = new URLSearchParams();
-      if (raidId) params.set("raidid", raidId.toString());
-
-      const queryString = params.toString();
-      const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
-      router.replace(newUrl, { scroll: false });
-    },
-    [pathname, router]
-  );
-
-  // Initial data fetch - only raids and events
-  const fetchInitialData = useCallback(async () => {
+  // Fetch all data from single endpoint
+  const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [raidsData, eventsData] = await Promise.all([api.getRaids(), api.getEvents(5)]);
-
-      setRaids(raidsData);
-      setEvents(eventsData);
-
-      // Check URL parameters
-      const raidIdParam = searchParams.get("raidid");
-
-      let raidToSelect: number | null = null;
-
-      // Try to use raid ID from URL first
-      if (raidIdParam) {
-        const raidId = parseInt(raidIdParam, 10);
-        if (!isNaN(raidId) && raidsData.some((r) => r.id === raidId)) {
-          raidToSelect = raidId;
-        }
-      }
-
-      // If no valid raid ID in URL, select the first raid by default
-      if (!raidToSelect && raidsData.length > 0) {
-        raidToSelect = raidsData[0].id;
-      }
-
-      if (raidToSelect) {
-        setSelectedRaidId(raidToSelect);
-        // Update URL if raid was auto-selected (not from URL param)
-        if (!raidIdParam) {
-          updateURL(raidToSelect);
-        }
-      }
+      const data = await api.getHomeData();
+      setHomeData(data);
     } catch (err) {
-      console.error("Error fetching initial data:", err);
+      console.error("Error fetching data:", err);
       setError("Failed to load data. Make sure the backend server is running.");
     } finally {
       setLoading(false);
-    }
-  }, [searchParams, updateURL]);
-
-  // Fetch raid-specific data (dates and guilds) when raid is selected
-  const fetchRaidData = useCallback(async (raidId: number) => {
-    try {
-      setError(null);
-      const [datesData, guildsData] = await Promise.all([api.getRaidDates(raidId), api.getGuilds(raidId)]);
-
-      setRaidDates(datesData);
-
-      // Sort guilds by backend-calculated guild rank (lower is better)
-      const sortedGuilds = guildsData.sort((a, b) => {
-        const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
-        const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
-        const aHeroic = a.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
-        const bHeroic = b.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
-
-        // Get the effective progress (mythic if exists, otherwise heroic)
-        const aProgress = aMythic || aHeroic;
-        const bProgress = bMythic || bHeroic;
-
-        // Guilds without progress go to the end
-        if (!aProgress && !bProgress) return 0;
-        if (!aProgress) return 1;
-        if (!bProgress) return -1;
-
-        // Use backend-calculated guildRank (lower is better)
-        const aRank = aProgress.guildRank ?? 999;
-        const bRank = bProgress.guildRank ?? 999;
-
-        return aRank - bRank;
-      });
-
-      setGuilds(sortedGuilds);
-    } catch (err) {
-      console.error("Error fetching raid data:", err);
-      setError("Failed to load raid data.");
     }
   }, []);
 
   // Initial fetch on mount
   useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
-
-  // Fetch raid-specific data when raid selection changes
-  useEffect(() => {
-    if (selectedRaidId !== null) {
-      fetchRaidData(selectedRaidId);
-    }
-  }, [selectedRaidId, fetchRaidData]);
+    fetchData();
+  }, [fetchData]);
 
   // Handle guild click - navigate to guild profile page
   const handleGuildClick = useCallback(
@@ -145,12 +54,12 @@ function HomeContent() {
   // Handle raid progress click - open raid detail modal
   const handleRaidProgressClick = useCallback(
     async (guild: GuildListItem) => {
-      if (!selectedRaidId) return;
+      if (!homeData) return;
 
       try {
         setError(null);
         // Fetch boss progress for this specific raid and bosses list
-        const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(guild.realm, guild.name, selectedRaidId), api.getBosses(selectedRaidId)]);
+        const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(guild.realm, guild.name, homeData.raid.id), api.getBosses(homeData.raid.id)]);
 
         // Create a detailed guild object for the modal
         const detailedGuild: Guild = {
@@ -174,7 +83,7 @@ function HomeContent() {
         setError("Failed to load raid details.");
       }
     },
-    [selectedRaidId]
+    [homeData]
   );
 
   // Handle closing raid detail modal
@@ -185,37 +94,20 @@ function HomeContent() {
 
   // Auto-refresh with different intervals
   useEffect(() => {
-    // Refresh events every 1 minute
-    const eventsInterval = setInterval(() => {
+    // Refresh home data every 1 minute
+    const refreshInterval = setInterval(() => {
       api
-        .getEvents(5)
-        .then(setEvents)
+        .getHomeData()
+        .then(setHomeData)
         .catch((err) => {
-          console.error("Error refreshing events:", err);
+          console.error("Error refreshing home data:", err);
         });
     }, 60000);
 
-    // Refresh guilds every 5 minutes
-    const guildsInterval = setInterval(() => {
-      if (selectedRaidId !== null) {
-        fetchRaidData(selectedRaidId);
-      }
-    }, 300000);
-
     return () => {
-      clearInterval(eventsInterval);
-      clearInterval(guildsInterval);
+      clearInterval(refreshInterval);
     };
-  }, [selectedRaidId, fetchRaidData]);
-
-  // Handle raid selection change
-  const handleRaidSelect = useCallback(
-    (raidId: number) => {
-      setSelectedRaidId(raidId);
-      updateURL(raidId);
-    },
-    [updateURL]
-  );
+  }, []);
 
   if (loading) {
     return (
@@ -228,26 +120,90 @@ function HomeContent() {
     );
   }
 
+  if (!homeData) {
+    return null;
+  }
+
+  // Format dates (EU by default)
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const startDate = formatDate(homeData.dates.starts?.eu);
+  const endDate = formatDate(homeData.dates.ends?.eu);
+
   return (
-    <main className=" text-white min-h-screen">
+    <main className="text-white min-h-screen">
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
 
         {/* Horizontal Events Feed at the top */}
         <div className="mb-2">
-          <HorizontalEventsFeed events={events} />
+          <HorizontalEventsFeed events={homeData.events} />
         </div>
 
-        {/* Guild Leaderboard in the middle */}
+        {/* Raid Header */}
+        <div className="mb-4 p-2 md:p-3">
+          {/* Expansion name and icon */}
+          <div className="flex items-center gap-2 mb-1 md:mb-2">
+            <span className="text-xs md:text-sm font-bold text-gray-400">{homeData.raid.expansion}</span>
+            <Image
+              src={`/expansions/${homeData.raid.expansion.toLowerCase().replace(/\s+/g, "-")}.png`}
+              alt={`${homeData.raid.expansion} icon`}
+              height={16}
+              width={26}
+              className="md:h-5 md:w-8"
+            />
+          </div>
+
+          {/* Raid name, icon, and dates */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              {homeData.raid.iconUrl && <Image src={getIconUrl(homeData.raid.iconUrl) || ""} alt="Raid icon" width={32} height={32} className="rounded md:w-10 md:h-10 shrink-0" />}
+              <h2 className="text-lg md:text-2xl font-bold truncate">{homeData.raid.name}</h2>
+            </div>
+
+            {/* Season dates */}
+            <div className="text-right text-xs md:text-sm text-gray-400 shrink-0 hidden sm:block">
+              <div>
+                {startDate} - {endDate}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile dates - shown below on small screens */}
+          <div className="sm:hidden text-xs text-gray-400 mt-1">
+            {startDate} - {endDate}
+          </div>
+        </div>
+
+        {/* Guild Leaderboard for current raid (no raid selector) */}
         <div>
-          {/* Integrated Raid Selector - replaces both the dropdown and the header */}
-          {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
-          <GuildTable guilds={guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={selectedRaidId} />
+          <GuildTable guilds={homeData.guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={homeData.raid.id} />
         </div>
 
         {/* Raid Detail Modal */}
-        {selectedGuildDetail && selectedRaidId && (
-          <RaidDetailModal guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
+        {selectedGuildDetail && (
+          <RaidDetailModal
+            guild={selectedGuildDetail}
+            onClose={handleCloseModal}
+            selectedRaidId={homeData.raid.id}
+            raids={[
+              {
+                id: homeData.raid.id,
+                name: homeData.raid.name,
+                slug: homeData.raid.slug,
+                expansion: homeData.raid.expansion,
+                iconUrl: homeData.raid.iconUrl,
+              },
+            ]}
+            bosses={bossesForSelectedRaid}
+          />
         )}
       </div>
     </main>

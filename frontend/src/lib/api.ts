@@ -27,6 +27,25 @@ import {
   AnalyticsTrends,
   AnalyticsSlowEndpoint,
   AnalyticsErrors,
+  User,
+  WoWCharacter,
+  AdminUsersResponse,
+  AdminGuildsResponse,
+  AdminUserStats,
+  AdminGuildStats,
+  AdminOverview,
+  HomePageData,
+  PickemSummary,
+  PickemDetails,
+  PickemPrediction,
+  SimpleGuild,
+  AdminPickemsResponse,
+  AdminPickem,
+  CreatePickemInput,
+  UpdatePickemInput,
+  BossPullHistoryResponse,
+  RaidAnalytics,
+  RaidAnalyticsListItem,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -43,9 +62,16 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 
 export const api = {
+  // Home page endpoint - returns all data for the home page in a single request
+  async getHomeData(): Promise<HomePageData> {
+    const response = await fetch(`${API_URL}/api/home`);
+    if (!response.ok) throw new Error("Failed to fetch home page data");
+    return response.json();
+  },
+
   // Guild endpoints
   async getGuilds(raidId?: number): Promise<GuildListItem[]> {
-    const url = raidId ? `${API_URL}/api/guilds?raidId=${raidId}` : `${API_URL}/api/guilds`;
+    const url = raidId ? `${API_URL}/api/progress?raidId=${raidId}` : `${API_URL}/api/guilds`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
@@ -62,6 +88,14 @@ export const api = {
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`);
     if (!response.ok) throw new Error("Failed to fetch guild boss progress");
+    return response.json();
+  },
+
+  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<BossPullHistoryResponse> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses/${bossId}/pull-history?difficulty=${difficulty}`);
+    if (!response.ok) throw new Error("Failed to fetch boss pull history");
     return response.json();
   },
 
@@ -282,6 +316,350 @@ export const api = {
   async getAnalyticsErrors(days: number = 7): Promise<AnalyticsErrors> {
     const response = await fetch(`${API_URL}/api/analytics/errors?days=${days}`);
     if (!response.ok) throw new Error("Failed to fetch error analytics");
+    return response.json();
+  },
+
+  // Auth endpoints
+  async getDiscordLoginUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/discord/login`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Discord login URL");
+    return response.json();
+  },
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/me`, {
+        credentials: "include",
+      });
+      if (response.status === 401) return null;
+      if (!response.ok) throw new Error("Failed to get current user");
+      return response.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async logout(): Promise<void> {
+    await fetch(`${API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  },
+
+  // Twitch account connection
+  async getTwitchConnectUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/twitch/connect`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Twitch connect URL");
+    return response.json();
+  },
+
+  async disconnectTwitch(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/twitch/disconnect`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to disconnect Twitch");
+  },
+
+  // Battle.net account connection
+  async getBattleNetConnectUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/connect`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Battle.net connect URL");
+    return response.json();
+  },
+
+  async disconnectBattleNet(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/disconnect`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to disconnect Battle.net");
+  },
+
+  async getAllWoWCharacters(): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch WoW characters");
+    return response.json();
+  },
+
+  async updateCharacterSelection(characterIds: number[]): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ characterIds }),
+    });
+    if (!response.ok) throw new Error("Failed to update character selection");
+    return response.json();
+  },
+
+  async refreshWoWCharacters(): Promise<{ characters: WoWCharacter[] }> {
+    const response = await fetch(`${API_URL}/api/auth/battlenet/characters/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to refresh characters" }));
+      const error: any = new Error(errorData.error || "Failed to refresh characters");
+      error.response = { data: errorData };
+      throw error;
+    }
+    return response.json();
+  },
+
+  // Admin endpoints (requires admin authentication)
+  async getAdminOverview(): Promise<AdminOverview> {
+    const response = await fetch(`${API_URL}/api/admin/overview`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch admin overview");
+    return response.json();
+  },
+
+  async getAdminUsers(page: number = 1, limit: number = 20): Promise<AdminUsersResponse> {
+    const response = await fetch(`${API_URL}/api/admin/users?page=${page}&limit=${limit}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch users");
+    return response.json();
+  },
+
+  async getAdminUserStats(): Promise<AdminUserStats> {
+    const response = await fetch(`${API_URL}/api/admin/users/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch user stats");
+    return response.json();
+  },
+
+  async getAdminGuilds(page: number = 1, limit: number = 20): Promise<AdminGuildsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch guilds");
+    return response.json();
+  },
+
+  async getAdminGuildStats(): Promise<AdminGuildStats> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch guild stats");
+    return response.json();
+  },
+
+  async getAdminAnalyticsOverview(): Promise<AnalyticsOverview> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/overview`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch analytics overview");
+    return response.json();
+  },
+
+  async getAdminAnalyticsDaily(days: number = 30): Promise<AnalyticsDaily[]> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/daily?days=${days}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch daily analytics");
+    return response.json();
+  },
+
+  async getAdminAnalyticsEndpoints(days: number = 7): Promise<AnalyticsEndpoint[]> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/endpoints?days=${days}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch endpoint analytics");
+    return response.json();
+  },
+
+  async getAdminAnalyticsRealtime(): Promise<AnalyticsRealtime> {
+    const response = await fetch(`${API_URL}/api/admin/analytics/realtime`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch realtime analytics");
+    return response.json();
+  },
+
+  // Pickems endpoints
+  async getPickems(): Promise<PickemSummary[]> {
+    const response = await fetch(`${API_URL}/api/pickems`);
+    if (!response.ok) throw new Error("Failed to fetch pickems");
+    return response.json();
+  },
+
+  async getPickemsGuilds(): Promise<SimpleGuild[]> {
+    const response = await fetch(`${API_URL}/api/pickems/guilds`);
+    if (!response.ok) throw new Error("Failed to fetch guilds for pickems");
+    return response.json();
+  },
+
+  async getPickemsRwfGuilds(): Promise<SimpleGuild[]> {
+    const response = await fetch(`${API_URL}/api/pickems/guilds/rwf`);
+    if (!response.ok) throw new Error("Failed to fetch RWF guilds for pickems");
+    return response.json();
+  },
+
+  async getPickemDetails(pickemId: string): Promise<PickemDetails> {
+    const response = await fetch(`${API_URL}/api/pickems/${pickemId}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickem details");
+    return response.json();
+  },
+
+  async submitPickemPredictions(pickemId: string, predictions: PickemPrediction[]): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/pickems/${pickemId}/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ predictions }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to submit predictions");
+    }
+    return response.json();
+  },
+
+  // Admin Pickem endpoints
+  async getAdminPickems(): Promise<AdminPickemsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/pickems`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickems");
+    return response.json();
+  },
+
+  async getAdminPickem(pickemId: string): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch pickem");
+    return response.json();
+  },
+
+  async createAdminPickem(input: CreatePickemInput): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to create pickem");
+    }
+    return response.json();
+  },
+
+  async updateAdminPickem(pickemId: string, input: UpdatePickemInput): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to update pickem");
+    }
+    return response.json();
+  },
+
+  async deleteAdminPickem(pickemId: string): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete pickem");
+    }
+    return response.json();
+  },
+
+  async toggleAdminPickem(pickemId: string): Promise<AdminPickem> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/toggle`, {
+      method: "PATCH",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to toggle pickem");
+    }
+    return response.json();
+  },
+
+  async finalizeRwfPickem(pickemId: string, finalRankings: string[]): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ finalRankings }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to finalize pickem");
+    }
+    return response.json();
+  },
+
+  async unfinalizeRwfPickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/unfinalize`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to unfinalize pickem");
+    }
+    return response.json();
+  },
+
+  // ============================================================================
+  // RAID ANALYTICS
+  // ============================================================================
+
+  async getRaidAnalyticsRaids(): Promise<RaidAnalyticsListItem[]> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/raids`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch raid analytics raids");
+    }
+    return response.json();
+  },
+
+  async getRaidAnalytics(raidId: number): Promise<RaidAnalytics> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/${raidId}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("No analytics available for this raid");
+      }
+      throw new Error("Failed to fetch raid analytics");
+    }
+    return response.json();
+  },
+
+  async getAllRaidAnalytics(): Promise<RaidAnalytics[]> {
+    const response = await fetch(`${API_URL}/api/raid-analytics/all`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch all raid analytics");
+    }
     return response.json();
   },
 };

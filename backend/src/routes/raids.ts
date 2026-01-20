@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import Raid from "../models/Raid";
 import { TRACKED_RAIDS } from "../config/guilds";
 import logger from "../utils/logger";
+import cacheService from "../services/cache.service";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -62,24 +64,37 @@ router.get("/:id/bosses", async (req: Request, res: Response) => {
 });
 
 // Get start/end dates for a specific raid
-router.get("/:id/dates", async (req: Request, res: Response) => {
-  try {
-    const raidId = parseInt(req.params.id);
-    const raid = await Raid.findOne({ id: raidId }).select("starts ends -_id");
-
-    if (!raid) {
-      return res.status(404).json({ error: "Raid not found" });
+router.get(
+  "/:id/dates",
+  cacheMiddleware(
+    (req) => {
+      const raidId = parseInt(req.params.id);
+      return cacheService.getRaidDatesKey(raidId);
+    },
+    (req) => {
+      const raidId = parseInt(req.params.id);
+      return cacheService.getTTLForRaid(raidId);
     }
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const raidId = parseInt(req.params.id);
+      const raid = await Raid.findOne({ id: raidId }).select("starts ends -_id");
 
-    // Return only the dates
-    res.json({
-      starts: raid.starts,
-      ends: raid.ends,
-    });
-  } catch (error) {
-    logger.error("Error fetching raid dates:", error);
-    res.status(500).json({ error: "Failed to fetch raid dates" });
+      if (!raid) {
+        return res.status(404).json({ error: "Raid not found" });
+      }
+
+      // Return only the dates
+      res.json({
+        starts: raid.starts,
+        ends: raid.ends,
+      });
+    } catch (error) {
+      logger.error("Error fetching raid dates:", error);
+      res.status(500).json({ error: "Failed to fetch raid dates" });
+    }
   }
-});
+);
 
 export default router;

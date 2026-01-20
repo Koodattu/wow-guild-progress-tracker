@@ -6,7 +6,16 @@ export interface TrackedGuild {
   streamers?: string[]; // Twitch channel names
 }
 
-export const GUILDS: TrackedGuild[] = [
+export const GUILDS_DEV: TrackedGuild[] = [
+  {
+    name: "Tuju",
+    realm: "Kazzak",
+    region: "EU",
+    streamers: ["vaarattu", "forsen", "b0aty", "wiba"],
+  },
+];
+
+export const GUILDS_DEV_B: TrackedGuild[] = [
   {
     name: "Tuju",
     realm: "Kazzak",
@@ -115,7 +124,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
     name: "LkaksP Issue",
     realm: "Stormreaver",
     region: "EU",
-    streamers: ["persecticus", "diskopallo"],
+    streamers: ["diskopallo"],
   },
   {
     name: "TURTLES KIMBLE",
@@ -200,6 +209,9 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Karanteeni", realm: "Ravencrest", region: "EU" },
   { name: "Intervention", realm: "Stormreaver", region: "EU" },
   { name: "Saunan Taakse", realm: "Stormreaver", region: "EU" },
+  { name: "Northern", realm: "Frostmane", region: "EU" },
+  { name: "Anatidaephobia", realm: "Stormreaver", region: "EU" },
+  { name: "ei ollu safe", realm: "Stormreaver", region: "EU" },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
@@ -274,4 +286,13 @@ export const MANUAL_RAID_DATES = [
     euStartDate: "2015-06-24",
     euEndDate: "2016-07-20",
   },
+];
+
+// Custom PickEms, pick world first guild, top 3, this is hardcoded to: options being: Liquid, Echo, Method, 火 锅 英 雄, FatSharkYes
+export const PICK_EM_RWF_GUILDS = [
+  "Liquid",
+  "Echo",
+  "Method",
+  "火 锅 英 雄",
+  "FatSharkYes",
 ];
