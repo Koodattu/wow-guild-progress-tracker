@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import logger from "../utils/logger";
-import { log } from "console";
+import { GUILDS_DEV_B, GUILDS_PROD, TrackedGuild } from "../config/guilds";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -863,6 +863,15 @@ class WarcraftLogsService {
                   slug
                 }
               }
+              guilds {
+                name
+                server {
+                  slug
+                  region {
+                    slug
+                  }
+                }
+              }
             }
             fights(fightIDs: [$fightId]) {
               id
@@ -881,7 +890,43 @@ class WarcraftLogsService {
       fightId,
     };
 
-    return this.query<any>(query, variables);
+    const result = await this.query<any>(query, variables);
+
+    // Get tracked guilds based on environment
+    const trackedGuilds =
+      process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV_B;
+
+    // Filter rankedCharacters to only include those in tracked guilds
+    if (result?.reportData?.report?.rankedCharacters) {
+      result.reportData.report.rankedCharacters =
+        result.reportData.report.rankedCharacters.filter((character: any) => {
+          // Check if the character belongs to any tracked guild or parent guild of tracked teams
+          return character.guilds?.some((guild: any) => {
+            return trackedGuilds.some((trackedGuild: TrackedGuild) => {
+              // Check direct guild match
+              const directMatch =
+                guild.name.toLowerCase() === trackedGuild.name.toLowerCase() &&
+                guild.server.slug.toLowerCase() ===
+                  trackedGuild.realm.toLowerCase() &&
+                guild.server.region.slug.toLowerCase() ===
+                  trackedGuild.region.toLowerCase();
+
+              // Check if character's guild is the parent guild of a tracked team
+              const parentMatch =
+                trackedGuild.parent_guild &&
+                guild.name.toLowerCase() ===
+                  trackedGuild.parent_guild.toLowerCase() &&
+                guild.server.slug.toLowerCase() ===
+                  trackedGuild.realm.toLowerCase() &&
+                guild.server.region.slug.toLowerCase() ===
+                  trackedGuild.region.toLowerCase();
+
+              return directMatch || parentMatch;
+            });
+          });
+        });
+    }
+    return result;
   }
 
   /**
