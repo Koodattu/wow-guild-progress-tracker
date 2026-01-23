@@ -28,7 +28,7 @@ export interface IZoneRanking {
 }
 
 export interface ITrackedCharacter extends Document {
-  warcraftlogsId: string; // WarcraftLogs canonicalID
+  warcraftlogsId: number; // WarcraftLogs canonicalID
   name: string;
   realm: string;
   region: string;
@@ -74,7 +74,7 @@ const ZoneRankingSchema: Schema = new Schema({
 
 const TrackedCharacterSchema: Schema = new Schema(
   {
-    warcraftlogsId: { type: String, required: true, unique: true },
+    warcraftlogsId: { type: Number, required: true, unique: true },
     name: { type: String, required: true },
     realm: { type: String, required: true },
     region: { type: String, required: true },

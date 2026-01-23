@@ -230,6 +230,24 @@ class CharacterService {
       logger.error("Error in character ranking check:", error);
     }
   }
+
+  // Get character rankings by zone ID
+  async getCharacterRankingsByZone(
+    zoneId: string,
+    characterId: string,
+  ): Promise<IWarcraftLogsZoneRankings[]> {
+    const zoneIdNum = parseInt(zoneId);
+    const characterIdNum = parseInt(characterId);
+    if (isNaN(zoneIdNum) || isNaN(characterIdNum)) {
+      throw new Error("Invalid zone ID or character ID");
+    }
+
+    const trackedChars = await TrackedCharacter.findOne({
+      "zoneRanking.zoneId": zoneIdNum,
+      warcraftlogsId: characterIdNum,
+      rankingsAvailable: "true",
+    });
+  }
 }
 
 export default new CharacterService();
