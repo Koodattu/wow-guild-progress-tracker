@@ -1,4 +1,4 @@
-import TrackedCharacter from "../models/TrackedCharacter";
+import Character from "../models/Character";
 import logger from "../utils/logger";
 import wclService from "./warcraftlogs.service";
 
@@ -85,7 +85,7 @@ class CharacterService {
 
     try {
       // Find eligible characters
-      const eligibleChars = await TrackedCharacter.find({
+      const eligibleChars = await Character.find({
         // Eligible if lastMythicSeenAt within 14 days and rankingsAvailable not "false"
         lastMythicSeenAt: {
           $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),

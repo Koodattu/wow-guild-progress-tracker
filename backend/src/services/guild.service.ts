@@ -4,7 +4,7 @@ import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
 import TierList from "../models/TierList";
-import TrackedCharacter from "../models/TrackedCharacter";
+import Character from "../models/Character";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
