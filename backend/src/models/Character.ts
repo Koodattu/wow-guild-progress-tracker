@@ -6,7 +6,7 @@ export interface IAllStars {
 }
 
 export interface ICharacter extends Document {
-  warcraftlogsId: number; // WCL canonicalID
+  wclCanonicalCharacterId: number;
   name: string;
   realm: string;
   region: string;
@@ -38,7 +38,7 @@ const AllStarsSchema = new Schema(
 
 const CharacterSchema: Schema = new Schema(
   {
-    warcraftlogsId: { type: Number, required: true, unique: true },
+    wclCanonicalCharacterId: { type: Number, required: true, unique: true },
     name: { type: String, required: true },
     realm: { type: String, required: true },
     region: { type: String, required: true },

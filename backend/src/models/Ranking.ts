@@ -7,7 +7,7 @@ export interface IAllStars {
 
 export interface IRanking extends Document {
   characterId: mongoose.Types.ObjectId; // mongoose ObjectId reference to Character
-  warcraftlogsId: number; // WCL canonicalID for the character ranking belongs to
+  wclCanonicalCharacterId: number; // WCL canonicalID for the character ranking belongs to
 
   // character info (easier querying)
   name: string;
@@ -48,11 +48,11 @@ const RankingSchema: Schema = new Schema(
   {
     characterId: {
       type: Schema.Types.ObjectId,
-      ref: "TrackedCharacter",
+      ref: "Character",
       required: true,
       index: true,
     },
-    warcraftlogsId: { type: Number, required: true, index: true },
+    wclCanonicalCharacterId: { type: Number, required: true, index: true },
 
     name: { type: String, required: true },
     realm: { type: String, required: true },
@@ -101,7 +101,7 @@ RankingSchema.index({
   metric: 1,
   spec: 1,
   rankPercent: -1,
-  warcraftlogsId: 1,
+  wclCanonicalCharacterId: 1,
 });
 
 // Boss+spec leaderboard
@@ -112,7 +112,7 @@ RankingSchema.index({
   "encounter.id": 1,
   spec: 1,
   rankPercent: -1,
-  warcraftlogsId: 1,
+  wclCanonicalCharacterId: 1,
 });
 
 export default mongoose.model<IRanking>("Ranking", RankingSchema);

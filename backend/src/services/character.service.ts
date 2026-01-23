@@ -1,4 +1,5 @@
 import Character from "../models/Character";
+import Ranking from "../models/Ranking";
 import logger from "../utils/logger";
 import wclService from "./warcraftlogs.service";
 
@@ -133,43 +134,65 @@ class CharacterService {
 
             // Check if averages changed or no existing ranking
             const hasChanged =
-              !char.zoneRanking ||
+              !char.currentBestPerformanceAverage ||
               Math.abs(
-                char.zoneRanking.bestPerformanceAverage -
+                char.currentBestPerformanceAverage -
                   zoneRankings.bestPerformanceAverage,
               ) > 0.001 ||
               Math.abs(
-                char.zoneRanking.medianPerformanceAverage -
+                (char.currentMedianPerformanceAverage ?? 0) -
                   zoneRankings.medianPerformanceAverage,
               ) > 0.001;
 
             if (hasChanged) {
-              // Update with full data
-              await TrackedCharacter.findByIdAndUpdate(char._id, {
-                zoneRanking: {
-                  zoneId: CURRENT_TIER_ID,
-                  bestPerformanceAverage: zoneRankings.bestPerformanceAverage,
-                  medianPerformanceAverage:
-                    zoneRankings.medianPerformanceAverage,
-                  allStars:
-                    zoneRankings.allStars.length > 0
-                      ? {
-                          points: zoneRankings.allStars[0].points,
-                          possiblePoints:
-                            zoneRankings.allStars[0].possiblePoints,
-                        }
-                      : { points: 0, possiblePoints: 0 },
-                },
-                rankings: zoneRankings.rankings.map(
-                  (r: IWarcraftLogsRanking) => ({
+              await Character.findByIdAndUpdate(char._id, {
+                currentZoneId: CURRENT_TIER_ID,
+                currentBestPerformanceAverage:
+                  zoneRankings.bestPerformanceAverage,
+                currentMedianPerformanceAverage:
+                  zoneRankings.medianPerformanceAverage,
+                currentAllStars:
+                  zoneRankings.allStars.length > 0
+                    ? {
+                        points: zoneRankings.allStars[0].points,
+                        possiblePoints: zoneRankings.allStars[0].possiblePoints,
+                      }
+                    : { points: 0, possiblePoints: 0 },
+                currentZoneUpdatedAt: new Date(),
+                rankingsAvailable: "true",
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 24 * 60 * 60 * 1000,
+                ),
+                updatedAt: new Date(),
+              });
+
+              // Upsert rankings
+              for (const r of zoneRankings.rankings) {
+                await Ranking.findOneAndUpdate(
+                  {
+                    characterId: char._id,
+                    zoneId: CURRENT_TIER_ID,
+                    difficulty: 5,
+                    metric: "dps",
+                    "encounter.id": r.encounter.id,
+                    spec: r.spec ?? "",
+                  },
+                  {
+                    wclCanonicalCharacterId: character.canonicalID,
+                    name: char.name,
+                    realm: char.realm,
+                    region: char.region,
+                    classID: char.classID,
                     encounter: {
                       id: r.encounter.id,
                       name: r.encounter.name,
                     },
+                    bestSpec: r.bestSpec,
                     rankPercent: r.rankPercent ?? 0,
                     medianPercent: r.medianPercent ?? 0,
                     lockedIn: r.lockedIn,
                     totalKills: r.totalKills,
+                    bestAmount: r.bestAmount,
                     allStars: r.allStars
                       ? {
                           points:
@@ -182,21 +205,14 @@ class CharacterService {
                               : 0,
                         }
                       : { points: 0, possiblePoints: 0 },
-                    spec: r.spec ?? "",
-                    bestSpec: r.bestSpec,
-                    bestAmount: r.bestAmount,
-                  }),
-                ),
-                rankingsAvailable: "true",
-                nextEligibleRefreshAt: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
-                ),
-                updatedAt: new Date(),
-              });
+                  },
+                  { upsert: true, new: true },
+                );
+              }
+
               logger.info(`Updated rankings for ${char.name} (${char.realm})`);
             } else {
-              // No changes, just update refresh time
-              await TrackedCharacter.findByIdAndUpdate(char._id, {
+              await Character.findByIdAndUpdate(char._id, {
                 nextEligibleRefreshAt: new Date(
                   Date.now() + 24 * 60 * 60 * 1000,
                 ),
@@ -205,8 +221,7 @@ class CharacterService {
               logger.info(`No changes for ${char.name} (${char.realm})`);
             }
           } else {
-            // No data, mark as unavailable
-            await TrackedCharacter.findByIdAndUpdate(char._id, {
+            await Character.findByIdAndUpdate(char._id, {
               rankingsAvailable: "false",
               nextEligibleRefreshAt: new Date(
                 Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -218,7 +233,6 @@ class CharacterService {
             );
           }
 
-          // Small delay
           await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
           logger.error(`Error checking rankings for ${char.name}:`, error);
@@ -235,18 +249,53 @@ class CharacterService {
   async getCharacterRankingsByZone(
     zoneId: string,
     characterId: string,
-  ): Promise<IWarcraftLogsZoneRankings[]> {
+  ): Promise<any> {
     const zoneIdNum = parseInt(zoneId);
     const characterIdNum = parseInt(characterId);
     if (isNaN(zoneIdNum) || isNaN(characterIdNum)) {
       throw new Error("Invalid zone ID or character ID");
     }
 
-    const trackedChars = await TrackedCharacter.findOne({
-      "zoneRanking.zoneId": zoneIdNum,
-      warcraftlogsId: characterIdNum,
+    const char = await Character.findOne({
+      wclCanonicalCharacterId: characterIdNum,
       rankingsAvailable: "true",
     });
+
+    if (!char || char.currentZoneId !== zoneIdNum) {
+      return null;
+    }
+
+    const rankings = await Ranking.find({
+      characterId: char._id,
+      zoneId: zoneIdNum,
+      difficulty: 5,
+      metric: "dps",
+    });
+
+    return {
+      bestPerformanceAverage: char.currentBestPerformanceAverage || 0,
+      medianPerformanceAverage: char.currentMedianPerformanceAverage || 0,
+      difficulty: 5,
+      metric: "dps",
+      partition: 1, // assuming
+      zone: zoneIdNum,
+      size: 0, // assuming
+      allStars: char.currentAllStars ? [char.currentAllStars] : [],
+      rankings: rankings.map((r) => ({
+        encounter: r.encounter,
+        rankPercent: r.rankPercent,
+        medianPercent: r.medianPercent,
+        lockedIn: r.lockedIn,
+        totalKills: r.totalKills,
+        fastestKill: r.bestAmount,
+        allStars: r.allStars,
+        spec: r.spec,
+        bestSpec: r.bestSpec,
+        bestAmount: r.bestAmount,
+        rankTooltip: null,
+        bestRank: {} as any, // placeholder
+      })),
+    };
   }
 }
 

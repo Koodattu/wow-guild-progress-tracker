@@ -1388,8 +1388,8 @@ class GuildService {
                   charData?.reportData?.report?.rankedCharacters || [];
 
                 for (const char of rankedChars) {
-                  await TrackedCharacter.findOneAndUpdate(
-                    { warcraftlogsId: char.canonicalID },
+                  await Character.findOneAndUpdate(
+                    { wclCanonicalCharacterId: char.canonicalID },
                     {
                       name: char.name,
                       realm: char.server.slug,
@@ -2103,8 +2103,8 @@ class GuildService {
                 charData?.reportData?.report?.rankedCharacters || [];
 
               for (const char of rankedChars) {
-                await TrackedCharacter.findOneAndUpdate(
-                  { warcraftlogsId: char.canonicalID },
+                await Character.findOneAndUpdate(
+                  { wclCanonicalCharacterId: char.canonicalID },
                   {
                     name: char.name,
                     realm: char.server.slug,
