@@ -1395,13 +1395,10 @@ class GuildService {
                       realm: char.server.slug,
                       region: char.server.region.slug,
                       classID: char.classID,
-                      hidden: char.hidden,
-                      lastSeenAt: new Date(),
+                      wclProfileHidden: char.hidden,
                       lastMythicSeenAt: new Date(),
-                      rankingsAvailable: "unknown",
-                      nextEligibleRefreshAt: new Date(
-                        Date.now() + 24 * 60 * 60 * 1000,
-                      ),
+                      rankingsAvailable:
+                        char.hidden === true ? "false" : "unknown",
                     },
                     { upsert: true, new: true },
                   );
@@ -2110,13 +2107,10 @@ class GuildService {
                     realm: char.server.slug,
                     region: char.server.region.slug,
                     classID: char.classID,
-                    hidden: char.hidden,
-                    lastSeenAt: new Date(),
+                    wclProfileHidden: char.hidden,
                     lastMythicSeenAt: new Date(),
-                    rankingsAvailable: "unknown",
-                    nextEligibleRefreshAt: new Date(
-                      Date.now() + 24 * 60 * 60 * 1000,
-                    ),
+                    rankingsAvailable:
+                      char.hidden === true ? "false" : "unknown",
                   },
                   { upsert: true, new: true },
                 );

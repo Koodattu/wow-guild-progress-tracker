@@ -49,7 +49,7 @@ interface IWarcraftLogsZoneRankings {
   partition: number;
   zone: number;
   size: number;
-  allStars: IWarcraftLogsAllStars[];
+  allStars?: IWarcraftLogsAllStars[];
   rankings: IWarcraftLogsRanking[];
 }
 
@@ -129,100 +129,15 @@ class CharacterService {
             variables,
           );
 
-          if (result.characterData?.character?.zoneRankings) {
-            const character = result.characterData.character;
-            const zoneRankings = character.zoneRankings!;
-
-            // Check if averages changed or no existing ranking
-            const hasChanged =
-              !char.currentBestPerformanceAverage ||
-              Math.abs(
-                char.currentBestPerformanceAverage -
-                  zoneRankings.bestPerformanceAverage,
-              ) > 0.001 ||
-              Math.abs(
-                (char.currentMedianPerformanceAverage ?? 0) -
-                  zoneRankings.medianPerformanceAverage,
-              ) > 0.001;
-
-            if (hasChanged) {
-              await Character.findByIdAndUpdate(char._id, {
-                currentZoneId: CURRENT_TIER_ID,
-                currentBestPerformanceAverage:
-                  zoneRankings.bestPerformanceAverage,
-                currentMedianPerformanceAverage:
-                  zoneRankings.medianPerformanceAverage,
-                currentAllStars:
-                  zoneRankings.allStars.length > 0
-                    ? {
-                        points: zoneRankings.allStars[0].points,
-                        possiblePoints: zoneRankings.allStars[0].possiblePoints,
-                      }
-                    : { points: 0, possiblePoints: 0 },
-                currentZoneUpdatedAt: new Date(),
-                rankingsAvailable: "true",
-                nextEligibleRefreshAt: new Date(
-                  Date.now() + 12 * 60 * 60 * 1000,
-                ),
-                updatedAt: new Date(),
-              });
-
-              // Upsert rankings
-              for (const r of zoneRankings.rankings) {
-                await Ranking.findOneAndUpdate(
-                  {
-                    characterId: char._id,
-                    zoneId: CURRENT_TIER_ID,
-                    difficulty: 5,
-                    metric: "dps",
-                    "encounter.id": r.encounter.id,
-                    spec: r.spec ?? "",
-                  },
-                  {
-                    wclCanonicalCharacterId: character.canonicalID,
-                    name: char.name,
-                    realm: char.realm,
-                    region: char.region,
-                    classID: char.classID,
-                    encounter: {
-                      id: r.encounter.id,
-                      name: r.encounter.name,
-                    },
-                    bestSpec: r.bestSpec,
-                    rankPercent: r.rankPercent ?? 0,
-                    medianPercent: r.medianPercent ?? 0,
-                    lockedIn: r.lockedIn,
-                    totalKills: r.totalKills,
-                    bestAmount: r.bestAmount,
-                    allStars: r.allStars
-                      ? {
-                          points:
-                            typeof r.allStars.points === "number"
-                              ? r.allStars.points
-                              : 0,
-                          possiblePoints:
-                            typeof r.allStars.possiblePoints === "number"
-                              ? r.allStars.possiblePoints
-                              : 0,
-                        }
-                      : { points: 0, possiblePoints: 0 },
-                  },
-                  { upsert: true, new: true },
-                );
-              }
-
-              logger.info(`Updated rankings for ${char.name} (${char.realm})`);
-            } else {
-              await Character.findByIdAndUpdate(char._id, {
-                nextEligibleRefreshAt: new Date(
-                  Date.now() + 12 * 60 * 60 * 1000,
-                ),
-                updatedAt: new Date(),
-              });
-              logger.info(`No changes for ${char.name} (${char.realm})`);
-            }
-          } else {
+          const character = result.characterData?.character;
+          if (
+            !character ||
+            character.hidden ||
+            !character.zoneRankings ||
+            (character.zoneRankings as any).error
+          ) {
             await Character.findByIdAndUpdate(char._id, {
+              wclProfileHidden: character?.hidden || false,
               rankingsAvailable: "false",
               nextEligibleRefreshAt: new Date(
                 Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -232,8 +147,100 @@ class CharacterService {
             logger.info(
               `No rankings available for ${char.name} (${char.realm})`,
             );
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            continue;
           }
 
+          const zoneRankings = character.zoneRankings!;
+
+          // Check if averages changed or no existing ranking
+          const hasChanged = true;
+
+          /*
+            !char.latestBestPerformanceAverage ||
+            Math.abs(
+              char.latestBestPerformanceAverage -
+                zoneRankings.bestPerformanceAverage,
+            ) > 0.001 ||
+            Math.abs(
+              (char.latestMedianPerformanceAverage ?? 0) -
+                zoneRankings.medianPerformanceAverage,
+            ) > 0.001;
+              */
+
+          if (!hasChanged) {
+            await Character.findByIdAndUpdate(char._id, {
+              nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+              updatedAt: new Date(),
+            });
+            logger.info(`No changes for ${char.name} (${char.realm})`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            continue;
+          }
+
+          // Update character
+
+          await Character.findByIdAndUpdate(char._id, {
+            latestZoneId: CURRENT_TIER_ID,
+            latestBestPerformanceAverage: zoneRankings.bestPerformanceAverage,
+            latestMedianPerformanceAverage:
+              zoneRankings.medianPerformanceAverage,
+            latestAllStars:
+              zoneRankings.allStars && zoneRankings.allStars.length > 0
+                ? {
+                    points: zoneRankings.allStars[0].points,
+                    possiblePoints: zoneRankings.allStars[0].possiblePoints,
+                  }
+                : { points: 0, possiblePoints: 0 },
+            rankingsAvailable: "true",
+            nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+          });
+
+          // Upsert rankings
+          for (const r of zoneRankings.rankings) {
+            await Ranking.findOneAndUpdate(
+              {
+                characterId: char._id,
+                zoneId: CURRENT_TIER_ID,
+                difficulty: 5,
+                metric: "dps",
+                "encounter.id": r.encounter.id,
+                spec: r.spec ?? "",
+              },
+              {
+                wclCanonicalCharacterId: character.canonicalID,
+                name: char.name,
+                realm: char.realm,
+                region: char.region,
+                classID: char.classID,
+                encounter: {
+                  id: r.encounter.id,
+                  name: r.encounter.name,
+                },
+                bestSpec: r.bestSpec,
+                rankPercent: r.rankPercent ?? 0,
+                medianPercent: r.medianPercent ?? 0,
+                lockedIn: r.lockedIn,
+                totalKills: r.totalKills,
+                bestAmount: r.bestAmount,
+                allStars: r.allStars
+                  ? {
+                      points:
+                        typeof r.allStars.points === "number"
+                          ? r.allStars.points
+                          : 0,
+                      possiblePoints:
+                        typeof r.allStars.possiblePoints === "number"
+                          ? r.allStars.possiblePoints
+                          : 0,
+                    }
+                  : { points: 0, possiblePoints: 0 },
+              },
+              { upsert: true, new: true },
+            );
+          }
+
+          logger.info(`Updated rankings for ${char.name} (${char.realm})`);
           await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
           logger.error(`Error checking rankings for ${char.name}:`, error);

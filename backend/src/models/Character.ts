@@ -11,18 +11,16 @@ export interface ICharacter extends Document {
   realm: string;
   region: string;
   classID: number;
-  hidden: boolean;
+  wclProfileHidden: boolean;
 
-  lastSeenAt: Date;
   lastMythicSeenAt: Date;
   rankingsAvailable: "unknown" | "true" | "false";
-  nextEligibleRefreshAt: Date;
+  nextEligibleRefreshAt?: Date;
 
-  currentZoneId?: number;
-  currentAllStars?: IAllStars;
-  currentBestPerformanceAverage?: number;
-  currentMedianPerformanceAverage?: number;
-  currentZoneUpdatedAt?: Date;
+  latestZoneId?: number;
+  latestAllStars?: IAllStars;
+  latestBestPerformanceAverage?: number;
+  latestMedianPerformanceAverage?: number;
 
   createdAt: Date;
   updatedAt: Date;
@@ -43,9 +41,8 @@ const CharacterSchema: Schema = new Schema(
     realm: { type: String, required: true },
     region: { type: String, required: true },
     classID: { type: Number, required: true },
-    hidden: { type: Boolean, required: true, default: false },
+    wclProfileHidden: { type: Boolean, required: true, default: false },
 
-    lastSeenAt: { type: Date, required: true },
     lastMythicSeenAt: { type: Date, required: true },
     rankingsAvailable: {
       type: String,
@@ -53,24 +50,23 @@ const CharacterSchema: Schema = new Schema(
       required: true,
       default: "unknown",
     },
-    nextEligibleRefreshAt: { type: Date, required: true },
+    nextEligibleRefreshAt: { type: Date, required: false },
 
     // Cached current-tier summary
-    currentZoneId: { type: Number, required: false },
-    currentAllStars: { type: AllStarsSchema, required: false },
-    currentBestPerformanceAverage: { type: Number, required: false },
-    currentMedianPerformanceAverage: { type: Number, required: false },
-    currentZoneUpdatedAt: { type: Date, required: false },
+    latestZoneId: { type: Number, required: false },
+    latestAllStars: { type: AllStarsSchema, required: false },
+    latestBestPerformanceAverage: { type: Number, required: false },
+    latestMedianPerformanceAverage: { type: Number, required: false },
   },
   { timestamps: true },
 );
 
-CharacterSchema.index({ name: 1, realm: 1, region: 1 }, { unique: true });
+CharacterSchema.index({ name: 1, realm: 1, region: 1 });
 
 CharacterSchema.index({
-  currentZoneId: 1,
+  latestZoneId: 1,
   hidden: 1,
-  "currentAllStars.points": -1,
+  "latestAllStars.points": -1,
 });
 
 export default mongoose.model<ICharacter>("Character", CharacterSchema);
