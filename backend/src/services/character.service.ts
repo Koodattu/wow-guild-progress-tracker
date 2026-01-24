@@ -1,6 +1,6 @@
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import Character from "../models/Character";
-import Ranking, { IRanking } from "../models/Ranking";
+import Ranking from "../models/Ranking";
 import logger from "../utils/logger";
 import { buildSpecKey, resolveRole } from "../utils/spec";
 import wclService from "./warcraftlogs.service";
@@ -77,6 +77,36 @@ interface IWarcraftLogsResponse {
     character: IWarcraftLogsCharacter | null;
   };
 }
+
+export type CharacterRankingRow = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+  };
+  context: {
+    zoneId: number;
+    encounterId: number | null;
+    specKey?: string;
+    role?: "dps" | "healer" | "tank";
+    metric: "dps" | "hps";
+  };
+  score: {
+    type: "allStars" | "bestAmount";
+    value: number;
+  };
+  stats: {
+    allStars?: { points: number; possiblePoints: number };
+    bestAmount?: number;
+    rankPercent?: number;
+    medianPercent?: number;
+    totalKills?: number;
+  };
+  updatedAt?: string;
+};
+
 class CharacterService {
   // Check and update character rankings (nightly job)
   async checkAndRefreshCharacterRankings(): Promise<void> {
@@ -88,12 +118,12 @@ class CharacterService {
     try {
       // Find eligible characters
       const eligibleChars = await Character.find({
-        // Eligible if lastMythicSeenAt within 14 days and rankingsAvailable not "false"
+        // Eligible if lastMythicSeenAt within 14 days, rankingsAvailable not "false" and cooldown passed
         lastMythicSeenAt: {
           $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         },
         rankingsAvailable: { $ne: "false" },
-        //  nextEligibleRefreshAt: { $lte: new Date() },
+        nextEligibleRefreshAt: { $lte: new Date() },
       }).limit(BATCH_SIZE);
 
       logger.info(
@@ -144,6 +174,7 @@ class CharacterService {
                 Date.now() + 7 * 24 * 60 * 60 * 1000,
               ),
             });
+            await Ranking.deleteMany({ characterId: char._id });
             logger.info(
               `No rankings available for ${char.name} (${char.realm})`,
             );
@@ -153,10 +184,8 @@ class CharacterService {
 
           //  Check if averages changed
           const zoneRankings = character.zoneRankings!;
-
-          const hasChanged = true;
-
-          !char.latestBestPerformanceAverage ||
+          const hasChanged =
+            !char.latestBestPerformanceAverage ||
             Math.abs(
               char.latestBestPerformanceAverage -
                 zoneRankings.bestPerformanceAverage,
@@ -268,70 +297,180 @@ class CharacterService {
     }
   }
 
-  /*
-  async getLeaderboard(options: {
-    zoneId: number;
-    encounterId?: number;
-    spec?: string;
-    classID?: number;
-  }): Promise<IRanking[]> {
-    const { zoneId, encounterId, spec, classID } = options;
-
-
-  }
-
-  */
-  async getRankingsByZone(zoneId: string): Promise<IRanking[] | null> {
-    const zoneIdNum = parseInt(zoneId);
-    if (isNaN(zoneIdNum)) {
-      throw new Error("Invalid zone ID");
-    }
-    return await Ranking.find({
-      zoneId: zoneIdNum,
-    });
-  }
-
-  async getZoneRankings(options: {
+  async getCharacterRankings(options: {
     zoneId: number;
     encounterId?: number;
     classId?: number;
-    spec?: string;
     specKey?: string;
-  }): Promise<any[]> {
-    const { zoneId, encounterId, classId, spec, specKey } = options;
+    role?: "dps" | "healer" | "tank";
+    metric?: "dps" | "hps";
+    limit?: number;
+    page?: number;
+  }): Promise<CharacterRankingRow[]> {
+    const {
+      zoneId,
+      encounterId,
+      classId,
+      specKey,
+      role,
+      metric = "dps",
+      limit = 100,
+      page = 1,
+    } = options;
 
+    const safeLimit = Math.min(Math.max(limit, 1), 500);
+    const skip = (Math.max(page, 1) - 1) * safeLimit;
+
+    // Encounter selected -> bestAmount
     if (encounterId !== undefined) {
-      // Return Rankings for the encounter
       const query: any = {
         zoneId,
-        difficulty: 5,
-        metric: "dps",
+        metric,
         "encounter.id": encounterId,
+        difficulty: 5,
       };
       if (classId !== undefined) query.classID = classId;
-      if (spec) query.specName = spec;
-      if (specKey) query.specKey = specKey;
+      if (specKey !== undefined) query.specKey = specKey;
+      if (role !== undefined) query.role = role;
 
-      return await Ranking.find(query).sort({ rankPercent: -1 });
-    } else {
-      // Return Characters with allStars
+      const rows = await Ranking.find(query)
+        .select(
+          "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName specKey role " +
+            "rankPercent medianPercent totalKills bestAmount allStars lockedIn updatedAt",
+        )
+        .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean();
+
+      return rows.map((r: any) => ({
+        character: {
+          wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+          name: r.name,
+          realm: r.realm,
+          region: r.region,
+          classID: r.classID,
+        },
+        context: {
+          zoneId,
+          encounterId: encounterId ?? null,
+          specKey,
+          role,
+          metric,
+        },
+        score: { type: "bestAmount", value: r.bestAmount ?? 0 },
+        stats: {
+          bestAmount: r.bestAmount ?? 0,
+          rankPercent: r.rankPercent,
+          medianPercent: r.medianPercent,
+          totalKills: r.totalKills,
+          allStars: r.allStars,
+        },
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
+          : undefined,
+      }));
+    }
+
+    // No encounter -> allStar points
+
+    const needsRankingAggregate =
+      specKey !== undefined || role !== undefined || metric !== "dps";
+
+    if (!needsRankingAggregate) {
       const query: any = {
         latestZoneId: zoneId,
         rankingsAvailable: "true",
+        wclProfileHidden: false,
+        latestAllStars: { $exists: true },
       };
       if (classId !== undefined) query.classID = classId;
-      if (spec) {
-        // Assuming spec is specName, but for Character, we might need to filter differently
-        // Character doesn't have spec, so perhaps skip or handle later
-      }
-      if (specKey) {
-        // Similarly, specKey is in Ranking
-      }
 
-      return await Character.find(query)
-        .select("name realm region classID latestAllStars")
-        .sort({ "latestAllStars.points": -1 });
+      const rows = await Character.find(query)
+        .select(
+          "wclCanonicalCharacterId name realm region classID latestAllStars updatedAt",
+        )
+        .sort({ "latestAllStars.points": -1, name: 1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean();
+
+      return rows.map((c: any) => ({
+        character: {
+          wclCanonicalCharacterId: c.wclCanonicalCharacterId,
+          name: c.name,
+          realm: c.realm,
+          region: c.region,
+          classID: c.classID,
+        },
+        context: {
+          zoneId,
+          encounterId: null,
+          specKey,
+          role,
+          metric,
+        },
+        score: { type: "allStars", value: c.latestAllStars?.points ?? 0 },
+        stats: { allStars: c.latestAllStars },
+        updatedAt: c.updatedAt
+          ? new Date(c.updatedAt).toISOString()
+          : undefined,
+      }));
     }
+
+    // Filtered all-boss view (specKey/role/metric) => aggregate rankings to compute allStars per character
+    const match: any = { zoneId, metric, difficulty: 5 };
+    if (classId !== undefined) match.classID = classId;
+    if (specKey !== undefined) match.specKey = specKey;
+    if (role !== undefined) match.role = role;
+
+    const agg = await Ranking.aggregate([
+      { $match: match },
+
+      // group per character across bosses
+      {
+        $group: {
+          _id: "$characterId",
+          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+          name: { $first: "$name" },
+          realm: { $first: "$realm" },
+          region: { $first: "$region" },
+          classID: { $first: "$classID" },
+          points: { $sum: "$allStars.points" },
+          possiblePoints: { $sum: "$allStars.possiblePoints" },
+          updatedAt: { $max: "$updatedAt" },
+        },
+      },
+
+      { $sort: { points: -1, possiblePoints: -1, name: 1 } },
+      { $skip: skip },
+      { $limit: safeLimit },
+    ]);
+
+    return agg.map((r: any) => ({
+      character: {
+        wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+        name: r.name,
+        realm: r.realm,
+        region: r.region,
+        classID: r.classID,
+      },
+      context: {
+        zoneId,
+        encounterId: null,
+        specKey,
+        role,
+        metric,
+      },
+      score: { type: "allStars", value: r.points ?? 0 },
+      stats: {
+        allStars: {
+          points: r.points ?? 0,
+          possiblePoints: r.possiblePoints ?? 0,
+        },
+      },
+      updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+    }));
   }
 }
 

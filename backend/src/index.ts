@@ -22,7 +22,7 @@ import analyticsRouter from "./routes/analytics";
 import raidAnalyticsRouter from "./routes/raid-analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
-import zoneRankingsRouter from "./routes/zone-rankings";
+import characterRankingsRouter from "./routes/character-rankings";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
 import {
@@ -150,7 +150,7 @@ app.use("/api/raid-analytics", raidAnalyticsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/pickems", pickemsRouter);
-app.use("/api/zone-rankings", zoneRankingsRouter);
+app.use("/api/character-rankings", characterRankingsRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS

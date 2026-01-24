@@ -1,7 +1,6 @@
 import { Router, Request, Response } from "express";
 import characterService from "../services/character.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
-import Ranking from "../models/Ranking";
 
 const router = Router();
 
@@ -12,19 +11,26 @@ router.get("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid zone ID" });
     }
 
-    const { encounter, classId, spec, specKey } = req.query;
+    const { encounter, classId, spec } = req.query;
+
+    if (encounter && isNaN(parseInt(encounter as string))) {
+      return res.status(400).json({ error: "Invalid encounter ID" });
+    }
+    if (classId && isNaN(parseInt(classId as string))) {
+      return res.status(400).json({ error: "Invalid class ID" });
+    }
+
     const options = {
       zoneId,
       encounterId: encounter ? parseInt(encounter as string) : undefined,
       classId: classId ? parseInt(classId as string) : undefined,
       spec: spec as string,
-      specKey: specKey as string,
     };
 
-    const rankings = await characterService.getZoneRankings(options);
+    const rankings = await characterService.getCharacterRankings(options);
     res.json(rankings);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch zone rankings" });
+    res.status(500).json({ error: "Failed to fetch character rankings" });
   }
 });
 
@@ -44,10 +50,10 @@ router.get("/:id", async (req: Request, res: Response) => {
       specKey: specKey as string,
     };
 
-    const rankings = await characterService.getZoneRankings(options);
+    const rankings = await characterService.getCharacterRankings(options);
     res.json(rankings);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch zone rankings" });
+    res.status(500).json({ error: "Failed to fetch character rankings" });
   }
 });
 

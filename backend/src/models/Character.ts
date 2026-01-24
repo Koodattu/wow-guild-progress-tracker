@@ -65,7 +65,8 @@ CharacterSchema.index({ name: 1, realm: 1, region: 1 });
 
 CharacterSchema.index({
   latestZoneId: 1,
-  hidden: 1,
+  rankingsAvailable: 1,
+  wclProfileHidden: 1,
   "latestAllStars.points": -1,
 });
 
