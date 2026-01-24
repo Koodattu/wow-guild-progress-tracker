@@ -17,13 +17,15 @@ export interface IRanking extends Document {
 
   zoneId: number;
   difficulty: number;
-  metric: string;
+  metric: "dps" | "hps";
   encounter: {
     id: number;
     name: string;
   };
-  spec: string;
-  bestSpec: string;
+  specName: string;
+  specKey: string;
+  role: "dps" | "healer" | "tank";
+  bestSpecName: string;
 
   rankPercent: number;
   medianPercent: number;
@@ -61,15 +63,28 @@ const RankingSchema: Schema = new Schema(
 
     zoneId: { type: Number, required: true, index: true },
     difficulty: { type: Number, required: true, default: 5, index: true },
-    metric: { type: String, required: true, default: "dps", index: true },
+    metric: {
+      type: String,
+      enum: ["dps", "hps"],
+      required: true,
+      default: "dps",
+      index: true,
+    },
 
     encounter: {
       id: { type: Number, required: true },
       name: { type: String, required: true },
     },
 
-    spec: { type: String, required: true, index: true },
-    bestSpec: { type: String, required: true, default: "" },
+    specName: { type: String, required: true },
+    specKey: { type: String, required: true, index: true },
+    bestSpecName: { type: String, required: true },
+    role: {
+      type: String,
+      enum: ["dps", "healer", "tank"],
+      required: true,
+      index: true,
+    },
 
     rankPercent: { type: Number, required: true, default: 0 },
     medianPercent: { type: Number, required: true, default: 0 },
@@ -89,7 +104,7 @@ RankingSchema.index(
     difficulty: 1,
     metric: 1,
     "encounter.id": 1,
-    spec: 1,
+    specKey: 1,
   },
   { unique: true },
 );
@@ -99,7 +114,7 @@ RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
   metric: 1,
-  spec: 1,
+  specKey: 1,
   rankPercent: -1,
   wclCanonicalCharacterId: 1,
 });
@@ -110,9 +125,19 @@ RankingSchema.index({
   difficulty: 1,
   metric: 1,
   "encounter.id": 1,
-  spec: 1,
+  specKey: 1,
   rankPercent: -1,
   wclCanonicalCharacterId: 1,
+});
+
+// Boss+role leaderboard
+RankingSchema.index({
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
+  "encounter.id": 1,
+  role: 1,
+  rankPercent: -1,
 });
 
 export default mongoose.model<IRanking>("Ranking", RankingSchema);

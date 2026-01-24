@@ -1,6 +1,8 @@
+import { CURRENT_RAID_IDS } from "../config/guilds";
 import Character from "../models/Character";
 import Ranking, { IRanking } from "../models/Ranking";
 import logger from "../utils/logger";
+import { buildSpecKey, resolveRole } from "../utils/spec";
 import wclService from "./warcraftlogs.service";
 
 interface IWarcraftLogsAllStars {
@@ -75,13 +77,12 @@ interface IWarcraftLogsResponse {
     character: IWarcraftLogsCharacter | null;
   };
 }
-
 class CharacterService {
   // Check and update character rankings (nightly job)
   async checkAndRefreshCharacterRankings(): Promise<void> {
     logger.info("Starting character ranking check and update...");
 
-    const CURRENT_TIER_ID = 44; // Manaforge Omega
+    const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
     const BATCH_SIZE = 200;
 
     try {
@@ -142,7 +143,6 @@ class CharacterService {
               nextEligibleRefreshAt: new Date(
                 Date.now() + 7 * 24 * 60 * 60 * 1000,
               ),
-              updatedAt: new Date(),
             });
             logger.info(
               `No rankings available for ${char.name} (${char.realm})`,
@@ -151,13 +151,12 @@ class CharacterService {
             continue;
           }
 
+          //  Check if averages changed
           const zoneRankings = character.zoneRankings!;
 
-          // Check if averages changed or no existing ranking
           const hasChanged = true;
 
-          /*
-            !char.latestBestPerformanceAverage ||
+          !char.latestBestPerformanceAverage ||
             Math.abs(
               char.latestBestPerformanceAverage -
                 zoneRankings.bestPerformanceAverage,
@@ -166,12 +165,10 @@ class CharacterService {
               (char.latestMedianPerformanceAverage ?? 0) -
                 zoneRankings.medianPerformanceAverage,
             ) > 0.001;
-              */
 
           if (!hasChanged) {
             await Character.findByIdAndUpdate(char._id, {
               nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
-              updatedAt: new Date(),
             });
             logger.info(`No changes for ${char.name} (${char.realm})`);
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -179,7 +176,6 @@ class CharacterService {
           }
 
           // Update character
-
           await Character.findByIdAndUpdate(char._id, {
             latestZoneId: CURRENT_TIER_ID,
             latestBestPerformanceAverage: zoneRankings.bestPerformanceAverage,
@@ -198,6 +194,11 @@ class CharacterService {
 
           // Upsert rankings
           for (const r of zoneRankings.rankings) {
+            const specName = r.spec?.trim();
+            if (!specName) continue;
+            const specKey = buildSpecKey(char.classID, specName); // id:slug (e.g. 1:blood)
+            const role = resolveRole(char.classID, specName);
+
             await Ranking.findOneAndUpdate(
               {
                 characterId: char._id,
@@ -205,24 +206,38 @@ class CharacterService {
                 difficulty: 5,
                 metric: "dps",
                 "encounter.id": r.encounter.id,
-                spec: r.spec ?? "",
+                specKey,
               },
               {
+                characterId: char._id,
                 wclCanonicalCharacterId: character.canonicalID,
+
                 name: char.name,
                 realm: char.realm,
                 region: char.region,
                 classID: char.classID,
+
+                zoneId: CURRENT_TIER_ID,
+                difficulty: 5,
+                metric: "dps",
+
                 encounter: {
                   id: r.encounter.id,
                   name: r.encounter.name,
                 },
-                bestSpec: r.bestSpec,
+
+                specName,
+                specKey,
+                role,
+
+                bestSpecName: r.bestSpec,
+
                 rankPercent: r.rankPercent ?? 0,
                 medianPercent: r.medianPercent ?? 0,
                 lockedIn: r.lockedIn,
                 totalKills: r.totalKills,
-                bestAmount: r.bestAmount,
+                bestAmount: r.bestAmount ?? 0,
+
                 allStars: r.allStars
                   ? {
                       points:
@@ -253,6 +268,19 @@ class CharacterService {
     }
   }
 
+  /*
+  async getLeaderboard(options: {
+    zoneId: number;
+    encounterId?: number;
+    spec?: string;
+    classID?: number;
+  }): Promise<IRanking[]> {
+    const { zoneId, encounterId, spec, classID } = options;
+
+
+  }
+
+  */
   async getRankingsByZone(zoneId: string): Promise<IRanking[] | null> {
     const zoneIdNum = parseInt(zoneId);
     if (isNaN(zoneIdNum)) {
