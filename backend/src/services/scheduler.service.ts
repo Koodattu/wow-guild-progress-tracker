@@ -194,7 +194,7 @@ class UpdateScheduler {
     // NIGHTLY: Refresh character rankings (at 2 AM Finnish time)
     // Updates zone rankings and encounter rankings for eligible tracked characters
     cron.schedule(
-      "0 2 * * *",
+      "50 12 * * *",
       async () => {
         if (this.isUpdatingCharacterRankings) {
           logger.info(

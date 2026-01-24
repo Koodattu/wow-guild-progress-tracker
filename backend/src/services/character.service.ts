@@ -1,5 +1,5 @@
 import Character from "../models/Character";
-import Ranking from "../models/Ranking";
+import Ranking, { IRanking } from "../models/Ranking";
 import logger from "../utils/logger";
 import wclService from "./warcraftlogs.service";
 
@@ -92,6 +92,7 @@ class CharacterService {
           $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         },
         rankingsAvailable: { $ne: "false" },
+        //  nextEligibleRefreshAt: { $lte: new Date() },
       }).limit(BATCH_SIZE);
 
       logger.info(
@@ -161,7 +162,7 @@ class CharacterService {
                 currentZoneUpdatedAt: new Date(),
                 rankingsAvailable: "true",
                 nextEligibleRefreshAt: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
+                  Date.now() + 12 * 60 * 60 * 1000,
                 ),
                 updatedAt: new Date(),
               });
@@ -214,7 +215,7 @@ class CharacterService {
             } else {
               await Character.findByIdAndUpdate(char._id, {
                 nextEligibleRefreshAt: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
+                  Date.now() + 12 * 60 * 60 * 1000,
                 ),
                 updatedAt: new Date(),
               });
@@ -245,57 +246,14 @@ class CharacterService {
     }
   }
 
-  // Get character rankings by zone ID
-  async getCharacterRankingsByZone(
-    zoneId: string,
-    characterId: string,
-  ): Promise<any> {
+  async getRankingsByZone(zoneId: string): Promise<IRanking[] | null> {
     const zoneIdNum = parseInt(zoneId);
-    const characterIdNum = parseInt(characterId);
-    if (isNaN(zoneIdNum) || isNaN(characterIdNum)) {
-      throw new Error("Invalid zone ID or character ID");
+    if (isNaN(zoneIdNum)) {
+      throw new Error("Invalid zone ID");
     }
-
-    const char = await Character.findOne({
-      wclCanonicalCharacterId: characterIdNum,
-      rankingsAvailable: "true",
-    });
-
-    if (!char || char.currentZoneId !== zoneIdNum) {
-      return null;
-    }
-
-    const rankings = await Ranking.find({
-      characterId: char._id,
+    return await Ranking.find({
       zoneId: zoneIdNum,
-      difficulty: 5,
-      metric: "dps",
     });
-
-    return {
-      bestPerformanceAverage: char.currentBestPerformanceAverage || 0,
-      medianPerformanceAverage: char.currentMedianPerformanceAverage || 0,
-      difficulty: 5,
-      metric: "dps",
-      partition: 1, // assuming
-      zone: zoneIdNum,
-      size: 0, // assuming
-      allStars: char.currentAllStars ? [char.currentAllStars] : [],
-      rankings: rankings.map((r) => ({
-        encounter: r.encounter,
-        rankPercent: r.rankPercent,
-        medianPercent: r.medianPercent,
-        lockedIn: r.lockedIn,
-        totalKills: r.totalKills,
-        fastestKill: r.bestAmount,
-        allStars: r.allStars,
-        spec: r.spec,
-        bestSpec: r.bestSpec,
-        bestAmount: r.bestAmount,
-        rankTooltip: null,
-        bestRank: {} as any, // placeholder
-      })),
-    };
   }
 }
 
