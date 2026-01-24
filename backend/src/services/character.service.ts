@@ -290,6 +290,49 @@ class CharacterService {
       zoneId: zoneIdNum,
     });
   }
+
+  async getZoneRankings(options: {
+    zoneId: number;
+    encounterId?: number;
+    classId?: number;
+    spec?: string;
+    specKey?: string;
+  }): Promise<any[]> {
+    const { zoneId, encounterId, classId, spec, specKey } = options;
+
+    if (encounterId !== undefined) {
+      // Return Rankings for the encounter
+      const query: any = {
+        zoneId,
+        difficulty: 5,
+        metric: "dps",
+        "encounter.id": encounterId,
+      };
+      if (classId !== undefined) query.classID = classId;
+      if (spec) query.specName = spec;
+      if (specKey) query.specKey = specKey;
+
+      return await Ranking.find(query).sort({ rankPercent: -1 });
+    } else {
+      // Return Characters with allStars
+      const query: any = {
+        latestZoneId: zoneId,
+        rankingsAvailable: "true",
+      };
+      if (classId !== undefined) query.classID = classId;
+      if (spec) {
+        // Assuming spec is specName, but for Character, we might need to filter differently
+        // Character doesn't have spec, so perhaps skip or handle later
+      }
+      if (specKey) {
+        // Similarly, specKey is in Ranking
+      }
+
+      return await Character.find(query)
+        .select("name realm region classID latestAllStars")
+        .sort({ "latestAllStars.points": -1 });
+    }
+  }
 }
 
 export default new CharacterService();

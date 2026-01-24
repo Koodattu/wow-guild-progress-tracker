@@ -22,15 +22,13 @@ import analyticsRouter from "./routes/analytics";
 import raidAnalyticsRouter from "./routes/raid-analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
+import zoneRankingsRouter from "./routes/zone-rankings";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
 import {
   analyticsMiddleware,
   flushAnalytics,
 } from "./middleware/analytics.middleware";
-import wclService from "./services/warcraftlogs.service";
-import Character from "./models/Character";
-import { CURRENT_RAID_IDS } from "./config/guilds";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -152,78 +150,7 @@ app.use("/api/raid-analytics", raidAnalyticsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/pickems", pickemsRouter);
-
-// Test route to populate characters from a report
-app.get("/api/test/populate-report", async (req: Request, res: Response) => {
-  try {
-    const reportCode = req.query.reportCode as string;
-    if (!reportCode) {
-      return res
-        .status(400)
-        .json({ error: "reportCode query parameter is required" });
-    }
-
-    logger.info(
-      `[Test Route] Populating characters from report: ${reportCode}`,
-    );
-
-    const reportData =
-      await wclService.getReportByCodeAllDifficulties(reportCode);
-    if (!reportData.reportData?.report) {
-      return res.status(404).json({ error: "Report not found" });
-    }
-
-    const report = reportData.reportData.report;
-    let totalChars = 0;
-
-    for (const fight of report.fights || []) {
-      if (fight.kill && fight.difficulty === 5) {
-        // Mythic kill
-        try {
-          const charData = await wclService.getFightCharacters(
-            report.code,
-            fight.id,
-          );
-          const rankedChars =
-            charData?.reportData?.report?.rankedCharacters || [];
-
-          for (const char of rankedChars) {
-            await Character.findOneAndUpdate(
-              { wclCanonicalCharacterId: char.canonicalID },
-              {
-                name: char.name,
-                realm: char.server.slug,
-                region: char.server.region.slug,
-                classID: char.classID,
-                wclProfileHidden: char.hidden,
-                lastMythicSeenAt: new Date(),
-                rankingsAvailable: char.hidden === true ? "false" : "unknown",
-              },
-              { upsert: true, new: true },
-            );
-          }
-
-          totalChars += rankedChars.length;
-          logger.info(
-            `[Test Route] Saved ${rankedChars.length} characters from fight ${fight.id}`,
-          );
-        } catch (error) {
-          logger.error(
-            `[Test Route] Failed to fetch characters for fight ${fight.id}:`,
-            error,
-          );
-        }
-      }
-    }
-
-    res.json({
-      message: `Populated ${totalChars} characters from report ${reportCode}`,
-    });
-  } catch (error) {
-    logger.error("[Test Route] Error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+app.use("/api/zone-rankings", zoneRankingsRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS
