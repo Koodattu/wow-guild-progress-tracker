@@ -46,6 +46,7 @@ import {
   BossPullHistoryResponse,
   RaidAnalytics,
   RaidAnalyticsListItem,
+  CharacterRankingRow,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -71,30 +72,51 @@ export const api = {
 
   // Guild endpoints
   async getGuilds(raidId?: number): Promise<GuildListItem[]> {
-    const url = raidId ? `${API_URL}/api/progress?raidId=${raidId}` : `${API_URL}/api/guilds`;
+    const url = raidId
+      ? `${API_URL}/api/progress?raidId=${raidId}`
+      : `${API_URL}/api/guilds`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
   },
 
-  async getGuildBossProgress(guildId: string, raidId: number): Promise<RaidProgress[]> {
-    const response = await fetch(`${API_URL}/api/guilds/${guildId}/raids/${raidId}/bosses`);
+  async getGuildBossProgress(
+    guildId: string,
+    raidId: number,
+  ): Promise<RaidProgress[]> {
+    const response = await fetch(
+      `${API_URL}/api/guilds/${guildId}/raids/${raidId}/bosses`,
+    );
     if (!response.ok) throw new Error("Failed to fetch guild boss progress");
     return response.json();
   },
 
-  async getGuildBossProgressByRealmName(realm: string, name: string, raidId: number): Promise<RaidProgress[]> {
+  async getGuildBossProgressByRealmName(
+    realm: string,
+    name: string,
+    raidId: number,
+  ): Promise<RaidProgress[]> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`);
+    const response = await fetch(
+      `${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`,
+    );
     if (!response.ok) throw new Error("Failed to fetch guild boss progress");
     return response.json();
   },
 
-  async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<BossPullHistoryResponse> {
+  async getBossPullHistory(
+    realm: string,
+    name: string,
+    raidId: number,
+    bossId: number,
+    difficulty: "mythic" | "heroic",
+  ): Promise<BossPullHistoryResponse> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses/${bossId}/pull-history?difficulty=${difficulty}`);
+    const response = await fetch(
+      `${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses/${bossId}/pull-history?difficulty=${difficulty}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch boss pull history");
     return response.json();
   },
@@ -111,10 +133,15 @@ export const api = {
     return response.json();
   },
 
-  async getGuildSummaryByRealmName(realm: string, name: string): Promise<GuildSummary> {
+  async getGuildSummaryByRealmName(
+    realm: string,
+    name: string,
+  ): Promise<GuildSummary> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/summary`);
+    const response = await fetch(
+      `${API_URL}/api/guilds/${encodedRealm}/${encodedName}/summary`,
+    );
     if (!response.ok) throw new Error("Failed to fetch guild summary");
     return response.json();
   },
@@ -166,8 +193,13 @@ export const api = {
     return Array.isArray(data) ? data : data.events;
   },
 
-  async getEventsPaginated(page: number = 1, limit: number = 50): Promise<EventsResponse> {
-    const response = await fetch(`${API_URL}/api/events?limit=${limit}&page=${page}`);
+  async getEventsPaginated(
+    page: number = 1,
+    limit: number = 50,
+  ): Promise<EventsResponse> {
+    const response = await fetch(
+      `${API_URL}/api/events?limit=${limit}&page=${page}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch events");
     const data = await response.json();
     // If old format (array), convert to new format
@@ -186,17 +218,25 @@ export const api = {
   },
 
   async getGuildEvents(guildId: string, limit: number = 50): Promise<Event[]> {
-    const response = await fetch(`${API_URL}/api/events/guild/${guildId}?limit=${limit}`);
+    const response = await fetch(
+      `${API_URL}/api/events/guild/${guildId}?limit=${limit}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch guild events");
     const data = await response.json();
     // Support both old (array) and new (paginated) response formats
     return Array.isArray(data) ? data : data.events;
   },
 
-  async getGuildEventsByRealmName(realm: string, name: string, limit: number = 50): Promise<Event[]> {
+  async getGuildEventsByRealmName(
+    realm: string,
+    name: string,
+    limit: number = 50,
+  ): Promise<Event[]> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/events/guild/${encodedRealm}/${encodedName}?limit=${limit}`);
+    const response = await fetch(
+      `${API_URL}/api/events/guild/${encodedRealm}/${encodedName}?limit=${limit}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch guild events");
     const data = await response.json();
     // Support both old (array) and new (paginated) response formats
@@ -260,7 +300,9 @@ export const api = {
   },
 
   async getAnalyticsHourly(days: number = 7): Promise<AnalyticsHourly[]> {
-    const response = await fetch(`${API_URL}/api/analytics/hourly?days=${days}`);
+    const response = await fetch(
+      `${API_URL}/api/analytics/hourly?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch hourly analytics");
     return response.json();
   },
@@ -272,19 +314,27 @@ export const api = {
   },
 
   async getAnalyticsEndpoints(days: number = 7): Promise<AnalyticsEndpoint[]> {
-    const response = await fetch(`${API_URL}/api/analytics/endpoints?days=${days}`);
+    const response = await fetch(
+      `${API_URL}/api/analytics/endpoints?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch endpoint analytics");
     return response.json();
   },
 
-  async getAnalyticsStatusCodes(days: number = 7): Promise<AnalyticsStatusCode[]> {
-    const response = await fetch(`${API_URL}/api/analytics/status-codes?days=${days}`);
+  async getAnalyticsStatusCodes(
+    days: number = 7,
+  ): Promise<AnalyticsStatusCode[]> {
+    const response = await fetch(
+      `${API_URL}/api/analytics/status-codes?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch status code analytics");
     return response.json();
   },
 
   async getAnalyticsRecent(limit: number = 100): Promise<AnalyticsRecent[]> {
-    const response = await fetch(`${API_URL}/api/analytics/recent?limit=${limit}`);
+    const response = await fetch(
+      `${API_URL}/api/analytics/recent?limit=${limit}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch recent requests");
     return response.json();
   },
@@ -296,7 +346,9 @@ export const api = {
   },
 
   async getAnalyticsPeakHours(days: number = 7): Promise<AnalyticsPeakHours> {
-    const response = await fetch(`${API_URL}/api/analytics/peak-hours?days=${days}`);
+    const response = await fetch(
+      `${API_URL}/api/analytics/peak-hours?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch peak hours analytics");
     return response.json();
   },
@@ -307,14 +359,20 @@ export const api = {
     return response.json();
   },
 
-  async getAnalyticsSlowEndpoints(days: number = 7): Promise<AnalyticsSlowEndpoint[]> {
-    const response = await fetch(`${API_URL}/api/analytics/slow-endpoints?days=${days}`);
+  async getAnalyticsSlowEndpoints(
+    days: number = 7,
+  ): Promise<AnalyticsSlowEndpoint[]> {
+    const response = await fetch(
+      `${API_URL}/api/analytics/slow-endpoints?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch slow endpoints");
     return response.json();
   },
 
   async getAnalyticsErrors(days: number = 7): Promise<AnalyticsErrors> {
-    const response = await fetch(`${API_URL}/api/analytics/errors?days=${days}`);
+    const response = await fetch(
+      `${API_URL}/api/analytics/errors?days=${days}`,
+    );
     if (!response.ok) throw new Error("Failed to fetch error analytics");
     return response.json();
   },
@@ -390,7 +448,9 @@ export const api = {
     return response.json();
   },
 
-  async updateCharacterSelection(characterIds: number[]): Promise<{ characters: WoWCharacter[] }> {
+  async updateCharacterSelection(
+    characterIds: number[],
+  ): Promise<{ characters: WoWCharacter[] }> {
     const response = await fetch(`${API_URL}/api/auth/battlenet/characters`, {
       method: "POST",
       credentials: "include",
@@ -404,13 +464,20 @@ export const api = {
   },
 
   async refreshWoWCharacters(): Promise<{ characters: WoWCharacter[] }> {
-    const response = await fetch(`${API_URL}/api/auth/battlenet/characters/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
+    const response = await fetch(
+      `${API_URL}/api/auth/battlenet/characters/refresh`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Failed to refresh characters" }));
-      const error: any = new Error(errorData.error || "Failed to refresh characters");
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: "Failed to refresh characters" }));
+      const error: any = new Error(
+        errorData.error || "Failed to refresh characters",
+      );
       error.response = { data: errorData };
       throw error;
     }
@@ -426,10 +493,16 @@ export const api = {
     return response.json();
   },
 
-  async getAdminUsers(page: number = 1, limit: number = 20): Promise<AdminUsersResponse> {
-    const response = await fetch(`${API_URL}/api/admin/users?page=${page}&limit=${limit}`, {
-      credentials: "include",
-    });
+  async getAdminUsers(
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<AdminUsersResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/users?page=${page}&limit=${limit}`,
+      {
+        credentials: "include",
+      },
+    );
     if (!response.ok) throw new Error("Failed to fetch users");
     return response.json();
   },
@@ -442,10 +515,16 @@ export const api = {
     return response.json();
   },
 
-  async getAdminGuilds(page: number = 1, limit: number = 20): Promise<AdminGuildsResponse> {
-    const response = await fetch(`${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`, {
-      credentials: "include",
-    });
+  async getAdminGuilds(
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<AdminGuildsResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`,
+      {
+        credentials: "include",
+      },
+    );
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
   },
@@ -467,17 +546,25 @@ export const api = {
   },
 
   async getAdminAnalyticsDaily(days: number = 30): Promise<AnalyticsDaily[]> {
-    const response = await fetch(`${API_URL}/api/admin/analytics/daily?days=${days}`, {
-      credentials: "include",
-    });
+    const response = await fetch(
+      `${API_URL}/api/admin/analytics/daily?days=${days}`,
+      {
+        credentials: "include",
+      },
+    );
     if (!response.ok) throw new Error("Failed to fetch daily analytics");
     return response.json();
   },
 
-  async getAdminAnalyticsEndpoints(days: number = 7): Promise<AnalyticsEndpoint[]> {
-    const response = await fetch(`${API_URL}/api/admin/analytics/endpoints?days=${days}`, {
-      credentials: "include",
-    });
+  async getAdminAnalyticsEndpoints(
+    days: number = 7,
+  ): Promise<AnalyticsEndpoint[]> {
+    const response = await fetch(
+      `${API_URL}/api/admin/analytics/endpoints?days=${days}`,
+      {
+        credentials: "include",
+      },
+    );
     if (!response.ok) throw new Error("Failed to fetch endpoint analytics");
     return response.json();
   },
@@ -517,7 +604,10 @@ export const api = {
     return response.json();
   },
 
-  async submitPickemPredictions(pickemId: string, predictions: PickemPrediction[]): Promise<{ success: boolean; message: string }> {
+  async submitPickemPredictions(
+    pickemId: string,
+    predictions: PickemPrediction[],
+  ): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${API_URL}/api/pickems/${pickemId}/predict`, {
       method: "POST",
       headers: {
@@ -566,7 +656,10 @@ export const api = {
     return response.json();
   },
 
-  async updateAdminPickem(pickemId: string, input: UpdatePickemInput): Promise<AdminPickem> {
+  async updateAdminPickem(
+    pickemId: string,
+    input: UpdatePickemInput,
+  ): Promise<AdminPickem> {
     const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
       method: "PUT",
       headers: {
@@ -582,7 +675,9 @@ export const api = {
     return response.json();
   },
 
-  async deleteAdminPickem(pickemId: string): Promise<{ success: boolean; message: string }> {
+  async deleteAdminPickem(
+    pickemId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}`, {
       method: "DELETE",
       credentials: "include",
@@ -595,10 +690,13 @@ export const api = {
   },
 
   async toggleAdminPickem(pickemId: string): Promise<AdminPickem> {
-    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/toggle`, {
-      method: "PATCH",
-      credentials: "include",
-    });
+    const response = await fetch(
+      `${API_URL}/api/admin/pickems/${pickemId}/toggle`,
+      {
+        method: "PATCH",
+        credentials: "include",
+      },
+    );
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to toggle pickem");
@@ -606,13 +704,19 @@ export const api = {
     return response.json();
   },
 
-  async finalizeRwfPickem(pickemId: string, finalRankings: string[]): Promise<{ success: boolean; pickem: AdminPickem }> {
-    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/finalize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ finalRankings }),
-    });
+  async finalizeRwfPickem(
+    pickemId: string,
+    finalRankings: string[],
+  ): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/pickems/${pickemId}/finalize`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ finalRankings }),
+      },
+    );
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to finalize pickem");
@@ -620,15 +724,60 @@ export const api = {
     return response.json();
   },
 
-  async unfinalizeRwfPickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
-    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/unfinalize`, {
-      method: "POST",
-      credentials: "include",
-    });
+  async unfinalizeRwfPickem(
+    pickemId: string,
+  ): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/pickems/${pickemId}/unfinalize`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to unfinalize pickem");
     }
+    return response.json();
+  },
+
+  async getCharacterRankings(
+    params: {
+      zoneId?: number;
+      encounterId?: number;
+      classId?: number;
+      specKey?: string;
+      role?: "dps" | "healer" | "tank";
+      metric?: "dps" | "hps";
+      page?: number;
+      limit?: number;
+    } = {},
+  ): Promise<CharacterRankingRow[]> {
+    const searchParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.set(key, String(value));
+      }
+    });
+
+    const url =
+      `${API_URL}/api/character-rankings` +
+      (searchParams.toString() ? `?${searchParams.toString()}` : "");
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      let message = "Failed to fetch character rankings";
+      try {
+        const error = await response.json();
+        if (error?.error) message = error.error;
+      } catch {
+        // ignore JSON parse errors
+      }
+      throw new Error(message);
+    }
+
     return response.json();
   },
 

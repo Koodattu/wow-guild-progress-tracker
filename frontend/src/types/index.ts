@@ -772,6 +772,35 @@ export interface UpdatePickemInput {
   streakConfig?: Partial<StreakConfig>;
 }
 
+export type CharacterRankingRow = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+  };
+  context: {
+    zoneId: number;
+    encounterId: number | null;
+    specKey?: string;
+    role?: "dps" | "healer" | "tank";
+    metric: "dps" | "hps";
+  };
+  score: {
+    type: "allStars" | "bestAmount";
+    value: number;
+  };
+  stats: {
+    allStars?: { points: number; possiblePoints: number };
+    bestAmount?: number;
+    rankPercent?: number;
+    medianPercent?: number;
+    totalKills?: number;
+  };
+  updatedAt?: string;
+};
+
 // ============================================================================
 // RAID ANALYTICS TYPES
 // ============================================================================

@@ -7,50 +7,58 @@ const router = Router();
 router.get("/", async (req: Request, res: Response) => {
   try {
     const zoneId = CURRENT_RAID_IDS[0];
-    if (isNaN(zoneId)) {
+    if (!Number.isFinite(zoneId)) {
       return res.status(400).json({ error: "Invalid zone ID" });
     }
 
-    const { encounter, classId, spec } = req.query;
+    const encounterId =
+      req.query.encounterId !== undefined
+        ? Number(req.query.encounterId)
+        : undefined;
+    const classId =
+      req.query.classId !== undefined ? Number(req.query.classId) : undefined;
+    const page =
+      req.query.page !== undefined ? Number(req.query.page) : undefined;
+    const limit =
+      req.query.limit !== undefined ? Number(req.query.limit) : undefined;
 
-    if (encounter && isNaN(parseInt(encounter as string))) {
-      return res.status(400).json({ error: "Invalid encounter ID" });
+    const specKey =
+      req.query.specKey !== undefined ? String(req.query.specKey) : undefined;
+
+    const role =
+      req.query.role !== undefined
+        ? (String(req.query.role) as "dps" | "healer" | "tank")
+        : undefined;
+
+    const metric =
+      req.query.metric !== undefined
+        ? (String(req.query.metric) as "dps" | "hps")
+        : undefined;
+
+    if (encounterId !== undefined && Number.isNaN(encounterId)) {
+      return res.status(400).json({ error: "Invalid encounterId" });
     }
-    if (classId && isNaN(parseInt(classId as string))) {
-      return res.status(400).json({ error: "Invalid class ID" });
+    if (classId !== undefined && Number.isNaN(classId)) {
+      return res.status(400).json({ error: "Invalid classId" });
+    }
+    if (page !== undefined && (Number.isNaN(page) || page < 1)) {
+      return res.status(400).json({ error: "Invalid page" });
+    }
+    if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
+      return res.status(400).json({ error: "Invalid limit" });
     }
 
-    const options = {
+    const rankings = await characterService.getCharacterRankings({
       zoneId,
-      encounterId: encounter ? parseInt(encounter as string) : undefined,
-      classId: classId ? parseInt(classId as string) : undefined,
-      spec: spec as string,
-    };
+      encounterId,
+      classId,
+      specKey,
+      role,
+      metric,
+      page,
+      limit,
+    });
 
-    const rankings = await characterService.getCharacterRankings(options);
-    res.json(rankings);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch character rankings" });
-  }
-});
-
-router.get("/:id", async (req: Request, res: Response) => {
-  try {
-    const zoneId = parseInt(req.params.id);
-    if (isNaN(zoneId)) {
-      return res.status(400).json({ error: "Invalid zone ID" });
-    }
-
-    const { encounter, classId, spec, specKey } = req.query;
-    const options = {
-      zoneId,
-      encounterId: encounter ? parseInt(encounter as string) : undefined,
-      classId: classId ? parseInt(classId as string) : undefined,
-      spec: spec as string,
-      specKey: specKey as string,
-    };
-
-    const rankings = await characterService.getCharacterRankings(options);
     res.json(rankings);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch character rankings" });
