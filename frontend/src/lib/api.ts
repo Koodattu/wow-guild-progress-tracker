@@ -12,7 +12,6 @@ import {
   GuildSchedule,
   LiveStreamer,
   TierList,
-  RaidTierList,
   OverallTierListResponse,
   RaidTierListResponse,
   TierListRaidInfo,
@@ -741,43 +740,14 @@ export const api = {
     return response.json();
   },
 
-  async getCharacterRankings(
-    params: {
-      zoneId?: number;
-      encounterId?: number;
-      classId?: number;
-      specKey?: string;
-      role?: "dps" | "healer" | "tank";
-      metric?: "dps" | "hps";
-      page?: number;
-      limit?: number;
-    } = {},
-  ): Promise<CharacterRankingRow[]> {
-    const searchParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        searchParams.set(key, String(value));
-      }
-    });
-
-    const url =
-      `${API_URL}/api/character-rankings` +
-      (searchParams.toString() ? `?${searchParams.toString()}` : "");
-
-    const response = await fetch(url);
-
+  async getCharacterRankings(queryString = ""): Promise<CharacterRankingRow[]> {
+    const response = await fetch(
+      `${API_URL}/api/character-rankings${queryString}`,
+    );
     if (!response.ok) {
-      let message = "Failed to fetch character rankings";
-      try {
-        const error = await response.json();
-        if (error?.error) message = error.error;
-      } catch {
-        // ignore JSON parse errors
-      }
-      throw new Error(message);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to fetch character rankings");
     }
-
     return response.json();
   },
 
