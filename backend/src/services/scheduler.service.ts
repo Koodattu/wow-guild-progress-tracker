@@ -49,52 +49,64 @@ class UpdateScheduler {
     logger.info("Off hours: 01:00 - 16:00 (1 AM - 4 PM)");
 
     // HOT HOURS - Active guilds: Check every 15 minutes
-    this.hotHoursActiveInterval = setInterval(async () => {
-      if (!this.isHotHours()) return; // Skip if not hot hours
+    this.hotHoursActiveInterval = setInterval(
+      async () => {
+        if (!this.isHotHours()) return; // Skip if not hot hours
 
-      if (this.isUpdatingHotActive) {
-        logger.info("[Hot/Active] Previous update still in progress, skipping...");
-        return;
-      }
-      await this.updateActiveGuilds();
-    }, 15 * 60 * 1000); // 15 minutes
+        if (this.isUpdatingHotActive) {
+          logger.info("[Hot/Active] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateActiveGuilds();
+      },
+      15 * 60 * 1000,
+    ); // 15 minutes
 
     // HOT HOURS - Currently raiding guilds: Check every 5 minutes
-    this.hotHoursRaidingInterval = setInterval(async () => {
-      if (!this.isHotHours()) return; // Skip if not hot hours
+    this.hotHoursRaidingInterval = setInterval(
+      async () => {
+        if (!this.isHotHours()) return; // Skip if not hot hours
 
-      if (this.isUpdatingHotRaiding) {
-        logger.info("[Hot/Raiding] Previous update still in progress, skipping...");
-        return;
-      }
-      await this.updateRaidingGuilds();
-    }, 5 * 60 * 1000); // 5 minutes
+        if (this.isUpdatingHotRaiding) {
+          logger.info("[Hot/Raiding] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateRaidingGuilds();
+      },
+      5 * 60 * 1000,
+    ); // 5 minutes
 
     // HOT HOURS - Twitch stream status: Check every 15 minutes
-    this.hotHoursTwitchInterval = setInterval(async () => {
-      if (!this.isHotHours()) {
-        // Outside hot hours, set all streams to offline
-        await this.setAllStreamsOffline();
-        return;
-      }
+    this.hotHoursTwitchInterval = setInterval(
+      async () => {
+        if (!this.isHotHours()) {
+          // Outside hot hours, set all streams to offline
+          await this.setAllStreamsOffline();
+          return;
+        }
 
-      if (this.isUpdatingTwitchStreams) {
-        logger.info("[Hot/Twitch] Previous update still in progress, skipping...");
-        return;
-      }
-      await this.updateTwitchStreamStatus();
-    }, 15 * 60 * 1000); // 15 minutes
+        if (this.isUpdatingTwitchStreams) {
+          logger.info("[Hot/Twitch] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateTwitchStreamStatus();
+      },
+      15 * 60 * 1000,
+    ); // 15 minutes
 
     // OFF HOURS - Active guilds: Check every hour
-    this.offHoursActiveInterval = setInterval(async () => {
-      if (this.isHotHours()) return; // Skip if hot hours
+    this.offHoursActiveInterval = setInterval(
+      async () => {
+        if (this.isHotHours()) return; // Skip if hot hours
 
-      if (this.isUpdatingOffActive) {
-        logger.info("[Off/Active] Previous update still in progress, skipping...");
-        return;
-      }
-      await this.updateActiveGuildsOffHours();
-    }, 60 * 60 * 1000); // 1 hour
+        if (this.isUpdatingOffActive) {
+          logger.info("[Off/Active] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateActiveGuildsOffHours();
+      },
+      60 * 60 * 1000,
+    ); // 1 hour
 
     // OFF HOURS - Inactive guilds: Check once per day (at 10 AM Finnish time)
     cron.schedule(
@@ -108,7 +120,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM European time)
@@ -124,7 +136,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
@@ -140,7 +152,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     // NIGHTLY: Refetch 3 most recent reports for all active guilds (at 3 AM Finnish time)
@@ -156,7 +168,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     // NIGHTLY: Calculate tier lists (at 5 AM Finnish time, after all other nightly jobs)
@@ -172,7 +184,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     // NIGHTLY: Calculate raid analytics (at 6 AM Finnish time, after tier lists)
@@ -188,7 +200,7 @@ class UpdateScheduler {
       },
       {
         timezone: "Europe/Helsinki",
-      }
+      },
     );
 
     logger.info("Background scheduler started:");
@@ -276,7 +288,7 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate tier lists
-  private async calculateTierLists(): Promise<void> {
+  async calculateTierLists(): Promise<void> {
     this.isUpdatingTierLists = true;
 
     try {
@@ -291,7 +303,7 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate raid analytics
-  private async calculateRaidAnalytics(): Promise<void> {
+  async calculateRaidAnalytics(): Promise<void> {
     this.isUpdatingRaidAnalytics = true;
 
     try {
@@ -339,7 +351,7 @@ class UpdateScheduler {
         {
           $or: [{ lastLogEndTime: { $lt: thirtyDaysAgo } }, { lastLogEndTime: { $exists: false } }],
         },
-        { $set: { activityStatus: "inactive" } }
+        { $set: { activityStatus: "inactive" } },
       );
 
       // Mark guilds as active if they have logs within 30 days
@@ -350,7 +362,7 @@ class UpdateScheduler {
   }
 
   // HOT HOURS: Update active guilds (every 15 minutes during 16:00-01:00)
-  private async updateActiveGuilds(): Promise<void> {
+  async updateActiveGuilds(): Promise<void> {
     this.isUpdatingHotActive = true;
 
     try {
@@ -461,7 +473,7 @@ class UpdateScheduler {
   }
 
   // OFF HOURS: Update inactive guilds (once daily at 10:00)
-  private async updateInactiveGuilds(): Promise<void> {
+  async updateInactiveGuilds(): Promise<void> {
     this.isUpdatingOffInactive = true;
 
     try {
@@ -524,7 +536,7 @@ class UpdateScheduler {
 
   // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)
   // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
-  private async updateAllGuildsWorldRanks(): Promise<void> {
+  async updateAllGuildsWorldRanks(): Promise<void> {
     this.isUpdatingNightlyWorldRanks = true;
 
     try {
@@ -573,7 +585,7 @@ class UpdateScheduler {
 
   // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
   // Guild crests can be changed by guilds or sometimes fail to fetch initially
-  private async updateAllGuildCrests(): Promise<void> {
+  async updateAllGuildCrests(): Promise<void> {
     this.isUpdatingGuildCrests = true;
 
     try {
@@ -589,7 +601,7 @@ class UpdateScheduler {
 
   // NIGHTLY: Refetch 3 most recent reports for all active guilds (at 3 AM Finnish time)
   // This catches any fights that might have been missed during live polling or uploaded late
-  private async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
+  async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
     this.isUpdatingRefetchRecentReports = true;
 
     try {
@@ -602,7 +614,7 @@ class UpdateScheduler {
   }
 
   // HOT HOURS: Update Twitch stream status (every 15 minutes during 16:00-01:00)
-  private async updateTwitchStreamStatus(): Promise<void> {
+  async updateTwitchStreamStatus(): Promise<void> {
     this.isUpdatingTwitchStreams = true;
 
     try {
@@ -654,7 +666,7 @@ class UpdateScheduler {
             logger.info(
               `  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${status.isLive ? "live" : "offline"}${
                 status.isLive ? ` (${status.gameName || "unknown game"})` : ""
-              }`
+              }`,
             );
           }
 
@@ -672,7 +684,7 @@ class UpdateScheduler {
             { _id: guild._id },
             {
               $set: { streamers: updatedStreamers },
-            }
+            },
           );
         }
       }
@@ -727,7 +739,7 @@ class UpdateScheduler {
           { _id: guild._id },
           {
             $set: { streamers: updatedStreamers },
-          }
+          },
         );
       }
 

@@ -2,12 +2,17 @@ import { Router, Request, Response } from "express";
 import { requireAdmin } from "../middleware/admin.middleware";
 import User from "../models/User";
 import Guild from "../models/Guild";
+import Report from "../models/Report";
+import Fight from "../models/Fight";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import pickemService from "../services/pickem.service";
 import rateLimitService from "../services/rate-limit.service";
 import backgroundGuildProcessor from "../services/background-guild-processor.service";
 import GuildProcessingQueue, { ProcessingStatus } from "../models/GuildProcessingQueue";
 import logger from "../utils/logger";
+import scheduler from "../services/scheduler.service";
+import guildService from "../services/guild.service";
+import wclService from "../services/warcraftlogs.service";
 
 const router = Router();
 
@@ -163,6 +168,7 @@ router.get("/guilds", async (req: Request, res: Response) => {
       region: guild.region,
       faction: guild.faction,
       warcraftlogsId: guild.warcraftlogsId,
+      wclStatus: guild.wclStatus || "unknown",
       parentGuild: guild.parent_guild,
       isCurrentlyRaiding: guild.isCurrentlyRaiding,
       lastFetched: guild.lastFetched,
@@ -214,6 +220,192 @@ router.get("/guilds/stats", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error fetching guild stats:", error);
     res.status(500).json({ error: "Failed to fetch guild stats" });
+  }
+});
+
+// Get detailed guild info
+router.get("/guilds/:guildId", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId).lean();
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Get report count
+    const reportCount = await Report.countDocuments({ guildId: guild._id });
+
+    // Get fight count
+    const fightCount = await Fight.countDocuments({ guildId: guild._id });
+
+    // Get queue status if exists
+    const queueItem = await GuildProcessingQueue.findOne({ guildId: guild._id }).lean();
+
+    res.json({
+      id: guild._id.toString(),
+      name: guild.name,
+      realm: guild.realm,
+      region: guild.region,
+      faction: guild.faction,
+      warcraftlogsId: guild.warcraftlogsId,
+      parentGuild: guild.parent_guild,
+      isCurrentlyRaiding: guild.isCurrentlyRaiding,
+      activityStatus: guild.activityStatus,
+      lastFetched: guild.lastFetched,
+      lastLogEndTime: guild.lastLogEndTime,
+      createdAt: guild.createdAt,
+      updatedAt: guild.updatedAt,
+      wclStatus: guild.wclStatus || "unknown",
+      wclStatusUpdatedAt: guild.wclStatusUpdatedAt,
+      wclNotFoundCount: guild.wclNotFoundCount || 0,
+      progress: guild.progress || [],
+      reportCount,
+      fightCount,
+      queueStatus: queueItem
+        ? {
+            status: queueItem.status,
+            progress: queueItem.progress,
+            errorCount: queueItem.errorCount,
+            lastError: queueItem.lastError,
+            errorType: queueItem.errorType,
+            isPermanentError: queueItem.isPermanentError,
+            createdAt: queueItem.createdAt,
+            startedAt: queueItem.startedAt,
+            completedAt: queueItem.completedAt,
+          }
+        : null,
+    });
+  } catch (error) {
+    logger.error("Error fetching guild details:", error);
+    res.status(500).json({ error: "Failed to fetch guild details" });
+  }
+});
+
+// Recalculate stats for single guild
+router.post("/guilds/:guildId/recalculate-stats", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Run async
+    guildService
+      .calculateGuildStatistics(guild, null)
+      .then(async () => {
+        await guild.save();
+        logger.info(`Recalculated statistics for guild: ${guild.name}`);
+      })
+      .catch((err) => logger.error(`Failed to recalculate stats for ${guild.name}:`, err));
+
+    res.json({
+      success: true,
+      message: `Statistics recalculation started for ${guild.name}`,
+    });
+  } catch (error) {
+    logger.error("Error triggering guild stats recalculation:", error);
+    res.status(500).json({ error: "Failed to trigger statistics recalculation" });
+  }
+});
+
+// Queue guild for full rescan
+router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Check if already in queue and processing
+    const existingQueue = await GuildProcessingQueue.findOne({
+      guildId: guild._id,
+      status: { $in: ["pending", "in_progress"] },
+    });
+
+    if (existingQueue) {
+      return res.status(400).json({
+        error: "Guild is already in the processing queue",
+        status: existingQueue.status,
+      });
+    }
+
+    // Add to queue for full rescan
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5); // Priority 5 = higher than normal
+
+    res.json({
+      success: true,
+      message: `Guild ${guild.name} queued for rescan`,
+      queueId: queueItem._id.toString(),
+      status: queueItem.status,
+    });
+  } catch (error) {
+    logger.error("Error queueing guild for rescan:", error);
+    res.status(500).json({ error: "Failed to queue guild for rescan" });
+  }
+});
+
+// Check if we have all reports (compare WCL vs database)
+router.get("/guilds/:guildId/verify-reports", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Get our stored reports
+    const storedReports = await Report.find({ guildId: guild._id }).select("code startTime endTime").lean();
+
+    const storedReportCodes = new Set(storedReports.map((r) => r.code));
+
+    // Fetch reports from WCL (just first page to get count/sample)
+    try {
+      const wclReports = await wclService.getGuildReports(
+        guild.name,
+        guild.realm.toLowerCase().replace(/\s+/g, "-"),
+        guild.region.toLowerCase(),
+        1, // page
+        100, // limit
+      );
+
+      // Find reports in WCL that we don't have
+      const missingReports = wclReports.data.filter((r: { code: string }) => !storedReportCodes.has(r.code));
+
+      res.json({
+        guildName: guild.name,
+        storedReportCount: storedReports.length,
+        wclReportCount: wclReports.total,
+        wclSampleSize: wclReports.data.length,
+        missingFromSample: missingReports.length,
+        missingReportCodes: missingReports.map((r: { code: string }) => r.code).slice(0, 20), // First 20
+        hasMorePages: wclReports.has_more_pages,
+        isComplete: missingReports.length === 0 && !wclReports.has_more_pages,
+        message:
+          missingReports.length > 0
+            ? `Found ${missingReports.length} missing reports in first ${wclReports.data.length} WCL reports`
+            : wclReports.has_more_pages
+              ? "No missing reports in sample, but more pages exist in WCL"
+              : "All reports appear to be synced",
+      });
+    } catch (wclError) {
+      const errorMessage = wclError instanceof Error ? wclError.message : "Unknown error";
+      res.json({
+        guildName: guild.name,
+        storedReportCount: storedReports.length,
+        wclReportCount: null,
+        error: errorMessage,
+        message: "Could not fetch reports from WarcraftLogs",
+      });
+    }
+  } catch (error) {
+    logger.error("Error verifying guild reports:", error);
+    res.status(500).json({ error: "Failed to verify reports" });
   }
 });
 
@@ -966,6 +1158,167 @@ router.post("/processing-queue/queue-guild", async (req: Request, res: Response)
   } catch (error) {
     logger.error("Error queueing guild for processing:", error);
     res.status(500).json({ error: "Failed to queue guild for processing" });
+  }
+});
+
+// ============================================================
+// MANUAL TRIGGER ENDPOINTS
+// ============================================================
+
+// Trigger recalculation of statistics for ALL guilds
+router.post("/trigger/calculate-all-statistics", async (req: Request, res: Response) => {
+  try {
+    const currentTierOnly = req.body.currentTierOnly !== false; // Default true
+
+    // Run async - don't wait for completion
+    guildService
+      .recalculateExistingGuildStatistics(currentTierOnly)
+      .then(() => logger.info("Calculate all statistics completed"))
+      .catch((err) => logger.error("Calculate all statistics failed:", err));
+
+    res.json({
+      success: true,
+      message: "Statistics recalculation started for all guilds",
+      currentTierOnly,
+    });
+  } catch (error) {
+    logger.error("Error triggering statistics calculation:", error);
+    res.status(500).json({ error: "Failed to trigger statistics calculation" });
+  }
+});
+
+// Trigger tier list calculation
+router.post("/trigger/calculate-tier-lists", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .calculateTierLists()
+      .then(() => logger.info("Calculate tier lists completed"))
+      .catch((err) => logger.error("Calculate tier lists failed:", err));
+
+    res.json({ success: true, message: "Tier list calculation started" });
+  } catch (error) {
+    logger.error("Error triggering tier list calculation:", error);
+    res.status(500).json({ error: "Failed to trigger tier list calculation" });
+  }
+});
+
+// Trigger Twitch stream status check
+router.post("/trigger/check-twitch-streams", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateTwitchStreamStatus()
+      .then(() => logger.info("Check Twitch streams completed"))
+      .catch((err) => logger.error("Check Twitch streams failed:", err));
+
+    res.json({ success: true, message: "Twitch stream check started" });
+  } catch (error) {
+    logger.error("Error triggering Twitch stream check:", error);
+    res.status(500).json({ error: "Failed to trigger Twitch stream check" });
+  }
+});
+
+// Trigger world ranks update for all guilds
+router.post("/trigger/update-world-ranks", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateAllGuildsWorldRanks()
+      .then(() => logger.info("Update world ranks completed"))
+      .catch((err) => logger.error("Update world ranks failed:", err));
+
+    res.json({ success: true, message: "World ranks update started" });
+  } catch (error) {
+    logger.error("Error triggering world ranks update:", error);
+    res.status(500).json({ error: "Failed to trigger world ranks update" });
+  }
+});
+
+// Trigger raid analytics calculation
+router.post("/trigger/calculate-raid-analytics", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .calculateRaidAnalytics()
+      .then(() => logger.info("Calculate raid analytics completed"))
+      .catch((err) => logger.error("Calculate raid analytics failed:", err));
+
+    res.json({ success: true, message: "Raid analytics calculation started" });
+  } catch (error) {
+    logger.error("Error triggering raid analytics calculation:", error);
+    res.status(500).json({ error: "Failed to trigger raid analytics calculation" });
+  }
+});
+
+// Trigger active guilds update
+router.post("/trigger/update-active-guilds", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateActiveGuilds()
+      .then(() => logger.info("Update active guilds completed"))
+      .catch((err) => logger.error("Update active guilds failed:", err));
+
+    res.json({ success: true, message: "Active guilds update started" });
+  } catch (error) {
+    logger.error("Error triggering active guilds update:", error);
+    res.status(500).json({ error: "Failed to trigger active guilds update" });
+  }
+});
+
+// Trigger inactive guilds update
+router.post("/trigger/update-inactive-guilds", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateInactiveGuilds()
+      .then(() => logger.info("Update inactive guilds completed"))
+      .catch((err) => logger.error("Update inactive guilds failed:", err));
+
+    res.json({ success: true, message: "Inactive guilds update started" });
+  } catch (error) {
+    logger.error("Error triggering inactive guilds update:", error);
+    res.status(500).json({ error: "Failed to trigger inactive guilds update" });
+  }
+});
+
+// Trigger all guilds update
+router.post("/trigger/update-all-guilds", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateAllGuilds()
+      .then(() => logger.info("Update all guilds completed"))
+      .catch((err) => logger.error("Update all guilds failed:", err));
+
+    res.json({ success: true, message: "All guilds update started" });
+  } catch (error) {
+    logger.error("Error triggering all guilds update:", error);
+    res.status(500).json({ error: "Failed to trigger all guilds update" });
+  }
+});
+
+// Trigger recent reports refetch for all active guilds
+router.post("/trigger/refetch-recent-reports", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .refetchRecentReportsForAllActiveGuilds()
+      .then(() => logger.info("Refetch recent reports completed"))
+      .catch((err) => logger.error("Refetch recent reports failed:", err));
+
+    res.json({ success: true, message: "Recent reports refetch started" });
+  } catch (error) {
+    logger.error("Error triggering recent reports refetch:", error);
+    res.status(500).json({ error: "Failed to trigger recent reports refetch" });
+  }
+});
+
+// Trigger guild crests update
+router.post("/trigger/update-guild-crests", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .updateAllGuildCrests()
+      .then(() => logger.info("Update guild crests completed"))
+      .catch((err) => logger.error("Update guild crests failed:", err));
+
+    res.json({ success: true, message: "Guild crests update started" });
+  } catch (error) {
+    logger.error("Error triggering guild crests update:", error);
+    res.status(500).json({ error: "Failed to trigger guild crests update" });
   }
 });
 

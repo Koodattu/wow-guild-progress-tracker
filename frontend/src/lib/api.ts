@@ -55,6 +55,10 @@ import {
   ProcessorStatus,
   QueueItem,
   ErrorType,
+  TriggerResponse,
+  AdminGuildDetail,
+  VerifyReportsResponse,
+  QueueRescanResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -793,3 +797,136 @@ export const api = {
     return response.json();
   },
 };
+
+// ==================== Admin Trigger Functions ====================
+
+export async function triggerCalculateAllStatistics(currentTierOnly: boolean = true): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/calculate-all-statistics`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentTierOnly }),
+  });
+  if (!response.ok) throw new Error("Failed to trigger statistics calculation");
+  return response.json();
+}
+
+export async function triggerCalculateTierLists(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/calculate-tier-lists`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger tier list calculation");
+  return response.json();
+}
+
+export async function triggerCheckTwitchStreams(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/check-twitch-streams`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger Twitch stream check");
+  return response.json();
+}
+
+export async function triggerUpdateWorldRanks(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-world-ranks`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger world ranks update");
+  return response.json();
+}
+
+export async function triggerCalculateRaidAnalytics(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/calculate-raid-analytics`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger raid analytics calculation");
+  return response.json();
+}
+
+export async function triggerUpdateActiveGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-active-guilds`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger active guilds update");
+  return response.json();
+}
+
+export async function triggerUpdateInactiveGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-inactive-guilds`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger inactive guilds update");
+  return response.json();
+}
+
+export async function triggerUpdateAllGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-all-guilds`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger all guilds update");
+  return response.json();
+}
+
+export async function triggerRefetchRecentReports(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/refetch-recent-reports`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger recent reports refetch");
+  return response.json();
+}
+
+export async function triggerUpdateGuildCrests(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-guild-crests`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger guild crests update");
+  return response.json();
+}
+
+// ==================== Admin Guild Management Functions ====================
+
+export async function getAdminGuildDetail(guildId: string): Promise<AdminGuildDetail> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}`, {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to fetch guild details");
+  return response.json();
+}
+
+export async function recalculateGuildStats(guildId: string): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/recalculate-stats`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger guild stats recalculation");
+  return response.json();
+}
+
+export async function queueGuildRescan(guildId: string): Promise<QueueRescanResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/queue-rescan`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to queue guild for rescan");
+  }
+  return response.json();
+}
+
+export async function verifyGuildReports(guildId: string): Promise<VerifyReportsResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/verify-reports`, {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to verify guild reports");
+  return response.json();
+}

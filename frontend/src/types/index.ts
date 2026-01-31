@@ -556,6 +556,7 @@ export interface AdminGuild {
   region: string;
   faction?: string;
   warcraftlogsId?: number;
+  wclStatus?: "active" | "not_found" | "unclaimed" | "unknown";
   parentGuild?: string;
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
@@ -987,4 +988,77 @@ export interface ProcessingQueueErrorsResponse {
     total: number;
     totalPages: number;
   };
+}
+
+// ============================================================
+// ADMIN TRIGGER & DETAIL TYPES
+// ============================================================
+
+// Admin Trigger Response
+export interface TriggerResponse {
+  success: boolean;
+  message: string;
+  currentTierOnly?: boolean;
+}
+
+// Detailed Guild Info for Admin
+export interface AdminGuildDetail {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  warcraftlogsId?: number;
+  parentGuild?: string;
+  isCurrentlyRaiding: boolean;
+  activityStatus?: "active" | "inactive";
+  lastFetched?: string;
+  lastLogEndTime?: string;
+  createdAt: string;
+  updatedAt: string;
+  wclStatus: "active" | "not_found" | "unclaimed" | "unknown";
+  wclStatusUpdatedAt?: string;
+  wclNotFoundCount: number;
+  progress: Array<{
+    raidName: string;
+    difficulty: string;
+    bossesDefeated: number;
+    totalBosses: number;
+  }>;
+  reportCount: number;
+  fightCount: number;
+  queueStatus: {
+    status: ProcessingStatus;
+    progress: QueueItemProgress;
+    errorCount: number;
+    lastError?: string;
+    errorType?: ErrorType;
+    isPermanentError?: boolean;
+    createdAt: string;
+    startedAt?: string;
+    completedAt?: string;
+  } | null;
+}
+
+// Verify Reports Response
+export interface VerifyReportsResponse {
+  guildName: string;
+  storedReportCount: number;
+  wclReportCount: number | null;
+  wclSampleSize?: number;
+  missingFromSample?: number;
+  missingReportCodes?: string[];
+  hasMorePages?: boolean;
+  isComplete?: boolean;
+  message: string;
+  error?: string;
+}
+
+// Queue Rescan Response
+export interface QueueRescanResponse {
+  success: boolean;
+  message: string;
+  queueId?: string;
+  status?: ProcessingStatus;
+  error?: string;
 }

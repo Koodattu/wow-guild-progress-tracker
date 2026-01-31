@@ -9,6 +9,22 @@ import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import {
+  triggerCalculateAllStatistics,
+  triggerCalculateTierLists,
+  triggerCheckTwitchStreams,
+  triggerUpdateWorldRanks,
+  triggerCalculateRaidAnalytics,
+  triggerUpdateActiveGuilds,
+  triggerUpdateInactiveGuilds,
+  triggerUpdateAllGuilds,
+  triggerRefetchRecentReports,
+  triggerUpdateGuildCrests,
+  getAdminGuildDetail,
+  recalculateGuildStats,
+  queueGuildRescan,
+  verifyGuildReports,
+} from "@/lib/api";
+import {
   AdminUser,
   AdminGuild,
   AdminUserStats,
@@ -28,6 +44,9 @@ import {
   ProcessingStatus,
   ErrorType,
   ProcessingQueueErrorItem,
+  TriggerResponse,
+  AdminGuildDetail,
+  VerifyReportsResponse,
 } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "pickems" | "system";
@@ -101,6 +120,16 @@ export default function AdminPage() {
   const [errorFilter, setErrorFilter] = useState<ErrorType | "all">("all");
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
+  // Scheduler trigger status
+  const [triggerLoading, setTriggerLoading] = useState<string | null>(null);
+  const [triggerMessage, setTriggerMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Guild detail modal
+  const [selectedGuild, setSelectedGuild] = useState<AdminGuildDetail | null>(null);
+  const [showGuildDetail, setShowGuildDetail] = useState(false);
+  const [guildDetailLoading, setGuildDetailLoading] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerifyReportsResponse | null>(null);
+
   // Pickem form state
   const [pickemForm, setPickemForm] = useState({
     pickemId: "",
@@ -152,33 +181,41 @@ export default function AdminPage() {
 
       try {
         switch (activeTab) {
-          case "overview":
-            const overviewData = await api.getAdminOverview();
+          case "overview": {
+            const [overviewData, rateLimitData, queueStatsData] = await Promise.all([api.getAdminOverview(), api.getAdminRateLimitStatus(), api.getAdminProcessingQueueStats()]);
             setOverview(overviewData);
+            setRateLimitStatus(rateLimitData.status);
+            setRateLimitConfig(rateLimitData.config);
+            setProcessorStatus(queueStatsData.processor);
+            setQueueStats(queueStatsData.queue);
             break;
+          }
 
-          case "users":
+          case "users": {
             const [usersData, userStatsData] = await Promise.all([api.getAdminUsers(usersPage), api.getAdminUserStats()]);
             setUsers(usersData.users);
             setUsersTotalPages(usersData.pagination.totalPages);
             setUserStats(userStatsData);
             break;
+          }
 
-          case "guilds":
+          case "guilds": {
             const [guildsData, guildStatsData] = await Promise.all([api.getAdminGuilds(guildsPage), api.getAdminGuildStats()]);
             setGuilds(guildsData.guilds);
             setGuildsTotalPages(guildsData.pagination.totalPages);
             setGuildStats(guildStatsData);
             break;
+          }
 
-          case "pickems":
+          case "pickems": {
             const [pickemsData, raidsData] = await Promise.all([api.getAdminPickems(), api.getRaids()]);
             setPickems(pickemsData.pickems);
             setPickemStats(pickemsData.stats);
             setRaids(raidsData);
             break;
+          }
 
-          case "system":
+          case "system": {
             const [rateLimitData, queueStatsData, queueData, errorsData] = await Promise.all([
               api.getAdminRateLimitStatus(),
               api.getAdminProcessingQueueStats(),
@@ -193,6 +230,7 @@ export default function AdminPage() {
             setQueueTotalPages(queueData.pagination.totalPages);
             setErrorItems(errorsData.items);
             break;
+          }
         }
       } catch (err) {
         console.error("Error fetching admin data:", err);
@@ -262,6 +300,81 @@ export default function AdminPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
+  // Handler for scheduler triggers
+  const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
+    setTriggerLoading(triggerName);
+    setTriggerMessage(null);
+    try {
+      const result = await triggerFn();
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to trigger action",
+      });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  // Handler for opening guild detail modal
+  const handleGuildClick = async (guildId: string) => {
+    setGuildDetailLoading(true);
+    setShowGuildDetail(true);
+    setVerifyResult(null);
+    try {
+      const detail = await getAdminGuildDetail(guildId);
+      setSelectedGuild(detail);
+    } catch (error) {
+      console.error("Failed to fetch guild details:", error);
+      setSelectedGuild(null);
+    } finally {
+      setGuildDetailLoading(false);
+    }
+  };
+
+  // Handler for verifying guild reports
+  const handleVerifyReports = async (guildId: string) => {
+    try {
+      const result = await verifyGuildReports(guildId);
+      setVerifyResult(result);
+    } catch (error) {
+      console.error("Failed to verify reports:", error);
+    }
+  };
+
+  // Handler for queueing guild rescan
+  const handleQueueRescan = async (guildId: string, guildName: string) => {
+    try {
+      await queueGuildRescan(guildId);
+      setTriggerMessage({ type: "success", text: `${guildName} queued for rescan` });
+      // Refresh guild detail
+      const detail = await getAdminGuildDetail(guildId);
+      setSelectedGuild(detail);
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to queue rescan",
+      });
+    }
+  };
+
+  // Handler for recalculating guild stats
+  const handleRecalculateStats = async (guildId: string, guildName: string) => {
+    try {
+      await recalculateGuildStats(guildId);
+      setTriggerMessage({ type: "success", text: `Statistics recalculation started for ${guildName}` });
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to recalculate stats",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -311,21 +424,193 @@ export default function AdminPage() {
         )}
 
         {/* Overview Tab */}
-        {!loading && activeTab === "overview" && overview && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h3 className="text-gray-400 text-sm font-medium">{t("overview.totalUsers")}</h3>
-              <p className="text-3xl font-bold text-white mt-2">{overview.users.total}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {overview.users.activeToday} {t("overview.activeToday")}
-              </p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h3 className="text-gray-400 text-sm font-medium">{t("overview.totalGuilds")}</h3>
-              <p className="text-3xl font-bold text-white mt-2">{overview.guilds.total}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {overview.guilds.updatedToday} {t("overview.updatedToday")}
-              </p>
+        {!loading && activeTab === "overview" && (
+          <div className="space-y-6">
+            {/* Stats Summary */}
+            {overview && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-gray-400 text-sm font-medium">{t("overview.totalUsers")}</h3>
+                  <p className="text-3xl font-bold text-white mt-1">{overview.users.total}</p>
+                  <p className="text-sm text-gray-500">
+                    {overview.users.activeToday} {t("overview.activeToday")}
+                  </p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-gray-400 text-sm font-medium">{t("overview.totalGuilds")}</h3>
+                  <p className="text-3xl font-bold text-white mt-1">{overview.guilds.total}</p>
+                  <p className="text-sm text-gray-500">
+                    {overview.guilds.updatedToday} {t("overview.updatedToday")}
+                  </p>
+                </div>
+
+                {/* Rate Limit Widget */}
+                {rateLimitStatus && (
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h3 className="text-gray-400 text-sm font-medium flex items-center gap-1">
+                      <span>⚡</span> WCL Rate Limit
+                    </h3>
+                    <p
+                      className={`text-3xl font-bold mt-1 ${
+                        rateLimitStatus.percentUsed >= 80 ? "text-red-400" : rateLimitStatus.percentUsed >= 60 ? "text-amber-400" : "text-green-400"
+                      }`}
+                    >
+                      {rateLimitStatus.percentUsed.toFixed(0)}%
+                    </p>
+                    <div className="w-full bg-gray-600 rounded-full h-1.5 mt-2">
+                      <div
+                        className={`h-1.5 rounded-full ${rateLimitStatus.percentUsed >= 80 ? "bg-red-500" : rateLimitStatus.percentUsed >= 60 ? "bg-amber-500" : "bg-green-500"}`}
+                        style={{ width: `${Math.min(100, rateLimitStatus.percentUsed)}%` }}
+                      />
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {rateLimitStatus.pointsRemaining} pts left • Resets in {Math.floor(rateLimitStatus.resetInSeconds / 60)}m
+                    </p>
+                  </div>
+                )}
+
+                {/* Queue Status Widget */}
+                {queueStats && (
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h3 className="text-gray-400 text-sm font-medium flex items-center gap-1">
+                      <span>📦</span> Processing Queue
+                    </h3>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-3xl font-bold text-white">{queueStats.pending + queueStats.inProgress}</span>
+                      <span className="text-gray-500">active</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {queueStats.inProgress > 0 && <span className="text-blue-400">{queueStats.inProgress} processing</span>}
+                      {queueStats.inProgress > 0 && queueStats.failed > 0 && " • "}
+                      {queueStats.failed > 0 && <span className="text-red-400">{queueStats.failed} failed</span>}
+                      {queueStats.inProgress === 0 && queueStats.failed === 0 && "No active jobs"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Trigger Message */}
+            {triggerMessage && (
+              <div className={`rounded-lg p-4 ${triggerMessage.type === "success" ? "bg-green-900/50 border border-green-500" : "bg-red-900/50 border border-red-500"}`}>
+                <p className={triggerMessage.type === "success" ? "text-green-300" : "text-red-300"}>{triggerMessage.text}</p>
+              </div>
+            )}
+
+            {/* Scheduler Triggers */}
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span>⚙️</span> Manual Actions
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Guild Updates */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                    <span>🏰</span> Guild Updates
+                  </h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleTrigger("active-guilds", triggerUpdateActiveGuilds)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Check Active Guilds</span>
+                      {triggerLoading === "active-guilds" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("inactive-guilds", triggerUpdateInactiveGuilds)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Check Inactive Guilds</span>
+                      {triggerLoading === "inactive-guilds" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("all-guilds", triggerUpdateAllGuilds)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Check All Guilds</span>
+                      {triggerLoading === "all-guilds" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("refetch-reports", triggerRefetchRecentReports)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Refetch Recent Reports</span>
+                      {triggerLoading === "refetch-reports" && <span className="animate-spin">⏳</span>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Statistics & Analytics */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                    <span>📊</span> Statistics & Analytics
+                  </h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleTrigger("all-statistics", () => triggerCalculateAllStatistics(true))}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Calculate All Statistics</span>
+                      {triggerLoading === "all-statistics" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("tier-lists", triggerCalculateTierLists)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Calculate Tier Lists</span>
+                      {triggerLoading === "tier-lists" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("raid-analytics", triggerCalculateRaidAnalytics)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Calculate Raid Analytics</span>
+                      {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("world-ranks", triggerUpdateWorldRanks)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Update World Ranks</span>
+                      {triggerLoading === "world-ranks" && <span className="animate-spin">⏳</span>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Other Actions */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                    <span>🔧</span> Other Actions
+                  </h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleTrigger("twitch-streams", triggerCheckTwitchStreams)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Check Twitch Streams</span>
+                      {triggerLoading === "twitch-streams" && <span className="animate-spin">⏳</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("guild-crests", triggerUpdateGuildCrests)}
+                      disabled={triggerLoading !== null}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Update Guild Crests</span>
+                      {triggerLoading === "guild-crests" && <span className="animate-spin">⏳</span>}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -401,6 +686,13 @@ export default function AdminPage() {
         {/* Guilds Tab */}
         {!loading && activeTab === "guilds" && (
           <div>
+            {/* Trigger Message (reuse from overview) */}
+            {triggerMessage && (
+              <div className={`rounded-lg p-4 mb-4 ${triggerMessage.type === "success" ? "bg-green-900/50 border border-green-500" : "bg-red-900/50 border border-red-500"}`}>
+                <p className={triggerMessage.type === "success" ? "text-green-300" : "text-red-300"}>{triggerMessage.text}</p>
+              </div>
+            )}
+
             {/* Guild Stats */}
             {guildStats && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -431,13 +723,15 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.name")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.realm")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.faction")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">WCL Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.status")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.lastFetched")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
                   {guilds.map((guild) => (
-                    <tr key={guild.id} className="hover:bg-gray-750">
+                    <tr key={guild.id} className="hover:bg-gray-750 cursor-pointer" onClick={() => handleGuildClick(guild.id)}>
                       <td className="px-4 py-3 text-white">
                         {guild.name}
                         {guild.parentGuild && <span className="text-gray-500 text-sm ml-2">({guild.parentGuild})</span>}
@@ -447,6 +741,21 @@ export default function AdminPage() {
                         <span className={`${guild.faction === "Horde" ? "text-red-400" : "text-blue-400"}`}>{guild.faction || "-"}</span>
                       </td>
                       <td className="px-4 py-3">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            guild.wclStatus === "active"
+                              ? "bg-green-900 text-green-300"
+                              : guild.wclStatus === "not_found"
+                                ? "bg-red-900 text-red-300"
+                                : guild.wclStatus === "unclaimed"
+                                  ? "bg-amber-900 text-amber-300"
+                                  : "bg-gray-700 text-gray-300"
+                          }`}
+                        >
+                          {(guild.wclStatus || "unknown").replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         {guild.isCurrentlyRaiding ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-900/50 text-green-400">{t("guilds.raiding")}</span>
                         ) : (
@@ -454,6 +763,24 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-400 text-sm">{guild.lastFetched ? formatDate(guild.lastFetched) : "-"}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleQueueRescan(guild.id, guild.name)}
+                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            title="Queue for full rescan"
+                          >
+                            Rescan
+                          </button>
+                          <button
+                            onClick={() => handleRecalculateStats(guild.id, guild.name)}
+                            className="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                            title="Recalculate statistics"
+                          >
+                            Stats
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1393,14 +1720,7 @@ export default function AdminPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-gray-600 rounded-full h-2">
-                              <div className="h-2 rounded-full bg-blue-500" style={{ width: `${item.progress.percentComplete}%` }} />
-                            </div>
-                            <span className="text-white text-sm">{item.progress.percentComplete}%</span>
-                          </div>
-                        </td>
+                        <td className="px-4 py-3 text-gray-300">{item.progress.percentComplete}%</td>
                         <td className="px-4 py-3 text-gray-300">
                           {item.progress.reportsFetched}
                           {item.progress.totalReportsEstimate > 0 && <span className="text-gray-500"> / ~{item.progress.totalReportsEstimate}</span>}
@@ -1510,6 +1830,222 @@ export default function AdminPage() {
                       Next
                     </button>
                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Guild Detail Modal */}
+        {showGuildDetail && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                <h2 className="text-xl font-bold text-white">{guildDetailLoading ? "Loading..." : selectedGuild?.name || "Guild Details"}</h2>
+                <button
+                  onClick={() => {
+                    setShowGuildDetail(false);
+                    setSelectedGuild(null);
+                    setVerifyResult(null);
+                  }}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-4">
+                {guildDetailLoading ? (
+                  <div className="text-center py-8 text-gray-400">Loading guild details...</div>
+                ) : selectedGuild ? (
+                  <div className="space-y-6">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <h4 className="text-gray-400 text-sm">Realm</h4>
+                        <p className="text-white">{selectedGuild.realm}</p>
+                      </div>
+                      <div>
+                        <h4 className="text-gray-400 text-sm">Region</h4>
+                        <p className="text-white uppercase">{selectedGuild.region}</p>
+                      </div>
+                      <div>
+                        <h4 className="text-gray-400 text-sm">Faction</h4>
+                        <p className={selectedGuild.faction === "Horde" ? "text-red-400" : "text-blue-400"}>{selectedGuild.faction || "Unknown"}</p>
+                      </div>
+                      <div>
+                        <h4 className="text-gray-400 text-sm">WCL Status</h4>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            selectedGuild.wclStatus === "active"
+                              ? "bg-green-900 text-green-300"
+                              : selectedGuild.wclStatus === "not_found"
+                                ? "bg-red-900 text-red-300"
+                                : selectedGuild.wclStatus === "unclaimed"
+                                  ? "bg-amber-900 text-amber-300"
+                                  : "bg-gray-700 text-gray-300"
+                          }`}
+                        >
+                          {selectedGuild.wclStatus.replace("_", " ")}
+                        </span>
+                        {selectedGuild.wclNotFoundCount > 0 && <span className="ml-2 text-xs text-red-400">({selectedGuild.wclNotFoundCount} failures)</span>}
+                      </div>
+                      <div>
+                        <h4 className="text-gray-400 text-sm">Activity</h4>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            selectedGuild.activityStatus === "active" ? "bg-green-900 text-green-300" : "bg-gray-700 text-gray-300"
+                          }`}
+                        >
+                          {selectedGuild.activityStatus || "unknown"}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-gray-400 text-sm">Raiding</h4>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${selectedGuild.isCurrentlyRaiding ? "bg-green-900 text-green-300" : "bg-gray-700 text-gray-300"}`}>
+                          {selectedGuild.isCurrentlyRaiding ? "Yes" : "No"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Data Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-gray-700 rounded-lg p-3">
+                        <h4 className="text-gray-400 text-sm">Reports</h4>
+                        <p className="text-2xl font-bold text-white">{selectedGuild.reportCount}</p>
+                      </div>
+                      <div className="bg-gray-700 rounded-lg p-3">
+                        <h4 className="text-gray-400 text-sm">Fights</h4>
+                        <p className="text-2xl font-bold text-white">{selectedGuild.fightCount}</p>
+                      </div>
+                      <div className="bg-gray-700 rounded-lg p-3">
+                        <h4 className="text-gray-400 text-sm">WCL ID</h4>
+                        <p className="text-lg font-medium text-white">{selectedGuild.warcraftlogsId || "N/A"}</p>
+                      </div>
+                      <div className="bg-gray-700 rounded-lg p-3">
+                        <h4 className="text-gray-400 text-sm">Last Fetched</h4>
+                        <p className="text-sm text-white">{selectedGuild.lastFetched ? formatDate(selectedGuild.lastFetched) : "Never"}</p>
+                      </div>
+                    </div>
+
+                    {/* Queue Status */}
+                    {selectedGuild.queueStatus && (
+                      <div className="bg-gray-700 rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-2">Queue Status</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <span className="text-gray-400 text-sm">Status:</span>
+                            <span
+                              className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                                selectedGuild.queueStatus.status === "completed"
+                                  ? "bg-green-900 text-green-300"
+                                  : selectedGuild.queueStatus.status === "in_progress"
+                                    ? "bg-blue-900 text-blue-300"
+                                    : selectedGuild.queueStatus.status === "failed"
+                                      ? "bg-red-900 text-red-300"
+                                      : "bg-gray-600 text-gray-300"
+                              }`}
+                            >
+                              {selectedGuild.queueStatus.status.replace("_", " ")}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 text-sm">Progress:</span>
+                            <span className="ml-2 text-white">{selectedGuild.queueStatus.progress.percentComplete}%</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 text-sm">Reports:</span>
+                            <span className="ml-2 text-white">{selectedGuild.queueStatus.progress.reportsFetched}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 text-sm">Errors:</span>
+                            <span className={`ml-2 ${selectedGuild.queueStatus.errorCount > 0 ? "text-red-400" : "text-white"}`}>{selectedGuild.queueStatus.errorCount}</span>
+                          </div>
+                        </div>
+                        {selectedGuild.queueStatus.lastError && (
+                          <div className="mt-3 p-2 bg-red-900/50 rounded">
+                            <span className="text-red-300 text-sm">{selectedGuild.queueStatus.lastError}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Progress */}
+                    {selectedGuild.progress && selectedGuild.progress.length > 0 && (
+                      <div>
+                        <h4 className="text-white font-medium mb-2">Raid Progress</h4>
+                        <div className="space-y-2">
+                          {selectedGuild.progress.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between bg-gray-700 rounded p-2">
+                              <span className="text-white">
+                                {p.raidName} ({p.difficulty})
+                              </span>
+                              <span className="text-gray-300">
+                                {p.bossesDefeated}/{p.totalBosses}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Verify Reports Section */}
+                    <div className="border-t border-gray-700 pt-4">
+                      <div className="flex items-center gap-4 mb-4">
+                        <button onClick={() => handleVerifyReports(selectedGuild.id)} className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700">
+                          Verify Reports
+                        </button>
+                        <button onClick={() => handleQueueRescan(selectedGuild.id, selectedGuild.name)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                          Queue Full Rescan
+                        </button>
+                        <button
+                          onClick={() => handleRecalculateStats(selectedGuild.id, selectedGuild.name)}
+                          className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                        >
+                          Recalculate Stats
+                        </button>
+                      </div>
+
+                      {verifyResult && (
+                        <div className={`rounded-lg p-4 ${verifyResult.isComplete ? "bg-green-900/50" : verifyResult.error ? "bg-red-900/50" : "bg-amber-900/50"}`}>
+                          <h5 className="font-medium text-white mb-2">Verification Result</h5>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-400">Stored Reports:</span>
+                              <span className="ml-2 text-white">{verifyResult.storedReportCount}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">WCL Reports:</span>
+                              <span className="ml-2 text-white">{verifyResult.wclReportCount ?? "Error"}</span>
+                            </div>
+                            {verifyResult.missingFromSample !== undefined && (
+                              <div>
+                                <span className="text-gray-400">Missing (sample):</span>
+                                <span className={`ml-2 ${verifyResult.missingFromSample > 0 ? "text-red-400" : "text-green-400"}`}>{verifyResult.missingFromSample}</span>
+                              </div>
+                            )}
+                            {verifyResult.hasMorePages !== undefined && (
+                              <div>
+                                <span className="text-gray-400">More pages:</span>
+                                <span className="ml-2 text-white">{verifyResult.hasMorePages ? "Yes" : "No"}</span>
+                              </div>
+                            )}
+                          </div>
+                          <p className={`mt-2 ${verifyResult.isComplete ? "text-green-300" : verifyResult.error ? "text-red-300" : "text-amber-300"}`}>{verifyResult.message}</p>
+                          {verifyResult.missingReportCodes && verifyResult.missingReportCodes.length > 0 && (
+                            <div className="mt-2">
+                              <span className="text-gray-400 text-sm">Missing codes: </span>
+                              <span className="text-red-300 text-sm">{verifyResult.missingReportCodes.join(", ")}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-red-400">Failed to load guild details</div>
                 )}
               </div>
             </div>
