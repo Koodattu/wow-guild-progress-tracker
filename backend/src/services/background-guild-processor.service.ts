@@ -358,6 +358,16 @@ class BackgroundGuildProcessor {
         // Don't fail the queue item for world ranks failure
       }
 
+      // Update global rankings for all guilds
+      guildLog.info("Recalculating global rankings for all guilds");
+      try {
+        await guildService.calculateGuildRankingsForAllRaids();
+        guildLog.info("Global rankings recalculation complete");
+      } catch (globalRankError) {
+        guildLog.error("Failed to recalculate global rankings:", globalRankError instanceof Error ? globalRankError.message : "Unknown");
+        // Don't fail the queue item for global rankings failure
+      }
+
       // Trigger statistics calculation for the newly fetched guild
       guildLog.info("Triggering statistics recalculation for newly fetched guild");
       try {
