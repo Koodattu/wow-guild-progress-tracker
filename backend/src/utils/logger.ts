@@ -17,7 +17,7 @@ const logFormat = winston.format.combine(
       return `${timestamp} [${level.toUpperCase()}]: ${message}\n${stack}`;
     }
     return `${timestamp} [${level.toUpperCase()}]: ${message}`;
-  })
+  }),
 );
 
 // Create general application logger
@@ -79,6 +79,10 @@ export function getGuildLogger(guildName: string, realm: string): winston.Logger
     format: logFormat,
     defaultMeta: { guild: guildName, realm },
     transports: [
+      // Write logs to console
+      new winston.transports.Console({
+        format: winston.format.combine(winston.format.colorize(), logFormat),
+      }),
       // Write to guild-specific log file with 7-day rotation
       new winston.transports.File({
         filename: path.join(guildLogsDir, `${safeFileName}.log`),

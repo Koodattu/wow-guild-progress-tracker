@@ -351,7 +351,7 @@ class BackgroundGuildProcessor {
       // Update world ranks for the guild first
       guildLog.info("Updating world ranks for newly fetched guild");
       try {
-        await guildService.updateCurrentRaidsWorldRanking(guild._id.toString());
+        await guildService.updateGuildWorldRankings(guild._id.toString());
         guildLog.info("World ranks update complete");
       } catch (rankError) {
         guildLog.error("Failed to update world ranks:", rankError instanceof Error ? rankError.message : "Unknown");
