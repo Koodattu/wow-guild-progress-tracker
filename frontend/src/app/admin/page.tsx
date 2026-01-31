@@ -21,6 +21,7 @@ import {
   triggerUpdateGuildCrests,
   getAdminGuildDetail,
   recalculateGuildStats,
+  updateGuildWorldRanks,
   queueGuildRescan,
   verifyGuildReports,
 } from "@/lib/api";
@@ -123,6 +124,7 @@ export default function AdminPage() {
   // Scheduler trigger status
   const [triggerLoading, setTriggerLoading] = useState<string | null>(null);
   const [triggerMessage, setTriggerMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [triggerCooldowns, setTriggerCooldowns] = useState<Record<string, boolean>>({});
 
   // Guild detail modal
   const [selectedGuild, setSelectedGuild] = useState<AdminGuildDetail | null>(null);
@@ -300,13 +302,20 @@ export default function AdminPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  // Handler for scheduler triggers
+  // Handler for scheduler triggers with 10-second cooldown per button
   const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
     setTriggerLoading(triggerName);
     setTriggerMessage(null);
     try {
       const result = await triggerFn();
       setTriggerMessage({ type: "success", text: result.message });
+
+      // Set cooldown for this specific button
+      setTriggerCooldowns((prev) => ({ ...prev, [triggerName]: true }));
+      setTimeout(() => {
+        setTriggerCooldowns((prev) => ({ ...prev, [triggerName]: false }));
+      }, 10000);
+
       setTimeout(() => setTriggerMessage(null), 5000);
     } catch (error) {
       setTriggerMessage({
@@ -315,6 +324,20 @@ export default function AdminPage() {
       });
     } finally {
       setTriggerLoading(null);
+    }
+  };
+
+  // Handler for updating guild world ranks
+  const handleUpdateGuildWorldRanks = async (guildId: string, guildName: string) => {
+    try {
+      await updateGuildWorldRanks(guildId);
+      setTriggerMessage({ type: "success", text: `World rankings update started for ${guildName}` });
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to update world ranks",
+      });
     }
   };
 
@@ -512,35 +535,39 @@ export default function AdminPage() {
                   <div className="space-y-2">
                     <button
                       onClick={() => handleTrigger("active-guilds", triggerUpdateActiveGuilds)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "active-guilds" || triggerCooldowns["active-guilds"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Check Active Guilds</span>
                       {triggerLoading === "active-guilds" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["active-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("inactive-guilds", triggerUpdateInactiveGuilds)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "inactive-guilds" || triggerCooldowns["inactive-guilds"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Check Inactive Guilds</span>
                       {triggerLoading === "inactive-guilds" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["inactive-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("all-guilds", triggerUpdateAllGuilds)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "all-guilds" || triggerCooldowns["all-guilds"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Check All Guilds</span>
                       {triggerLoading === "all-guilds" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["all-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("refetch-reports", triggerRefetchRecentReports)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "refetch-reports" || triggerCooldowns["refetch-reports"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Refetch Recent Reports</span>
                       {triggerLoading === "refetch-reports" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["refetch-reports"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                   </div>
                 </div>
@@ -553,35 +580,39 @@ export default function AdminPage() {
                   <div className="space-y-2">
                     <button
                       onClick={() => handleTrigger("all-statistics", () => triggerCalculateAllStatistics(true))}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "all-statistics" || triggerCooldowns["all-statistics"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Calculate All Statistics</span>
                       {triggerLoading === "all-statistics" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["all-statistics"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("tier-lists", triggerCalculateTierLists)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "tier-lists" || triggerCooldowns["tier-lists"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Calculate Tier Lists</span>
                       {triggerLoading === "tier-lists" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["tier-lists"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("raid-analytics", triggerCalculateRaidAnalytics)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "raid-analytics" || triggerCooldowns["raid-analytics"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Calculate Raid Analytics</span>
                       {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["raid-analytics"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("world-ranks", triggerUpdateWorldRanks)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "world-ranks" || triggerCooldowns["world-ranks"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Update World Ranks</span>
                       {triggerLoading === "world-ranks" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["world-ranks"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                   </div>
                 </div>
@@ -594,19 +625,21 @@ export default function AdminPage() {
                   <div className="space-y-2">
                     <button
                       onClick={() => handleTrigger("twitch-streams", triggerCheckTwitchStreams)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "twitch-streams" || triggerCooldowns["twitch-streams"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Check Twitch Streams</span>
                       {triggerLoading === "twitch-streams" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["twitch-streams"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("guild-crests", triggerUpdateGuildCrests)}
-                      disabled={triggerLoading !== null}
+                      disabled={triggerLoading === "guild-crests" || triggerCooldowns["guild-crests"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
                     >
                       <span>Update Guild Crests</span>
                       {triggerLoading === "guild-crests" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["guild-crests"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                   </div>
                 </div>
@@ -778,6 +811,13 @@ export default function AdminPage() {
                             title="Recalculate statistics"
                           >
                             Stats
+                          </button>
+                          <button
+                            onClick={() => handleUpdateGuildWorldRanks(guild.id, guild.name)}
+                            className="px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700"
+                            title="Update world rankings for all raids"
+                          >
+                            Ranks
                           </button>
                         </div>
                       </td>

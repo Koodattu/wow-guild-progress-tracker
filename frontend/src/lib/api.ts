@@ -911,6 +911,15 @@ export async function recalculateGuildStats(guildId: string): Promise<TriggerRes
   return response.json();
 }
 
+export async function updateGuildWorldRanks(guildId: string): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/update-world-ranks`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger guild world ranks update");
+  return response.json();
+}
+
 export async function queueGuildRescan(guildId: string): Promise<QueueRescanResponse> {
   const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/queue-rescan`, {
     method: "POST",

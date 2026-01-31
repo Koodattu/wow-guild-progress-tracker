@@ -311,6 +311,34 @@ router.post("/guilds/:guildId/recalculate-stats", async (req: Request, res: Resp
   }
 });
 
+// Update world rankings for single guild (all raids)
+router.post("/guilds/:guildId/update-world-ranks", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Run async
+    guildService
+      .updateGuildWorldRankings(guildId)
+      .then(() => {
+        logger.info(`Updated world rankings for guild: ${guild.name}`);
+      })
+      .catch((err) => logger.error(`Failed to update world ranks for ${guild.name}:`, err));
+
+    res.json({
+      success: true,
+      message: `World rankings update started for ${guild.name}`,
+    });
+  } catch (error) {
+    logger.error("Error triggering guild world ranks update:", error);
+    res.status(500).json({ error: "Failed to trigger world rankings update" });
+  }
+});
+
 // Queue guild for full rescan
 router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response) => {
   try {
