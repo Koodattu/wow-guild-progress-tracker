@@ -11,6 +11,7 @@ import raiderIOService from "./raiderio.service";
 import cacheService from "./cache.service";
 import backgroundGuildProcessor from "./background-guild-processor.service";
 import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
+import { filterUniqueGuilds } from "../utils/filterUniqueGuilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 
@@ -327,8 +328,9 @@ class GuildService {
   async initializeGuilds(): Promise<void> {
     logger.info("Initializing guilds from config...");
 
-    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
-    logger.info(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
+    const rawGuilds = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
+    const guildsToTrack = filterUniqueGuilds(rawGuilds);
+    logger.info(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} unique guilds (from ${rawGuilds.length} total)`);
 
     let newGuildsCount = 0;
     let existingGuildsCount = 0;
@@ -405,7 +407,8 @@ class GuildService {
   async syncGuildConfigData(): Promise<void> {
     logger.info("Syncing guild config data (parent_guild, streamers)...");
 
-    const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
+    const rawGuilds = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
+    const guildsToTrack = filterUniqueGuilds(rawGuilds);
 
     for (const guildConfig of guildsToTrack) {
       try {
@@ -698,9 +701,7 @@ class GuildService {
 
     // Only update rankings for raids where the guild has made progress
     // Progress is counted if either mythic or heroic bosses have been defeated
-    const raidsWithProgress = guild.progress.filter(
-      (p) => (p.difficulty === "mythic" || p.difficulty === "heroic") && p.bossesDefeated > 0
-    );
+    const raidsWithProgress = guild.progress.filter((p) => (p.difficulty === "mythic" || p.difficulty === "heroic") && p.bossesDefeated > 0);
 
     if (raidsWithProgress.length === 0) {
       guildLog.info("No raids with progress, skipping world rank update");
