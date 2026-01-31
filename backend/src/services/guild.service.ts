@@ -697,7 +697,10 @@ class GuildService {
     guildLog.info("Updating world rankings...");
 
     // Only update rankings for raids where the guild has made progress
-    const raidsWithProgress = guild.progress.filter((p) => p.bossesDefeated > 0);
+    // Progress is counted if either mythic or heroic bosses have been defeated
+    const raidsWithProgress = guild.progress.filter(
+      (p) => (p.difficulty === "mythic" || p.difficulty === "heroic") && p.bossesDefeated > 0
+    );
 
     if (raidsWithProgress.length === 0) {
       guildLog.info("No raids with progress, skipping world rank update");
