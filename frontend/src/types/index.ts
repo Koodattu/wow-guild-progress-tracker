@@ -520,7 +520,14 @@ export interface BattleNetUserInfo {
   lastCharacterSync: string | null;
 }
 
-export interface User {
+// Minimal user info from /me endpoint (used for auth check)
+export interface AuthUser {
+  discord: DiscordUserInfo;
+  isAdmin: boolean;
+}
+
+// Full user profile from /profile endpoint (used on profile page)
+export interface UserProfile {
   discord: DiscordUserInfo;
   twitch?: TwitchUserInfo;
   battlenet?: BattleNetUserInfo;
@@ -528,6 +535,9 @@ export interface User {
   createdAt: string;
   lastLoginAt: string;
 }
+
+// Alias for backwards compatibility
+export type User = AuthUser;
 
 // Admin Panel types
 export interface AdminUser {

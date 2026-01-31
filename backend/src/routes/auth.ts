@@ -31,14 +31,17 @@ async function getAuthenticatedUser(req: Request): Promise<IUser | null> {
 const stateStore: Map<string, { userId: string; expiresAt: Date }> = new Map();
 
 // Clean up expired states periodically
-setInterval(() => {
-  const now = new Date();
-  for (const [state, data] of stateStore.entries()) {
-    if (data.expiresAt < now) {
-      stateStore.delete(state);
+setInterval(
+  () => {
+    const now = new Date();
+    for (const [state, data] of stateStore.entries()) {
+      if (data.expiresAt < now) {
+        stateStore.delete(state);
+      }
     }
-  }
-}, 5 * 60 * 1000); // Clean up every 5 minutes
+  },
+  5 * 60 * 1000,
+); // Clean up every 5 minutes
 
 /**
  * Generate a secure state token for OAuth flow
@@ -116,7 +119,7 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
   }
 });
 
-// Get current user
+// Get current user (minimal auth check - used on every page load)
 router.get("/me", async (req: Request, res: Response) => {
   try {
     const userId = req.session.userId;
@@ -134,7 +137,39 @@ router.get("/me", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Session expired" });
     }
 
-    // Build response with connected accounts (minimal data)
+    // Minimal response for auth check - only essential data
+    const response = {
+      discord: {
+        username: user.discord.username,
+        avatarUrl: discordService.getAvatarUrl(user.discord.id, user.discord.avatar),
+      },
+      isAdmin: discordService.isAdmin(user.discord.username),
+    };
+
+    res.json(response);
+  } catch (error) {
+    logger.error("Error getting current user:", error);
+    res.status(500).json({ error: "Failed to get user info" });
+  }
+});
+
+// Get full user profile (used on profile page)
+router.get("/profile", async (req: Request, res: Response) => {
+  try {
+    const userId = req.session.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await discordService.getUserFromSession(userId);
+
+    if (!user) {
+      logger.warn(`Session exists but user not found in DB: ${userId}`);
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    // Build full profile response
     const response: Record<string, unknown> = {
       discord: {
         username: user.discord.username,
@@ -181,8 +216,8 @@ router.get("/me", async (req: Request, res: Response) => {
 
     res.json(response);
   } catch (error) {
-    logger.error("Error getting current user:", error);
-    res.status(500).json({ error: "Failed to get user info" });
+    logger.error("Error getting user profile:", error);
+    res.status(500).json({ error: "Failed to get user profile" });
   }
 });
 

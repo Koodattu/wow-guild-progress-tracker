@@ -27,6 +27,16 @@ export const GUILDS_DEV: TrackedGuild[] = [
     realm: "Darksorrow",
     region: "EU",
   },
+  {
+    name: "Anonyymi",
+    realm: "Stormreaver",
+    region: "EU",
+  },
+  {
+    name: "AoK",
+    realm: "Stormreaver",
+    region: "EU",
+  },
 ];
 
 export const GUILDS_DEV_B: TrackedGuild[] = [

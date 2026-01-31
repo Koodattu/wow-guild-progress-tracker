@@ -27,7 +27,8 @@ import {
   AnalyticsTrends,
   AnalyticsSlowEndpoint,
   AnalyticsErrors,
-  User,
+  AuthUser,
+  UserProfile,
   WoWCharacter,
   AdminUsersResponse,
   AdminGuildsResponse,
@@ -341,13 +342,26 @@ export const api = {
     return response.json();
   },
 
-  async getCurrentUser(): Promise<User | null> {
+  async getCurrentUser(): Promise<AuthUser | null> {
     try {
       const response = await fetch(`${API_URL}/api/auth/me`, {
         credentials: "include",
       });
       if (response.status === 401) return null;
       if (!response.ok) throw new Error("Failed to get current user");
+      return response.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getProfile(): Promise<UserProfile | null> {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
+        credentials: "include",
+      });
+      if (response.status === 401) return null;
+      if (!response.ok) throw new Error("Failed to get user profile");
       return response.json();
     } catch {
       return null;
