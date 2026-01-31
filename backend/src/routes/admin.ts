@@ -4,6 +4,9 @@ import User from "../models/User";
 import Guild from "../models/Guild";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import pickemService from "../services/pickem.service";
+import rateLimitService from "../services/rate-limit.service";
+import backgroundGuildProcessor from "../services/background-guild-processor.service";
+import GuildProcessingQueue, { ProcessingStatus } from "../models/GuildProcessingQueue";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -659,6 +662,310 @@ router.post("/pickems/:pickemId/unfinalize", async (req: Request, res: Response)
   } catch (error) {
     logger.error("Error unfinalizing pickem:", error);
     res.status(500).json({ error: "Failed to unfinalize pickem" });
+  }
+});
+
+// ============================================================
+// RATE LIMIT MONITORING
+// ============================================================
+
+// Get current rate limit status
+router.get("/rate-limit", async (req: Request, res: Response) => {
+  try {
+    const status = rateLimitService.getStatus();
+    const config = rateLimitService.getConfig();
+
+    res.json({
+      status,
+      config,
+    });
+  } catch (error) {
+    logger.error("Error fetching rate limit status:", error);
+    res.status(500).json({ error: "Failed to fetch rate limit status" });
+  }
+});
+
+// Toggle manual pause for background processing
+router.post("/rate-limit/pause", async (req: Request, res: Response) => {
+  try {
+    const { paused } = req.body;
+
+    if (typeof paused !== "boolean") {
+      return res.status(400).json({ error: "paused must be a boolean" });
+    }
+
+    rateLimitService.setManualPause(paused);
+
+    res.json({
+      success: true,
+      isPaused: paused,
+      status: rateLimitService.getStatus(),
+    });
+  } catch (error) {
+    logger.error("Error toggling rate limit pause:", error);
+    res.status(500).json({ error: "Failed to toggle rate limit pause" });
+  }
+});
+
+// ============================================================
+// GUILD PROCESSING QUEUE
+// ============================================================
+
+// Get processing queue status and statistics
+router.get("/processing-queue/stats", async (req: Request, res: Response) => {
+  try {
+    const stats = await backgroundGuildProcessor.getQueueStats();
+    const processorStatus = backgroundGuildProcessor.getStatus();
+
+    // Get error breakdown by type
+    const errorBreakdown = await GuildProcessingQueue.aggregate([
+      {
+        $match: {
+          lastError: { $exists: true, $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: "$errorType",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const errorsByType: Record<string, number> = {};
+    for (const item of errorBreakdown) {
+      errorsByType[item._id || "unknown"] = item.count;
+    }
+
+    res.json({
+      processor: processorStatus,
+      queue: stats,
+      errorsByType,
+    });
+  } catch (error) {
+    logger.error("Error fetching processing queue stats:", error);
+    res.status(500).json({ error: "Failed to fetch processing queue stats" });
+  }
+});
+
+// Get processing queue items with errors
+router.get("/processing-queue/errors", async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const errorType = req.query.errorType as string | undefined;
+    const skip = (page - 1) * limit;
+
+    // Build query for items with errors
+    const query: Record<string, unknown> = {
+      lastError: { $exists: true, $ne: null },
+    };
+
+    if (errorType) {
+      query.errorType = errorType;
+    }
+
+    const [items, total] = await Promise.all([
+      GuildProcessingQueue.find(query)
+        .select({
+          guildId: 1,
+          guildName: 1,
+          guildRealm: 1,
+          guildRegion: 1,
+          status: 1,
+          errorType: 1,
+          isPermanentError: 1,
+          failureReason: 1,
+          lastError: 1,
+          lastErrorAt: 1,
+          errorCount: 1,
+        })
+        .sort({ lastErrorAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      GuildProcessingQueue.countDocuments(query),
+    ]);
+
+    const formattedItems = items.map((item) => ({
+      id: item._id.toString(),
+      guildName: item.guildName,
+      guildRealm: item.guildRealm,
+      guildRegion: item.guildRegion,
+      status: item.status,
+      errorType: item.errorType || "unknown",
+      isPermanentError: item.isPermanentError || false,
+      failureReason: item.failureReason,
+      lastError: item.lastError,
+      lastErrorAt: item.lastErrorAt,
+      errorCount: item.errorCount,
+    }));
+
+    res.json({
+      items: formattedItems,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching processing queue errors:", error);
+    res.status(500).json({ error: "Failed to fetch processing queue errors" });
+  }
+});
+
+// Get processing queue items
+router.get("/processing-queue", async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const status = req.query.status as ProcessingStatus | undefined;
+
+    const result = await backgroundGuildProcessor.getQueueItems(page, limit, status);
+
+    res.json({
+      items: result.items,
+      pagination: {
+        page,
+        limit,
+        total: result.total,
+        totalPages: Math.ceil(result.total / limit),
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching processing queue:", error);
+    res.status(500).json({ error: "Failed to fetch processing queue" });
+  }
+});
+
+// Pause/Resume all background processing
+router.post("/processing-queue/pause-all", async (req: Request, res: Response) => {
+  try {
+    const { paused } = req.body;
+
+    if (typeof paused !== "boolean") {
+      return res.status(400).json({ error: "paused must be a boolean" });
+    }
+
+    if (paused) {
+      backgroundGuildProcessor.pauseAll();
+    } else {
+      backgroundGuildProcessor.resumeAll();
+    }
+
+    res.json({
+      success: true,
+      processor: backgroundGuildProcessor.getStatus(),
+    });
+  } catch (error) {
+    logger.error("Error toggling processing queue pause:", error);
+    res.status(500).json({ error: "Failed to toggle processing queue pause" });
+  }
+});
+
+// Pause a specific guild's processing
+router.post("/processing-queue/:guildId/pause", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const success = await backgroundGuildProcessor.pauseGuild(guildId);
+
+    if (!success) {
+      return res.status(404).json({ error: "Guild not found in processing queue or not in pausable state" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Error pausing guild processing:", error);
+    res.status(500).json({ error: "Failed to pause guild processing" });
+  }
+});
+
+// Resume a specific guild's processing
+router.post("/processing-queue/:guildId/resume", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const success = await backgroundGuildProcessor.resumeGuild(guildId);
+
+    if (!success) {
+      return res.status(404).json({ error: "Guild not found in processing queue or not in resumable state" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Error resuming guild processing:", error);
+    res.status(500).json({ error: "Failed to resume guild processing" });
+  }
+});
+
+// Retry a failed guild's processing
+router.post("/processing-queue/:guildId/retry", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const success = await backgroundGuildProcessor.retryGuild(guildId);
+
+    if (!success) {
+      return res.status(404).json({ error: "Guild not found in processing queue or not in failed state" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Error retrying guild processing:", error);
+    res.status(500).json({ error: "Failed to retry guild processing" });
+  }
+});
+
+// Remove a guild from the processing queue
+router.delete("/processing-queue/:guildId", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const success = await backgroundGuildProcessor.removeFromQueue(guildId);
+
+    if (!success) {
+      return res.status(404).json({ error: "Guild not found in processing queue" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Error removing guild from processing queue:", error);
+    res.status(500).json({ error: "Failed to remove guild from processing queue" });
+  }
+});
+
+// Manually queue a guild for processing
+router.post("/processing-queue/queue-guild", async (req: Request, res: Response) => {
+  try {
+    const { guildId, priority } = req.body;
+
+    if (!guildId) {
+      return res.status(400).json({ error: "guildId is required" });
+    }
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, priority || 10);
+
+    res.json({
+      success: true,
+      queueItem: {
+        id: queueItem._id,
+        guildName: queueItem.guildName,
+        guildRealm: queueItem.guildRealm,
+        status: queueItem.status,
+        priority: queueItem.priority,
+      },
+    });
+  } catch (error) {
+    logger.error("Error queueing guild for processing:", error);
+    res.status(500).json({ error: "Failed to queue guild for processing" });
   }
 });
 

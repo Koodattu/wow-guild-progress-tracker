@@ -24,6 +24,7 @@ import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
+import backgroundGuildProcessor from "./services/background-guild-processor.service";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 
 const app: Application = express();
@@ -91,7 +92,7 @@ app.use(
   cors({
     origin: process.env.NODE_ENV === "production" ? "https://suomiwow.vaarattu.tv" : "http://localhost:3000",
     credentials: true,
-  })
+  }),
 );
 app.use(express.json());
 
@@ -271,6 +272,11 @@ async function runBackgroundInitialization(): Promise<void> {
     scheduler.start();
   });
 
+  // Start background guild processor (handles initial data fetch for new guilds)
+  await runStartupTask("Start background guild processor", async () => {
+    backgroundGuildProcessor.start();
+  });
+
   // Log death events fetching status
   const fetchDeathEvents = process.env.FETCH_DEATH_EVENTS === "true";
   if (fetchDeathEvents) {
@@ -291,7 +297,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Check Twitch streams", async () => {
         await scheduler.checkStreamsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
@@ -303,7 +309,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Update inactive guilds", async () => {
         await scheduler.updateInactiveGuildsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("UPDATE_INACTIVE_GUILDS_ON_STARTUP is disabled, skipping startup inactive guilds update");
@@ -315,7 +321,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Update world ranks", async () => {
         await scheduler.updateWorldRanksOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("UPDATE_WORLD_RANKS_ON_STARTUP is disabled, skipping startup world ranks update");
@@ -327,7 +333,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Update guild crests", async () => {
         await scheduler.updateGuildCrestsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("UPDATE_GUILD_CRESTS_ON_STARTUP is disabled, skipping startup guild crests update");
@@ -339,7 +345,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Refetch recent reports", async () => {
         await scheduler.refetchRecentReportsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("REFETCH_RECENT_REPORTS_ON_STARTUP is disabled, skipping startup recent reports refetch");
@@ -351,7 +357,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Calculate tier lists", async () => {
         await scheduler.calculateTierListsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("CALCULATE_TIER_LISTS_ON_STARTUP is disabled, skipping startup tier list calculation");
@@ -363,7 +369,7 @@ async function runBackgroundInitialization(): Promise<void> {
     optionalTasks.push(
       runStartupTask("Calculate raid analytics", async () => {
         await scheduler.calculateRaidAnalyticsOnStartup();
-      }).then(() => {})
+      }).then(() => {}),
     );
   } else {
     logger.info("CALCULATE_RAID_ANALYTICS_ON_STARTUP is disabled, skipping startup raid analytics calculation");

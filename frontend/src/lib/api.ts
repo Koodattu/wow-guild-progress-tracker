@@ -46,6 +46,15 @@ import {
   BossPullHistoryResponse,
   RaidAnalytics,
   RaidAnalyticsListItem,
+  RateLimitResponse,
+  RateLimitStatus,
+  ProcessingQueueStatsResponse,
+  ProcessingQueueResponse,
+  ProcessingQueueErrorsResponse,
+  ProcessingStatus,
+  ProcessorStatus,
+  QueueItem,
+  ErrorType,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -660,6 +669,127 @@ export const api = {
     if (!response.ok) {
       throw new Error("Failed to fetch all raid analytics");
     }
+    return response.json();
+  },
+
+  // ============================================================================
+  // RATE LIMIT & PROCESSING QUEUE (Admin)
+  // ============================================================================
+
+  async getAdminRateLimitStatus(): Promise<RateLimitResponse> {
+    const response = await fetch(`${API_URL}/api/admin/rate-limit`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch rate limit status");
+    return response.json();
+  },
+
+  async setAdminRateLimitPause(paused: boolean): Promise<{ success: boolean; isPaused: boolean; status: RateLimitStatus }> {
+    const response = await fetch(`${API_URL}/api/admin/rate-limit/pause`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ paused }),
+    });
+    if (!response.ok) throw new Error("Failed to toggle rate limit pause");
+    return response.json();
+  },
+
+  async getAdminProcessingQueueStats(): Promise<ProcessingQueueStatsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch processing queue stats");
+    return response.json();
+  },
+
+  async getAdminProcessingQueue(page: number = 1, limit: number = 20, status?: ProcessingStatus): Promise<ProcessingQueueResponse> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (status) params.append("status", status);
+
+    const response = await fetch(`${API_URL}/api/admin/processing-queue?${params}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch processing queue");
+    return response.json();
+  },
+
+  async setAdminProcessingQueuePauseAll(paused: boolean): Promise<{ success: boolean; processor: ProcessorStatus }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/pause-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ paused }),
+    });
+    if (!response.ok) throw new Error("Failed to toggle processing queue pause");
+    return response.json();
+  },
+
+  async pauseAdminProcessingQueueGuild(guildId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/${guildId}/pause`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to pause guild processing");
+    return response.json();
+  },
+
+  async resumeAdminProcessingQueueGuild(guildId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/${guildId}/resume`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to resume guild processing");
+    return response.json();
+  },
+
+  async retryAdminProcessingQueueGuild(guildId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/${guildId}/retry`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to retry guild processing");
+    return response.json();
+  },
+
+  async removeAdminProcessingQueueGuild(guildId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/${guildId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to remove guild from processing queue");
+    return response.json();
+  },
+
+  async queueAdminGuildForProcessing(guildId: string, priority?: number): Promise<{ success: boolean; queueItem: QueueItem }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/queue-guild`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ guildId, priority }),
+    });
+    if (!response.ok) throw new Error("Failed to queue guild for processing");
+    return response.json();
+  },
+
+  async getAdminProcessingQueueErrors(page: number = 1, limit: number = 20, errorType?: ErrorType): Promise<ProcessingQueueErrorsResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+
+    if (errorType) {
+      params.append("errorType", errorType);
+    }
+
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/errors?${params}`, {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch processing queue errors");
+    }
+
     return response.json();
   },
 };

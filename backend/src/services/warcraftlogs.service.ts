@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import logger from "../utils/logger";
-import { log } from "console";
+import rateLimitService, { WCLRateLimitData } from "./rate-limit.service";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -11,12 +11,12 @@ interface WCLAuthResponse {
 class WarcraftLogsService {
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
-  private requestCount: number = 0;
-  private requestWindow: number = Date.now();
-  private readonly MAX_REQUESTS_PER_HOUR = 3600;
   private zonesCache: any = null;
   private zonesCacheTime: number = 0;
   private readonly ZONES_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Minimum delay between requests to avoid bursting
+  private readonly REQUEST_DELAY_MS = 100;
 
   private async authenticate(): Promise<string> {
     // Check if we have a valid token
@@ -58,34 +58,27 @@ class WarcraftLogsService {
     return this.accessToken;
   }
 
-  private async rateLimitCheck(): Promise<void> {
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
+  /**
+   * Add a small delay between requests to avoid bursting.
+   * Rate limit tracking is now handled globally by rateLimitService.
+   */
+  private async requestDelay(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, this.REQUEST_DELAY_MS));
+  }
 
-    // Reset counter if we've passed the hour window
-    if (now - this.requestWindow > oneHour) {
-      this.requestCount = 0;
-      this.requestWindow = now;
+  /**
+   * Update the global rate limit service with data from API response
+   */
+  private updateRateLimitFromResponse(rateLimitData: WCLRateLimitData | undefined): void {
+    if (rateLimitData) {
+      rateLimitService.updateFromResponse(rateLimitData);
     }
-
-    // If we're approaching the limit, wait
-    if (this.requestCount >= this.MAX_REQUESTS_PER_HOUR - 10) {
-      const waitTime = oneHour - (now - this.requestWindow);
-      logger.info(`Rate limit approaching, waiting ${waitTime}ms`);
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-      this.requestCount = 0;
-      this.requestWindow = Date.now();
-    }
-
-    this.requestCount++;
-
-    // Add a small delay between requests to avoid bursting
-    // This helps stay under the rate limit more smoothly
-    await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay = max 600 requests/minute
   }
 
   async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false): Promise<T> {
-    await this.rateLimitCheck();
+    // Add delay between requests to avoid bursting
+    await this.requestDelay();
+
     const token = await this.authenticate();
 
     const response = await fetch("https://www.warcraftlogs.com/api/v2/client", {
@@ -123,20 +116,9 @@ class WarcraftLogsService {
       throw new Error(`WCL GraphQL error: ${JSON.stringify(result.errors)}`);
     }
 
-    // Log rate limit info if available
+    // Update global rate limit tracking from response
     if (result.data?.rateLimitData) {
-      const rateLimit = result.data.rateLimitData;
-      const percentUsed = ((rateLimit.pointsSpentThisHour / rateLimit.limitPerHour) * 100).toFixed(1);
-      logger.info(
-        `[WCL Rate Limit] ${rateLimit.pointsSpentThisHour.toFixed(0)}/${rateLimit.limitPerHour} points used (${percentUsed}%), resets in ${Math.floor(
-          rateLimit.pointsResetIn / 60
-        )}m ${rateLimit.pointsResetIn % 60}s`
-      );
-
-      // Warn if we're getting close to the limit
-      if (rateLimit.pointsSpentThisHour / rateLimit.limitPerHour > 0.8) {
-        logger.warn(`⚠️  WARNING: Approaching rate limit! Consider slowing down requests.`);
-      }
+      this.updateRateLimitFromResponse(result.data.rateLimitData);
     }
 
     return result.data as T;
@@ -403,7 +385,7 @@ class WarcraftLogsService {
   // Note: Limit kept low (10) to avoid WCL query complexity limits when fetching phase data
   async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 10, page: number = 1) {
     logger.info(
-      `[API REQUEST] WarcraftLogsService.getGuildReportsAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`
+      `[API REQUEST] WarcraftLogsService.getGuildReportsAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`,
     );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $page: Int!) {
@@ -470,7 +452,7 @@ class WarcraftLogsService {
   // Get zone (raid) information - with caching
   async getGuildReports(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, difficultyId: number, limit: number = 50, page: number = 1) {
     logger.info(
-      `[API REQUEST] WarcraftLogsService.getGuildReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`
+      `[API REQUEST] WarcraftLogsService.getGuildReports - POST https://www.warcraftlogs.com/api/v2/client (guild: ${guildName}-${serverSlug}, zone: ${zoneId}, page: ${page})`,
     );
     const query = `
       query($guildName: String!, $serverSlug: String!, $serverRegion: String!, $zoneId: Int!, $limit: Int!, $difficulty: Int!, $page: Int!) {
@@ -599,7 +581,7 @@ class WarcraftLogsService {
    */
   determinePhaseInfo(
     fight: any,
-    encounterPhases: any[]
+    encounterPhases: any[],
   ): {
     lastPhase?: { phaseId: number; phaseName: string; isIntermission: boolean };
     allPhases: Array<{ phaseId: number; phaseName: string; isIntermission: boolean }>;

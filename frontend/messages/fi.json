@@ -238,7 +238,27 @@
     "saving": "Tallennetaan...",
     "charactersSaved": "Hahmovalinta tallennettu!",
     "saveError": "Hahmovalinnan tallennus epäonnistui. Yritä uudelleen.",
-    "lastSynced": "Viimeksi synkronoitu:"
+    "lastSynced": "Viimeksi synkronoitu:",
+    "editCharacters": "Muokkaa hahmoja",
+    "noCharactersSelected": "Ei hahmoja valittuna"
+  },
+  "characterSelector": {
+    "title": "Valitse Hahmot",
+    "searchPlaceholder": "Etsi nimellä, realmilla, luokalla, rodulla, tasolla tai killalla...",
+    "selectAll": "Valitse kaikki",
+    "deselectAll": "Poista kaikki valinnat",
+    "refresh": "Päivitä",
+    "refreshing": "Päivitetään...",
+    "selected": "{count} valittu / {total} yhteensä",
+    "noResults": "Ei tuloksia",
+    "noCharacters": "Ei hahmoja löytynyt",
+    "race": "Rotu",
+    "level": "Taso",
+    "class": "Luokka",
+    "guild": "Kilta",
+    "cancel": "Peruuta",
+    "save": "Tallenna valinta",
+    "loading": "Ladataan hahmoja..."
   },
   "admin": {
     "title": "Hallintapaneeli",
@@ -249,7 +269,8 @@
       "users": "Käyttäjät",
       "guilds": "Killat",
       "pickems": "Veikkaukset",
-      "analytics": "Analytiikka"
+      "analytics": "Analytiikka",
+      "system": "Järjestelmä"
     },
     "overview": {
       "totalUsers": "Käyttäjiä yhteensä",

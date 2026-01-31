@@ -269,7 +269,8 @@
       "users": "Users",
       "guilds": "Guilds",
       "pickems": "Pickems",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "system": "System"
     },
     "overview": {
       "totalUsers": "Total Users",

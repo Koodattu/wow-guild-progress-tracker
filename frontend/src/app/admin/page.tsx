@@ -8,9 +8,29 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { AdminUser, AdminGuild, AdminUserStats, AdminGuildStats, AdminOverview, AdminPickem, AdminPickemStats, ScoringConfig, StreakConfig, RaidInfo, PickemType } from "@/types";
+import {
+  AdminUser,
+  AdminGuild,
+  AdminUserStats,
+  AdminGuildStats,
+  AdminOverview,
+  AdminPickem,
+  AdminPickemStats,
+  ScoringConfig,
+  StreakConfig,
+  RaidInfo,
+  PickemType,
+  RateLimitStatus,
+  RateLimitConfig,
+  ProcessorStatus,
+  QueueStatistics,
+  QueueItem,
+  ProcessingStatus,
+  ErrorType,
+  ProcessingQueueErrorItem,
+} from "@/types";
 
-type TabType = "overview" | "users" | "guilds" | "pickems";
+type TabType = "overview" | "users" | "guilds" | "pickems" | "system";
 
 // Sortable item for finalization ranking
 function SortableRankingItem({ id, rank }: { id: string; rank: number }) {
@@ -65,6 +85,21 @@ export default function AdminPage() {
   const [showPickemForm, setShowPickemForm] = useState(false);
   const [editingPickem, setEditingPickem] = useState<AdminPickem | null>(null);
   const [raids, setRaids] = useState<RaidInfo[]>([]);
+
+  // System tab data (Rate Limits & Processing Queue)
+  const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
+  const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitConfig | null>(null);
+  const [processorStatus, setProcessorStatus] = useState<ProcessorStatus | null>(null);
+  const [queueStats, setQueueStats] = useState<QueueStatistics | null>(null);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueTotalPages, setQueueTotalPages] = useState(1);
+  const [queueFilter, setQueueFilter] = useState<ProcessingStatus | "">("");
+  const [systemRefreshInterval, setSystemRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  // Error tracking state
+  const [errorItems, setErrorItems] = useState<ProcessingQueueErrorItem[]>([]);
+  const [errorFilter, setErrorFilter] = useState<ErrorType | "all">("all");
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   // Pickem form state
   const [pickemForm, setPickemForm] = useState({
@@ -142,6 +177,22 @@ export default function AdminPage() {
             setPickemStats(pickemsData.stats);
             setRaids(raidsData);
             break;
+
+          case "system":
+            const [rateLimitData, queueStatsData, queueData, errorsData] = await Promise.all([
+              api.getAdminRateLimitStatus(),
+              api.getAdminProcessingQueueStats(),
+              api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
+              api.getAdminProcessingQueueErrors(1, 50),
+            ]);
+            setRateLimitStatus(rateLimitData.status);
+            setRateLimitConfig(rateLimitData.config);
+            setProcessorStatus(queueStatsData.processor);
+            setQueueStats(queueStatsData.queue);
+            setQueueItems(queueData.items);
+            setQueueTotalPages(queueData.pagination.totalPages);
+            setErrorItems(errorsData.items);
+            break;
         }
       } catch (err) {
         console.error("Error fetching admin data:", err);
@@ -152,7 +203,38 @@ export default function AdminPage() {
     };
 
     fetchData();
-  }, [activeTab, user?.isAdmin, usersPage, guildsPage]);
+  }, [activeTab, user?.isAdmin, usersPage, guildsPage, queuePage, queueFilter]);
+
+  // Auto-refresh system tab every 10 seconds
+  useEffect(() => {
+    if (activeTab === "system" && user?.isAdmin) {
+      const interval = setInterval(async () => {
+        try {
+          const [rateLimitData, queueStatsData, queueData, errorsData] = await Promise.all([
+            api.getAdminRateLimitStatus(),
+            api.getAdminProcessingQueueStats(),
+            api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
+            api.getAdminProcessingQueueErrors(1, 50),
+          ]);
+          setRateLimitStatus(rateLimitData.status);
+          setRateLimitConfig(rateLimitData.config);
+          setProcessorStatus(queueStatsData.processor);
+          setQueueStats(queueStatsData.queue);
+          setQueueItems(queueData.items);
+          setQueueTotalPages(queueData.pagination.totalPages);
+          setErrorItems(errorsData.items);
+        } catch (err) {
+          console.error("Error refreshing system data:", err);
+        }
+      }, 10000);
+
+      setSystemRefreshInterval(interval);
+      return () => clearInterval(interval);
+    } else if (systemRefreshInterval) {
+      clearInterval(systemRefreshInterval);
+      setSystemRefreshInterval(null);
+    }
+  }, [activeTab, user?.isAdmin, queuePage, queueFilter]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -200,7 +282,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
-          {(["overview", "users", "guilds", "pickems"] as TabType[]).map((tab) => (
+          {(["overview", "users", "guilds", "pickems", "system"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -952,6 +1034,484 @@ export default function AdminPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* System Tab - Rate Limits & Processing Queue */}
+        {!loading && activeTab === "system" && (
+          <div className="space-y-6">
+            {/* Rate Limit Status */}
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span>⚡</span> WarcraftLogs Rate Limit
+              </h2>
+              {rateLimitStatus && rateLimitConfig && (
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Points Used</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {rateLimitStatus.pointsUsed} / {rateLimitStatus.pointsMax}
+                      </p>
+                      <p className="text-sm text-gray-500">{rateLimitStatus.pointsRemaining} remaining</p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Usage</h4>
+                      <p
+                        className={`text-2xl font-bold ${
+                          rateLimitStatus.percentUsed >= 80 ? "text-red-400" : rateLimitStatus.percentUsed >= 60 ? "text-amber-400" : "text-green-400"
+                        }`}
+                      >
+                        {rateLimitStatus.percentUsed.toFixed(1)}%
+                      </p>
+                      <div className="w-full bg-gray-600 rounded-full h-2 mt-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            rateLimitStatus.percentUsed >= 80 ? "bg-red-500" : rateLimitStatus.percentUsed >= 60 ? "bg-amber-500" : "bg-green-500"
+                          }`}
+                          style={{ width: `${Math.min(100, rateLimitStatus.percentUsed)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Resets In</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {Math.floor(rateLimitStatus.resetInSeconds / 60)}m {rateLimitStatus.resetInSeconds % 60}s
+                      </p>
+                      <p className="text-sm text-gray-500">{new Date(rateLimitStatus.resetAt).toLocaleTimeString()}</p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Status</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-block w-3 h-3 rounded-full ${rateLimitStatus.isPaused ? "bg-red-500" : "bg-green-500"}`} />
+                        <span className={`text-lg font-bold ${rateLimitStatus.isPaused ? "text-red-400" : "text-green-400"}`}>
+                          {rateLimitStatus.isPaused ? "Paused" : "Active"}
+                        </span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.setAdminRateLimitPause(!rateLimitStatus.isPaused);
+                            const data = await api.getAdminRateLimitStatus();
+                            setRateLimitStatus(data.status);
+                          } catch (err) {
+                            console.error("Failed to toggle pause:", err);
+                          }
+                        }}
+                        className={`mt-2 px-3 py-1 text-sm rounded ${
+                          rateLimitStatus.isPaused ? "bg-green-600 hover:bg-green-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"
+                        }`}
+                      >
+                        {rateLimitStatus.isPaused ? "Resume" : "Pause"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    <span className="mr-4">Reserve: {rateLimitConfig.liveOperationsReserve}%</span>
+                    <span className="mr-4">Warning: {rateLimitConfig.warningThreshold}%</span>
+                    <span>Pause at: {rateLimitConfig.pauseThreshold}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Processing Queue */}
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span>📦</span> Guild Processing Queue
+              </h2>
+
+              {/* Processor Status & Queue Stats */}
+              {processorStatus && queueStats && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">Processor</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`inline-block w-3 h-3 rounded-full ${processorStatus.isRunning && !processorStatus.isPaused ? "bg-green-500" : "bg-red-500"}`} />
+                      <span className="text-lg font-bold text-white">{processorStatus.isPaused ? "Paused" : processorStatus.isRunning ? "Running" : "Stopped"}</span>
+                    </div>
+                    {processorStatus.currentGuild && <p className="text-sm text-gray-400 mt-1 truncate">{processorStatus.currentGuild}</p>}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.setAdminProcessingQueuePauseAll(!processorStatus.isPaused);
+                          const data = await api.getAdminProcessingQueueStats();
+                          setProcessorStatus(data.processor);
+                        } catch (err) {
+                          console.error("Failed to toggle processor:", err);
+                        }
+                      }}
+                      className={`mt-2 px-3 py-1 text-sm rounded ${
+                        processorStatus.isPaused ? "bg-green-600 hover:bg-green-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"
+                      }`}
+                    >
+                      {processorStatus.isPaused ? "Resume All" : "Pause All"}
+                    </button>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">Pending</h4>
+                    <p className="text-2xl font-bold text-amber-400">{queueStats.pending}</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">In Progress</h4>
+                    <p className="text-2xl font-bold text-blue-400">{queueStats.inProgress}</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">Completed</h4>
+                    <p className="text-2xl font-bold text-green-400">{queueStats.completed}</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">Failed</h4>
+                    <p className="text-2xl font-bold text-red-400">{queueStats.failed}</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h4 className="text-gray-400 text-sm">Paused</h4>
+                    <p className="text-2xl font-bold text-gray-400">{queueStats.paused}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Queue Filter */}
+              <div className="flex gap-2 mb-4">
+                <select
+                  value={queueFilter}
+                  onChange={(e) => {
+                    setQueueFilter(e.target.value as ProcessingStatus | "");
+                    setQueuePage(1);
+                  }}
+                  className="bg-gray-700 text-white rounded-lg px-3 py-2"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </div>
+
+              {/* Error Breakdown */}
+              {queueStats?.errorBreakdown && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                    <span>⚠️</span> Error Breakdown
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-red-500">
+                      <h4 className="text-gray-400 text-xs uppercase">Guild Not Found</h4>
+                      <p className="text-xl font-bold text-red-400">{queueStats.errorBreakdown.guild_not_found}</p>
+                      <span className="text-xs text-red-300">Permanent</span>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-yellow-500">
+                      <h4 className="text-gray-400 text-xs uppercase">Rate Limited</h4>
+                      <p className="text-xl font-bold text-yellow-400">{queueStats.errorBreakdown.rate_limited}</p>
+                      <span className="text-xs text-yellow-300">Retryable</span>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-orange-500">
+                      <h4 className="text-gray-400 text-xs uppercase">Network Error</h4>
+                      <p className="text-xl font-bold text-orange-400">{queueStats.errorBreakdown.network_error}</p>
+                      <span className="text-xs text-orange-300">Retryable</span>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-purple-500">
+                      <h4 className="text-gray-400 text-xs uppercase">API Error</h4>
+                      <p className="text-xl font-bold text-purple-400">{queueStats.errorBreakdown.api_error}</p>
+                      <span className="text-xs text-purple-300">Retryable</span>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-blue-500">
+                      <h4 className="text-gray-400 text-xs uppercase">Database Error</h4>
+                      <p className="text-xl font-bold text-blue-400">{queueStats.errorBreakdown.database_error}</p>
+                      <span className="text-xs text-blue-300">Retryable</span>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-gray-500">
+                      <h4 className="text-gray-400 text-xs uppercase">Unknown</h4>
+                      <p className="text-xl font-bold text-gray-400">{queueStats.errorBreakdown.unknown}</p>
+                      <span className="text-xs text-gray-300">Needs Review</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Errors Section */}
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowErrorDetails(!showErrorDetails)}
+                  className="flex items-center gap-2 text-lg font-semibold text-white mb-3 hover:text-amber-400 transition-colors"
+                >
+                  <span>{showErrorDetails ? "▼" : "▶"}</span>
+                  <span>🔴</span> Recent Errors ({errorItems.length})
+                </button>
+
+                {showErrorDetails && (
+                  <div className="space-y-4">
+                    {/* Error Type Filter */}
+                    <div className="flex gap-2">
+                      <select value={errorFilter} onChange={(e) => setErrorFilter(e.target.value as ErrorType | "all")} className="bg-gray-700 text-white rounded-lg px-3 py-2">
+                        <option value="all">All Error Types</option>
+                        <option value="guild_not_found">Guild Not Found</option>
+                        <option value="rate_limited">Rate Limited</option>
+                        <option value="network_error">Network Error</option>
+                        <option value="api_error">API Error</option>
+                        <option value="database_error">Database Error</option>
+                        <option value="unknown">Unknown</option>
+                      </select>
+                    </div>
+
+                    {/* Errors Table */}
+                    <div className="bg-gray-800 rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-900">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Guild</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Error Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reason</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {errorItems
+                            .filter((item) => errorFilter === "all" || item.errorType === errorFilter)
+                            .map((item) => {
+                              const getErrorTypeBadge = (errorType?: ErrorType) => {
+                                switch (errorType) {
+                                  case "guild_not_found":
+                                    return "bg-red-900 text-red-300 border border-red-500";
+                                  case "rate_limited":
+                                    return "bg-yellow-900 text-yellow-300";
+                                  case "network_error":
+                                    return "bg-orange-900 text-orange-300";
+                                  case "api_error":
+                                    return "bg-purple-900 text-purple-300";
+                                  case "database_error":
+                                    return "bg-blue-900 text-blue-300";
+                                  default:
+                                    return "bg-gray-700 text-gray-300";
+                                }
+                              };
+
+                              const formatErrorType = (errorType?: ErrorType) => {
+                                if (!errorType) return "Unknown";
+                                return errorType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                              };
+
+                              return (
+                                <tr key={item.id} className={`hover:bg-gray-750 ${item.isPermanentError ? "bg-red-950/30" : ""}`}>
+                                  <td className="px-4 py-3">
+                                    <div className="text-white font-medium">{item.guildName}</div>
+                                    <div className="text-gray-400 text-sm">
+                                      {item.guildRealm}-{item.guildRegion.toUpperCase()}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`px-2 py-1 rounded text-xs font-medium ${
+                                        item.status === "failed"
+                                          ? "bg-red-900 text-red-300"
+                                          : item.status === "paused"
+                                            ? "bg-gray-700 text-gray-300"
+                                            : "bg-amber-900 text-amber-300"
+                                      }`}
+                                    >
+                                      {item.status.replace("_", " ")}
+                                    </span>
+                                    {item.errorCount > 1 && <span className="ml-2 text-xs text-gray-400">({item.errorCount}x)</span>}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${getErrorTypeBadge(item.errorType)}`}>{formatErrorType(item.errorType)}</span>
+                                    {item.isPermanentError && (
+                                      <span className="ml-2 text-xs text-red-400 font-semibold" title="This error is permanent and will not be retried">
+                                        PERMANENT
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className="text-gray-300 text-sm" title={item.lastError}>
+                                      {item.failureReason || item.lastError || "No details available"}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-400 text-sm">{item.lastErrorAt ? formatDate(item.lastErrorAt) : "-"}</td>
+                                </tr>
+                              );
+                            })}
+                          {errorItems.filter((item) => errorFilter === "all" || item.errorType === errorFilter).length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                No errors
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Queue Table */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-900">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Guild</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Progress</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reports</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Fights</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Activity</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {queueItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-750">
+                        <td className="px-4 py-3">
+                          <div className="text-white font-medium">{item.guildName}</div>
+                          <div className="text-gray-400 text-sm">
+                            {item.guildRealm}-{item.guildRegion.toUpperCase()}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              item.status === "completed"
+                                ? "bg-green-900 text-green-300"
+                                : item.status === "in_progress"
+                                  ? "bg-blue-900 text-blue-300"
+                                  : item.status === "pending"
+                                    ? "bg-amber-900 text-amber-300"
+                                    : item.status === "failed"
+                                      ? "bg-red-900 text-red-300"
+                                      : "bg-gray-700 text-gray-300"
+                            }`}
+                          >
+                            {item.status.replace("_", " ")}
+                          </span>
+                          {item.errorCount > 0 && (
+                            <span className="ml-2 text-xs text-red-400" title={item.lastError}>
+                              ({item.errorCount} errors)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 bg-gray-600 rounded-full h-2">
+                              <div className="h-2 rounded-full bg-blue-500" style={{ width: `${item.progress.percentComplete}%` }} />
+                            </div>
+                            <span className="text-white text-sm">{item.progress.percentComplete}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
+                          {item.progress.reportsFetched}
+                          {item.progress.totalReportsEstimate > 0 && <span className="text-gray-500"> / ~{item.progress.totalReportsEstimate}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">{item.progress.fightsSaved}</td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{formatDate(item.lastActivityAt)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            {(item.status === "pending" || item.status === "in_progress") && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.pauseAdminProcessingQueueGuild(item.guildId);
+                                    const data = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                                    setQueueItems(data.items);
+                                  } catch (err) {
+                                    console.error("Failed to pause:", err);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700"
+                              >
+                                Pause
+                              </button>
+                            )}
+                            {(item.status === "paused" || item.status === "failed") && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.resumeAdminProcessingQueueGuild(item.guildId);
+                                    const data = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                                    setQueueItems(data.items);
+                                  } catch (err) {
+                                    console.error("Failed to resume:", err);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                              >
+                                Resume
+                              </button>
+                            )}
+                            {item.status === "failed" && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.retryAdminProcessingQueueGuild(item.guildId);
+                                    const data = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                                    setQueueItems(data.items);
+                                  } catch (err) {
+                                    console.error("Failed to retry:", err);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                              >
+                                Retry
+                              </button>
+                            )}
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Remove ${item.guildName} from queue?`)) {
+                                  try {
+                                    await api.removeAdminProcessingQueueGuild(item.guildId);
+                                    const data = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                                    setQueueItems(data.items);
+                                    const statsData = await api.getAdminProcessingQueueStats();
+                                    setQueueStats(statsData.queue);
+                                  } catch (err) {
+                                    console.error("Failed to remove:", err);
+                                  }
+                                }
+                              }}
+                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {queueItems.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                          No items in queue
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Pagination */}
+                {queueTotalPages > 1 && (
+                  <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
+                    <button
+                      onClick={() => setQueuePage((p) => Math.max(1, p - 1))}
+                      disabled={queuePage === 1}
+                      className="px-3 py-1 bg-gray-700 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-gray-400">
+                      Page {queuePage} of {queueTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setQueuePage((p) => Math.min(queueTotalPages, p + 1))}
+                      disabled={queuePage === queueTotalPages}
+                      className="px-3 py-1 bg-gray-700 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

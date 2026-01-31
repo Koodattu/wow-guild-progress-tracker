@@ -152,21 +152,26 @@ function StatsSection({
   weeklyProgression,
   progressionLabel,
 }: {
-  pullDistribution: Distribution;
-  timeDistribution: Distribution;
-  weeklyProgression: WeeklyProgressionEntry[];
+  pullDistribution?: Distribution;
+  timeDistribution?: Distribution;
+  weeklyProgression?: WeeklyProgressionEntry[];
   progressionLabel: string;
 }) {
+  // Handle undefined or missing distribution data
+  const safePullDistribution = pullDistribution?.buckets ?? [];
+  const safeTimeDistribution = timeDistribution?.buckets ?? [];
+  const safeWeeklyProgression = weeklyProgression ?? [];
+
   return (
     <div className="grid grid-cols-3 gap-4">
       {/* Pull Distribution Chart */}
-      <DistributionChart buckets={pullDistribution.buckets} title="Pull Distribution" />
+      <DistributionChart buckets={safePullDistribution} title="Pull Distribution" />
 
       {/* Time Distribution Chart */}
-      <DistributionChart buckets={timeDistribution.buckets} title="Time Distribution" />
+      <DistributionChart buckets={safeTimeDistribution} title="Time Distribution" />
 
       {/* Progression Chart */}
-      <ProgressionChart weeklyData={weeklyProgression} label={progressionLabel} />
+      <ProgressionChart weeklyData={safeWeeklyProgression} label={progressionLabel} />
     </div>
   );
 }

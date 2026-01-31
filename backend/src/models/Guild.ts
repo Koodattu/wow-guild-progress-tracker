@@ -108,6 +108,9 @@ export interface IGuild extends Document {
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
   activityStatus?: "active" | "inactive"; // active = logs within 30 days, inactive = no logs for 30+ days
+  wclStatus?: "active" | "not_found" | "unclaimed" | "unknown"; // Tracks whether the guild exists on WarcraftLogs
+  wclStatusUpdatedAt?: Date; // When the WCL status was last checked/updated
+  wclNotFoundCount?: number; // Consecutive "guild not found" errors count
   lastFetched?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -145,7 +148,7 @@ const BossProgressSchema: Schema = new Schema(
     ],
     lastUpdated: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const RaidProgressSchema: Schema = new Schema(
@@ -162,7 +165,7 @@ const RaidProgressSchema: Schema = new Schema(
     guildRank: { type: Number }, // Rank among tracked guilds (1 = best)
     lastUpdated: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const GuildSchema: Schema = new Schema(
@@ -220,11 +223,14 @@ const GuildSchema: Schema = new Schema(
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log
     activityStatus: { type: String, enum: ["active", "inactive"], default: "active" }, // Track guild activity
+    wclStatus: { type: String, enum: ["active", "not_found", "unclaimed", "unknown"], default: "unknown" }, // Tracks whether the guild exists on WarcraftLogs
+    wclStatusUpdatedAt: { type: Date }, // When the WCL status was last checked/updated
+    wclNotFoundCount: { type: Number, default: 0 }, // Consecutive "guild not found" errors count
     lastFetched: { type: Date },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index for guild lookup

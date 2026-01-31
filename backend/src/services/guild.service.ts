@@ -4,10 +4,12 @@ import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
 import TierList from "../models/TierList";
+import GuildProcessingQueue from "../models/GuildProcessingQueue";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
 import cacheService from "./cache.service";
+import backgroundGuildProcessor from "./background-guild-processor.service";
 import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -125,7 +127,7 @@ class GuildService {
                   id: zone.id,
                 },
               },
-              { upsert: true, new: true }
+              { upsert: true, new: true },
             );
 
             logger.info(`Synced raid: ${zoneData.name} (${expansionName}, ${bosses.length} bosses)`);
@@ -213,7 +215,7 @@ class GuildService {
               { id: zoneId },
               {
                 $set: updateData,
-              }
+              },
             );
 
             const hasManualDates = MANUAL_RAID_DATES.some((r) => r.id === zoneId);
@@ -321,11 +323,15 @@ class GuildService {
   }
 
   // Initialize all guilds from config
+  // New guilds are queued for background processing instead of blocking
   async initializeGuilds(): Promise<void> {
     logger.info("Initializing guilds from config...");
 
     const guildsToTrack = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
     logger.info(`Environment: ${process.env.NODE_ENV}, Tracking ${guildsToTrack.length} guilds`);
+
+    let newGuildsCount = 0;
+    let existingGuildsCount = 0;
 
     for (const guildConfig of guildsToTrack) {
       const existing = await Guild.findOne({
@@ -366,16 +372,32 @@ class GuildService {
         });
         logger.info(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
 
-        // Immediately fetch initial data for the newly created guild
-        logger.info(`Fetching initial data for: ${guildConfig.name} - ${guildConfig.realm}`);
+        // Queue for background processing instead of immediate blocking fetch
         try {
-          await this.updateGuildProgress(String(newGuild._id));
-          logger.info(`Initial fetch completed for: ${guildConfig.name} - ${guildConfig.realm}`);
+          await backgroundGuildProcessor.queueGuild(newGuild, 10);
+          logger.info(`Queued guild for background processing: ${guildConfig.name} - ${guildConfig.realm}`);
+          newGuildsCount++;
         } catch (error) {
-          logger.error(`Error during initial fetch for ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
+          logger.error(`Error queueing guild for processing: ${guildConfig.name} - ${guildConfig.realm}:`, error instanceof Error ? error.message : "Unknown error");
+        }
+      } else {
+        existingGuildsCount++;
+
+        // Check if this existing guild needs to be queued for initial fetch
+        // (i.e., it exists in DB but has no reports - maybe a previous fetch failed)
+        const hasReports = await Report.exists({ guildId: existing._id });
+        if (!hasReports) {
+          // Check if already in queue
+          const inQueue = await GuildProcessingQueue.findOne({ guildId: existing._id });
+          if (!inQueue || inQueue.status === "failed") {
+            logger.info(`Existing guild ${existing.name} has no reports, queueing for background fetch`);
+            await backgroundGuildProcessor.queueGuild(existing, 10);
+          }
         }
       }
     }
+
+    logger.info(`Guild initialization complete: ${newGuildsCount} new guilds queued, ${existingGuildsCount} existing guilds`);
   }
 
   // Sync guild config data (parent_guild and streamers) from config to database
@@ -442,7 +464,7 @@ class GuildService {
               realm: guildConfig.realm,
               region: guildConfig.region,
             },
-            { $set: updates }
+            { $set: updates },
           );
         }
       } catch (error) {
@@ -999,7 +1021,7 @@ class GuildService {
             fightCount: report.fights?.length || 0,
             lastProcessed: new Date(),
           },
-          { upsert: true, new: true }
+          { upsert: true, new: true },
         );
 
         totalReportsFetched++;
@@ -1080,7 +1102,7 @@ class GuildService {
                 duration: duration,
                 timestamp: fightTimestamp,
               },
-              { upsert: true, new: true }
+              { upsert: true, new: true },
             );
 
             totalFightsSaved++;
@@ -1191,7 +1213,7 @@ class GuildService {
           fightCount: totalFightsInReport,
           lastProcessed: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       // Process all fights from the report
@@ -1290,7 +1312,7 @@ class GuildService {
               duration: duration,
               timestamp: fightTimestamp,
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true },
           );
 
           newFightsInThisReport++;
@@ -1534,7 +1556,7 @@ class GuildService {
           fightCount: totalFightsInReport, // Store total fight count to detect missing fights later
           lastProcessed: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       // Process fights
@@ -1633,7 +1655,7 @@ class GuildService {
               duration: duration,
               timestamp: fightTimestamp,
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true },
           );
 
           newFightsInThisReport++;
@@ -1664,7 +1686,7 @@ class GuildService {
   // Calculate guild statistics from database fights
   // If raidId is provided, only calculate for that raid (used during updates)
   // If raidId is null, calculate for all tracked raids (used during initial fetch)
-  private async calculateGuildStatistics(guild: IGuild, raidId: number | null): Promise<void> {
+  async calculateGuildStatistics(guild: IGuild, raidId: number | null): Promise<void> {
     const guildLog = getGuildLogger(guild.name, guild.realm);
     if (raidId !== null) {
       guildLog.info(`Calculating statistics for current raid only (ID: ${raidId})`);
@@ -1966,8 +1988,8 @@ class GuildService {
         if (filteredDays.length < beforeFilterCount) {
           guildLog.info(
             `Filtered out ${beforeFilterCount - filteredDays.length} outlier day(s) with raid count < ${threshold.toFixed(1)} (${((threshold / maxRaidCount) * 100).toFixed(
-              0
-            )}% of max ${maxRaidCount})`
+              0,
+            )}% of max ${maxRaidCount})`,
           );
           guildLog.info("Final raiding days after outlier filtering:");
           filteredDays.forEach((slot) => {
@@ -2092,7 +2114,7 @@ class GuildService {
         guildLog.info(
           `Filtered out ${dateFilteredCount} ${difficulty} fights outside raid's current content window (${raidStartDate?.toISOString() || "no start"} to ${
             raidEndDate?.toISOString() || "no end"
-          }) for region ${guildRegion}`
+          }) for region ${guildRegion}`,
         );
       }
     }
@@ -2150,7 +2172,7 @@ class GuildService {
       if (duplicateCheck.isDuplicate) {
         duplicateCount++;
         guildLog.info(
-          `Skipping duplicate ${difficulty} fight: ${fight.encounterName} (${fight.reportCode}#${fight.fightId}) - duplicate of (${duplicateCheck.canonical.reportCode}#${duplicateCheck.canonical.fightId})`
+          `Skipping duplicate ${difficulty} fight: ${fight.encounterName} (${fight.reportCode}#${fight.fightId}) - duplicate of (${duplicateCheck.canonical.reportCode}#${duplicateCheck.canonical.fightId})`,
         );
         continue;
       }
@@ -2175,7 +2197,7 @@ class GuildService {
 
     guildLog.info(
       `First kill times identified for ${difficulty}:`,
-      Array.from(firstKillTimes.entries()).map(([id, time]) => `Boss ${id}: ${time.toISOString()}`)
+      Array.from(firstKillTimes.entries()).map(([id, time]) => `Boss ${id}: ${time.toISOString()}`),
     );
 
     // THIRD PASS: Process all unique fights and build statistics
@@ -2318,7 +2340,7 @@ class GuildService {
       Array.from(bossDataMap.keys()).map((id) => {
         const boss = bossDataMap.get(id)!;
         return `${boss.name} (${boss.kills} kills, ${boss.pulls} pulls)`;
-      })
+      }),
     );
 
     // Update or create raid progress entry
@@ -2993,7 +3015,7 @@ class GuildService {
         // Use parent_guild name if it exists, as that's the actual guild in Blizzard's system
         const blizzardGuildName = guild.parent_guild || guild.name;
         logger.info(
-          `[Guild Crests] [${i + 1}/${guilds.length}] Fetching crest for: ${blizzardGuildName} - ${guild.realm}${guild.parent_guild ? ` (parent guild for ${guild.name})` : ""}`
+          `[Guild Crests] [${i + 1}/${guilds.length}] Fetching crest for: ${blizzardGuildName} - ${guild.realm}${guild.parent_guild ? ` (parent guild for ${guild.name})` : ""}`,
         );
 
         try {

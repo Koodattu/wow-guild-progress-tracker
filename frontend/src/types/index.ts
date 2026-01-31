@@ -835,9 +835,9 @@ export interface BossAnalytics {
   guildsProgressing: number;
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
-  pullDistribution: Distribution;
-  timeDistribution: Distribution;
-  weeklyProgression: WeeklyProgressionEntry[];
+  pullDistribution?: Distribution;
+  timeDistribution?: Distribution;
+  weeklyProgression?: WeeklyProgressionEntry[];
 }
 
 // Overall raid analytics
@@ -846,9 +846,9 @@ export interface RaidOverallAnalytics {
   guildsProgressing: number;
   pullCount: AnalyticsPullStats;
   timeSpent: AnalyticsTimeStats;
-  pullDistribution: Distribution;
-  timeDistribution: Distribution;
-  weeklyProgression: WeeklyProgressionEntry[];
+  pullDistribution?: Distribution;
+  timeDistribution?: Distribution;
+  weeklyProgression?: WeeklyProgressionEntry[];
 }
 
 // Full raid analytics response (stripped - no difficulty, _id, __v, etc.)
@@ -867,4 +867,124 @@ export interface RaidAnalyticsListItem {
   raidId: number;
   raidName: string;
   lastCalculated: string;
+}
+
+// ============================================================
+// RATE LIMIT & PROCESSING QUEUE TYPES
+// ============================================================
+
+export type ProcessingStatus = "pending" | "in_progress" | "completed" | "failed" | "paused";
+
+export type ErrorType = "guild_not_found" | "rate_limited" | "network_error" | "api_error" | "database_error" | "unknown";
+
+export interface RateLimitStatus {
+  pointsUsed: number;
+  pointsMax: number;
+  pointsRemaining: number;
+  percentUsed: number;
+  resetAt: string;
+  resetInSeconds: number;
+  isNearLimit: boolean;
+  isPaused: boolean;
+  lastUpdated: string;
+}
+
+export interface RateLimitConfig {
+  liveOperationsReserve: number;
+  warningThreshold: number;
+  pauseThreshold: number;
+}
+
+export interface RateLimitResponse {
+  status: RateLimitStatus;
+  config: RateLimitConfig;
+}
+
+export interface ErrorBreakdown {
+  guild_not_found: number;
+  rate_limited: number;
+  network_error: number;
+  api_error: number;
+  database_error: number;
+  unknown: number;
+}
+
+export interface QueueStatistics {
+  pending: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+  paused: number;
+  totalReportsFetched: number;
+  totalFightsSaved: number;
+  errorBreakdown?: ErrorBreakdown;
+}
+
+export interface ProcessorStatus {
+  isRunning: boolean;
+  isPaused: boolean;
+  currentGuild: string | null;
+}
+
+export interface ProcessingQueueStatsResponse {
+  processor: ProcessorStatus;
+  queue: QueueStatistics;
+}
+
+export interface QueueItemProgress {
+  percentComplete: number;
+  reportsFetched: number;
+  totalReportsEstimate: number;
+  fightsSaved: number;
+  currentPage: number;
+}
+
+export interface QueueItem {
+  id: string;
+  guildId: string;
+  guildName: string;
+  guildRealm: string;
+  guildRegion: string;
+  status: ProcessingStatus;
+  priority: number;
+  progress: QueueItemProgress;
+  errorCount: number;
+  lastError?: string;
+  errorType?: ErrorType;
+  isPermanentError?: boolean;
+  failureReason?: string;
+  lastErrorAt?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  lastActivityAt: string;
+}
+
+export interface ProcessingQueueResponse {
+  items: QueueItem[];
+  pagination: AdminPagination;
+}
+
+export interface ProcessingQueueErrorItem {
+  id: string;
+  guildName: string;
+  guildRealm: string;
+  guildRegion: string;
+  status: ProcessingStatus;
+  errorType?: ErrorType;
+  isPermanentError?: boolean;
+  failureReason?: string;
+  lastError?: string;
+  lastErrorAt?: string;
+  errorCount: number;
+}
+
+export interface ProcessingQueueErrorsResponse {
+  items: ProcessingQueueErrorItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
