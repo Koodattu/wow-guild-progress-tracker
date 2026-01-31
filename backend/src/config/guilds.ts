@@ -12,6 +12,16 @@ export const GUILDS_DEV: TrackedGuild[] = [
   { name: "ST-Raid", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["kukkis12"] },
   { name: "PH-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["suhruu"] },
   { name: "CE-Tiimi", realm: "Stormreaver", region: "EU", parent_guild: "IHAN SAMA", streamers: ["zetabeachh"] },
+  {
+    name: "Afterburst",
+    realm: "Stormreaver",
+    region: "EU",
+  },
+  {
+    name: "Angry Moose",
+    realm: "Argent Dawn",
+    region: "EU",
+  },
 ];
 
 export const GUILDS_DEV_B: TrackedGuild[] = [
@@ -65,6 +75,11 @@ export const GUILDS_PROD: TrackedGuild[] = [
   { name: "Northern", realm: "Frostmane", region: "EU" },
   { name: "Anatidaephobia", realm: "Stormreaver", region: "EU" },
   { name: "ei ollu safe", realm: "Stormreaver", region: "EU" },
+  {
+    name: "Afterburst",
+    realm: "Stormreaver",
+    region: "EU",
+  },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)

@@ -348,6 +348,16 @@ class BackgroundGuildProcessor {
         wclNotFoundCount: 0,
       });
 
+      // Update world ranks for the guild first
+      guildLog.info("Updating world ranks for newly fetched guild");
+      try {
+        await guildService.updateCurrentRaidsWorldRanking(guild._id.toString());
+        guildLog.info("World ranks update complete");
+      } catch (rankError) {
+        guildLog.error("Failed to update world ranks:", rankError instanceof Error ? rankError.message : "Unknown");
+        // Don't fail the queue item for world ranks failure
+      }
+
       // Trigger statistics calculation for the newly fetched guild
       guildLog.info("Triggering statistics recalculation for newly fetched guild");
       try {
