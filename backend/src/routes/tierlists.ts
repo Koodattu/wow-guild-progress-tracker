@@ -89,7 +89,7 @@ router.post("/calculate", async (req: Request, res: Response) => {
   try {
     await tierListService.calculateTierLists();
     // Invalidate tier list caches after recalculation
-    cacheService.invalidateTierListCaches();
+    await cacheService.invalidateTierListCaches();
     res.json({ message: "Tier list calculation completed" });
   } catch (error) {
     logger.error("Error calculating tier list:", error);

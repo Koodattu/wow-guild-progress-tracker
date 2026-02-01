@@ -429,6 +429,11 @@ const startServer = async () => {
     await connectDB();
     completeStartupTask("Connect to MongoDB");
 
+    // Initialize cache service (requires MongoDB connection)
+    setStartupTask("Initialize cache service");
+    await cacheService.initialize();
+    completeStartupTask("Initialize cache service");
+
     // Start Express server IMMEDIATELY after database connection
     app.listen(PORT, () => {
       logger.info(`[Startup] Server running on port ${PORT}`);
@@ -456,7 +461,6 @@ process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
   backgroundGuildProcessor.stop();
-  cacheService.stopCleanup();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
@@ -465,7 +469,6 @@ process.on("SIGTERM", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
   backgroundGuildProcessor.stop();
-  cacheService.stopCleanup();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });

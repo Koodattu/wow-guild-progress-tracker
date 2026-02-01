@@ -1,11 +1,6 @@
 import logger from "../utils/logger";
 import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
-
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  ttl: number;
-}
+import Cache from "../models/Cache";
 
 /**
  * Cache warmer function type - async function that generates cache data
@@ -13,300 +8,326 @@ interface CacheEntry<T> {
 type CacheWarmer = () => Promise<any>;
 
 /**
- * Comprehensive in-memory cache service for API responses.
+ * MongoDB-backed cache service for API responses.
  *
  * Features:
- * - Smart TTL management based on data volatility
+ * - Persistent caching via MongoDB collection
+ * - Automatic expiration via MongoDB TTL index
  * - Pattern-based cache invalidation
  * - Cache warming for startup and after scheduled updates
- * - Automatic cleanup of expired entries
  *
  * Cache Strategy:
  * - Static data (tier lists, raid analytics, older raids): Long TTL (24h), invalidate on recalculation
- * - Semi-static data (guild list, schedules): Medium TTL (5min), invalidate on guild updates
- * - Dynamic data (current raid progress, live streamers): Short TTL (1-5min), frequent refresh
+ * - Semi-static data (guild list, schedules): Long TTL (24h), invalidate on updates
+ * - Dynamic data (current raid progress, home, live streamers, events): Short TTL (1-5min)
+ *
+ * TTL Summary:
+ * - /api/home: 5 minutes (current raid changes frequently)
+ * - /api/progress?raidId=current: 5 minutes
+ * - /api/progress?raidId=older: 24 hours (invalidated when guilds recalculated)
+ * - /api/guilds/list: 24 hours (invalidated when new guild added or nightly)
+ * - /api/guilds/schedules: 24 hours (invalidated when schedules recalculated or nightly)
+ * - /api/guilds/live-streamers: 1 minute
+ * - /api/guilds/:realm/:name: 24 hours (invalidated when that specific guild updates)
+ * - /api/tierlists/*: 24 hours (invalidated when tier lists recalculated)
+ * - /api/raid-analytics/*: 24 hours (invalidated when raid analytics recalculated)
+ * - /api/events: 1 minute
  */
 class CacheService {
-  private cache: Map<string, CacheEntry<any>> = new Map();
-  private cleanupInterval: NodeJS.Timeout | null = null;
   private warmers: Map<string, CacheWarmer> = new Map();
+  private isInitialized: boolean = false;
 
   // ============================================================================
   // TTL CONSTANTS (milliseconds)
   // ============================================================================
 
-  // Static data - rarely changes, long TTL
-  public readonly STATIC_TTL = 24 * 60 * 60 * 1000; // 24 hours (effectively infinite until invalidation)
+  // Static data - rarely changes, long TTL (invalidated by backend triggers)
+  public readonly STATIC_TTL = 24 * 60 * 60 * 1000; // 24 hours
   public readonly TIER_LIST_TTL = 24 * 60 * 60 * 1000; // 24 hours (recalculated nightly)
   public readonly RAID_ANALYTICS_TTL = 24 * 60 * 60 * 1000; // 24 hours (recalculated nightly)
   public readonly OLDER_RAID_TTL = 24 * 60 * 60 * 1000; // 24 hours for historical raids
 
-  // Semi-static data - changes occasionally
-  public readonly GUILD_LIST_TTL = 5 * 60 * 1000; // 5 minutes
-  public readonly SCHEDULES_TTL = 5 * 60 * 1000; // 5 minutes
-  public readonly GUILD_SUMMARY_TTL = 5 * 60 * 1000; // 5 minutes
-  public readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+  // Semi-static data - changes occasionally, 24h TTL (invalidated by triggers)
+  public readonly GUILD_LIST_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on new guild or nightly)
+  public readonly SCHEDULES_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on schedule update or nightly)
+  public readonly GUILD_SUMMARY_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on guild update)
 
-  // Dynamic data - changes frequently
+  // Dynamic data - changes frequently, short TTL
+  public readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
   public readonly CURRENT_RAID_TTL = 5 * 60 * 1000; // 5 minutes for current raid
   public readonly LIVE_STREAMERS_TTL = 60 * 1000; // 1 minute
   public readonly EVENTS_TTL = 60 * 1000; // 1 minute
 
-  constructor() {
-    // Start automatic cleanup of expired entries every 5 minutes
-    this.startCleanupInterval();
-  }
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
 
   /**
-   * Start periodic cleanup of expired cache entries
+   * Initialize the cache service.
+   * Should be called after MongoDB connection is established.
    */
-  private startCleanupInterval(): void {
-    this.cleanupInterval = setInterval(
-      () => {
-        this.cleanupExpiredEntries();
-      },
-      5 * 60 * 1000,
-    ); // Run every 5 minutes
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      logger.debug("Cache service already initialized");
+      return;
+    }
 
-    // Prevent the interval from keeping the process alive
-    if (this.cleanupInterval.unref) {
-      this.cleanupInterval.unref();
+    try {
+      // Ensure indexes are created (TTL index is critical)
+      await Cache.createIndexes();
+      this.isInitialized = true;
+      logger.info("MongoDB cache service initialized with TTL indexes");
+    } catch (error) {
+      logger.error("Failed to initialize cache service:", error);
+      throw error;
     }
   }
 
-  /**
-   * Stop the cleanup interval (for graceful shutdown)
-   */
-  stopCleanup(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      logger.info("Cache cleanup interval stopped");
-    }
-  }
+  // ============================================================================
+  // CORE CACHE OPERATIONS
+  // ============================================================================
 
   /**
-   * Remove all expired entries from cache
+   * Get cached data if available and not expired.
+   * Returns null if cache miss or expired (MongoDB TTL handles cleanup).
    */
-  private cleanupExpiredEntries(): void {
-    const now = Date.now();
-    let removedCount = 0;
+  async get<T>(key: string): Promise<T | null> {
+    try {
+      const entry = await Cache.findOne({ key }).lean();
 
-    for (const [key, entry] of this.cache.entries()) {
-      const age = now - entry.timestamp;
-      if (age > entry.ttl) {
-        this.cache.delete(key);
-        removedCount++;
+      if (!entry) {
+        logger.debug(`Cache miss for key: ${key}`);
+        return null;
       }
-    }
 
-    if (removedCount > 0) {
-      logger.debug(`Cache cleanup: removed ${removedCount} expired entries (${this.cache.size} remaining)`);
-    }
-  }
+      // Double-check expiration (in case TTL index hasn't cleaned up yet)
+      if (new Date() > new Date(entry.expiresAt)) {
+        logger.debug(`Cache expired for key: ${key}`);
+        return null;
+      }
 
-  /**
-   * Get cached data if available and not expired
-   */
-  get<T>(key: string): T | null {
-    const entry = this.cache.get(key);
-
-    if (!entry) {
+      logger.debug(`Cache hit for key: ${key}`);
+      return entry.data as T;
+    } catch (error) {
+      logger.error(`Cache get error for key ${key}:`, error);
       return null;
     }
-
-    const now = Date.now();
-    const age = now - entry.timestamp;
-
-    // Check if entry has expired
-    if (age > entry.ttl) {
-      this.cache.delete(key);
-      logger.debug(`Cache expired for key: ${key} (age: ${Math.round(age / 1000)}s, ttl: ${Math.round(entry.ttl / 1000)}s)`);
-      return null;
-    }
-
-    logger.debug(`Cache hit for key: ${key} (age: ${Math.round(age / 1000)}s)`);
-    return entry.data as T;
   }
 
   /**
-   * Set data in cache with optional custom TTL
+   * Set data in cache with optional custom TTL.
+   * Uses upsert to create or update cache entry.
    */
-  set<T>(key: string, data: T, customTtl?: number): void {
-    const ttl = customTtl ?? this.DEFAULT_TTL;
+  async set<T>(key: string, data: T, customTtl?: number): Promise<void> {
+    try {
+      const ttl = customTtl ?? this.DEFAULT_TTL;
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + ttl);
+      const endpoint = this.extractEndpoint(key);
 
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl,
-    });
+      await Cache.findOneAndUpdate(
+        { key },
+        {
+          key,
+          data,
+          cachedAt: now,
+          expiresAt,
+          ttlMs: ttl,
+          endpoint,
+        },
+        { upsert: true, new: true },
+      );
 
-    logger.debug(`Cache set for key: ${key} (ttl: ${Math.round(ttl / 1000)}s)`);
-  }
-
-  /**
-   * Invalidate (delete) a specific cache entry
-   */
-  invalidate(key: string): void {
-    const deleted = this.cache.delete(key);
-    if (deleted) {
-      logger.info(`Cache invalidated for key: ${key}`);
+      logger.debug(`Cache set for key: ${key} (ttl: ${Math.round(ttl / 1000)}s)`);
+    } catch (error) {
+      logger.error(`Cache set error for key ${key}:`, error);
     }
   }
 
   /**
-   * Invalidate all cache entries matching a pattern
+   * Extract endpoint category from cache key for grouping.
    */
-  invalidatePattern(pattern: RegExp): void {
-    let count = 0;
-    for (const key of this.cache.keys()) {
-      if (pattern.test(key)) {
-        this.cache.delete(key);
-        count++;
+  private extractEndpoint(key: string): string {
+    // Extract first two segments as endpoint identifier
+    const parts = key.split(":");
+    if (parts.length >= 2) {
+      return `${parts[0]}:${parts[1]}`;
+    }
+    return parts[0];
+  }
+
+  /**
+   * Invalidate (delete) a specific cache entry.
+   */
+  async invalidate(key: string): Promise<void> {
+    try {
+      const result = await Cache.deleteOne({ key });
+      if (result.deletedCount > 0) {
+        logger.info(`Cache invalidated for key: ${key}`);
       }
-    }
-    if (count > 0) {
-      logger.info(`Cache invalidated ${count} entries matching pattern: ${pattern}`);
+    } catch (error) {
+      logger.error(`Cache invalidate error for key ${key}:`, error);
     }
   }
 
   /**
-   * Clear all cache entries
+   * Invalidate all cache entries matching a pattern (regex).
    */
-  clear(): void {
-    const size = this.cache.size;
-    this.cache.clear();
-    logger.info(`Cache cleared: ${size} entries removed`);
+  async invalidatePattern(pattern: RegExp): Promise<void> {
+    try {
+      const result = await Cache.deleteMany({ key: { $regex: pattern } });
+      if (result.deletedCount > 0) {
+        logger.info(`Cache invalidated ${result.deletedCount} entries matching pattern: ${pattern}`);
+      }
+    } catch (error) {
+      logger.error(`Cache invalidatePattern error for ${pattern}:`, error);
+    }
   }
 
   /**
-   * Get cache key for home page
+   * Clear all cache entries.
+   */
+  async clear(): Promise<void> {
+    try {
+      const result = await Cache.deleteMany({});
+      logger.info(`Cache cleared: ${result.deletedCount} entries removed`);
+    } catch (error) {
+      logger.error("Cache clear error:", error);
+    }
+  }
+
+  // ============================================================================
+  // CACHE KEY GENERATORS
+  // ============================================================================
+
+  /**
+   * Get cache key for home page.
    */
   getHomeKey(): string {
     return "home:data";
   }
 
   /**
-   * Get cache key for progress page by raid
+   * Get cache key for progress page by raid.
    */
   getProgressKey(raidId: number): string {
     return `progress:raid:${raidId}`;
   }
 
   /**
-   * Get cache key for guilds list by raid
+   * Get cache key for guilds list by raid.
    */
   getGuildsKey(raidId: number | null): string {
     return raidId ? `guilds:raid:${raidId}` : "guilds:all";
   }
 
   /**
-   * Get cache key for minimal guild list (directory page)
+   * Get cache key for minimal guild list (directory page).
    */
   getGuildListKey(): string {
     return "guilds:list";
   }
 
   /**
-   * Get cache key for guild schedules
+   * Get cache key for guild schedules.
    */
   getSchedulesKey(): string {
     return "guilds:schedules";
   }
 
   /**
-   * Get cache key for live streamers
+   * Get cache key for live streamers.
    */
   getLiveStreamersKey(): string {
     return "guilds:live-streamers";
   }
 
   /**
-   * Get cache key for individual guild summary
+   * Get cache key for individual guild summary.
    */
   getGuildSummaryKey(realm: string, name: string): string {
     return `guild:${realm.toLowerCase()}:${name.toLowerCase()}:summary`;
   }
 
   /**
-   * Get cache key for guild boss progress
+   * Get cache key for guild boss progress.
    */
   getBossProgressKey(realm: string, name: string, raidId: number): string {
     return `guild:${realm.toLowerCase()}:${name.toLowerCase()}:raid:${raidId}:bosses`;
   }
 
   /**
-   * Get cache key for events
+   * Get cache key for events.
    */
   getEventsKey(limit: number): string {
     return `events:limit:${limit}`;
   }
 
   /**
-   * Get cache key for events with pagination
+   * Get cache key for events with pagination.
    */
   getEventsPaginatedKey(limit: number, page: number): string {
     return `events:limit:${limit}:page:${page}`;
   }
 
   /**
-   * Get cache key for guild-specific events
+   * Get cache key for guild-specific events.
    */
   getGuildEventsKey(realm: string, name: string, limit: number, page: number): string {
     return `events:guild:${realm.toLowerCase()}:${name.toLowerCase()}:limit:${limit}:page:${page}`;
   }
 
   /**
-   * Get cache key for raid dates
+   * Get cache key for raid dates.
    */
   getRaidDatesKey(raidId: number): string {
     return `raid:${raidId}:dates`;
   }
 
   /**
-   * Get cache key for tier list (full)
+   * Get cache key for tier list (full).
    */
   getTierListFullKey(): string {
     return "tierlists:full";
   }
 
   /**
-   * Get cache key for overall tier list
+   * Get cache key for overall tier list.
    */
   getTierListOverallKey(): string {
     return "tierlists:overall";
   }
 
   /**
-   * Get cache key for tier list by raid
+   * Get cache key for tier list by raid.
    */
   getTierListRaidKey(raidId: number): string {
     return `tierlists:raid:${raidId}`;
   }
 
   /**
-   * Get cache key for tier list available raids
+   * Get cache key for tier list available raids.
    */
   getTierListRaidsKey(): string {
     return "tierlists:raids";
   }
 
   /**
-   * Get cache key for raid analytics all overview
+   * Get cache key for raid analytics all overview.
    */
   getRaidAnalyticsAllKey(): string {
     return "raid-analytics:all";
   }
 
   /**
-   * Get cache key for specific raid analytics
+   * Get cache key for specific raid analytics.
    */
   getRaidAnalyticsKey(raidId: number): string {
     return `raid-analytics:${raidId}`;
   }
 
   /**
-   * Get cache key for raid analytics available raids
+   * Get cache key for raid analytics available raids.
    */
   getRaidAnalyticsRaidsKey(): string {
     return "raid-analytics:raids";
@@ -317,7 +338,7 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Get TTL for a specific raid (current vs older)
+   * Get TTL for a specific raid (current vs older).
    */
   getTTLForRaid(raidId: number | null): number {
     if (!raidId) {
@@ -328,21 +349,21 @@ class CacheService {
   }
 
   /**
-   * Get TTL for events
+   * Get TTL for events.
    */
   getEventsTTL(): number {
     return this.EVENTS_TTL;
   }
 
   /**
-   * Get TTL for tier lists
+   * Get TTL for tier lists.
    */
   getTierListTTL(): number {
     return this.TIER_LIST_TTL;
   }
 
   /**
-   * Get TTL for raid analytics
+   * Get TTL for raid analytics.
    */
   getRaidAnalyticsTTL(): number {
     return this.RAID_ANALYTICS_TTL;
@@ -353,98 +374,98 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Invalidate all guild-related caches
-   * Called after guild data updates
+   * Invalidate all guild-related caches.
+   * Called after new guild added or major guild data updates.
    */
-  invalidateGuildCaches(): void {
-    this.invalidatePattern(/^guilds:/);
-    this.invalidatePattern(/^home:/);
-    this.invalidatePattern(/^guild:/);
-    this.invalidatePattern(/^progress:/);
+  async invalidateGuildCaches(): Promise<void> {
+    await this.invalidatePattern(/^guilds:/);
+    await this.invalidatePattern(/^home:/);
+    await this.invalidatePattern(/^guild:/);
+    await this.invalidatePattern(/^progress:/);
     logger.info("All guild-related caches invalidated");
   }
 
   /**
-   * Invalidate caches for current raid only
-   * Called after current raid progress updates (more targeted)
+   * Invalidate caches for current raid only.
+   * Called after current raid progress updates (more targeted).
    */
-  invalidateCurrentRaidCaches(): void {
+  async invalidateCurrentRaidCaches(): Promise<void> {
     for (const raidId of CURRENT_RAID_IDS) {
-      this.invalidate(this.getProgressKey(raidId));
-      this.invalidate(this.getGuildsKey(raidId));
+      await this.invalidate(this.getProgressKey(raidId));
+      await this.invalidate(this.getGuildsKey(raidId));
     }
-    this.invalidate(this.getHomeKey());
-    this.invalidate(this.getLiveStreamersKey());
+    await this.invalidate(this.getHomeKey());
+    await this.invalidate(this.getLiveStreamersKey());
     logger.info("Current raid caches invalidated");
   }
 
   /**
-   * Invalidate caches for a specific raid
-   * Called after raid-specific updates
+   * Invalidate caches for a specific raid.
+   * Called after raid-specific updates.
    */
-  invalidateRaidCaches(raidId: number): void {
-    this.invalidate(this.getProgressKey(raidId));
-    this.invalidate(this.getGuildsKey(raidId));
-    this.invalidatePattern(new RegExp(`raid:${raidId}`));
+  async invalidateRaidCaches(raidId: number): Promise<void> {
+    await this.invalidate(this.getProgressKey(raidId));
+    await this.invalidate(this.getGuildsKey(raidId));
+    await this.invalidatePattern(new RegExp(`raid:${raidId}`));
 
     // If it's a current raid, also invalidate home cache
     if (CURRENT_RAID_IDS.includes(raidId)) {
-      this.invalidate(this.getHomeKey());
+      await this.invalidate(this.getHomeKey());
     }
 
     logger.info(`Raid-specific caches invalidated for raid ${raidId}`);
   }
 
   /**
-   * Invalidate event caches
-   * Called after new events are created
+   * Invalidate event caches.
+   * Called after new events are created.
    */
-  invalidateEventCaches(): void {
-    this.invalidatePattern(/^events:/);
-    this.invalidatePattern(/^home:/); // Home page includes events
+  async invalidateEventCaches(): Promise<void> {
+    await this.invalidatePattern(/^events:/);
+    await this.invalidatePattern(/^home:/); // Home page includes events
     logger.info("Event caches invalidated");
   }
 
   /**
-   * Invalidate all tier list caches
-   * Called after tier list recalculation
+   * Invalidate all tier list caches.
+   * Called after tier list recalculation.
    */
-  invalidateTierListCaches(): void {
-    this.invalidatePattern(/^tierlists:/);
+  async invalidateTierListCaches(): Promise<void> {
+    await this.invalidatePattern(/^tierlists:/);
     logger.info("Tier list caches invalidated");
   }
 
   /**
-   * Invalidate all raid analytics caches
-   * Called after raid analytics recalculation
+   * Invalidate all raid analytics caches.
+   * Called after raid analytics recalculation.
    */
-  invalidateRaidAnalyticsCaches(): void {
-    this.invalidatePattern(/^raid-analytics:/);
+  async invalidateRaidAnalyticsCaches(): Promise<void> {
+    await this.invalidatePattern(/^raid-analytics:/);
     logger.info("Raid analytics caches invalidated");
   }
 
   /**
-   * Invalidate schedules cache
-   * Called when guild schedules are updated
+   * Invalidate schedules cache.
+   * Called when guild schedules are updated.
    */
-  invalidateSchedulesCaches(): void {
-    this.invalidate(this.getSchedulesKey());
+  async invalidateSchedulesCaches(): Promise<void> {
+    await this.invalidate(this.getSchedulesKey());
     logger.info("Schedules cache invalidated");
   }
 
   /**
-   * Invalidate caches for a specific guild
-   * Called after individual guild update
+   * Invalidate caches for a specific guild.
+   * Called after individual guild update.
    */
-  invalidateGuildSpecificCaches(realm: string, name: string): void {
+  async invalidateGuildSpecificCaches(realm: string, name: string): Promise<void> {
     // Invalidate guild summary
-    this.invalidate(this.getGuildSummaryKey(realm, name));
+    await this.invalidate(this.getGuildSummaryKey(realm, name));
 
     // Invalidate all boss progress caches for this guild
-    this.invalidatePattern(new RegExp(`^guild:${realm.toLowerCase()}:${name.toLowerCase()}:`));
+    await this.invalidatePattern(new RegExp(`^guild:${realm.toLowerCase()}:${name.toLowerCase()}:`));
 
     // Invalidate guild events
-    this.invalidatePattern(new RegExp(`^events:guild:${realm.toLowerCase()}:${name.toLowerCase()}:`));
+    await this.invalidatePattern(new RegExp(`^events:guild:${realm.toLowerCase()}:${name.toLowerCase()}:`));
 
     logger.debug(`Guild-specific caches invalidated for ${name}-${realm}`);
   }
@@ -454,8 +475,8 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Register a cache warmer function for a specific key
-   * Warmers are called during startup and after invalidation
+   * Register a cache warmer function for a specific key.
+   * Warmers are called during startup and after invalidation.
    */
   registerWarmer(key: string, warmer: CacheWarmer): void {
     this.warmers.set(key, warmer);
@@ -463,7 +484,7 @@ class CacheService {
   }
 
   /**
-   * Warm a specific cache key using its registered warmer
+   * Warm a specific cache key using its registered warmer.
    */
   async warmCache(key: string): Promise<boolean> {
     const warmer = this.warmers.get(key);
@@ -476,7 +497,7 @@ class CacheService {
       const data = await warmer();
       // TTL will be determined by the cache key pattern
       const ttl = this.inferTTLFromKey(key);
-      this.set(key, data, ttl);
+      await this.set(key, data, ttl);
       logger.info(`Cache warmed for key: ${key}`);
       return true;
     } catch (error) {
@@ -486,8 +507,8 @@ class CacheService {
   }
 
   /**
-   * Warm all registered caches
-   * Called during server startup
+   * Warm all registered caches.
+   * Called during server startup.
    */
   async warmAllCaches(): Promise<{ warmed: number; failed: number }> {
     logger.info(`[Cache Warm] Starting cache warm-up for ${this.warmers.size} registered warmers...`);
@@ -508,8 +529,8 @@ class CacheService {
   }
 
   /**
-   * Warm progress caches for all tracked raids
-   * Called during startup or after major updates
+   * Warm progress caches for all tracked raids.
+   * Called during startup or after major updates.
    */
   async warmProgressCaches(progressFetcher: (raidId: number) => Promise<any>): Promise<void> {
     logger.info(`[Cache Warm] Warming progress caches for ${TRACKED_RAIDS.length} raids...`);
@@ -519,7 +540,7 @@ class CacheService {
         const key = this.getProgressKey(raidId);
         const data = await progressFetcher(raidId);
         const ttl = this.getTTLForRaid(raidId);
-        this.set(key, data, ttl);
+        await this.set(key, data, ttl);
         logger.debug(`[Cache Warm] Progress cache warmed for raid ${raidId}`);
       } catch (error) {
         logger.error(`[Cache Warm] Failed to warm progress cache for raid ${raidId}:`, error);
@@ -530,7 +551,7 @@ class CacheService {
   }
 
   /**
-   * Warm tier list caches for all raids
+   * Warm tier list caches for all raids.
    */
   async warmTierListCaches(
     fullFetcher: () => Promise<any>,
@@ -544,26 +565,26 @@ class CacheService {
       // Warm full tier list
       const fullData = await fullFetcher();
       if (fullData) {
-        this.set(this.getTierListFullKey(), fullData, this.TIER_LIST_TTL);
+        await this.set(this.getTierListFullKey(), fullData, this.TIER_LIST_TTL);
       }
 
       // Warm overall tier list
       const overallData = await overallFetcher();
       if (overallData) {
-        this.set(this.getTierListOverallKey(), overallData, this.TIER_LIST_TTL);
+        await this.set(this.getTierListOverallKey(), overallData, this.TIER_LIST_TTL);
       }
 
       // Warm available raids list
       const raidsData = await raidsFetcher();
       if (raidsData) {
-        this.set(this.getTierListRaidsKey(), raidsData, this.TIER_LIST_TTL);
+        await this.set(this.getTierListRaidsKey(), raidsData, this.TIER_LIST_TTL);
 
         // Warm per-raid tier lists
         for (const raid of raidsData) {
           try {
             const raidData = await raidFetcher(raid.raidId);
             if (raidData) {
-              this.set(this.getTierListRaidKey(raid.raidId), raidData, this.TIER_LIST_TTL);
+              await this.set(this.getTierListRaidKey(raid.raidId), raidData, this.TIER_LIST_TTL);
             }
           } catch (error) {
             logger.error(`[Cache Warm] Failed to warm tier list for raid ${raid.raidId}:`, error);
@@ -578,7 +599,7 @@ class CacheService {
   }
 
   /**
-   * Warm raid analytics caches
+   * Warm raid analytics caches.
    */
   async warmRaidAnalyticsCaches(allFetcher: () => Promise<any>, raidFetcher: (raidId: number) => Promise<any>, raidsFetcher: () => Promise<any>): Promise<void> {
     logger.info(`[Cache Warm] Warming raid analytics caches...`);
@@ -587,20 +608,20 @@ class CacheService {
       // Warm all analytics overview
       const allData = await allFetcher();
       if (allData) {
-        this.set(this.getRaidAnalyticsAllKey(), allData, this.RAID_ANALYTICS_TTL);
+        await this.set(this.getRaidAnalyticsAllKey(), allData, this.RAID_ANALYTICS_TTL);
       }
 
       // Warm available raids list
       const raidsData = await raidsFetcher();
       if (raidsData) {
-        this.set(this.getRaidAnalyticsRaidsKey(), raidsData, this.RAID_ANALYTICS_TTL);
+        await this.set(this.getRaidAnalyticsRaidsKey(), raidsData, this.RAID_ANALYTICS_TTL);
 
         // Warm per-raid analytics
         for (const raid of raidsData) {
           try {
             const raidData = await raidFetcher(raid.raidId);
             if (raidData) {
-              this.set(this.getRaidAnalyticsKey(raid.raidId), raidData, this.RAID_ANALYTICS_TTL);
+              await this.set(this.getRaidAnalyticsKey(raid.raidId), raidData, this.RAID_ANALYTICS_TTL);
             }
           } catch (error) {
             logger.error(`[Cache Warm] Failed to warm analytics for raid ${raid.raidId}:`, error);
@@ -615,7 +636,7 @@ class CacheService {
   }
 
   /**
-   * Infer TTL from cache key pattern
+   * Infer TTL from cache key pattern.
    */
   private inferTTLFromKey(key: string): number {
     if (key.startsWith("tierlists:")) return this.TIER_LIST_TTL;
@@ -640,6 +661,7 @@ class CacheService {
     if (key === "guilds:live-streamers") return this.LIVE_STREAMERS_TTL;
     if (key.startsWith("events:")) return this.EVENTS_TTL;
     if (key.startsWith("home:")) return this.CURRENT_RAID_TTL;
+    if (key.startsWith("guild:")) return this.GUILD_SUMMARY_TTL;
 
     return this.DEFAULT_TTL;
   }
@@ -649,26 +671,44 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Get cache statistics
+   * Get cache statistics.
    */
-  getStats(): {
-    size: number;
-    keys: string[];
-    byPrefix: Record<string, number>;
-  } {
-    const keys = Array.from(this.cache.keys());
-    const byPrefix: Record<string, number> = {};
+  async getStats(): Promise<{
+    totalEntries: number;
+    byEndpoint: Record<string, number>;
+    oldestEntry: Date | null;
+    newestEntry: Date | null;
+  }> {
+    try {
+      const totalEntries = await Cache.countDocuments();
 
-    for (const key of keys) {
-      const prefix = key.split(":")[0];
-      byPrefix[prefix] = (byPrefix[prefix] || 0) + 1;
+      // Group by endpoint
+      const endpointStats = await Cache.aggregate([{ $group: { _id: "$endpoint", count: { $sum: 1 } } }]);
+
+      const byEndpoint: Record<string, number> = {};
+      for (const stat of endpointStats) {
+        byEndpoint[stat._id] = stat.count;
+      }
+
+      // Get oldest and newest entries
+      const oldest = await Cache.findOne().sort({ cachedAt: 1 }).select("cachedAt").lean();
+      const newest = await Cache.findOne().sort({ cachedAt: -1 }).select("cachedAt").lean();
+
+      return {
+        totalEntries,
+        byEndpoint,
+        oldestEntry: oldest?.cachedAt || null,
+        newestEntry: newest?.cachedAt || null,
+      };
+    } catch (error) {
+      logger.error("Failed to get cache stats:", error);
+      return {
+        totalEntries: 0,
+        byEndpoint: {},
+        oldestEntry: null,
+        newestEntry: null,
+      };
     }
-
-    return {
-      size: this.cache.size,
-      keys,
-      byPrefix,
-    };
   }
 }
 

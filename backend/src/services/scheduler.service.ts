@@ -204,6 +204,24 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Full cache warmup at 02:00 UTC (before all other nightly jobs)
+    // This ensures caches are fresh at the start of each day
+    cron.schedule(
+      "0 2 * * *",
+      async () => {
+        logger.info("[Nightly/CacheWarmup] Starting full cache warm-up...");
+        try {
+          await cacheWarmerService.warmAllCaches();
+          logger.info("[Nightly/CacheWarmup] Full cache warm-up completed");
+        } catch (error) {
+          logger.error("[Nightly/CacheWarmup] Error:", error);
+        }
+      },
+      {
+        timezone: "UTC",
+      },
+    );
+
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info("    * Active guilds: every 15 minutes");
@@ -214,6 +232,7 @@ class UpdateScheduler {
     logger.info("    * Inactive guilds: once daily at 10:00");
     logger.info("    * Twitch streams: all marked offline");
     logger.info("  - Nightly jobs:");
+    logger.info("    * Full cache warmup: daily at 02:00 UTC");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Guild crests update: daily at 04:00");
@@ -297,7 +316,7 @@ class UpdateScheduler {
       await tierListService.calculateTierLists();
 
       // Invalidate tier list caches and warm them with fresh data
-      cacheService.invalidateTierListCaches();
+      await cacheService.invalidateTierListCaches();
       await cacheWarmerService.warmTierListCaches();
 
       logger.info("[Nightly/TierLists] Tier list calculation completed");
@@ -317,7 +336,7 @@ class UpdateScheduler {
       await raidAnalyticsService.calculateAllRaidAnalytics();
 
       // Invalidate raid analytics caches and warm them with fresh data
-      cacheService.invalidateRaidAnalyticsCaches();
+      await cacheService.invalidateRaidAnalyticsCaches();
       await cacheWarmerService.warmRaidAnalyticsCaches();
 
       logger.info("[Nightly/RaidAnalytics] Raid analytics calculation completed");
@@ -401,7 +420,7 @@ class UpdateScheduler {
       logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
 
       // Invalidate current raid caches and warm them with fresh data
-      cacheService.invalidateCurrentRaidCaches();
+      await cacheService.invalidateCurrentRaidCaches();
       await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
@@ -435,7 +454,7 @@ class UpdateScheduler {
       logger.info(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
 
       // Invalidate current raid caches and warm them with fresh data
-      cacheService.invalidateCurrentRaidCaches();
+      await cacheService.invalidateCurrentRaidCaches();
       await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
@@ -475,7 +494,7 @@ class UpdateScheduler {
       logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
 
       // Invalidate guild caches after all updates
-      cacheService.invalidateGuildCaches();
+      await cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
     } finally {
@@ -516,7 +535,7 @@ class UpdateScheduler {
       logger.info(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
 
       // Invalidate guild caches after all updates
-      cacheService.invalidateGuildCaches();
+      await cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
     } finally {

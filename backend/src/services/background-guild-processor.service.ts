@@ -5,6 +5,7 @@ import GuildProcessingQueue, { IGuildProcessingQueue, ProcessingStatus } from ".
 import wclService from "./warcraftlogs.service";
 import rateLimitService from "./rate-limit.service";
 import guildService from "./guild.service";
+import cacheService from "./cache.service";
 import { TRACKED_RAIDS } from "../config/guilds";
 import Raid from "../models/Raid";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -375,6 +376,15 @@ class BackgroundGuildProcessor {
 
       // Mark as completed
       await queueItem.markCompleted();
+
+      // Invalidate guild-related caches after new guild is processed
+      // This ensures the guild list, progress, and home page are updated
+      try {
+        await cacheService.invalidateGuildCaches();
+        guildLog.info("Guild caches invalidated after initial fetch");
+      } catch (cacheError) {
+        guildLog.error("Failed to invalidate caches:", cacheError instanceof Error ? cacheError.message : "Unknown");
+      }
 
       guildLog.info(`✅ Initial fetch completed: ${totalReportsFetched} reports, ${totalFightsSaved} fights across ${page} pages`);
     } catch (error) {

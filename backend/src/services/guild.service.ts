@@ -2513,7 +2513,7 @@ class GuildService {
 
         // Invalidate event caches if any event was created
         if (eventCreated) {
-          cacheService.invalidateEventCaches();
+          await cacheService.invalidateEventCaches();
         }
       }
     }

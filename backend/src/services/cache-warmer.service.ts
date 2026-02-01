@@ -10,16 +10,19 @@ import Event from "../models/Event";
 /**
  * Cache Warming Service
  *
- * Responsible for pre-populating caches with data to ensure
+ * Responsible for pre-populating MongoDB caches with data to ensure
  * fast response times for end users. Called during:
  * - Server startup (after initialization)
+ * - Nightly at 02:00 UTC (before all other nightly jobs)
  * - After scheduled recalculations (tier lists, analytics)
  * - After guild updates
+ *
+ * All cache operations are async since they hit MongoDB.
  */
 class CacheWarmerService {
   /**
-   * Warm all critical caches on server startup
-   * This should be called after all services are initialized
+   * Warm all critical caches on server startup or nightly refresh.
+   * This should be called after all services are initialized.
    */
   async warmAllCaches(): Promise<void> {
     logger.info("[Cache Warmer] Starting full cache warm-up...");
@@ -40,8 +43,8 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm progress caches for all tracked raids
-   * Older raids get longer TTL since they don't change
+   * Warm progress caches for all tracked raids.
+   * Older raids get longer TTL since they don't change.
    */
   async warmProgressCaches(): Promise<void> {
     logger.info(`[Cache Warmer] Warming progress caches for ${TRACKED_RAIDS.length} raids...`);
@@ -51,7 +54,7 @@ class CacheWarmerService {
         const key = cacheService.getProgressKey(raidId);
         const data = await guildService.getAllGuildsForRaid(raidId);
         const ttl = cacheService.getTTLForRaid(raidId);
-        cacheService.set(key, data, ttl);
+        await cacheService.set(key, data, ttl);
         logger.debug(`[Cache Warmer] Progress cache warmed for raid ${raidId}`);
       } catch (error) {
         logger.error(`[Cache Warmer] Failed to warm progress cache for raid ${raidId}:`, error);
@@ -62,7 +65,7 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm home page data cache
+   * Warm home page data cache.
    */
   async warmHomeCacheData(): Promise<void> {
     logger.info("[Cache Warmer] Warming home page cache...");
@@ -119,7 +122,7 @@ class CacheWarmerService {
         events: events,
       };
 
-      cacheService.set(cacheService.getHomeKey(), response, cacheService.CURRENT_RAID_TTL);
+      await cacheService.set(cacheService.getHomeKey(), response, cacheService.CURRENT_RAID_TTL);
       logger.info("[Cache Warmer] Home page cache warmed");
     } catch (error) {
       logger.error("[Cache Warmer] Failed to warm home cache:", error);
@@ -127,7 +130,7 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm guild list related caches
+   * Warm guild list related caches.
    */
   async warmGuildListCaches(): Promise<void> {
     logger.info("[Cache Warmer] Warming guild list caches...");
@@ -135,11 +138,11 @@ class CacheWarmerService {
     try {
       // Warm minimal guild list
       const guildList = await guildService.getGuildListMinimal();
-      cacheService.set(cacheService.getGuildListKey(), guildList, cacheService.GUILD_LIST_TTL);
+      await cacheService.set(cacheService.getGuildListKey(), guildList, cacheService.GUILD_LIST_TTL);
 
       // Warm schedules
       const schedules = await guildService.getAllGuildSchedules();
-      cacheService.set(cacheService.getSchedulesKey(), schedules, cacheService.SCHEDULES_TTL);
+      await cacheService.set(cacheService.getSchedulesKey(), schedules, cacheService.SCHEDULES_TTL);
 
       logger.info("[Cache Warmer] Guild list caches warmed");
     } catch (error) {
@@ -148,7 +151,7 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm tier list caches
+   * Warm tier list caches.
    */
   async warmTierListCaches(): Promise<void> {
     logger.info("[Cache Warmer] Warming tier list caches...");
@@ -157,26 +160,26 @@ class CacheWarmerService {
       // Warm full tier list
       const fullTierList = await tierListService.getTierList();
       if (fullTierList) {
-        cacheService.set(cacheService.getTierListFullKey(), fullTierList, cacheService.TIER_LIST_TTL);
+        await cacheService.set(cacheService.getTierListFullKey(), fullTierList, cacheService.TIER_LIST_TTL);
       }
 
       // Warm overall tier list
       const overallTierList = await tierListService.getOverallTierList();
       if (overallTierList) {
-        cacheService.set(cacheService.getTierListOverallKey(), overallTierList, cacheService.TIER_LIST_TTL);
+        await cacheService.set(cacheService.getTierListOverallKey(), overallTierList, cacheService.TIER_LIST_TTL);
       }
 
       // Warm available raids
       const raids = await tierListService.getAvailableRaids();
       if (raids) {
-        cacheService.set(cacheService.getTierListRaidsKey(), raids, cacheService.TIER_LIST_TTL);
+        await cacheService.set(cacheService.getTierListRaidsKey(), raids, cacheService.TIER_LIST_TTL);
 
         // Warm per-raid tier lists
         for (const raid of raids) {
           try {
             const raidTierList = await tierListService.getTierListForRaid(raid.raidId);
             if (raidTierList) {
-              cacheService.set(cacheService.getTierListRaidKey(raid.raidId), raidTierList, cacheService.TIER_LIST_TTL);
+              await cacheService.set(cacheService.getTierListRaidKey(raid.raidId), raidTierList, cacheService.TIER_LIST_TTL);
             }
           } catch (error) {
             logger.error(`[Cache Warmer] Failed to warm tier list for raid ${raid.raidId}:`, error);
@@ -191,7 +194,7 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm raid analytics caches
+   * Warm raid analytics caches.
    */
   async warmRaidAnalyticsCaches(): Promise<void> {
     logger.info("[Cache Warmer] Warming raid analytics caches...");
@@ -200,20 +203,20 @@ class CacheWarmerService {
       // Warm all analytics overview
       const allAnalytics = await raidAnalyticsService.getAllRaidAnalyticsOverview();
       if (allAnalytics) {
-        cacheService.set(cacheService.getRaidAnalyticsAllKey(), allAnalytics, cacheService.RAID_ANALYTICS_TTL);
+        await cacheService.set(cacheService.getRaidAnalyticsAllKey(), allAnalytics, cacheService.RAID_ANALYTICS_TTL);
       }
 
       // Warm available raids
       const raids = await raidAnalyticsService.getAvailableRaids();
       if (raids) {
-        cacheService.set(cacheService.getRaidAnalyticsRaidsKey(), raids, cacheService.RAID_ANALYTICS_TTL);
+        await cacheService.set(cacheService.getRaidAnalyticsRaidsKey(), raids, cacheService.RAID_ANALYTICS_TTL);
 
         // Warm per-raid analytics
         for (const raid of raids) {
           try {
             const raidAnalytics = await raidAnalyticsService.getRaidAnalytics(raid.raidId);
             if (raidAnalytics) {
-              cacheService.set(cacheService.getRaidAnalyticsKey(raid.raidId), raidAnalytics, cacheService.RAID_ANALYTICS_TTL);
+              await cacheService.set(cacheService.getRaidAnalyticsKey(raid.raidId), raidAnalytics, cacheService.RAID_ANALYTICS_TTL);
             }
           } catch (error) {
             logger.error(`[Cache Warmer] Failed to warm analytics for raid ${raid.raidId}:`, error);
@@ -228,8 +231,8 @@ class CacheWarmerService {
   }
 
   /**
-   * Warm caches for current raid only
-   * Called after guild updates during hot hours
+   * Warm caches for current raid only.
+   * Called after guild updates during hot hours.
    */
   async warmCurrentRaidCaches(): Promise<void> {
     logger.info("[Cache Warmer] Warming current raid caches...");
@@ -238,7 +241,7 @@ class CacheWarmerService {
       for (const raidId of CURRENT_RAID_IDS) {
         const key = cacheService.getProgressKey(raidId);
         const data = await guildService.getAllGuildsForRaid(raidId);
-        cacheService.set(key, data, cacheService.CURRENT_RAID_TTL);
+        await cacheService.set(key, data, cacheService.CURRENT_RAID_TTL);
       }
 
       // Also warm home page
