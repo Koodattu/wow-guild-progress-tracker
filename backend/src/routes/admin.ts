@@ -487,14 +487,15 @@ router.post("/guilds", async (req: Request, res: Response) => {
       });
     }
 
-    // Fetch guild crest from Blizzard API
+    // Fetch guild crest and faction from Blizzard API
     let crest = null;
+    let faction = undefined;
     try {
-      crest = await blizzardService.getGuildCrest(
-        normalizedRealm.toLowerCase().replace(/\s+/g, "-"),
-        normalizedName.toLowerCase().replace(/\s+/g, "-"),
-        normalizedRegion.toLowerCase(),
-      );
+      const guildData = await blizzardService.getGuildData(normalizedName, normalizedRealm.toLowerCase().replace(/\s+/g, "-"), normalizedRegion.toLowerCase());
+      if (guildData) {
+        crest = guildData.crest;
+        faction = guildData.faction;
+      }
     } catch (crestError) {
       logger.warn(`Could not fetch crest for ${normalizedName}-${normalizedRealm}: ${crestError instanceof Error ? crestError.message : "Unknown error"}`);
     }
@@ -515,8 +516,9 @@ router.post("/guilds", async (req: Request, res: Response) => {
       name: normalizedName,
       realm: normalizedRealm,
       region: normalizedRegion,
+      faction,
       parent_guild: parent_guild?.trim() || undefined,
-      crest,
+      crest: crest || undefined,
       streamers: formattedStreamers,
       progress: [],
       isCurrentlyRaiding: false,
