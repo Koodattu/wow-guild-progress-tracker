@@ -22,8 +22,8 @@ router.get("/", async (req: Request, res: Response) => {
     const limit =
       req.query.limit !== undefined ? Number(req.query.limit) : undefined;
 
-    const specKey =
-      req.query.specKey !== undefined ? String(req.query.specKey) : undefined;
+    const specName =
+      req.query.specName !== undefined ? String(req.query.specName) : undefined;
 
     const role =
       req.query.role !== undefined
@@ -52,7 +52,7 @@ router.get("/", async (req: Request, res: Response) => {
       zoneId,
       encounterId,
       classId,
-      specKey,
+      specName,
       role,
       metric,
       page,

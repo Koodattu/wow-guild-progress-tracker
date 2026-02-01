@@ -783,7 +783,7 @@ export type CharacterRankingRow = {
   context: {
     zoneId: number;
     encounterId: number | null;
-    specKey?: string;
+    specName?: string;
     role?: "dps" | "healer" | "tank";
     metric: "dps" | "hps";
   };

@@ -7,7 +7,7 @@ import type { CharacterRankingRow } from "@/types";
 type Filters = {
   encounterId?: number;
   classId?: number;
-  specKey?: string;
+  specName?: string;
   role?: "dps" | "healer" | "tank";
   metric?: "dps" | "hps";
   page?: number;
@@ -35,7 +35,6 @@ export default function CharacterRankingsPage() {
     page: 1,
     role: "dps",
     encounterId: 3132,
-    specKey: "1:frost",
   };
 
   useEffect(() => {
@@ -63,14 +62,18 @@ export default function CharacterRankingsPage() {
         <thead>
           <tr className="text-left border-b border-gray-700">
             <th className="py-2 px-4">Character</th>
-            <th className="py-2 px-4">Score</th>
-            <th className="py-2 px-4">Spec</th>
+            <th className="py-2 px-4">Class ID</th>
+            <th className="py-2 px-4">specName</th>
+            <th className="py-2 px-4">raw dmg</th>
+            <th className="py-2 px-4">All star points for encounter</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className="border-b border-gray-700">
               <td className="py-2 px-4">{row.character.name}</td>
+              <td className="py-2 px-4">{row.character.classID}</td>
+              <td className="py-2 px-4">{row.context.specName}</td>
               <td className="py-2 px-4">{row.score.value}</td>
               <td className="py-2 px-4">{row.stats.allStars?.points}</td>
             </tr>

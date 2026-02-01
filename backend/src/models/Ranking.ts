@@ -23,7 +23,6 @@ export interface IRanking extends Document {
     name: string;
   };
   specName: string;
-  specKey: string;
   role: "dps" | "healer" | "tank";
   bestSpecName: string;
 
@@ -77,7 +76,6 @@ const RankingSchema: Schema = new Schema(
     },
 
     specName: { type: String, required: true },
-    specKey: { type: String, required: true, index: true },
     bestSpecName: { type: String, required: true },
     role: {
       type: String,
@@ -104,7 +102,7 @@ RankingSchema.index(
     difficulty: 1,
     metric: 1,
     "encounter.id": 1,
-    specKey: 1,
+    specName: 1,
   },
   { unique: true },
 );
@@ -114,7 +112,8 @@ RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
   metric: 1,
-  specKey: 1,
+  classID: 1,
+  specName: 1,
   rankPercent: -1,
   wclCanonicalCharacterId: 1,
 });
@@ -125,7 +124,8 @@ RankingSchema.index({
   difficulty: 1,
   metric: 1,
   "encounter.id": 1,
-  specKey: 1,
+  classID: 1,
+  specName: 1,
   rankPercent: -1,
   wclCanonicalCharacterId: 1,
 });

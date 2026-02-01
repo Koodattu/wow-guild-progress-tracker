@@ -2,7 +2,7 @@ import { CURRENT_RAID_IDS } from "../config/guilds";
 import Character from "../models/Character";
 import Ranking from "../models/Ranking";
 import logger from "../utils/logger";
-import { buildSpecKey, resolveRole } from "../utils/spec";
+import { resolveRole } from "../utils/spec";
 import wclService from "./warcraftlogs.service";
 
 interface IWarcraftLogsAllStars {
@@ -89,7 +89,7 @@ export type CharacterRankingRow = {
   context: {
     zoneId: number;
     encounterId: number | null;
-    specKey?: string;
+    specName?: string;
     role?: "dps" | "healer" | "tank";
     metric: "dps" | "hps";
   };
@@ -223,9 +223,8 @@ class CharacterService {
 
           // Upsert rankings
           for (const r of zoneRankings.rankings) {
-            const specName = r.spec?.trim();
+            const specName = r.spec?.trim().toLowerCase();
             if (!specName) continue;
-            const specKey = buildSpecKey(char.classID, specName); // id:slug (e.g. 1:blood)
             const role = resolveRole(char.classID, specName);
 
             await Ranking.findOneAndUpdate(
@@ -235,7 +234,7 @@ class CharacterService {
                 difficulty: 5,
                 metric: "dps",
                 "encounter.id": r.encounter.id,
-                specKey,
+                specName,
               },
               {
                 characterId: char._id,
@@ -256,10 +255,9 @@ class CharacterService {
                 },
 
                 specName,
-                specKey,
                 role,
 
-                bestSpecName: r.bestSpec,
+                bestSpecName: r.bestSpec?.trim().toLowerCase(),
 
                 rankPercent: r.rankPercent ?? 0,
                 medianPercent: r.medianPercent ?? 0,
@@ -301,7 +299,7 @@ class CharacterService {
     zoneId: number;
     encounterId?: number;
     classId?: number;
-    specKey?: string;
+    specName?: string;
     role?: "dps" | "healer" | "tank";
     metric?: "dps" | "hps";
     limit?: number;
@@ -311,7 +309,7 @@ class CharacterService {
       zoneId,
       encounterId,
       classId,
-      specKey,
+      specName,
       role,
       metric = "dps",
       limit = 100,
@@ -330,12 +328,12 @@ class CharacterService {
         difficulty: 5,
       };
       if (classId !== undefined) query.classID = classId;
-      if (specKey !== undefined) query.specKey = specKey;
+      if (specName !== undefined) query.specName = specName;
       if (role !== undefined) query.role = role;
 
       const rows = await Ranking.find(query)
         .select(
-          "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName specKey role " +
+          "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName role " +
             "rankPercent medianPercent totalKills bestAmount allStars lockedIn updatedAt",
         )
         .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
@@ -354,7 +352,7 @@ class CharacterService {
         context: {
           zoneId,
           encounterId: encounterId ?? null,
-          specKey,
+          specName: r.specName,
           role,
           metric,
         },
@@ -375,7 +373,7 @@ class CharacterService {
     // No encounter -> allStar points
 
     const needsRankingAggregate =
-      specKey !== undefined || role !== undefined || metric !== "dps";
+      specName !== undefined || role !== undefined || metric !== "dps";
 
     if (!needsRankingAggregate) {
       const query: any = {
@@ -406,7 +404,7 @@ class CharacterService {
         context: {
           zoneId,
           encounterId: null,
-          specKey,
+          specName,
           role,
           metric,
         },
@@ -418,10 +416,10 @@ class CharacterService {
       }));
     }
 
-    // Filtered all-boss view (specKey/role/metric) => aggregate rankings to compute allStars per character
+    // Filtered all-boss view (spec/role/metric) => aggregate rankings to compute allStars per character
     const match: any = { zoneId, metric, difficulty: 5 };
     if (classId !== undefined) match.classID = classId;
-    if (specKey !== undefined) match.specKey = specKey;
+    if (specName !== undefined) match.specName = specName;
     if (role !== undefined) match.role = role;
 
     const agg = await Ranking.aggregate([
@@ -458,7 +456,7 @@ class CharacterService {
       context: {
         zoneId,
         encounterId: null,
-        specKey,
+        specName,
         role,
         metric,
       },
