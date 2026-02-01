@@ -19,7 +19,7 @@ export const GUILDS_DEV: TrackedGuild[] = [
   },
   {
     name: "Angry Moose",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -103,7 +103,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Angry Moose",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -193,7 +193,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Eternium",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -213,7 +213,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Fear the Rabbit",
-    realm: "Defias Brotherhood",
+    realm: "Defias-Brotherhood",
     region: "EU",
   },
   {
@@ -248,7 +248,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Gifu",
-    realm: "Al'Akir",
+    realm: "AlAkir",
     region: "EU",
   },
   {
@@ -283,7 +283,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Hikivirta",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
@@ -293,12 +293,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "HinausYhtiö",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
     name: "Horna",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -308,7 +308,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Hunsvotit",
-    realm: "Shattered Hand",
+    realm: "Shattered-Hand",
     region: "EU",
   },
   {
@@ -318,7 +318,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Härdelli",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -358,12 +358,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Kaaos",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
     name: "Kalmankaarti",
-    realm: "Shattered Hand",
+    realm: "Shattered-Hand",
     region: "EU",
   },
   {
@@ -373,7 +373,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Kannunkulma",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -398,12 +398,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Kipinä",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
     name: "Kirous",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -413,7 +413,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Kitty Cat Death Squad",
-    realm: "Chamber of Aspects",
+    realm: "Chamber-of-Aspects",
     region: "EU",
   },
   {
@@ -473,7 +473,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Kuura",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -488,7 +488,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Lakko",
-    realm: "Defias Brotherhood",
+    realm: "Defias-Brotherhood",
     region: "EU",
   },
   {
@@ -508,7 +508,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Leipäjuusto Oy",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -523,7 +523,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Likasimmat",
-    realm: "Defias Brotherhood",
+    realm: "Defias-Brotherhood",
     region: "EU",
   },
   {
@@ -543,12 +543,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "M A N I A C XD",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
     name: "Mambo",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
@@ -588,7 +588,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Morian Dwarfs",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -713,7 +713,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Pimento",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -743,7 +743,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "POINTY HAT CREW",
-    realm: "Quel'Thalas",
+    realm: "QuelThalas",
     region: "EU",
   },
   {
@@ -788,7 +788,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Rauta",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -818,17 +818,17 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Riskiryhmä",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
     name: "Roistot",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
     name: "Rooster Ranch",
-    realm: "Lightning's Blade",
+    realm: "Lightnings-Blade",
     region: "EU",
   },
   {
@@ -933,7 +933,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Sisu",
-    realm: "Vek'nilash",
+    realm: "Veknilash",
     region: "EU",
   },
   {
@@ -953,7 +953,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Slummatti",
-    realm: "Chamber of Aspects",
+    realm: "Chamber-of-Aspects",
     region: "EU",
   },
   {
@@ -993,7 +993,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Talotaikurit",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {
@@ -1063,7 +1063,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Tulikaste",
-    realm: "Chamber of Aspects",
+    realm: "Chamber-of-Aspects",
     region: "EU",
   },
   {
@@ -1078,12 +1078,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Turpasauna",
-    realm: "Lightning's Blade",
+    realm: "Lightnings-Blade",
     region: "EU",
   },
   {
     name: "TURTLES KIMBLE",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
@@ -1118,7 +1118,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Univelka",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
@@ -1128,12 +1128,12 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Vaakamambo",
-    realm: "Tarren Mill",
+    realm: "Tarren-Mill",
     region: "EU",
   },
   {
     name: "Valiojoukko",
-    realm: "Argent Dawn",
+    realm: "Argent-Dawn",
     region: "EU",
   },
   {
@@ -1158,7 +1158,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "VMTL",
-    realm: "Twisting Nether",
+    realm: "Twisting-Nether",
     region: "EU",
   },
   {

@@ -95,6 +95,9 @@ class BackgroundGuildProcessor {
   // Cache for valid boss IDs
   private validBossIdsCache: Set<number> | null = null;
 
+  // Track when global rankings were last calculated
+  private lastGlobalRankingsUpdate: Date | null = null;
+
   /**
    * Start the background processor
    */
@@ -165,7 +168,8 @@ class BackgroundGuildProcessor {
       const queueItem = await GuildProcessingQueue.getNextToProcess();
 
       if (!queueItem) {
-        // No items to process, check again later
+        // No items to process - check if we should recalculate global rankings
+        await this.checkAndUpdateGlobalRankings();
         this.scheduleNextCheck(this.config.idleCheckInterval);
         return;
       }
@@ -356,16 +360,6 @@ class BackgroundGuildProcessor {
       } catch (rankError) {
         guildLog.error("Failed to update world ranks:", rankError instanceof Error ? rankError.message : "Unknown");
         // Don't fail the queue item for world ranks failure
-      }
-
-      // Update global rankings for all guilds
-      guildLog.info("Recalculating global rankings for all guilds");
-      try {
-        await guildService.calculateGuildRankingsForAllRaids();
-        guildLog.info("Global rankings recalculation complete");
-      } catch (globalRankError) {
-        guildLog.error("Failed to recalculate global rankings:", globalRankError instanceof Error ? globalRankError.message : "Unknown");
-        // Don't fail the queue item for global rankings failure
       }
 
       // Trigger statistics calculation for the newly fetched guild
@@ -756,6 +750,46 @@ class BackgroundGuildProcessor {
       isPaused: this.isPaused,
       currentGuild: this.currentGuildQueue ? `${this.currentGuildQueue.guildName}-${this.currentGuildQueue.guildRealm}` : null,
     };
+  }
+
+  /**
+   * Check if we should update global rankings and do so if needed
+   */
+  private async checkAndUpdateGlobalRankings(): Promise<void> {
+    try {
+      // Check if there are truly no more items to process
+      const stats = await GuildProcessingQueue.getQueueStats();
+      const hasActiveItems = (stats.pending?.count || 0) > 0 || (stats.in_progress?.count || 0) > 0 || (stats.paused?.count || 0) > 0;
+
+      if (hasActiveItems) {
+        return; // Still have items to process
+      }
+
+      // Check if we recently updated (within last 5 minutes)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (this.lastGlobalRankingsUpdate && this.lastGlobalRankingsUpdate > fiveMinutesAgo) {
+        return; // Already updated recently
+      }
+
+      // Check if we have any completed guilds since last update
+      const hasCompletedGuilds = (stats.completed?.count || 0) > 0;
+      if (!hasCompletedGuilds) {
+        return; // No work has been done
+      }
+
+      logger.info("[BackgroundProcessor] All guilds processed, recalculating global rankings for all guilds");
+
+      try {
+        await guildService.calculateGuildRankingsForAllRaids();
+        this.lastGlobalRankingsUpdate = new Date();
+        logger.info("[BackgroundProcessor] Global rankings recalculation complete");
+      } catch (globalRankError) {
+        logger.error("[BackgroundProcessor] Failed to recalculate global rankings:", globalRankError instanceof Error ? globalRankError.message : "Unknown");
+        // Don't throw - this is a non-critical operation
+      }
+    } catch (error) {
+      logger.error("[BackgroundProcessor] Error checking for global rankings update:", error instanceof Error ? error.message : "Unknown");
+    }
   }
 
   /**
