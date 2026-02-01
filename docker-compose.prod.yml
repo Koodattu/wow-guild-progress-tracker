@@ -19,6 +19,12 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongo:27017/wow_guild_tracker
       - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          memory: 1536M # 1.5GB limit
+        reservations:
+          memory: 512M # Reserve 512MB
     volumes:
       - ./data/images:/app/data/images
       - ./backend/logs:/app/logs

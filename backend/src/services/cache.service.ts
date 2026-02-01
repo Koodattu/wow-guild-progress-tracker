@@ -13,12 +13,66 @@ interface CacheEntry<T> {
  */
 class CacheService {
   private cache: Map<string, CacheEntry<any>> = new Map();
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   // Default TTLs in milliseconds (exposed as public for use in routes)
   public readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
   public readonly CURRENT_RAID_TTL = 3 * 60 * 1000; // 3 minutes for current raid
   public readonly OLDER_RAID_TTL = 60 * 60 * 1000; // 60 minutes for older raids
   public readonly EVENTS_TTL = 60 * 1000; // 1 minute for events
+
+  constructor() {
+    // Start automatic cleanup of expired entries every 5 minutes
+    this.startCleanupInterval();
+  }
+
+  /**
+   * Start periodic cleanup of expired cache entries
+   */
+  private startCleanupInterval(): void {
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanupExpiredEntries();
+      },
+      5 * 60 * 1000,
+    ); // Run every 5 minutes
+
+    // Prevent the interval from keeping the process alive
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Stop the cleanup interval (for graceful shutdown)
+   */
+  stopCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      logger.info("Cache cleanup interval stopped");
+    }
+  }
+
+  /**
+   * Remove all expired entries from cache
+   */
+  private cleanupExpiredEntries(): void {
+    const now = Date.now();
+    let removedCount = 0;
+
+    for (const [key, entry] of this.cache.entries()) {
+      const age = now - entry.timestamp;
+      if (age > entry.ttl) {
+        this.cache.delete(key);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      logger.debug(`Cache cleanup: removed ${removedCount} expired entries (${this.cache.size} remaining)`);
+    }
+  }
 
   /**
    * Get cached data if available and not expired

@@ -445,6 +445,8 @@ const startServer = async () => {
 process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  backgroundGuildProcessor.stop();
+  cacheService.stopCleanup();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
@@ -452,6 +454,8 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  backgroundGuildProcessor.stop();
+  cacheService.stopCleanup();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
