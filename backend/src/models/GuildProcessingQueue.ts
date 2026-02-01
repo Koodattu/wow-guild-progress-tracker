@@ -63,7 +63,6 @@ const GuildProcessingQueueSchema = new Schema<IGuildProcessingQueue>(
       type: Schema.Types.ObjectId,
       ref: "Guild",
       required: true,
-      index: true,
     },
     guildName: {
       type: String,

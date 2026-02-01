@@ -6,6 +6,7 @@ import twitchService from "./twitch.service";
 import tierListService from "./tierlist.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import cacheService from "./cache.service";
+import cacheWarmerService from "./cache-warmer.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger, { getGuildLogger } from "../utils/logger";
 
@@ -294,6 +295,11 @@ class UpdateScheduler {
     try {
       logger.info("[Nightly/TierLists] Starting tier list calculation...");
       await tierListService.calculateTierLists();
+
+      // Invalidate tier list caches and warm them with fresh data
+      cacheService.invalidateTierListCaches();
+      await cacheWarmerService.warmTierListCaches();
+
       logger.info("[Nightly/TierLists] Tier list calculation completed");
     } catch (error) {
       logger.error("[Nightly/TierLists] Error:", error);
@@ -309,8 +315,11 @@ class UpdateScheduler {
     try {
       logger.info("[Nightly/RaidAnalytics] Starting raid analytics calculation...");
       await raidAnalyticsService.calculateAllRaidAnalytics();
-      // Invalidate raid analytics cache
-      cacheService.invalidatePattern(/^raid-analytics:/);
+
+      // Invalidate raid analytics caches and warm them with fresh data
+      cacheService.invalidateRaidAnalyticsCaches();
+      await cacheWarmerService.warmRaidAnalyticsCaches();
+
       logger.info("[Nightly/RaidAnalytics] Raid analytics calculation completed");
     } catch (error) {
       logger.error("[Nightly/RaidAnalytics] Error:", error);
@@ -391,8 +400,9 @@ class UpdateScheduler {
 
       logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
 
-      // Invalidate guild caches after updates
-      cacheService.invalidateGuildCaches();
+      // Invalidate current raid caches and warm them with fresh data
+      cacheService.invalidateCurrentRaidCaches();
+      await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
     } finally {
@@ -424,8 +434,9 @@ class UpdateScheduler {
 
       logger.info(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
 
-      // Invalidate guild caches after updates
-      cacheService.invalidateGuildCaches();
+      // Invalidate current raid caches and warm them with fresh data
+      cacheService.invalidateCurrentRaidCaches();
+      await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
     } finally {
@@ -459,12 +470,12 @@ class UpdateScheduler {
       for (let i = 0; i < guilds.length; i++) {
         logger.info(`[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
-
-        // Invalidate guild caches after updates
-        cacheService.invalidateGuildCaches();
       }
 
       logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
+
+      // Invalidate guild caches after all updates
+      cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
     } finally {
@@ -497,15 +508,15 @@ class UpdateScheduler {
         await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
 
         // Small delay to avoid overwhelming the API
-
-        // Invalidate guild caches after updates
-        cacheService.invalidateGuildCaches();
         if (i < guilds.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       }
 
       logger.info(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
+
+      // Invalidate guild caches after all updates
+      cacheService.invalidateGuildCaches();
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
     } finally {

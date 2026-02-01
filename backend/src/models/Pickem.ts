@@ -80,7 +80,7 @@ const StreakConfigSchema = new Schema<IStreakConfig>(
 
 const PickemSchema = new Schema<IPickem>(
   {
-    pickemId: { type: String, required: true, unique: true },
+    pickemId: { type: String, required: true },
     name: { type: String, required: true },
     type: { type: String, enum: ["regular", "rwf"], required: true, default: "regular" },
     raidIds: {

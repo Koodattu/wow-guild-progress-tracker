@@ -27,6 +27,7 @@ import pickemService from "./services/pickem.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 import cacheService from "./services/cache.service";
+import cacheWarmerService from "./services/cache-warmer.service";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -380,6 +381,14 @@ async function runBackgroundInitialization(): Promise<void> {
   if (optionalTasks.length > 0) {
     await Promise.all(optionalTasks);
   }
+
+  // -------------------------------------------------------------------------
+  // Phase 5: Cache warming (always runs last)
+  // -------------------------------------------------------------------------
+
+  await runStartupTask("Warm API caches", async () => {
+    await cacheWarmerService.warmAllCaches();
+  });
 
   // -------------------------------------------------------------------------
   // Initialization complete

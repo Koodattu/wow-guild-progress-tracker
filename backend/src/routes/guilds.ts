@@ -7,37 +7,58 @@ import { cacheMiddleware } from "../middleware/cache.middleware";
 const router = Router();
 
 // Get all guilds with only their raid schedules (for calendar/timetable view)
-router.get("/schedules", async (req: Request, res: Response) => {
-  try {
-    const schedules = await guildService.getAllGuildSchedules();
-    res.json(schedules);
-  } catch (error) {
-    logger.error("Error fetching guild schedules:", error);
-    res.status(500).json({ error: "Failed to fetch guild schedules" });
-  }
-});
+router.get(
+  "/schedules",
+  cacheMiddleware(
+    () => cacheService.getSchedulesKey(),
+    () => cacheService.SCHEDULES_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const schedules = await guildService.getAllGuildSchedules();
+      res.json(schedules);
+    } catch (error) {
+      logger.error("Error fetching guild schedules:", error);
+      res.status(500).json({ error: "Failed to fetch guild schedules" });
+    }
+  },
+);
 
 // Get all live streamers with their guild info
-router.get("/live-streamers", async (req: Request, res: Response) => {
-  try {
-    const liveStreamers = await guildService.getLiveStreamers();
-    res.json(liveStreamers);
-  } catch (error) {
-    logger.error("Error fetching live streamers:", error);
-    res.status(500).json({ error: "Failed to fetch live streamers" });
-  }
-});
+router.get(
+  "/live-streamers",
+  cacheMiddleware(
+    () => cacheService.getLiveStreamersKey(),
+    () => cacheService.LIVE_STREAMERS_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const liveStreamers = await guildService.getLiveStreamers();
+      res.json(liveStreamers);
+    } catch (error) {
+      logger.error("Error fetching live streamers:", error);
+      res.status(500).json({ error: "Failed to fetch live streamers" });
+    }
+  },
+);
 
 // Get minimal guild list for directory page (name, realm, region, parent_guild, warcraftlogsId, isCurrentlyRaiding)
-router.get("/list", async (req: Request, res: Response) => {
-  try {
-    const guilds = await guildService.getGuildListMinimal();
-    res.json(guilds);
-  } catch (error) {
-    logger.error("Error fetching guild list:", error);
-    res.status(500).json({ error: "Failed to fetch guild list" });
-  }
-});
+router.get(
+  "/list",
+  cacheMiddleware(
+    () => cacheService.getGuildListKey(),
+    () => cacheService.GUILD_LIST_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const guilds = await guildService.getGuildListMinimal();
+      res.json(guilds);
+    } catch (error) {
+      logger.error("Error fetching guild list:", error);
+      res.status(500).json({ error: "Failed to fetch guild list" });
+    }
+  },
+);
 
 // Get all guilds with their progress
 // Optional query param: raidId - if provided, only returns progress for that raid
@@ -51,7 +72,7 @@ router.get(
     (req) => {
       const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
       return cacheService.getTTLForRaid(raidId);
-    }
+    },
   ),
   async (req: Request, res: Response) => {
     try {
@@ -69,7 +90,7 @@ router.get(
       logger.error("Error fetching guilds:", error);
       res.status(500).json({ error: "Failed to fetch guilds" });
     }
-  }
+  },
 );
 
 // Get pull history for a specific boss
@@ -99,24 +120,39 @@ router.get("/:realm/:name/raids/:raidId/bosses/:bossId/pull-history", async (req
 });
 
 // Get detailed boss progress for a specific guild and raid by realm/name (returns only progress array)
-router.get("/:realm/:name/raids/:raidId/bosses", async (req: Request, res: Response) => {
-  try {
-    const realm = decodeURIComponent(req.params.realm);
-    const name = decodeURIComponent(req.params.name);
-    const raidId = parseInt(req.params.raidId);
+router.get(
+  "/:realm/:name/raids/:raidId/bosses",
+  cacheMiddleware(
+    (req) => {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      const raidId = parseInt(req.params.raidId);
+      return cacheService.getBossProgressKey(realm, name, raidId);
+    },
+    (req) => {
+      const raidId = parseInt(req.params.raidId);
+      return cacheService.getTTLForRaid(raidId);
+    },
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      const raidId = parseInt(req.params.raidId);
 
-    const bossProgress = await guildService.getGuildBossProgressForRaidByRealmName(realm, name, raidId);
+      const bossProgress = await guildService.getGuildBossProgressForRaidByRealmName(realm, name, raidId);
 
-    if (!bossProgress) {
-      return res.status(404).json({ error: "Guild not found" });
+      if (!bossProgress) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+
+      res.json(bossProgress);
+    } catch (error) {
+      logger.error("Error fetching guild boss progress:", error);
+      res.status(500).json({ error: "Failed to fetch guild boss progress" });
     }
-
-    res.json(bossProgress);
-  } catch (error) {
-    logger.error("Error fetching guild boss progress:", error);
-    res.status(500).json({ error: "Failed to fetch guild boss progress" });
-  }
-});
+  },
+);
 
 // DEPRECATED: Get detailed boss progress by ObjectId (kept for backward compatibility)
 router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
@@ -138,22 +174,33 @@ router.get("/:id/raids/:raidId/bosses", async (req: Request, res: Response) => {
 });
 
 // Get guild summary by realm/name (without boss details)
-router.get("/:realm/:name/summary", async (req: Request, res: Response) => {
-  try {
-    const realm = decodeURIComponent(req.params.realm);
-    const name = decodeURIComponent(req.params.name);
-    const summary = await guildService.getGuildSummaryByRealmName(realm, name);
+router.get(
+  "/:realm/:name/summary",
+  cacheMiddleware(
+    (req) => {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      return cacheService.getGuildSummaryKey(realm, name);
+    },
+    () => cacheService.GUILD_SUMMARY_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      const summary = await guildService.getGuildSummaryByRealmName(realm, name);
 
-    if (!summary) {
-      return res.status(404).json({ error: "Guild not found" });
+      if (!summary) {
+        return res.status(404).json({ error: "Guild not found" });
+      }
+
+      res.json(summary);
+    } catch (error) {
+      logger.error("Error fetching guild summary:", error);
+      res.status(500).json({ error: "Failed to fetch guild summary" });
     }
-
-    res.json(summary);
-  } catch (error) {
-    logger.error("Error fetching guild summary:", error);
-    res.status(500).json({ error: "Failed to fetch guild summary" });
-  }
-});
+  },
+);
 
 // DEPRECATED: Get single guild by ID with summary progress (kept for backward compatibility)
 router.get("/:id/summary", async (req: Request, res: Response) => {

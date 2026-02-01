@@ -43,8 +43,8 @@ export interface IFight extends Document {
 
 const FightSchema: Schema = new Schema(
   {
-    reportCode: { type: String, required: true, index: true },
-    guildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true, index: true },
+    reportCode: { type: String, required: true },
+    guildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true },
     fightId: { type: Number, required: true },
     zoneId: { type: Number, required: true },
     encounterID: { type: Number, required: true, index: true },
@@ -82,7 +82,7 @@ const FightSchema: Schema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound indexes for efficient queries
