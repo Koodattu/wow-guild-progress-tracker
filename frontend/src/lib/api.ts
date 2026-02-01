@@ -60,6 +60,10 @@ import {
   AdminGuildDetail,
   VerifyReportsResponse,
   QueueRescanResponse,
+  CreateGuildInput,
+  CreateGuildResponse,
+  DeleteGuildPreviewResponse,
+  DeleteGuildResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -482,6 +486,40 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch guild stats");
+    return response.json();
+  },
+
+  async createAdminGuild(input: CreateGuildInput): Promise<CreateGuildResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to create guild");
+    }
+    return response.json();
+  },
+
+  async getAdminGuildDeletePreview(guildId: string): Promise<DeleteGuildPreviewResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/delete-preview`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch deletion preview");
+    return response.json();
+  },
+
+  async deleteAdminGuild(guildId: string): Promise<DeleteGuildResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}?confirm=true`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete guild");
+    }
     return response.json();
   },
 

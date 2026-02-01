@@ -48,6 +48,9 @@ import {
   TriggerResponse,
   AdminGuildDetail,
   VerifyReportsResponse,
+  CreateGuildInput,
+  DeleteGuildPreviewResponse,
+  DeleteGuildResponse,
 } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "pickems" | "system";
@@ -131,6 +134,23 @@ export default function AdminPage() {
   const [showGuildDetail, setShowGuildDetail] = useState(false);
   const [guildDetailLoading, setGuildDetailLoading] = useState(false);
   const [verifyResult, setVerifyResult] = useState<VerifyReportsResponse | null>(null);
+
+  // Add Guild modal
+  const [showAddGuildModal, setShowAddGuildModal] = useState(false);
+  const [addGuildForm, setAddGuildForm] = useState({
+    name: "",
+    realm: "",
+    region: "eu",
+    parent_guild: "",
+    streamers: "",
+  });
+  const [addGuildLoading, setAddGuildLoading] = useState(false);
+
+  // Delete Guild modal
+  const [showDeleteGuildModal, setShowDeleteGuildModal] = useState(false);
+  const [deleteGuildPreview, setDeleteGuildPreview] = useState<DeleteGuildPreviewResponse | null>(null);
+  const [deleteGuildLoading, setDeleteGuildLoading] = useState(false);
+  const [guildToDelete, setGuildToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Pickem form state
   const [pickemForm, setPickemForm] = useState({
@@ -395,6 +415,104 @@ export default function AdminPage() {
         type: "error",
         text: error instanceof Error ? error.message : "Failed to recalculate stats",
       });
+    }
+  };
+
+  // Handler for adding a new guild
+  const handleAddGuild = async () => {
+    if (!addGuildForm.name.trim() || !addGuildForm.realm.trim()) {
+      setTriggerMessage({ type: "error", text: "Guild name and realm are required" });
+      return;
+    }
+
+    setAddGuildLoading(true);
+    try {
+      const input: CreateGuildInput = {
+        name: addGuildForm.name.trim(),
+        realm: addGuildForm.realm.trim(),
+        region: addGuildForm.region,
+        parent_guild: addGuildForm.parent_guild.trim() || undefined,
+        streamers: addGuildForm.streamers.trim()
+          ? addGuildForm.streamers
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
+      };
+
+      const result = await api.createAdminGuild(input);
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+
+      // Refresh guilds list
+      const guildsData = await api.getAdminGuilds(guildsPage);
+      setGuilds(guildsData.guilds);
+      setGuildsTotalPages(guildsData.pagination.totalPages);
+      const guildStatsData = await api.getAdminGuildStats();
+      setGuildStats(guildStatsData);
+
+      // Close modal and reset form
+      setShowAddGuildModal(false);
+      setAddGuildForm({ name: "", realm: "", region: "eu", parent_guild: "", streamers: "" });
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to create guild",
+      });
+    } finally {
+      setAddGuildLoading(false);
+    }
+  };
+
+  // Handler for clicking delete on a guild - fetches preview
+  const handleDeleteGuildClick = async (guildId: string, guildName: string) => {
+    setDeleteGuildLoading(true);
+    setGuildToDelete({ id: guildId, name: guildName });
+    try {
+      const preview = await api.getAdminGuildDeletePreview(guildId);
+      setDeleteGuildPreview(preview);
+      setShowDeleteGuildModal(true);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to get delete preview",
+      });
+      setGuildToDelete(null);
+    } finally {
+      setDeleteGuildLoading(false);
+    }
+  };
+
+  // Handler for confirming guild deletion
+  const handleConfirmDeleteGuild = async () => {
+    if (!guildToDelete) return;
+
+    setDeleteGuildLoading(true);
+    try {
+      const result = await api.deleteAdminGuild(guildToDelete.id);
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+
+      // Refresh guilds list
+      const guildsData = await api.getAdminGuilds(guildsPage);
+      setGuilds(guildsData.guilds);
+      setGuildsTotalPages(guildsData.pagination.totalPages);
+      const guildStatsData = await api.getAdminGuildStats();
+      setGuildStats(guildStatsData);
+
+      // Close modals
+      setShowDeleteGuildModal(false);
+      setDeleteGuildPreview(null);
+      setGuildToDelete(null);
+      setShowGuildDetail(false);
+      setSelectedGuild(null);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to delete guild",
+      });
+    } finally {
+      setDeleteGuildLoading(false);
     }
   };
 
@@ -748,6 +866,13 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* Add Guild Button */}
+            <div className="mb-4">
+              <button onClick={() => setShowAddGuildModal(true)} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                + Add Guild
+              </button>
+            </div>
+
             {/* Guilds Table */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">
               <table className="w-full">
@@ -818,6 +943,14 @@ export default function AdminPage() {
                             title="Update world rankings for all raids"
                           >
                             Ranks
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGuildClick(guild.id, guild.name)}
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                            title="Delete guild"
+                            disabled={deleteGuildLoading && guildToDelete?.id === guild.id}
+                          >
+                            {deleteGuildLoading && guildToDelete?.id === guild.id ? "..." : "Delete"}
                           </button>
                         </div>
                       </td>
@@ -2033,7 +2166,7 @@ export default function AdminPage() {
 
                     {/* Verify Reports Section */}
                     <div className="border-t border-gray-700 pt-4">
-                      <div className="flex items-center gap-4 mb-4">
+                      <div className="flex items-center gap-4 mb-4 flex-wrap">
                         <button onClick={() => handleVerifyReports(selectedGuild.id)} className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700">
                           Verify Reports
                         </button>
@@ -2045,6 +2178,13 @@ export default function AdminPage() {
                           className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
                         >
                           Recalculate Stats
+                        </button>
+                        <button
+                          onClick={() => handleDeleteGuildClick(selectedGuild.id, selectedGuild.name)}
+                          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                          disabled={deleteGuildLoading}
+                        >
+                          {deleteGuildLoading ? "Loading..." : "Delete Guild"}
                         </button>
                       </div>
 
@@ -2087,6 +2227,182 @@ export default function AdminPage() {
                 ) : (
                   <div className="text-center py-8 text-red-400">Failed to load guild details</div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Guild Modal */}
+        {showAddGuildModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-white mb-4">Add New Guild</h3>
+
+              <div className="space-y-4">
+                {/* Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Guild Name *</label>
+                  <input
+                    type="text"
+                    value={addGuildForm.name}
+                    onChange={(e) => setAddGuildForm({ ...addGuildForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="Method"
+                    required
+                  />
+                </div>
+
+                {/* Realm */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Realm *</label>
+                  <input
+                    type="text"
+                    value={addGuildForm.realm}
+                    onChange={(e) => setAddGuildForm({ ...addGuildForm, realm: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="Tarren Mill"
+                    required
+                  />
+                </div>
+
+                {/* Region */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Region</label>
+                  <select
+                    value={addGuildForm.region}
+                    onChange={(e) => setAddGuildForm({ ...addGuildForm, region: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="eu">EU</option>
+                    <option value="us">US</option>
+                    <option value="kr">KR</option>
+                    <option value="tw">TW</option>
+                    <option value="cn">CN</option>
+                  </select>
+                </div>
+
+                {/* Parent Guild */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Parent Guild (optional)</label>
+                  <input
+                    type="text"
+                    value={addGuildForm.parent_guild}
+                    onChange={(e) => setAddGuildForm({ ...addGuildForm, parent_guild: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="Main guild name if this is a sub-team"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">For sub-teams/splits, enter the main guild name</p>
+                </div>
+
+                {/* Streamers */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Streamers (optional)</label>
+                  <input
+                    type="text"
+                    value={addGuildForm.streamers}
+                    onChange={(e) => setAddGuildForm({ ...addGuildForm, streamers: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="streamer1, streamer2, streamer3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Comma-separated Twitch channel names</p>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleAddGuild}
+                    disabled={addGuildLoading || !addGuildForm.name.trim() || !addGuildForm.realm.trim()}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {addGuildLoading ? "Creating..." : "Create Guild"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddGuildModal(false);
+                      setAddGuildForm({ name: "", realm: "", region: "eu", parent_guild: "", streamers: "" });
+                    }}
+                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Guild Confirmation Modal */}
+        {showDeleteGuildModal && deleteGuildPreview && guildToDelete && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full">
+              <h3 className="text-xl font-bold text-red-400 mb-4">⚠️ Delete Guild</h3>
+
+              <div className="space-y-4">
+                {/* Guild Info */}
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-white font-medium mb-2">{deleteGuildPreview.guild.name}</h4>
+                  <p className="text-gray-400 text-sm">
+                    {deleteGuildPreview.guild.realm} - {deleteGuildPreview.guild.region.toUpperCase()}
+                  </p>
+                </div>
+
+                {/* What will be deleted */}
+                <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
+                  <h4 className="text-red-400 font-medium mb-3">The following data will be permanently deleted:</h4>
+                  <ul className="space-y-2 text-gray-300 text-sm">
+                    <li className="flex justify-between">
+                      <span>Reports:</span>
+                      <span className="font-medium text-white">{deleteGuildPreview.willBeDeleted.reports}</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Fights:</span>
+                      <span className="font-medium text-white">{deleteGuildPreview.willBeDeleted.fights}</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Events:</span>
+                      <span className="font-medium text-white">{deleteGuildPreview.willBeDeleted.events}</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Queue Items:</span>
+                      <span className="font-medium text-white">{deleteGuildPreview.willBeDeleted.queueItem}</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Tier List Entries:</span>
+                      <span className="font-medium text-white">{deleteGuildPreview.willBeDeleted.tierListEntries}</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Warning */}
+                <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                  <p className="text-amber-300 text-sm">{deleteGuildPreview.warning}</p>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteGuild}
+                    disabled={deleteGuildLoading}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleteGuildLoading ? "Deleting..." : "Confirm Delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteGuildModal(false);
+                      setDeleteGuildPreview(null);
+                      setGuildToDelete(null);
+                    }}
+                    disabled={deleteGuildLoading}
+                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>

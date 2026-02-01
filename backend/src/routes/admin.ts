@@ -4,6 +4,8 @@ import User from "../models/User";
 import Guild from "../models/Guild";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
+import Event from "../models/Event";
+import TierList from "../models/TierList";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import pickemService from "../services/pickem.service";
 import rateLimitService from "../services/rate-limit.service";
@@ -13,6 +15,7 @@ import logger from "../utils/logger";
 import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
 import wclService from "../services/warcraftlogs.service";
+import blizzardService from "../services/blizzard.service";
 
 const router = Router();
 
@@ -434,6 +437,225 @@ router.get("/guilds/:guildId/verify-reports", async (req: Request, res: Response
   } catch (error) {
     logger.error("Error verifying guild reports:", error);
     res.status(500).json({ error: "Failed to verify reports" });
+  }
+});
+
+// Create a new guild
+router.post("/guilds", async (req: Request, res: Response) => {
+  try {
+    const { name, realm, region, parent_guild, streamers } = req.body;
+
+    // Validate required fields
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ error: "Guild name is required" });
+    }
+    if (!realm || typeof realm !== "string" || realm.trim().length === 0) {
+      return res.status(400).json({ error: "Realm is required" });
+    }
+    if (!region || typeof region !== "string" || !["EU", "US", "KR", "TW", "CN"].includes(region.toUpperCase())) {
+      return res.status(400).json({ error: "Valid region is required (EU, US, KR, TW, CN)" });
+    }
+
+    // Validate optional fields
+    if (parent_guild !== undefined && parent_guild !== null && typeof parent_guild !== "string") {
+      return res.status(400).json({ error: "Parent guild must be a string" });
+    }
+    if (streamers !== undefined && streamers !== null) {
+      if (!Array.isArray(streamers)) {
+        return res.status(400).json({ error: "Streamers must be an array of channel names" });
+      }
+      if (!streamers.every((s: unknown) => typeof s === "string")) {
+        return res.status(400).json({ error: "All streamer entries must be strings" });
+      }
+    }
+
+    const normalizedName = name.trim();
+    const normalizedRealm = realm.trim();
+    const normalizedRegion = region.toUpperCase();
+
+    // Check if guild already exists
+    const existingGuild = await Guild.findOne({
+      name: { $regex: new RegExp(`^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+      realm: { $regex: new RegExp(`^${normalizedRealm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+      region: normalizedRegion,
+    });
+
+    if (existingGuild) {
+      return res.status(409).json({
+        error: "Guild already exists",
+        existingGuildId: existingGuild._id.toString(),
+      });
+    }
+
+    // Fetch guild crest from Blizzard API
+    let crest = null;
+    try {
+      crest = await blizzardService.getGuildCrest(
+        normalizedRealm.toLowerCase().replace(/\s+/g, "-"),
+        normalizedName.toLowerCase().replace(/\s+/g, "-"),
+        normalizedRegion.toLowerCase(),
+      );
+    } catch (crestError) {
+      logger.warn(`Could not fetch crest for ${normalizedName}-${normalizedRealm}: ${crestError instanceof Error ? crestError.message : "Unknown error"}`);
+    }
+
+    // Format streamers array
+    const formattedStreamers = streamers
+      ? streamers.map((channelName: string) => ({
+          channelName: channelName.trim().toLowerCase(),
+          isLive: false,
+          isPlayingWoW: false,
+          gameName: null,
+          lastChecked: null,
+        }))
+      : [];
+
+    // Create the guild
+    const newGuild = await Guild.create({
+      name: normalizedName,
+      realm: normalizedRealm,
+      region: normalizedRegion,
+      parent_guild: parent_guild?.trim() || undefined,
+      crest,
+      streamers: formattedStreamers,
+      progress: [],
+      isCurrentlyRaiding: false,
+      activityStatus: "active",
+      wclStatus: "unknown",
+    });
+
+    // Queue the guild for initial report processing
+    const queueItem = await backgroundGuildProcessor.queueGuild(newGuild, 10);
+
+    logger.info(`Admin created new guild: ${normalizedName}-${normalizedRealm} (${normalizedRegion}) - queued for processing`);
+
+    res.status(201).json({
+      success: true,
+      message: `Guild ${normalizedName} created and queued for processing`,
+      guild: {
+        id: newGuild._id.toString(),
+        name: newGuild.name,
+        realm: newGuild.realm,
+        region: newGuild.region,
+        parentGuild: newGuild.parent_guild,
+      },
+      queueStatus: {
+        id: queueItem._id.toString(),
+        status: queueItem.status,
+      },
+    });
+  } catch (error) {
+    logger.error("Error creating guild:", error);
+    res.status(500).json({ error: "Failed to create guild" });
+  }
+});
+
+// Delete a guild and all associated data
+router.delete("/guilds/:guildId", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+    const { confirm } = req.query;
+
+    // Require explicit confirmation
+    if (confirm !== "true") {
+      return res.status(400).json({
+        error: "Deletion requires confirmation",
+        message: "Add ?confirm=true to confirm deletion of guild and all associated data",
+      });
+    }
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const guildName = guild.name;
+    const guildRealm = guild.realm;
+
+    // Count associated data before deletion
+    const [reportCount, fightCount, eventCount, queueCount] = await Promise.all([
+      Report.countDocuments({ guildId: guild._id }),
+      Fight.countDocuments({ guildId: guild._id }),
+      Event.countDocuments({ guildId: guild._id }),
+      GuildProcessingQueue.countDocuments({ guildId: guild._id }),
+    ]);
+
+    // Delete all associated data in parallel
+    const [reportResult, fightResult, eventResult, queueResult, tierListOverallResult, tierListRaidsResult] = await Promise.all([
+      Report.deleteMany({ guildId: guild._id }),
+      Fight.deleteMany({ guildId: guild._id }),
+      Event.deleteMany({ guildId: guild._id }),
+      GuildProcessingQueue.deleteMany({ guildId: guild._id }),
+      // Remove guild from tier list overall array
+      TierList.updateMany({}, { $pull: { overall: { guildId: guild._id } } }),
+      // Remove guild from tier list raid arrays
+      TierList.updateMany({}, { $pull: { "raids.$[].guilds": { guildId: guild._id } } }),
+    ]);
+
+    // Delete the guild itself
+    await Guild.deleteOne({ _id: guild._id });
+
+    logger.info(
+      `Admin deleted guild: ${guildName}-${guildRealm} (ID: ${guildId}). ` +
+        `Removed: ${reportResult.deletedCount} reports, ${fightResult.deletedCount} fights, ` +
+        `${eventResult.deletedCount} events, ${queueResult.deletedCount} queue items`,
+    );
+
+    res.json({
+      success: true,
+      message: `Guild ${guildName} and all associated data deleted`,
+      deleted: {
+        guild: { id: guildId, name: guildName, realm: guildRealm },
+        reports: reportResult.deletedCount,
+        fights: fightResult.deletedCount,
+        events: eventResult.deletedCount,
+        queueItems: queueResult.deletedCount,
+        tierListEntriesModified: tierListOverallResult.modifiedCount + tierListRaidsResult.modifiedCount,
+      },
+    });
+  } catch (error) {
+    logger.error("Error deleting guild:", error);
+    res.status(500).json({ error: "Failed to delete guild" });
+  }
+});
+
+// Get guild deletion preview (shows what will be deleted)
+router.get("/guilds/:guildId/delete-preview", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Count associated data
+    const [reportCount, fightCount, eventCount, queueItem] = await Promise.all([
+      Report.countDocuments({ guildId: guild._id }),
+      Fight.countDocuments({ guildId: guild._id }),
+      Event.countDocuments({ guildId: guild._id }),
+      GuildProcessingQueue.findOne({ guildId: guild._id }).lean(),
+    ]);
+
+    res.json({
+      guild: {
+        id: guildId,
+        name: guild.name,
+        realm: guild.realm,
+        region: guild.region,
+      },
+      willBeDeleted: {
+        reports: reportCount,
+        fights: fightCount,
+        events: eventCount,
+        queueItem: queueItem ? 1 : 0,
+        tierListEntries: "Guild will be removed from all tier lists",
+      },
+      warning: "This action cannot be undone. The guild and all associated data will be permanently deleted.",
+    });
+  } catch (error) {
+    logger.error("Error getting guild deletion preview:", error);
+    res.status(500).json({ error: "Failed to get deletion preview" });
   }
 });
 

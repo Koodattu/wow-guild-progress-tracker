@@ -1072,3 +1072,65 @@ export interface QueueRescanResponse {
   status?: ProcessingStatus;
   error?: string;
 }
+
+// Create Guild Input
+export interface CreateGuildInput {
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+  streamers?: string[];
+}
+
+// Create Guild Response
+export interface CreateGuildResponse {
+  success: boolean;
+  message: string;
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+    region: string;
+    parentGuild?: string;
+  };
+  queueStatus: {
+    id: string;
+    status: ProcessingStatus;
+  };
+}
+
+// Delete Guild Preview Response
+export interface DeleteGuildPreviewResponse {
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+    region: string;
+  };
+  willBeDeleted: {
+    reports: number;
+    fights: number;
+    events: number;
+    queueItem: number;
+    tierListEntries: string;
+  };
+  warning: string;
+}
+
+// Delete Guild Response
+export interface DeleteGuildResponse {
+  success: boolean;
+  message: string;
+  deleted: {
+    guild: {
+      id: string;
+      name: string;
+      realm: string;
+    };
+    reports: number;
+    fights: number;
+    events: number;
+    queueItems: number;
+    tierListEntriesModified: number;
+  };
+}
