@@ -389,6 +389,12 @@ class GuildService {
         // (i.e., it exists in DB but has no reports - maybe a previous fetch failed)
         const hasReports = await Report.exists({ guildId: existing._id });
         if (!hasReports) {
+          // Skip guilds that don't exist on WarcraftLogs (marked as not_found)
+          if (existing.wclStatus === "not_found") {
+            logger.debug(`Skipping guild ${existing.name} - marked as not found on WarcraftLogs`);
+            continue;
+          }
+
           // Check if already in queue
           const inQueue = await GuildProcessingQueue.findOne({ guildId: existing._id });
           if (!inQueue || inQueue.status === "failed") {

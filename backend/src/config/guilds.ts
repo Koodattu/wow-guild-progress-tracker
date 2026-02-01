@@ -872,11 +872,6 @@ export const GUILDS_PROD: TrackedGuild[] = [
     region: "EU",
   },
   {
-    name: "SaunanTaakse",
-    realm: "Stormreaver",
-    region: "EU",
-  },
-  {
     name: "Saunatauko",
     realm: "Bladefist",
     region: "EU",

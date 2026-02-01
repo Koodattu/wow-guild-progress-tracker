@@ -535,6 +535,12 @@ class BackgroundGuildProcessor {
    * Add a guild to the processing queue
    */
   async queueGuild(guild: IGuild, priority: number = 10): Promise<IGuildProcessingQueue> {
+    // Don't queue guilds that are marked as not found on WarcraftLogs
+    if (guild.wclStatus === "not_found") {
+      logger.warn(`[BackgroundProcessor] Skipping guild ${guild.name}-${guild.realm}: marked as not found on WarcraftLogs`);
+      throw new Error(`Guild ${guild.name}-${guild.realm} is marked as not found on WarcraftLogs and cannot be queued`);
+    }
+
     // Check if already in queue
     const existing = await GuildProcessingQueue.findOne({ guildId: guild._id });
 
