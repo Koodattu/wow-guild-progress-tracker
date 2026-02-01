@@ -28,14 +28,11 @@ export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // change these values to test different queries
-  const filters: Filters = {
-    limit: 50,
+  const [filters, setFilters] = useState<Filters>({
+    limit: 100,
     page: 1,
     role: "dps",
-    encounterId: 3132,
-  };
+  });
 
   useEffect(() => {
     (async () => {
@@ -51,7 +48,7 @@ export default function CharacterRankingsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [filters]);
 
   if (loading) return <div className="p-6">Loading…</div>;
   if (error) return <div className="p-6 text-red-300">{error}</div>;
