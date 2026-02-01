@@ -473,8 +473,11 @@ export const api = {
     return response.json();
   },
 
-  async getAdminGuilds(page: number = 1, limit: number = 20): Promise<AdminGuildsResponse> {
-    const response = await fetch(`${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`, {
+  async getAdminGuilds(page: number = 1, limit: number = 20, search?: string): Promise<AdminGuildsResponse> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.append("search", search);
+
+    const response = await fetch(`${API_URL}/api/admin/guilds?${params}`, {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch guilds");
@@ -846,6 +849,24 @@ export const api = {
       throw new Error("Failed to fetch processing queue errors");
     }
 
+    return response.json();
+  },
+
+  async clearAdminProcessingQueueCompleted(): Promise<{ success: boolean; deletedCount: number; message: string }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/clear-completed`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to clear completed guilds");
+    return response.json();
+  },
+
+  async clearAdminProcessingQueueErrors(action: "reset" | "remove" = "reset"): Promise<{ success: boolean; deletedCount?: number; modifiedCount?: number; message: string }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/clear-errors?action=${action}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to clear errors");
     return response.json();
   },
 };

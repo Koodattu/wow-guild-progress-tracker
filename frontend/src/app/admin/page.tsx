@@ -101,6 +101,8 @@ export default function AdminPage() {
   const [guildStats, setGuildStats] = useState<AdminGuildStats | null>(null);
   const [guildsPage, setGuildsPage] = useState(1);
   const [guildsTotalPages, setGuildsTotalPages] = useState(1);
+  const [guildSearch, setGuildSearch] = useState("");
+  const [guildSearchDebounced, setGuildSearchDebounced] = useState("");
 
   // Pickems data
   const [pickems, setPickems] = useState<AdminPickem[]>([]);
@@ -222,7 +224,7 @@ export default function AdminPage() {
           }
 
           case "guilds": {
-            const [guildsData, guildStatsData] = await Promise.all([api.getAdminGuilds(guildsPage), api.getAdminGuildStats()]);
+            const [guildsData, guildStatsData] = await Promise.all([api.getAdminGuilds(guildsPage, 20, guildSearchDebounced || undefined), api.getAdminGuildStats()]);
             setGuilds(guildsData.guilds);
             setGuildsTotalPages(guildsData.pagination.totalPages);
             setGuildStats(guildStatsData);
@@ -263,7 +265,18 @@ export default function AdminPage() {
     };
 
     fetchData();
-  }, [activeTab, user?.isAdmin, usersPage, guildsPage, queuePage, queueFilter]);
+  }, [activeTab, user?.isAdmin, usersPage, guildsPage, queuePage, queueFilter, guildSearchDebounced]);
+
+  // Debounce guild search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGuildSearchDebounced(guildSearch);
+      if (guildSearch !== guildSearchDebounced) {
+        setGuildsPage(1); // Reset to first page when search changes
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [guildSearch]);
 
   // Auto-refresh system tab every 10 seconds
   useEffect(() => {
@@ -445,7 +458,7 @@ export default function AdminPage() {
       setTimeout(() => setTriggerMessage(null), 5000);
 
       // Refresh guilds list
-      const guildsData = await api.getAdminGuilds(guildsPage);
+      const guildsData = await api.getAdminGuilds(guildsPage, 20, guildSearchDebounced || undefined);
       setGuilds(guildsData.guilds);
       setGuildsTotalPages(guildsData.pagination.totalPages);
       const guildStatsData = await api.getAdminGuildStats();
@@ -494,7 +507,7 @@ export default function AdminPage() {
       setTimeout(() => setTriggerMessage(null), 5000);
 
       // Refresh guilds list
-      const guildsData = await api.getAdminGuilds(guildsPage);
+      const guildsData = await api.getAdminGuilds(guildsPage, 20, guildSearchDebounced || undefined);
       setGuilds(guildsData.guilds);
       setGuildsTotalPages(guildsData.pagination.totalPages);
       const guildStatsData = await api.getAdminGuildStats();
@@ -866,11 +879,30 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Add Guild Button */}
-            <div className="mb-4">
+            {/* Add Guild Button and Search */}
+            <div className="mb-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
               <button onClick={() => setShowAddGuildModal(true)} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
                 + Add Guild
               </button>
+
+              {/* Guild Search */}
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  value={guildSearch}
+                  onChange={(e) => setGuildSearch(e.target.value)}
+                  placeholder="Search by guild name or realm..."
+                  className="w-full px-4 py-2 pl-10 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {guildSearch && (
+                  <button onClick={() => setGuildSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Guilds Table */}
@@ -1660,6 +1692,35 @@ export default function AdminPage() {
                   <div className="bg-gray-800 rounded-lg p-4">
                     <h4 className="text-gray-400 text-sm">Completed</h4>
                     <p className="text-2xl font-bold text-green-400">{queueStats.completed}</p>
+                    {queueStats.completed > 0 && (
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Clear all ${queueStats.completed} completed guilds from the queue?`)) {
+                            try {
+                              const result = await api.clearAdminProcessingQueueCompleted();
+                              setTriggerMessage({ type: "success", text: result.message });
+                              setTimeout(() => setTriggerMessage(null), 5000);
+                              // Refresh queue stats
+                              const statsData = await api.getAdminProcessingQueueStats();
+                              setQueueStats(statsData.queue);
+                              setProcessorStatus(statsData.processor);
+                              // Refresh queue items if viewing completed
+                              if (queueFilter === "completed" || queueFilter === "") {
+                                const queueData = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                                setQueueItems(queueData.items);
+                                setQueueTotalPages(queueData.pagination.totalPages);
+                              }
+                            } catch (err) {
+                              console.error("Failed to clear completed:", err);
+                              setTriggerMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to clear completed guilds" });
+                            }
+                          }
+                        }}
+                        className="mt-2 px-2 py-1 text-xs bg-gray-600 text-gray-200 rounded hover:bg-gray-500 transition-colors"
+                      >
+                        Clear All
+                      </button>
+                    )}
                   </div>
                   <div className="bg-gray-800 rounded-lg p-4">
                     <h4 className="text-gray-400 text-sm">Failed</h4>
@@ -1734,13 +1795,73 @@ export default function AdminPage() {
 
               {/* Recent Errors Section */}
               <div className="mb-6">
-                <button
-                  onClick={() => setShowErrorDetails(!showErrorDetails)}
-                  className="flex items-center gap-2 text-lg font-semibold text-white mb-3 hover:text-amber-400 transition-colors"
-                >
-                  <span>{showErrorDetails ? "▼" : "▶"}</span>
-                  <span>🔴</span> Recent Errors ({errorItems.length})
-                </button>
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => setShowErrorDetails(!showErrorDetails)}
+                    className="flex items-center gap-2 text-lg font-semibold text-white hover:text-amber-400 transition-colors"
+                  >
+                    <span>{showErrorDetails ? "▼" : "▶"}</span>
+                    <span>🔴</span> Recent Errors ({errorItems.length})
+                  </button>
+
+                  {/* Clear Errors Buttons */}
+                  {queueStats && queueStats.failed > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Reset ${queueStats.failed} failed guilds for retry? This will clear their error state and move them back to pending.`)) {
+                            try {
+                              const result = await api.clearAdminProcessingQueueErrors("reset");
+                              setTriggerMessage({ type: "success", text: result.message });
+                              setTimeout(() => setTriggerMessage(null), 5000);
+                              // Refresh stats and errors
+                              const [statsData, errorsData] = await Promise.all([api.getAdminProcessingQueueStats(), api.getAdminProcessingQueueErrors(1, 50)]);
+                              setQueueStats(statsData.queue);
+                              setProcessorStatus(statsData.processor);
+                              setErrorItems(errorsData.items);
+                              // Refresh queue items
+                              const queueData = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                              setQueueItems(queueData.items);
+                              setQueueTotalPages(queueData.pagination.totalPages);
+                            } catch (err) {
+                              console.error("Failed to reset errors:", err);
+                              setTriggerMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to reset errors" });
+                            }
+                          }
+                        }}
+                        className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                      >
+                        Reset for Retry
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Remove ${queueStats.failed} failed guilds from the queue? This action cannot be undone.`)) {
+                            try {
+                              const result = await api.clearAdminProcessingQueueErrors("remove");
+                              setTriggerMessage({ type: "success", text: result.message });
+                              setTimeout(() => setTriggerMessage(null), 5000);
+                              // Refresh stats and errors
+                              const [statsData, errorsData] = await Promise.all([api.getAdminProcessingQueueStats(), api.getAdminProcessingQueueErrors(1, 50)]);
+                              setQueueStats(statsData.queue);
+                              setProcessorStatus(statsData.processor);
+                              setErrorItems(errorsData.items);
+                              // Refresh queue items
+                              const queueData = await api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined);
+                              setQueueItems(queueData.items);
+                              setQueueTotalPages(queueData.pagination.totalPages);
+                            } catch (err) {
+                              console.error("Failed to remove errors:", err);
+                              setTriggerMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to remove failed guilds" });
+                            }
+                          }
+                        }}
+                        className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                      >
+                        Remove All Failed
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {showErrorDetails && (
                   <div className="space-y-4">

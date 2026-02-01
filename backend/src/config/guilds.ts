@@ -1008,7 +1008,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Tervaleijona",
-    realm: "Burning Steppes",
+    realm: "Burning-Steppes",
     region: "EU",
   },
   {
@@ -1053,7 +1053,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Tröllin Likaiset Varpaat",
-    realm: "Laughing Skull",
+    realm: "Laughing-Skull",
     region: "EU",
   },
   {

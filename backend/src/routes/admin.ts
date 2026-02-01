@@ -131,15 +131,23 @@ router.get("/users/stats", async (req: Request, res: Response) => {
 // GUILD MANAGEMENT
 // ============================================================
 
-// Get all guilds with pagination
+// Get all guilds with pagination and optional search
 router.get("/guilds", async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
+    const search = (req.query.search as string)?.trim() || "";
     const skip = (page - 1) * limit;
 
+    // Build query with optional search filter
+    const query: Record<string, unknown> = {};
+    if (search) {
+      // Search by guild name or realm (case-insensitive)
+      query.$or = [{ name: { $regex: search, $options: "i" } }, { realm: { $regex: search, $options: "i" } }];
+    }
+
     const [guilds, total] = await Promise.all([
-      Guild.find()
+      Guild.find(query)
         .select({
           name: 1,
           realm: 1,
@@ -160,7 +168,7 @@ router.get("/guilds", async (req: Request, res: Response) => {
         .skip(skip)
         .limit(limit)
         .lean(),
-      Guild.countDocuments(),
+      Guild.countDocuments(query),
     ]);
 
     // Format guilds for response
@@ -1360,6 +1368,73 @@ router.post("/processing-queue/:guildId/retry", async (req: Request, res: Respon
   } catch (error) {
     logger.error("Error retrying guild processing:", error);
     res.status(500).json({ error: "Failed to retry guild processing" });
+  }
+});
+
+// Clear all completed guilds from the processing queue
+// NOTE: This route MUST be defined before the parameterized /:guildId route
+router.delete("/processing-queue/clear-completed", async (req: Request, res: Response) => {
+  try {
+    const result = await GuildProcessingQueue.deleteMany({ status: "completed" });
+
+    logger.info(`Cleared ${result.deletedCount} completed guilds from processing queue`);
+
+    res.json({
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `Cleared ${result.deletedCount} completed guilds from the queue`,
+    });
+  } catch (error) {
+    logger.error("Error clearing completed guilds from processing queue:", error);
+    res.status(500).json({ error: "Failed to clear completed guilds" });
+  }
+});
+
+// Clear errors from failed guilds (reset them to pending for retry, or optionally remove them)
+// NOTE: This route MUST be defined before the parameterized /:guildId route
+router.delete("/processing-queue/clear-errors", async (req: Request, res: Response) => {
+  try {
+    const { action = "reset" } = req.query; // "reset" or "remove"
+
+    if (action === "remove") {
+      // Remove all failed guilds from the queue
+      const result = await GuildProcessingQueue.deleteMany({ status: "failed" });
+
+      logger.info(`Removed ${result.deletedCount} failed guilds from processing queue`);
+
+      res.json({
+        success: true,
+        deletedCount: result.deletedCount,
+        message: `Removed ${result.deletedCount} failed guilds from the queue`,
+      });
+    } else {
+      // Reset failed guilds to pending and clear error state
+      const result = await GuildProcessingQueue.updateMany(
+        { status: "failed" },
+        {
+          $set: {
+            status: "pending",
+            errorType: null,
+            isPermanentError: false,
+            failureReason: null,
+            lastError: null,
+            lastErrorAt: null,
+            errorCount: 0,
+          },
+        },
+      );
+
+      logger.info(`Reset ${result.modifiedCount} failed guilds in processing queue`);
+
+      res.json({
+        success: true,
+        modifiedCount: result.modifiedCount,
+        message: `Reset ${result.modifiedCount} failed guilds for retry`,
+      });
+    }
+  } catch (error) {
+    logger.error("Error clearing errors from processing queue:", error);
+    res.status(500).json({ error: "Failed to clear errors" });
   }
 });
 
