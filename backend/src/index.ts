@@ -26,6 +26,7 @@ import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
+import cacheService from "./services/cache.service";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
