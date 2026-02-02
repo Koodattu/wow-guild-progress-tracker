@@ -398,9 +398,11 @@ class UpdateScheduler {
       await this.updateGuildActivityStatus();
 
       // Get active guilds that are NOT currently raiding (raiding guilds handled separately)
+      // Skip guilds marked as not found on WarcraftLogs
       const guilds = await Guild.find({
         activityStatus: "active",
         isCurrentlyRaiding: { $ne: true },
+        wclStatus: { $ne: "not_found" },
       });
 
       if (guilds.length === 0) {
@@ -434,8 +436,9 @@ class UpdateScheduler {
     this.isUpdatingHotRaiding = true;
 
     try {
-      // Get guilds that are currently raiding
-      const raidingGuilds = await guildService.getGuildsCurrentlyRaiding();
+      // Get guilds that are currently raiding (excluding guilds not found on WCL)
+      const allRaidingGuilds = await guildService.getGuildsCurrentlyRaiding();
+      const raidingGuilds = allRaidingGuilds.filter((guild) => guild.wclStatus !== "not_found");
 
       if (raidingGuilds.length === 0) {
         // No raiding guilds, nothing to do
@@ -472,9 +475,11 @@ class UpdateScheduler {
       await this.updateGuildActivityStatus();
 
       // Get active guilds (not currently raiding during off hours is unlikely, but check anyway)
+      // Skip guilds marked as not found on WarcraftLogs
       const guilds = await Guild.find({
         activityStatus: "active",
         isCurrentlyRaiding: { $ne: true },
+        wclStatus: { $ne: "not_found" },
       });
 
       if (guilds.length === 0) {
@@ -510,8 +515,11 @@ class UpdateScheduler {
       // First, update activity statuses
       await this.updateGuildActivityStatus();
 
-      // Get inactive guilds
-      const guilds = await Guild.find({ activityStatus: "inactive" });
+      // Get inactive guilds (excluding guilds not found on WCL)
+      const guilds = await Guild.find({
+        activityStatus: "inactive",
+        wclStatus: { $ne: "not_found" },
+      });
 
       if (guilds.length === 0) {
         logger.info("[Daily/Inactive] No inactive guilds to update");
@@ -546,7 +554,7 @@ class UpdateScheduler {
   // Manually trigger update of all guilds
   async updateAllGuilds(): Promise<void> {
     logger.info("Starting full update of all guilds...");
-    const guilds = await Guild.find();
+    const guilds = await Guild.find({ wclStatus: { $ne: "not_found" } });
 
     for (let i = 0; i < guilds.length; i++) {
       const guild = guilds[i];
@@ -570,8 +578,8 @@ class UpdateScheduler {
     this.isUpdatingNightlyWorldRanks = true;
 
     try {
-      // Get all guilds
-      const guilds = await Guild.find();
+      // Get all guilds (excluding guilds not found on WCL)
+      const guilds = await Guild.find({ wclStatus: { $ne: "not_found" } });
 
       if (guilds.length === 0) {
         logger.info("[Nightly/WorldRanks] No guilds to update");

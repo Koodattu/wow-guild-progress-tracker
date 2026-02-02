@@ -638,7 +638,23 @@ class GuildService {
       getGuildLogger(guild.name, guild.realm).info("Successfully updated guild progress");
       return guild;
     } catch (error) {
-      getGuildLogger(guild.name, guild.realm).error("Error updating guild:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      getGuildLogger(guild.name, guild.realm).error("Error updating guild:", errorMessage);
+
+      // Classify the error for better handling
+      const { classifyError, ErrorType } = require("../utils/error-classifier");
+      const classifiedError = classifyError(errorMessage);
+
+      // If guild not found on WarcraftLogs, mark it and don't retry automatically
+      if (classifiedError.type === ErrorType.GUILD_NOT_FOUND) {
+        getGuildLogger(guild.name, guild.realm).warn("Guild not found on WarcraftLogs, marking as not_found");
+        await Guild.findByIdAndUpdate(guild._id, {
+          wclStatus: "not_found",
+          wclStatusUpdatedAt: new Date(),
+          $inc: { wclNotFoundCount: 1 },
+        });
+      }
+
       return null;
     }
   }
@@ -1353,8 +1369,11 @@ class GuildService {
     logger.info("[Refetch/Recent] Starting refetch of recent reports for all active guilds...");
 
     try {
-      // Get all active guilds
-      const guilds = await Guild.find({ activityStatus: "active" });
+      // Get all active guilds (excluding guilds not found on WCL)
+      const guilds = await Guild.find({
+        activityStatus: "active",
+        wclStatus: { $ne: "not_found" },
+      });
 
       if (guilds.length === 0) {
         logger.info("[Refetch/Recent] No active guilds found");
