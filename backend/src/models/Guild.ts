@@ -111,6 +111,8 @@ export interface IGuild extends Document {
   wclStatus?: "active" | "not_found" | "unclaimed" | "unknown"; // Tracks whether the guild exists on WarcraftLogs
   wclStatusUpdatedAt?: Date; // When the WCL status was last checked/updated
   wclNotFoundCount?: number; // Consecutive "guild not found" errors count
+  initialFetchCompleted?: boolean; // Whether initial background fetch was completed (even if no reports were found)
+  initialFetchCompletedAt?: Date; // When the initial fetch was completed
   lastFetched?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -226,6 +228,8 @@ const GuildSchema: Schema = new Schema(
     wclStatus: { type: String, enum: ["active", "not_found", "unclaimed", "unknown"], default: "unknown" }, // Tracks whether the guild exists on WarcraftLogs
     wclStatusUpdatedAt: { type: Date }, // When the WCL status was last checked/updated
     wclNotFoundCount: { type: Number, default: 0 }, // Consecutive "guild not found" errors count
+    initialFetchCompleted: { type: Boolean, default: false }, // Whether initial background fetch was completed
+    initialFetchCompletedAt: { type: Date }, // When the initial fetch was completed
     lastFetched: { type: Date },
   },
   {

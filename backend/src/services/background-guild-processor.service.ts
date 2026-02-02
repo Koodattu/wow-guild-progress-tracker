@@ -346,11 +346,14 @@ class BackgroundGuildProcessor {
         await guild.save();
       }
 
-      // Reset guild's wclStatus to active on successful processing
+      // Reset guild's wclStatus to active on successful processing and mark initial fetch as complete
+      // This flag ensures guilds with no WCL reports won't be re-queued on startup
       await Guild.findByIdAndUpdate(queueItem.guildId, {
         wclStatus: "active",
         wclStatusUpdatedAt: new Date(),
         wclNotFoundCount: 0,
+        initialFetchCompleted: true,
+        initialFetchCompletedAt: new Date(),
       });
 
       // Update world ranks for the guild first
@@ -781,24 +784,29 @@ class BackgroundGuildProcessor {
         return; // Still have items to process
       }
 
-      // Check if we recently updated (within last 5 minutes)
+      // Check if we have any completed guilds since last update
+      const completedCount = stats.completed?.count || 0;
+      if (completedCount === 0) {
+        return; // No work has been done since last rankings update
+      }
+
+      // Check if we recently updated (within last 5 minutes) - safety debounce
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       if (this.lastGlobalRankingsUpdate && this.lastGlobalRankingsUpdate > fiveMinutesAgo) {
         return; // Already updated recently
       }
 
-      // Check if we have any completed guilds since last update
-      const hasCompletedGuilds = (stats.completed?.count || 0) > 0;
-      if (!hasCompletedGuilds) {
-        return; // No work has been done
-      }
-
-      logger.info("[BackgroundProcessor] All guilds processed, recalculating global rankings for all guilds");
+      logger.info(`[BackgroundProcessor] All guilds processed (${completedCount} completed), recalculating global rankings`);
 
       try {
         await guildService.calculateGuildRankingsForAllRaids();
         this.lastGlobalRankingsUpdate = new Date();
         logger.info("[BackgroundProcessor] Global rankings recalculation complete");
+
+        // Clear completed queue entries to prevent re-triggering rankings
+        // This ensures rankings are only recalculated when NEW guilds are processed
+        const deleteResult = await GuildProcessingQueue.deleteMany({ status: "completed" });
+        logger.info(`[BackgroundProcessor] Cleared ${deleteResult.deletedCount} completed queue entries`);
       } catch (globalRankError) {
         logger.error("[BackgroundProcessor] Failed to recalculate global rankings:", globalRankError instanceof Error ? globalRankError.message : "Unknown");
         // Don't throw - this is a non-critical operation

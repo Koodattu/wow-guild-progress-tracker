@@ -395,6 +395,12 @@ class GuildService {
             continue;
           }
 
+          // Skip guilds that already completed their initial fetch (they just have no reports on WCL)
+          if (existing.initialFetchCompleted) {
+            logger.debug(`Skipping guild ${existing.name} - initial fetch already completed (no reports on WCL)`);
+            continue;
+          }
+
           // Check if already in queue
           const inQueue = await GuildProcessingQueue.findOne({ guildId: existing._id });
           if (!inQueue || inQueue.status === "failed") {
