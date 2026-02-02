@@ -380,11 +380,14 @@ class BackgroundGuildProcessor {
       // Mark as completed
       await queueItem.markCompleted();
 
-      // Invalidate guild-related caches after new guild is processed
-      // This ensures the guild list, progress, and home page are updated
+      // Invalidate ALL guild-related caches after new guild is processed
+      // This is correct here because a NEW guild needs to appear in:
+      // - Guild list
+      // - All progress pages (including older raids)
+      // - Home page
       try {
-        await cacheService.invalidateGuildCaches();
-        guildLog.info("Guild caches invalidated after initial fetch");
+        await cacheService.invalidateAllGuildCaches();
+        guildLog.info("All guild caches invalidated after initial fetch");
       } catch (cacheError) {
         guildLog.error("Failed to invalidate caches:", cacheError instanceof Error ? cacheError.message : "Unknown");
       }

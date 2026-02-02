@@ -498,8 +498,10 @@ class UpdateScheduler {
 
       logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
 
-      // Invalidate guild caches after all updates
-      await cacheService.invalidateGuildCaches();
+      // Invalidate current raid caches only (older raids never change during regular updates)
+      // Then warm them with fresh data
+      await cacheService.invalidateCurrentRaidCaches();
+      await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
     } finally {
@@ -542,8 +544,10 @@ class UpdateScheduler {
 
       logger.info(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
 
-      // Invalidate guild caches after all updates
-      await cacheService.invalidateGuildCaches();
+      // Invalidate current raid caches only (older raids never change during regular updates)
+      // Then warm them with fresh data
+      await cacheService.invalidateCurrentRaidCaches();
+      await cacheWarmerService.warmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
     } finally {

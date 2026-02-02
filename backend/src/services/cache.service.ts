@@ -374,20 +374,50 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Invalidate all guild-related caches.
-   * Called after new guild added or major guild data updates.
+   * Invalidate ALL guild-related caches including older raid progress.
+   *
+   * ⚠️  USE SPARINGLY - This is aggressive and should only be called when:
+   * - A NEW guild is added and its data is fetched (new guild appears in all lists)
+   * - Major data restructuring occurs
+   *
+   * This invalidates:
+   * - guilds:* (guild list, schedules, live streamers)
+   * - home:* (home page data)
+   * - guild:* (individual guild summaries)
+   * - progress:* (ALL raid progress including older raids)
    */
-  async invalidateGuildCaches(): Promise<void> {
+  async invalidateAllGuildCaches(): Promise<void> {
     await this.invalidatePattern(/^guilds:/);
     await this.invalidatePattern(/^home:/);
     await this.invalidatePattern(/^guild:/);
     await this.invalidatePattern(/^progress:/);
-    logger.info("All guild-related caches invalidated");
+    logger.info("All guild-related caches invalidated (including older raids)");
+  }
+
+  /**
+   * @deprecated Use invalidateCurrentRaidCaches() for regular updates or invalidateAllGuildCaches() for new guilds
+   */
+  async invalidateGuildCaches(): Promise<void> {
+    // Redirect to the more targeted method for backward compatibility
+    // This prevents accidental invalidation of older raid caches
+    await this.invalidateCurrentRaidCaches();
   }
 
   /**
    * Invalidate caches for current raid only.
-   * Called after current raid progress updates (more targeted).
+   *
+   * ✅ USE THIS for regular guild updates (hot/off hours).
+   *
+   * This is the correct method for most guild update scenarios because:
+   * - Older raid data NEVER changes (guilds don't get new progress for completed raids)
+   * - Only current raid progress can change during updates
+   * - Home page shows current raid data
+   *
+   * This invalidates:
+   * - progress:raid:{currentRaidId} (current raid progress only)
+   * - guilds:raid:{currentRaidId} (current raid guild list)
+   * - home:* (home page shows current raid)
+   * - guilds:live-streamers (can change during updates)
    */
   async invalidateCurrentRaidCaches(): Promise<void> {
     for (const raidId of CURRENT_RAID_IDS) {
