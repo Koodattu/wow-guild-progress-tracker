@@ -6,6 +6,7 @@ import wclService from "./warcraftlogs.service";
 import rateLimitService from "./rate-limit.service";
 import guildService from "./guild.service";
 import cacheService from "./cache.service";
+import cacheWarmerService from "./cache-warmer.service";
 import { TRACKED_RAIDS } from "../config/guilds";
 import Raid from "../models/Raid";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -385,11 +386,14 @@ class BackgroundGuildProcessor {
       // - Guild list
       // - All progress pages (including older raids)
       // - Home page
+      // Then warm all caches immediately so they're ready for users
       try {
         await cacheService.invalidateAllGuildCaches();
-        guildLog.info("All guild caches invalidated after initial fetch");
+        guildLog.info("All guild caches invalidated after initial fetch, warming caches...");
+        await cacheWarmerService.warmAllCaches();
+        guildLog.info("All caches warmed after new guild processing");
       } catch (cacheError) {
-        guildLog.error("Failed to invalidate caches:", cacheError instanceof Error ? cacheError.message : "Unknown");
+        guildLog.error("Failed to invalidate/warm caches:", cacheError instanceof Error ? cacheError.message : "Unknown");
       }
 
       guildLog.info(`✅ Initial fetch completed: ${totalReportsFetched} reports, ${totalFightsSaved} fights across ${page} pages`);
