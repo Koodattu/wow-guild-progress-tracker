@@ -107,6 +107,16 @@ export type CharacterRankingRow = {
   updatedAt?: string;
 };
 
+export type CharacterRankingsResponse = {
+  data: CharacterRankingRow[];
+  pagination: {
+    totalItems: number;
+    totalPages: number;
+    currentPage: number;
+    pageSize: number;
+  };
+};
+
 class CharacterService {
   // Check and update character rankings (nightly job)
   async checkAndRefreshCharacterRankings(): Promise<void> {
@@ -304,7 +314,7 @@ class CharacterService {
     metric?: "dps" | "hps";
     limit?: number;
     page?: number;
-  }): Promise<CharacterRankingRow[]> {
+  }): Promise<CharacterRankingsResponse> {
     const {
       zoneId,
       encounterId,
@@ -331,6 +341,7 @@ class CharacterService {
       if (specName !== undefined) query.specName = specName;
       if (role !== undefined) query.role = role;
 
+      const totalItems = await Ranking.countDocuments(query);
       const rows = await Ranking.find(query)
         .select(
           "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName role " +
@@ -341,7 +352,7 @@ class CharacterService {
         .limit(safeLimit)
         .lean();
 
-      return rows.map((r: any) => ({
+      const data = rows.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -356,7 +367,7 @@ class CharacterService {
           role,
           metric,
         },
-        score: { type: "bestAmount", value: r.bestAmount ?? 0 },
+        score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
         stats: {
           bestAmount: r.bestAmount ?? 0,
           rankPercent: r.rankPercent,
@@ -368,6 +379,16 @@ class CharacterService {
           ? new Date(r.updatedAt).toISOString()
           : undefined,
       }));
+
+      return {
+        data,
+        pagination: {
+          totalItems,
+          totalPages: Math.ceil(totalItems / safeLimit),
+          currentPage: Math.max(page, 1),
+          pageSize: safeLimit,
+        },
+      };
     }
 
     // No encounter -> allStar points
@@ -384,6 +405,7 @@ class CharacterService {
       };
       if (classId !== undefined) query.classID = classId;
 
+      const totalItems = await Character.countDocuments(query);
       const rows = await Character.find(query)
         .select(
           "wclCanonicalCharacterId name realm region classID latestAllStars updatedAt",
@@ -393,7 +415,7 @@ class CharacterService {
         .limit(safeLimit)
         .lean();
 
-      return rows.map((c: any) => ({
+      const data = rows.map((c: any) => ({
         character: {
           wclCanonicalCharacterId: c.wclCanonicalCharacterId,
           name: c.name,
@@ -408,12 +430,25 @@ class CharacterService {
           role,
           metric,
         },
-        score: { type: "allStars", value: c.latestAllStars?.points ?? 0 },
+        score: {
+          type: "allStars" as const,
+          value: c.latestAllStars?.points ?? 0,
+        },
         stats: { allStars: c.latestAllStars },
         updatedAt: c.updatedAt
           ? new Date(c.updatedAt).toISOString()
           : undefined,
       }));
+
+      return {
+        data,
+        pagination: {
+          totalItems,
+          totalPages: Math.ceil(totalItems / safeLimit),
+          currentPage: Math.max(page, 1),
+          pageSize: safeLimit,
+        },
+      };
     }
 
     // Filtered all-boss view (spec/role/metric) => aggregate rankings to compute allStars per character
@@ -421,6 +456,19 @@ class CharacterService {
     if (classId !== undefined) match.classID = classId;
     if (specName !== undefined) match.specName = specName;
     if (role !== undefined) match.role = role;
+
+    // First, get total count without pagination
+    const countAgg = await Ranking.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$characterId",
+        },
+      },
+      { $count: "total" },
+    ]);
+
+    const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
     const agg = await Ranking.aggregate([
       { $match: match },
@@ -445,7 +493,7 @@ class CharacterService {
       { $limit: safeLimit },
     ]);
 
-    return agg.map((r: any) => ({
+    const data = agg.map((r: any) => ({
       character: {
         wclCanonicalCharacterId: r.wclCanonicalCharacterId,
         name: r.name,
@@ -460,7 +508,7 @@ class CharacterService {
         role,
         metric,
       },
-      score: { type: "allStars", value: r.points ?? 0 },
+      score: { type: "allStars" as const, value: r.points ?? 0 },
       stats: {
         allStars: {
           points: r.points ?? 0,
@@ -469,6 +517,16 @@ class CharacterService {
       },
       updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
     }));
+
+    return {
+      data,
+      pagination: {
+        totalItems,
+        totalPages: Math.ceil(totalItems / safeLimit),
+        currentPage: Math.max(page, 1),
+        pageSize: safeLimit,
+      },
+    };
   }
 }
 

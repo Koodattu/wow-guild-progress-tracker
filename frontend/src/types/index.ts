@@ -1,3 +1,5 @@
+import { ReactNode } from "react";
+
 export interface BestPullPhase {
   phaseId: number;
   phaseName: string;
@@ -811,6 +813,14 @@ export type ClassInfo = {
   name: string;
   iconUrl: string;
   specs: Spec[];
+};
+
+export type ColumnDef<T> = {
+  id: string;
+  header: string;
+  accessor?: (row: T, index: number) => ReactNode;
+  width?: string; // e.g., "w-1/6"
+  sortable?: boolean;
 };
 
 // ============================================================================

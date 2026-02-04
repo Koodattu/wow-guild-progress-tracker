@@ -740,7 +740,15 @@ export const api = {
     return response.json();
   },
 
-  async getCharacterRankings(queryString = ""): Promise<CharacterRankingRow[]> {
+  async getCharacterRankings(queryString = ""): Promise<{
+    data: CharacterRankingRow[];
+    pagination: {
+      totalItems: number;
+      totalPages: number;
+      currentPage: number;
+      pageSize: number;
+    };
+  }> {
     const response = await fetch(
       `${API_URL}/api/character-rankings${queryString}`,
     );
