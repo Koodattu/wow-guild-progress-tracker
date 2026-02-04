@@ -65,7 +65,7 @@ export default function GuildProfilePage({ params }: PageProps) {
       const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
       router.replace(newUrl, { scroll: false });
     },
-    [pathname, router]
+    [pathname, router],
   );
 
   // Initial data fetch - guild summary, raids, and events
@@ -135,15 +135,15 @@ export default function GuildProfilePage({ params }: PageProps) {
         setError("Failed to load raid details.");
       }
     },
-    [guildSummary, realm, name, updateURL]
+    [guildSummary, realm, name, updateURL],
   );
 
   // Handle raid info click - navigate to main page with raid selected
   const handleRaidInfoClick = useCallback(
     (raidId: number) => {
-      router.push(`/?raidid=${raidId}`);
+      router.push(`/progress/?raidid=${raidId}`);
     },
-    [router]
+    [router],
   );
 
   // Handle raid selection from URL parameter after initial load
@@ -518,8 +518,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const bestProgress = mythicProgress?.bestPullPhase?.displayString
                           ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
                           : mythicProgress && mythicProgress.bestPullPercent < 100
-                          ? formatPercent(mythicProgress.bestPullPercent)
-                          : null;
+                            ? formatPercent(mythicProgress.bestPullPercent)
+                            : null;
                         const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
                         const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
                         const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
@@ -633,8 +633,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const bestProgress = mythicProgress?.bestPullPhase?.displayString
                             ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
                             : mythicProgress && mythicProgress.bestPullPercent < 100
-                            ? formatPercent(mythicProgress.bestPullPercent)
-                            : "-";
+                              ? formatPercent(mythicProgress.bestPullPercent)
+                              : "-";
 
                           // Get guild rank - prefer mythic, fall back to heroic
                           const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
