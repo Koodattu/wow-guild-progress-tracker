@@ -801,6 +801,18 @@ export type CharacterRankingRow = {
   updatedAt?: string;
 };
 
+export type Spec = {
+  name: string;
+  role: "dps" | "healer" | "tank";
+};
+
+export type ClassInfo = {
+  id: number;
+  name: string;
+  iconUrl: string;
+  specs: Spec[];
+};
+
 // ============================================================================
 // RAID ANALYTICS TYPES
 // ============================================================================
