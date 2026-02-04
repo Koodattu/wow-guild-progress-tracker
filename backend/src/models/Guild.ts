@@ -240,4 +240,19 @@ const GuildSchema: Schema = new Schema(
 // Compound index for guild lookup
 GuildSchema.index({ name: 1, realm: 1, region: 1 }, { unique: true });
 
+// Compound index for progress queries (used by getAllGuildsForRaid)
+GuildSchema.index({ "progress.raidId": 1, "progress.bossesDefeated": -1 });
+
+// Index for isCurrentlyRaiding (used to filter active guilds)
+GuildSchema.index({ isCurrentlyRaiding: 1 });
+
+// Index for guildStatus (used to filter by status)
+GuildSchema.index({ guildStatus: 1 });
+
+// Index for lastFetched (used in background processing to find outdated guilds)
+GuildSchema.index({ lastFetched: 1 });
+
+// Index for lastLogDate (used to find inactive guilds)
+GuildSchema.index({ lastLogDate: 1 });
+
 export default mongoose.model<IGuild>("Guild", GuildSchema);

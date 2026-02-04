@@ -8,34 +8,131 @@ import Cache from "../models/Cache";
 type CacheWarmer = () => Promise<any>;
 
 /**
- * MongoDB-backed cache service for API responses.
+ * In-memory cache entry with metadata for LRU tracking and stale-while-revalidate
+ */
+interface MemoryCacheEntry {
+  data: any;
+  cachedAt: Date;
+  expiresAt: Date;
+  staleExpiresAt: Date;
+  lastAccessed: Date;
+  accessCount: number;
+}
+
+/**
+ * MongoDB cache entry structure (matches what we read from DB)
+ */
+interface MongoCacheEntry {
+  key: string;
+  data: any;
+  cachedAt: Date;
+  expiresAt: Date;
+  staleExpiresAt?: Date;
+  ttlMs: number;
+  endpoint: string;
+}
+
+/**
+ * ============================================================================
+ * STALE-WHILE-REVALIDATE CACHE SERVICE
+ * ============================================================================
  *
- * Features:
- * - Persistent caching via MongoDB collection
- * - Automatic expiration via MongoDB TTL index
- * - Pattern-based cache invalidation
- * - Cache warming for startup and after scheduled updates
+ * This cache service implements a two-tier caching strategy with stale-while-revalidate:
  *
- * Cache Strategy:
- * - Static data (tier lists, raid analytics, older raids): Long TTL (24h), invalidate on recalculation
- * - Semi-static data (guild list, schedules): Long TTL (24h), invalidate on updates
- * - Dynamic data (current raid progress, home, live streamers, events): Short TTL (1-5min)
+ * ## Architecture
  *
- * TTL Summary:
- * - /api/home: 5 minutes (current raid changes frequently)
- * - /api/progress?raidId=current: 5 minutes
- * - /api/progress?raidId=older: 24 hours (invalidated when guilds recalculated)
- * - /api/guilds/list: 24 hours (invalidated when new guild added or nightly)
- * - /api/guilds/schedules: 24 hours (invalidated when schedules recalculated or nightly)
- * - /api/guilds/live-streamers: 1 minute
- * - /api/guilds/:realm/:name: 24 hours (invalidated when that specific guild updates)
- * - /api/tierlists/*: 24 hours (invalidated when tier lists recalculated)
- * - /api/raid-analytics/*: 24 hours (invalidated when raid analytics recalculated)
- * - /api/events: 1 minute
+ * 1. **L1 Cache (In-Memory)**: Fast Map-based cache for hot paths
+ *    - Holds up to MAX_MEMORY_ENTRIES items
+ *    - LRU eviction when full (evicts least recently accessed items)
+ *    - Checked FIRST before hitting MongoDB
+ *    - Prioritizes frequently accessed keys (home, progress:raid:*)
+ *
+ * 2. **L2 Cache (MongoDB)**: Persistent cache with TTL indexes
+ *    - Survives server restarts
+ *    - Automatic cleanup via MongoDB TTL indexes
+ *    - Source of truth for cache state
+ *
+ * ## Stale-While-Revalidate Pattern
+ *
+ * Each cache entry has TWO expiration times:
+ * - `expiresAt`: When data is considered "fresh" (main TTL)
+ * - `staleExpiresAt`: When data is completely unusable (stale TTL, typically 2x main TTL)
+ *
+ * Cache lookup behavior:
+ * - **Fresh data** (now < expiresAt): Return immediately
+ * - **Stale data** (expiresAt < now < staleExpiresAt): Return stale data AND trigger background refresh
+ * - **Expired data** (now > staleExpiresAt): Cache miss, must fetch new data
+ *
+ * ## Refresh Pattern (vs Invalidation)
+ *
+ * Instead of delete-then-warm pattern which leaves a gap:
+ * ```
+ * OLD: delete(key) -> cache miss window -> warm(key)
+ * ```
+ *
+ * We use refresh-in-place pattern:
+ * ```
+ * NEW: refreshCache(key, warmer) -> old data served until new data ready
+ * ```
+ *
+ * ## Stampede Prevention
+ *
+ * - `inFlightRefreshes` Set tracks keys currently being refreshed
+ * - If refresh already in progress, new requests wait or get stale data
+ * - Only ONE refresh executes at a time per key
+ *
+ * ## Cache Key Priorities
+ *
+ * Hot paths that benefit from in-memory caching:
+ * - `home:*` - Home page, most frequently accessed
+ * - `progress:raid:*` - Raid progress pages
+ * - `guilds:list` - Guild directory
+ * - `guilds:raid:*` - Guild lists by raid
  */
 class CacheService {
   private warmers: Map<string, CacheWarmer> = new Map();
   private isInitialized: boolean = false;
+
+  // ============================================================================
+  // IN-MEMORY CACHE (L1)
+  // ============================================================================
+
+  /**
+   * In-memory cache using Map for O(1) lookups
+   * Stores frequently accessed keys to avoid MongoDB round-trips
+   */
+  private memoryCache: Map<string, MemoryCacheEntry> = new Map();
+
+  /**
+   * Maximum number of entries in memory cache
+   * Prevents unbounded memory growth
+   */
+  private readonly MAX_MEMORY_ENTRIES = 100;
+
+  /**
+   * Keys that should be prioritized for in-memory caching
+   * These patterns are checked first and less likely to be evicted
+   */
+  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/];
+
+  // ============================================================================
+  // STALE-WHILE-REVALIDATE TRACKING
+  // ============================================================================
+
+  /**
+   * Set of keys currently being refreshed
+   * Prevents stampede - only one refresh per key at a time
+   */
+  private inFlightRefreshes: Set<string> = new Set();
+
+  /**
+   * Multiplier for stale TTL relative to main TTL
+   * staleExpiresAt = expiresAt + (TTL * STALE_MULTIPLIER)
+   *
+   * With multiplier of 1.0, stale data is valid for 2x the main TTL
+   * Example: 5min TTL -> fresh for 5min, stale-but-usable for 5-10min
+   */
+  private readonly STALE_TTL_MULTIPLIER = 1.0;
 
   // ============================================================================
   // TTL CONSTANTS (milliseconds)
@@ -76,7 +173,7 @@ class CacheService {
       // Ensure indexes are created (TTL index is critical)
       await Cache.createIndexes();
       this.isInitialized = true;
-      logger.info("MongoDB cache service initialized with TTL indexes");
+      logger.info("MongoDB cache service initialized with TTL indexes and in-memory L1 cache");
     } catch (error) {
       logger.error("Failed to initialize cache service:", error);
       throw error;
@@ -84,47 +181,336 @@ class CacheService {
   }
 
   // ============================================================================
-  // CORE CACHE OPERATIONS
+  // IN-MEMORY CACHE OPERATIONS
   // ============================================================================
 
   /**
-   * Get cached data if available and not expired.
-   * Returns null if cache miss or expired (MongoDB TTL handles cleanup).
+   * Check if a key matches hot path patterns (should be prioritized in memory)
+   */
+  private isHotPath(key: string): boolean {
+    return this.HOT_PATH_PATTERNS.some((pattern) => pattern.test(key));
+  }
+
+  /**
+   * Get entry from in-memory cache
+   * Updates access tracking for LRU
+   */
+  private getFromMemory(key: string): MemoryCacheEntry | null {
+    const entry = this.memoryCache.get(key);
+    if (!entry) {
+      return null;
+    }
+
+    // Update access tracking
+    entry.lastAccessed = new Date();
+    entry.accessCount++;
+
+    return entry;
+  }
+
+  /**
+   * Set entry in in-memory cache
+   * Handles LRU eviction if cache is full
+   */
+  private setInMemory(key: string, data: any, expiresAt: Date, staleExpiresAt: Date, cachedAt: Date = new Date()): void {
+    // Evict if necessary before adding new entry
+    if (!this.memoryCache.has(key) && this.memoryCache.size >= this.MAX_MEMORY_ENTRIES) {
+      this.evictLRU();
+    }
+
+    this.memoryCache.set(key, {
+      data,
+      cachedAt,
+      expiresAt,
+      staleExpiresAt,
+      lastAccessed: new Date(),
+      accessCount: 1,
+    });
+  }
+
+  /**
+   * Evict least recently used entry from memory cache
+   * Prioritizes keeping hot paths in cache
+   */
+  private evictLRU(): void {
+    let oldestNonHotKey: string | null = null;
+    let oldestNonHotTime: Date | null = null;
+    let oldestHotKey: string | null = null;
+    let oldestHotTime: Date | null = null;
+
+    // Find oldest entry, preferring to evict non-hot paths
+    for (const [key, entry] of this.memoryCache.entries()) {
+      const isHot = this.isHotPath(key);
+
+      if (isHot) {
+        if (!oldestHotTime || entry.lastAccessed < oldestHotTime) {
+          oldestHotKey = key;
+          oldestHotTime = entry.lastAccessed;
+        }
+      } else {
+        if (!oldestNonHotTime || entry.lastAccessed < oldestNonHotTime) {
+          oldestNonHotKey = key;
+          oldestNonHotTime = entry.lastAccessed;
+        }
+      }
+    }
+
+    // Prefer evicting non-hot paths
+    const keyToEvict = oldestNonHotKey || oldestHotKey;
+    if (keyToEvict) {
+      this.memoryCache.delete(keyToEvict);
+      logger.debug(`[Memory Cache] Evicted LRU entry: ${keyToEvict}`);
+    }
+  }
+
+  /**
+   * Remove entry from in-memory cache
+   */
+  private removeFromMemory(key: string): void {
+    this.memoryCache.delete(key);
+  }
+
+  /**
+   * Remove entries matching pattern from in-memory cache
+   */
+  private removeFromMemoryByPattern(pattern: RegExp): number {
+    let removed = 0;
+    for (const key of this.memoryCache.keys()) {
+      if (pattern.test(key)) {
+        this.memoryCache.delete(key);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Clear entire in-memory cache
+   */
+  private clearMemoryCache(): void {
+    const size = this.memoryCache.size;
+    this.memoryCache.clear();
+    logger.debug(`[Memory Cache] Cleared ${size} entries`);
+  }
+
+  // ============================================================================
+  // CORE CACHE OPERATIONS WITH STALE-WHILE-REVALIDATE
+  // ============================================================================
+
+  /**
+   * Get cached data with stale-while-revalidate support.
+   *
+   * Lookup order:
+   * 1. Check in-memory cache (L1)
+   * 2. Check MongoDB cache (L2)
+   *
+   * For each level:
+   * - If fresh: return immediately
+   * - If stale but within stale TTL: return stale data AND trigger background refresh
+   * - If expired: continue to next level or return null
+   *
+   * NEVER returns null if we have stale data within stale TTL.
    */
   async get<T>(key: string): Promise<T | null> {
+    const now = new Date();
+
+    // ========================================
+    // L1: Check in-memory cache first
+    // ========================================
+    const memoryEntry = this.getFromMemory(key);
+    if (memoryEntry) {
+      // Check if data is fresh
+      if (now < memoryEntry.expiresAt) {
+        logger.debug(`[L1 Cache] Fresh hit for key: ${key}`);
+        return memoryEntry.data as T;
+      }
+
+      // Check if data is stale but still usable
+      if (now < memoryEntry.staleExpiresAt) {
+        logger.debug(`[L1 Cache] Stale hit for key: ${key} - triggering background refresh`);
+        // Trigger background refresh (non-blocking)
+        this.triggerBackgroundRefresh(key);
+        return memoryEntry.data as T;
+      }
+
+      // Data is completely expired, remove from memory
+      this.removeFromMemory(key);
+      logger.debug(`[L1 Cache] Expired, removed key: ${key}`);
+    }
+
+    // ========================================
+    // L2: Check MongoDB cache
+    // ========================================
     try {
-      const entry = await Cache.findOne({ key }).lean();
+      const entry = (await Cache.findOne({ key }).lean()) as MongoCacheEntry | null;
 
       if (!entry) {
-        logger.debug(`Cache miss for key: ${key}`);
+        logger.debug(`[L2 Cache] Miss for key: ${key}`);
         return null;
       }
 
-      // Double-check expiration (in case TTL index hasn't cleaned up yet)
-      if (new Date() > new Date(entry.expiresAt)) {
-        logger.debug(`Cache expired for key: ${key}`);
-        return null;
+      const expiresAt = new Date(entry.expiresAt);
+      // Calculate stale expiration if not stored (backward compatibility)
+      const staleExpiresAt = entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : new Date(expiresAt.getTime() + entry.ttlMs * this.STALE_TTL_MULTIPLIER);
+
+      // Check if data is fresh
+      if (now < expiresAt) {
+        logger.debug(`[L2 Cache] Fresh hit for key: ${key}`);
+        // Promote to L1 cache if it's a hot path
+        if (this.isHotPath(key)) {
+          this.setInMemory(key, entry.data, expiresAt, staleExpiresAt, new Date(entry.cachedAt));
+        }
+        return entry.data as T;
       }
 
-      logger.debug(`Cache hit for key: ${key}`);
-      return entry.data as T;
+      // Check if data is stale but still usable
+      if (now < staleExpiresAt) {
+        logger.debug(`[L2 Cache] Stale hit for key: ${key} - triggering background refresh`);
+        // Promote to L1 cache even if stale (we'll serve it while refreshing)
+        if (this.isHotPath(key)) {
+          this.setInMemory(key, entry.data, expiresAt, staleExpiresAt, new Date(entry.cachedAt));
+        }
+        // Trigger background refresh (non-blocking)
+        this.triggerBackgroundRefresh(key);
+        return entry.data as T;
+      }
+
+      // Data is completely expired
+      logger.debug(`[L2 Cache] Expired for key: ${key}`);
+      return null;
     } catch (error) {
-      logger.error(`Cache get error for key ${key}:`, error);
+      logger.error(`[L2 Cache] Get error for key ${key}:`, error);
       return null;
     }
   }
 
   /**
-   * Set data in cache with optional custom TTL.
-   * Uses upsert to create or update cache entry.
+   * Get cached data with metadata for HTTP cache headers.
+   *
+   * Returns the cached data along with TTL and expiration info needed for
+   * calculating Cache-Control headers and ETags.
+   *
+   * Uses same lookup logic as get() with stale-while-revalidate support.
+   */
+  async getWithMetadata<T>(key: string): Promise<{ data: T; expiresAt: Date; staleExpiresAt: Date; ttlMs: number; cachedAt: Date } | null> {
+    const now = new Date();
+
+    // ========================================
+    // L1: Check in-memory cache first
+    // ========================================
+    const memoryEntry = this.getFromMemory(key);
+    if (memoryEntry) {
+      // Check if data is fresh
+      if (now < memoryEntry.expiresAt) {
+        logger.debug(`[L1 Cache] Fresh hit with metadata for key: ${key}`);
+        const ttlMs = memoryEntry.expiresAt.getTime() - memoryEntry.cachedAt.getTime();
+        return {
+          data: memoryEntry.data as T,
+          expiresAt: memoryEntry.expiresAt,
+          staleExpiresAt: memoryEntry.staleExpiresAt,
+          ttlMs,
+          cachedAt: memoryEntry.cachedAt,
+        };
+      }
+
+      // Check if data is stale but still usable
+      if (now < memoryEntry.staleExpiresAt) {
+        logger.debug(`[L1 Cache] Stale hit with metadata for key: ${key} - triggering background refresh`);
+        this.triggerBackgroundRefresh(key);
+        const ttlMs = memoryEntry.expiresAt.getTime() - memoryEntry.cachedAt.getTime();
+        return {
+          data: memoryEntry.data as T,
+          expiresAt: memoryEntry.expiresAt,
+          staleExpiresAt: memoryEntry.staleExpiresAt,
+          ttlMs,
+          cachedAt: memoryEntry.cachedAt,
+        };
+      }
+
+      // Data is completely expired, remove from memory
+      this.removeFromMemory(key);
+      logger.debug(`[L1 Cache] Expired, removed key: ${key}`);
+    }
+
+    // ========================================
+    // L2: Check MongoDB cache
+    // ========================================
+    try {
+      const entry = (await Cache.findOne({ key }).lean()) as MongoCacheEntry | null;
+
+      if (!entry) {
+        logger.debug(`[L2 Cache] Miss with metadata for key: ${key}`);
+        return null;
+      }
+
+      const expiresAt = new Date(entry.expiresAt);
+      const staleExpiresAt = entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : new Date(expiresAt.getTime() + entry.ttlMs * this.STALE_TTL_MULTIPLIER);
+
+      // Check if data is fresh
+      if (now < expiresAt) {
+        logger.debug(`[L2 Cache] Fresh hit with metadata for key: ${key}`);
+        if (this.isHotPath(key)) {
+          this.setInMemory(key, entry.data, expiresAt, staleExpiresAt, new Date(entry.cachedAt));
+        }
+        return {
+          data: entry.data as T,
+          expiresAt,
+          staleExpiresAt,
+          ttlMs: entry.ttlMs,
+          cachedAt: new Date(entry.cachedAt),
+        };
+      }
+
+      // Check if data is stale but still usable
+      if (now < staleExpiresAt) {
+        logger.debug(`[L2 Cache] Stale hit with metadata for key: ${key} - triggering background refresh`);
+        if (this.isHotPath(key)) {
+          this.setInMemory(key, entry.data, expiresAt, staleExpiresAt, new Date(entry.cachedAt));
+        }
+        this.triggerBackgroundRefresh(key);
+        return {
+          data: entry.data as T,
+          expiresAt,
+          staleExpiresAt,
+          ttlMs: entry.ttlMs,
+          cachedAt: new Date(entry.cachedAt),
+        };
+      }
+
+      // Data is completely expired
+      logger.debug(`[L2 Cache] Expired with metadata for key: ${key}`);
+      return null;
+    } catch (error) {
+      logger.error(`[L2 Cache] Get with metadata error for key ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Set data in cache with stale-while-revalidate TTLs.
+   *
+   * Sets data in both L1 (if hot path) and L2 (MongoDB).
+   * Calculates both fresh TTL and stale TTL.
    */
   async set<T>(key: string, data: T, customTtl?: number): Promise<void> {
     try {
       const ttl = customTtl ?? this.DEFAULT_TTL;
       const now = new Date();
       const expiresAt = new Date(now.getTime() + ttl);
+      const staleExpiresAt = new Date(expiresAt.getTime() + ttl * this.STALE_TTL_MULTIPLIER);
       const endpoint = this.extractEndpoint(key);
 
+      // ========================================
+      // L1: Set in memory if hot path
+      // ========================================
+      if (this.isHotPath(key)) {
+        this.setInMemory(key, data, expiresAt, staleExpiresAt, now);
+        logger.debug(`[L1 Cache] Set for key: ${key}`);
+      }
+
+      // ========================================
+      // L2: Set in MongoDB
+      // ========================================
       await Cache.findOneAndUpdate(
         { key },
         {
@@ -132,13 +518,14 @@ class CacheService {
           data,
           cachedAt: now,
           expiresAt,
+          staleExpiresAt,
           ttlMs: ttl,
           endpoint,
         },
         { upsert: true, new: true },
       );
 
-      logger.debug(`Cache set for key: ${key} (ttl: ${Math.round(ttl / 1000)}s)`);
+      logger.debug(`[L2 Cache] Set for key: ${key} (fresh: ${Math.round(ttl / 1000)}s, stale: ${Math.round((ttl * (1 + this.STALE_TTL_MULTIPLIER)) / 1000)}s)`);
     } catch (error) {
       logger.error(`Cache set error for key ${key}:`, error);
     }
@@ -156,11 +543,111 @@ class CacheService {
     return parts[0];
   }
 
+  // ============================================================================
+  // BACKGROUND REFRESH & STAMPEDE PREVENTION
+  // ============================================================================
+
   /**
-   * Invalidate (delete) a specific cache entry.
+   * Trigger a background refresh for a stale cache key.
+   *
+   * This is non-blocking - the caller gets stale data immediately while
+   * we refresh in the background. Uses in-flight tracking to prevent stampede.
+   */
+  private triggerBackgroundRefresh(key: string): void {
+    // Check if refresh is already in progress
+    if (this.inFlightRefreshes.has(key)) {
+      logger.debug(`[Refresh] Already in progress for key: ${key}`);
+      return;
+    }
+
+    // Check if we have a warmer for this key
+    const warmer = this.warmers.get(key);
+    if (!warmer) {
+      logger.debug(`[Refresh] No warmer registered for key: ${key}`);
+      return;
+    }
+
+    // Mark as in-flight and start refresh
+    this.inFlightRefreshes.add(key);
+    logger.debug(`[Refresh] Starting background refresh for key: ${key}`);
+
+    // Execute refresh in background (don't await)
+    this.executeRefresh(key, warmer)
+      .catch((error) => {
+        logger.error(`[Refresh] Background refresh failed for key ${key}:`, error);
+      })
+      .finally(() => {
+        this.inFlightRefreshes.delete(key);
+        logger.debug(`[Refresh] Completed for key: ${key}`);
+      });
+  }
+
+  /**
+   * Execute the actual refresh operation.
+   */
+  private async executeRefresh(key: string, warmer: CacheWarmer): Promise<void> {
+    const data = await warmer();
+    const ttl = this.inferTTLFromKey(key);
+    await this.set(key, data, ttl);
+    logger.info(`[Refresh] Cache refreshed for key: ${key}`);
+  }
+
+  /**
+   * Refresh cache in place - fetches new data and updates cache atomically.
+   *
+   * Unlike invalidate-then-warm, this keeps old data available until new data is ready.
+   * Returns true if refresh succeeded, false otherwise.
+   *
+   * @param key - Cache key to refresh
+   * @param warmer - Function that generates new cache data
+   * @param forceRefresh - If true, ignores in-flight check and forces refresh
+   */
+  async refreshCache(key: string, warmer: CacheWarmer, forceRefresh: boolean = false): Promise<boolean> {
+    // Check if refresh is already in progress (unless forced)
+    if (!forceRefresh && this.inFlightRefreshes.has(key)) {
+      logger.debug(`[Refresh] Debounced - already in progress for key: ${key}`);
+      return false;
+    }
+
+    this.inFlightRefreshes.add(key);
+
+    try {
+      const data = await warmer();
+      const ttl = this.inferTTLFromKey(key);
+      await this.set(key, data, ttl);
+      logger.info(`[Refresh] Cache refreshed in place for key: ${key}`);
+      return true;
+    } catch (error) {
+      logger.error(`[Refresh] Failed to refresh cache for key ${key}:`, error);
+      return false;
+    } finally {
+      this.inFlightRefreshes.delete(key);
+    }
+  }
+
+  /**
+   * Check if a key is currently being refreshed.
+   */
+  isRefreshing(key: string): boolean {
+    return this.inFlightRefreshes.has(key);
+  }
+
+  // ============================================================================
+  // LEGACY INVALIDATION (kept for backward compatibility, but prefers refresh)
+  // ============================================================================
+
+  /**
+   * Invalidate (delete) a specific cache entry from both L1 and L2.
+   *
+   * NOTE: Prefer using refreshCache() instead to avoid cache miss windows.
+   * This is kept for cases where you truly want to delete without replacement.
    */
   async invalidate(key: string): Promise<void> {
     try {
+      // Remove from L1
+      this.removeFromMemory(key);
+
+      // Remove from L2
       const result = await Cache.deleteOne({ key });
       if (result.deletedCount > 0) {
         logger.info(`Cache invalidated for key: ${key}`);
@@ -171,13 +658,19 @@ class CacheService {
   }
 
   /**
-   * Invalidate all cache entries matching a pattern (regex).
+   * Invalidate all cache entries matching a pattern (regex) from both L1 and L2.
+   *
+   * NOTE: Prefer using refreshCachePattern() for batch refreshes.
    */
   async invalidatePattern(pattern: RegExp): Promise<void> {
     try {
+      // Remove from L1
+      const memoryRemoved = this.removeFromMemoryByPattern(pattern);
+
+      // Remove from L2
       const result = await Cache.deleteMany({ key: { $regex: pattern } });
-      if (result.deletedCount > 0) {
-        logger.info(`Cache invalidated ${result.deletedCount} entries matching pattern: ${pattern}`);
+      if (result.deletedCount > 0 || memoryRemoved > 0) {
+        logger.info(`Cache invalidated ${result.deletedCount} L2 + ${memoryRemoved} L1 entries matching pattern: ${pattern}`);
       }
     } catch (error) {
       logger.error(`Cache invalidatePattern error for ${pattern}:`, error);
@@ -185,12 +678,16 @@ class CacheService {
   }
 
   /**
-   * Clear all cache entries.
+   * Clear all cache entries from both L1 and L2.
    */
   async clear(): Promise<void> {
     try {
+      // Clear L1
+      this.clearMemoryCache();
+
+      // Clear L2
       const result = await Cache.deleteMany({});
-      logger.info(`Cache cleared: ${result.deletedCount} entries removed`);
+      logger.info(`Cache cleared: ${result.deletedCount} L2 entries removed`);
     } catch (error) {
       logger.error("Cache clear error:", error);
     }
@@ -370,15 +867,90 @@ class CacheService {
   }
 
   // ============================================================================
-  // CACHE INVALIDATION METHODS
+  // CACHE REFRESH METHODS (NEW PATTERN - REPLACES INVALIDATION)
+  // ============================================================================
+
+  /**
+   * Refresh ALL guild-related caches using registered warmers.
+   *
+   * Unlike invalidateAllGuildCaches(), this updates data in place.
+   * Old data remains available until new data is ready.
+   *
+   * ⚠️ USE SPARINGLY - This refreshes many caches and should only be called when:
+   * - A NEW guild is added and its data is fetched (new guild appears in all lists)
+   * - Major data restructuring occurs
+   */
+  async refreshAllGuildCaches(): Promise<void> {
+    logger.info("[Refresh] Starting full guild cache refresh...");
+
+    // Refresh home data if warmer exists
+    const homeKey = this.getHomeKey();
+    if (this.warmers.has(homeKey)) {
+      await this.refreshCache(homeKey, this.warmers.get(homeKey)!);
+    }
+
+    // Refresh guild list if warmer exists
+    const guildListKey = this.getGuildListKey();
+    if (this.warmers.has(guildListKey)) {
+      await this.refreshCache(guildListKey, this.warmers.get(guildListKey)!);
+    }
+
+    // Refresh progress for all tracked raids
+    for (const raidId of TRACKED_RAIDS) {
+      const progressKey = this.getProgressKey(raidId);
+      if (this.warmers.has(progressKey)) {
+        await this.refreshCache(progressKey, this.warmers.get(progressKey)!);
+      }
+    }
+
+    logger.info("[Refresh] Full guild cache refresh complete");
+  }
+
+  /**
+   * Refresh caches for current raid only.
+   *
+   * ✅ USE THIS for regular guild updates (hot/off hours).
+   * Updates data in place - old data served until new is ready.
+   */
+  async refreshCurrentRaidCaches(): Promise<void> {
+    logger.info("[Refresh] Starting current raid cache refresh...");
+
+    // Refresh home data
+    const homeKey = this.getHomeKey();
+    if (this.warmers.has(homeKey)) {
+      await this.refreshCache(homeKey, this.warmers.get(homeKey)!);
+    }
+
+    // Refresh current raid progress
+    for (const raidId of CURRENT_RAID_IDS) {
+      const progressKey = this.getProgressKey(raidId);
+      if (this.warmers.has(progressKey)) {
+        await this.refreshCache(progressKey, this.warmers.get(progressKey)!);
+      }
+
+      const guildsKey = this.getGuildsKey(raidId);
+      if (this.warmers.has(guildsKey)) {
+        await this.refreshCache(guildsKey, this.warmers.get(guildsKey)!);
+      }
+    }
+
+    // Refresh live streamers
+    const streamersKey = this.getLiveStreamersKey();
+    if (this.warmers.has(streamersKey)) {
+      await this.refreshCache(streamersKey, this.warmers.get(streamersKey)!);
+    }
+
+    logger.info("[Refresh] Current raid cache refresh complete");
+  }
+
+  // ============================================================================
+  // CACHE INVALIDATION METHODS (LEGACY - USE REFRESH METHODS WHEN POSSIBLE)
   // ============================================================================
 
   /**
    * Invalidate ALL guild-related caches including older raid progress.
    *
-   * ⚠️  USE SPARINGLY - This is aggressive and should only be called when:
-   * - A NEW guild is added and its data is fetched (new guild appears in all lists)
-   * - Major data restructuring occurs
+   * ⚠️ DEPRECATED: Prefer refreshAllGuildCaches() to avoid cache miss windows.
    *
    * This invalidates:
    * - guilds:* (guild list, schedules, live streamers)
@@ -395,29 +967,17 @@ class CacheService {
   }
 
   /**
-   * @deprecated Use invalidateCurrentRaidCaches() for regular updates or invalidateAllGuildCaches() for new guilds
+   * @deprecated Use refreshCurrentRaidCaches() for regular updates or refreshAllGuildCaches() for new guilds
    */
   async invalidateGuildCaches(): Promise<void> {
     // Redirect to the more targeted method for backward compatibility
-    // This prevents accidental invalidation of older raid caches
     await this.invalidateCurrentRaidCaches();
   }
 
   /**
    * Invalidate caches for current raid only.
    *
-   * ✅ USE THIS for regular guild updates (hot/off hours).
-   *
-   * This is the correct method for most guild update scenarios because:
-   * - Older raid data NEVER changes (guilds don't get new progress for completed raids)
-   * - Only current raid progress can change during updates
-   * - Home page shows current raid data
-   *
-   * This invalidates:
-   * - progress:raid:{currentRaidId} (current raid progress only)
-   * - guilds:raid:{currentRaidId} (current raid guild list)
-   * - home:* (home page shows current raid)
-   * - guilds:live-streamers (can change during updates)
+   * ⚠️ DEPRECATED: Prefer refreshCurrentRaidCaches() to avoid cache miss windows.
    */
   async invalidateCurrentRaidCaches(): Promise<void> {
     for (const raidId of CURRENT_RAID_IDS) {
@@ -701,13 +1261,16 @@ class CacheService {
   // ============================================================================
 
   /**
-   * Get cache statistics.
+   * Get cache statistics including in-memory cache info.
    */
   async getStats(): Promise<{
     totalEntries: number;
+    memoryEntries: number;
+    inFlightRefreshes: number;
     byEndpoint: Record<string, number>;
     oldestEntry: Date | null;
     newestEntry: Date | null;
+    memoryHotPaths: string[];
   }> {
     try {
       const totalEntries = await Cache.countDocuments();
@@ -724,21 +1287,65 @@ class CacheService {
       const oldest = await Cache.findOne().sort({ cachedAt: 1 }).select("cachedAt").lean();
       const newest = await Cache.findOne().sort({ cachedAt: -1 }).select("cachedAt").lean();
 
+      // Get memory cache hot paths
+      const memoryHotPaths = Array.from(this.memoryCache.keys()).filter((key) => this.isHotPath(key));
+
       return {
         totalEntries,
+        memoryEntries: this.memoryCache.size,
+        inFlightRefreshes: this.inFlightRefreshes.size,
         byEndpoint,
         oldestEntry: oldest?.cachedAt || null,
         newestEntry: newest?.cachedAt || null,
+        memoryHotPaths,
       };
     } catch (error) {
       logger.error("Failed to get cache stats:", error);
       return {
         totalEntries: 0,
+        memoryEntries: this.memoryCache.size,
+        inFlightRefreshes: this.inFlightRefreshes.size,
         byEndpoint: {},
         oldestEntry: null,
         newestEntry: null,
+        memoryHotPaths: [],
       };
     }
+  }
+
+  /**
+   * Get detailed memory cache statistics.
+   */
+  getMemoryCacheStats(): {
+    size: number;
+    maxSize: number;
+    utilizationPercent: number;
+    entries: Array<{
+      key: string;
+      accessCount: number;
+      isHotPath: boolean;
+      isFresh: boolean;
+      isStale: boolean;
+    }>;
+  } {
+    const now = new Date();
+    const entries = Array.from(this.memoryCache.entries()).map(([key, entry]) => ({
+      key,
+      accessCount: entry.accessCount,
+      isHotPath: this.isHotPath(key),
+      isFresh: now < entry.expiresAt,
+      isStale: now >= entry.expiresAt && now < entry.staleExpiresAt,
+    }));
+
+    // Sort by access count descending
+    entries.sort((a, b) => b.accessCount - a.accessCount);
+
+    return {
+      size: this.memoryCache.size,
+      maxSize: this.MAX_MEMORY_ENTRIES,
+      utilizationPercent: Math.round((this.memoryCache.size / this.MAX_MEMORY_ENTRIES) * 100),
+      entries,
+    };
   }
 }
 

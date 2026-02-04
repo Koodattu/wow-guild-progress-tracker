@@ -839,7 +839,7 @@ class GuildService {
   async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
     logger.info(`Calculating guild rankings for raid ${raidId}...`);
 
-    // Get all guilds
+    // Get all guilds (need documents to save, so no .lean())
     const guilds = await Guild.find();
 
     if (guilds.length === 0) {
@@ -2627,110 +2627,177 @@ class GuildService {
 
   // Get all guilds sorted by progress
   async getAllGuilds(): Promise<IGuild[]> {
-    const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });
-    return guilds;
+    const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 }).lean();
+    return guilds as IGuild[];
   }
 
   // Get all guilds with progress filtered by raidId (minimal data for leaderboard)
+  // Optimized with MongoDB aggregation pipeline for better performance
   async getAllGuildsForRaid(raidId: number): Promise<any[]> {
-    const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 });
+    // Use aggregation pipeline to filter, project, and sort at database level
+    const guilds = await Guild.aggregate([
+      // Stage 1: Match only guilds that have progress for this raid with at least 1 boss kill
+      {
+        $match: {
+          progress: {
+            $elemMatch: {
+              raidId: raidId,
+              bossesDefeated: { $gt: 0 },
+            },
+          },
+        },
+      },
+      // Stage 2: Project only the fields we need (exclude heavy nested data like pullHistory)
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          realm: 1,
+          region: 1,
+          faction: 1,
+          warcraftlogsId: 1,
+          crest: 1,
+          parent_guild: 1,
+          isCurrentlyRaiding: 1,
+          lastFetched: 1,
+          // Filter progress array to only include the specified raid
+          progress: {
+            $filter: {
+              input: "$progress",
+              as: "p",
+              cond: { $eq: ["$$p.raidId", raidId] },
+            },
+          },
+          // Include raidSchedule for schedule summary calculation
+          raidSchedule: 1,
+          // Include streamers to check isLive status (only need isLive field)
+          streamers: {
+            $map: {
+              input: { $ifNull: ["$streamers", []] },
+              as: "s",
+              in: { isLive: "$$s.isLive" },
+            },
+          },
+        },
+      },
+      // Stage 3: Add computed fields for sorting
+      {
+        $addFields: {
+          // Get mythic progress for sorting
+          mythicProgress: {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: "$progress",
+                  as: "p",
+                  cond: { $eq: ["$$p.difficulty", "mythic"] },
+                },
+              },
+              0,
+            ],
+          },
+          // Get heroic progress for sorting (fallback)
+          heroicProgress: {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: "$progress",
+                  as: "p",
+                  cond: { $eq: ["$$p.difficulty", "heroic"] },
+                },
+              },
+              0,
+            ],
+          },
+        },
+      },
+      // Stage 4: Add sort rank field (mythic rank preferred, then heroic)
+      {
+        $addFields: {
+          sortRank: {
+            $ifNull: ["$mythicProgress.guildRank", { $ifNull: ["$heroicProgress.guildRank", 999] }],
+          },
+        },
+      },
+      // Stage 5: Sort by guild rank at database level
+      {
+        $sort: { sortRank: 1 },
+      },
+      // Stage 6: Remove temporary sort fields
+      {
+        $project: {
+          mythicProgress: 0,
+          heroicProgress: 0,
+          sortRank: 0,
+        },
+      },
+    ]);
 
-    // Filter and transform to minimal structure for leaderboard
-    return guilds
-      .map((guild) => {
-        const guildObj = guild.toObject();
+    // Transform to minimal structure (still needed for boss-level calculations)
+    return guilds.map((guildObj) => {
+      // Transform progress to minimal structure
+      const minimalProgress = guildObj.progress.map((p: any) => {
+        // Find current boss (first unkilled boss) to get best pull info
+        const currentBoss = p.bosses?.find((b: any) => b.kills === 0);
 
-        // Filter progress for the specified raid
-        const raidProgress = guildObj.progress.filter((p) => p.raidId === raidId);
+        // Find the last killed boss to get the most recent kill timestamp
+        const killedBosses = p.bosses?.filter((b: any) => b.kills > 0 && b.firstKillTime) || [];
+        const lastKilledBoss =
+          killedBosses.length > 0 ? killedBosses.reduce((latest: any, boss: any) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
 
-        // Transform progress to minimal structure
-        const minimalProgress = raidProgress.map((p) => {
-          // Find current boss (first unkilled boss) to get best pull info
-          const currentBoss = p.bosses.find((b) => b.kills === 0);
-
-          // Find the last killed boss to get the most recent kill timestamp
-          const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
-          const lastKilledBoss =
-            killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
-
-          return {
-            raidId: p.raidId,
-            raidName: p.raidName,
-            difficulty: p.difficulty,
-            bossesDefeated: p.bossesDefeated,
-            totalBosses: p.totalBosses,
-            totalTimeSpent: p.totalTimeSpent,
-            currentBossPulls: currentBoss?.pullCount || 0,
-            bestPullPercent: currentBoss?.bestPercent || 0,
-            bestPullPhase: currentBoss?.bestPullPhase,
-            lastKillTime: lastKilledBoss?.firstKillTime || null,
-            worldRank: p.worldRank,
-            worldRankColor: p.worldRankColor,
-            guildRank: p.guildRank,
-          };
-        });
-
-        // Calculate schedule summary
-        const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
-
-        // Check if any streamers are live
-        const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
-
-        // Return minimal guild structure
         return {
-          _id: guildObj._id,
-          name: guildObj.name,
-          realm: guildObj.realm,
-          region: guildObj.region,
-          faction: guildObj.faction,
-          warcraftlogsId: guildObj.warcraftlogsId,
-          crest: guildObj.crest,
-          parent_guild: guildObj.parent_guild,
-          isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
-          isStreaming: isStreaming,
-          lastFetched: guildObj.lastFetched,
-          progress: minimalProgress,
-          scheduleDisplay: scheduleSummary,
+          raidId: p.raidId,
+          raidName: p.raidName,
+          difficulty: p.difficulty,
+          bossesDefeated: p.bossesDefeated,
+          totalBosses: p.totalBosses,
+          totalTimeSpent: p.totalTimeSpent,
+          currentBossPulls: currentBoss?.pullCount || 0,
+          bestPullPercent: currentBoss?.bestPercent || 0,
+          bestPullPhase: currentBoss?.bestPullPhase,
+          lastKillTime: lastKilledBoss?.firstKillTime || null,
+          worldRank: p.worldRank,
+          worldRankColor: p.worldRankColor,
+          guildRank: p.guildRank,
         };
-      })
-      .filter((guild) => {
-        // Only include guilds that have killed at least one boss (on any difficulty) for this raid
-        return guild.progress.some((p) => p.bossesDefeated > 0);
-      })
-      .sort((a, b) => {
-        // Sort guilds by guild rank (mythic first, then heroic)
-        const aMythic = a.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
-        const bMythic = b.progress.find((p) => p.difficulty === "mythic" && p.raidId === raidId);
-        const aHeroic = a.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
-        const bHeroic = b.progress.find((p) => p.difficulty === "heroic" && p.raidId === raidId);
-
-        const aProgress = aMythic || aHeroic;
-        const bProgress = bMythic || bHeroic;
-
-        if (!aProgress && !bProgress) return 0;
-        if (!aProgress) return 1;
-        if (!bProgress) return -1;
-
-        const aRank = aProgress.guildRank ?? 999;
-        const bRank = bProgress.guildRank ?? 999;
-
-        return aRank - bRank;
       });
+
+      // Calculate schedule summary
+      const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
+
+      // Check if any streamers are live
+      const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
+
+      // Return minimal guild structure
+      return {
+        _id: guildObj._id,
+        name: guildObj.name,
+        realm: guildObj.realm,
+        region: guildObj.region,
+        faction: guildObj.faction,
+        warcraftlogsId: guildObj.warcraftlogsId,
+        crest: guildObj.crest,
+        parent_guild: guildObj.parent_guild,
+        isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
+        isStreaming: isStreaming,
+        lastFetched: guildObj.lastFetched,
+        progress: minimalProgress,
+        scheduleDisplay: scheduleSummary,
+      };
+    });
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
   // Excludes pullHistory to reduce payload size
   async getGuildBossProgressForRaid(guildId: string, raidId: number): Promise<any[] | null> {
-    const guild = await Guild.findById(guildId);
+    const guild = await Guild.findById(guildId).select("progress").lean();
 
     if (!guild) {
       return null;
     }
 
-    const guildObj = guild.toObject();
-
     // Return only the progress array for the specified raid, excluding pullHistory
-    const raidProgress = guildObj.progress
+    const raidProgress = guild.progress
       .filter((p) => p.raidId === raidId)
       .map((progress) => ({
         ...progress,
@@ -2749,16 +2816,16 @@ class GuildService {
     const guild = await Guild.findOne({
       name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
       realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
-    });
+    })
+      .select("progress")
+      .lean();
 
     if (!guild) {
       return null;
     }
 
-    const guildObj = guild.toObject();
-
     // Return only the progress array for the specified raid, excluding pullHistory
-    const raidProgress = guildObj.progress
+    const raidProgress = guild.progress
       .filter((p) => p.raidId === raidId)
       .map((progress) => ({
         ...progress,
@@ -2776,23 +2843,23 @@ class GuildService {
     const guild = await Guild.findOne({
       name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
       realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
-    });
+    })
+      .select("progress")
+      .lean();
 
     if (!guild) {
       return null;
     }
 
-    const guildObj = guild.toObject();
-
-    // Find the specific raid progress
-    const raidProgress = guildObj.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+    // Find the specific raid progress (guild is already plain object from .lean())
+    const raidProgress = guild.progress.find((p: any) => p.raidId === raidId && p.difficulty === difficulty);
 
     if (!raidProgress) {
       return null;
     }
 
     // Find the specific boss
-    const boss = raidProgress.bosses.find((b) => b.bossId === bossId);
+    const boss = raidProgress.bosses.find((b: any) => b.bossId === bossId);
 
     if (!boss) {
       return null;
@@ -3094,7 +3161,9 @@ class GuildService {
     try {
       const guilds = await Guild.find({
         streamers: { $exists: true, $ne: [] },
-      });
+      })
+        .select("name realm region progress streamers")
+        .lean();
 
       const liveStreamers: any[] = [];
 

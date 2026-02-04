@@ -22,6 +22,9 @@ export interface ICache extends Document {
   /** When this cache entry should expire (used by MongoDB TTL index) */
   expiresAt: Date;
 
+  /** When the cached data becomes completely unusable (beyond the stale-while-revalidate window) */
+  staleExpiresAt?: Date;
+
   /** TTL in milliseconds (for reference, actual expiration handled by expiresAt) */
   ttlMs: number;
 
@@ -48,6 +51,11 @@ const CacheSchema = new Schema<ICache>(
     expiresAt: {
       type: Date,
       required: true,
+    },
+    // When the cached data becomes completely unusable (beyond the stale-while-revalidate window)
+    staleExpiresAt: {
+      type: Date,
+      required: false,
     },
     ttlMs: {
       type: Number,
