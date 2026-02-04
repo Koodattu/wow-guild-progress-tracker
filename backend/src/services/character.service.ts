@@ -142,6 +142,7 @@ class CharacterService {
 
       for (const char of eligibleChars) {
         try {
+          // Fetch DPS metric for all characters for now
           const query = `
             query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!) {
               characterData {
@@ -235,6 +236,8 @@ class CharacterService {
           for (const r of zoneRankings.rankings) {
             const specName = r.spec?.trim().toLowerCase();
             if (!specName) continue;
+
+            // Get the correct role for this spec
             const role = resolveRole(char.classID, specName);
 
             await Ranking.findOneAndUpdate(

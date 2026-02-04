@@ -1399,6 +1399,9 @@ class GuildService {
                       lastMythicSeenAt: new Date(),
                       rankingsAvailable:
                         char.hidden === true ? "false" : "unknown",
+                      nextEligibleRefreshAt: new Date(
+                        Date.now() + 12 * 60 * 60 * 1000,
+                      ),
                     },
                     { upsert: true, new: true },
                   );
@@ -2111,6 +2114,9 @@ class GuildService {
                     lastMythicSeenAt: new Date(),
                     rankingsAvailable:
                       char.hidden === true ? "false" : "unknown",
+                    nextEligibleRefreshAt: new Date(
+                      Date.now() + 12 * 60 * 60 * 1000,
+                    ),
                   },
                   { upsert: true, new: true },
                 );
