@@ -17,7 +17,6 @@ export interface IRanking extends Document {
 
   zoneId: number;
   difficulty: number;
-  metric: "dps" | "hps";
   partition: number; // WCL partition (patch)
   encounter: {
     id: number;
@@ -64,13 +63,6 @@ const RankingSchema: Schema = new Schema(
 
     zoneId: { type: Number, required: true, index: true },
     difficulty: { type: Number, required: true, default: 5, index: true },
-    metric: {
-      type: String,
-      enum: ["dps", "hps"],
-      required: true,
-      default: "dps",
-      index: true,
-    },
     partition: { type: Number, required: true, index: true },
 
     encounter: {
@@ -105,7 +97,6 @@ RankingSchema.index(
     characterId: 1,
     zoneId: 1,
     difficulty: 1,
-    metric: 1,
     partition: 1,
     "encounter.id": 1,
     specName: 1,
@@ -117,7 +108,6 @@ RankingSchema.index(
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   partition: 1,
   "encounter.id": 1,
   classID: 1,
@@ -129,7 +119,6 @@ RankingSchema.index({
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   partition: 1,
   "encounter.id": 1,
   role: 1,
@@ -140,7 +129,6 @@ RankingSchema.index({
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   partition: 1,
   classID: 1,
   specName: 1,
@@ -149,7 +137,6 @@ RankingSchema.index({
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   role: 1,
   rankPercent: -1,
 });
@@ -159,7 +146,6 @@ RankingSchema.index({
   characterId: 1,
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   partition: 1,
 });
 
@@ -167,7 +153,6 @@ RankingSchema.index({
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   classID: 1,
   specName: 1,
 });
@@ -175,7 +160,6 @@ RankingSchema.index({
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
-  metric: 1,
   role: 1,
 });
 

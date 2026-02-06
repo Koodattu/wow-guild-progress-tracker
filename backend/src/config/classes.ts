@@ -145,35 +145,6 @@ export const CLASSES: ClassInfo[] = [
 ];
 
 /**
- * Get the metric(s) that apply to a spec based on its role.
- * - Tanks use "tank" metric
- * - Healers use "hps" metric
- * - DPS use "dps" metric
- */
-export function getMetricsForSpec(
-  classId: number,
-  specName: string,
-): ("dps" | "hps" | "tank")[] {
-  const classInfo = CLASSES.find((c) => c.id === classId);
-  if (!classInfo) return ["dps"]; // default fallback
-
-  const spec = classInfo.specs.find(
-    (s) => s.name.toLowerCase() === specName.toLowerCase(),
-  );
-  if (!spec) return ["dps"]; // default fallback
-
-  switch (spec.role) {
-    case "tank":
-      return ["tank"];
-    case "healer":
-      return ["hps"];
-    case "dps":
-    default:
-      return ["dps"];
-  }
-}
-
-/**
  * Get role for a given class and spec.
  */
 export function getSpecRole(

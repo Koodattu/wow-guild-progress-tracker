@@ -27,7 +27,7 @@ const CharacterSchema: Schema = new Schema(
 
     lastMythicSeenAt: { type: Date, required: true },
     rankingsAvailable: { type: Boolean, required: false, default: null },
-    nextEligibleRefreshAt: { type: Date, required: false },
+    nextEligibleRefreshAt: { type: Date, required: false, default: Date.now },
   },
   { timestamps: true },
 );

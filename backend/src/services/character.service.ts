@@ -1,5 +1,5 @@
 import { CURRENT_RAID_IDS } from "../config/guilds";
-import Character from "../models/Character";
+import Character, { ICharacter } from "../models/Character";
 import Ranking from "../models/Ranking";
 import logger from "../utils/logger";
 import { resolveRole } from "../utils/spec";
@@ -47,7 +47,6 @@ interface IWarcraftLogsZoneRankings {
   bestPerformanceAverage: number;
   medianPerformanceAverage: number;
   difficulty: number;
-  metric: string;
   partition: number;
   zone: number;
   size: number;
@@ -89,7 +88,6 @@ export type CharacterRankingRow = {
   context: {
     zoneId: number;
     difficulty: number;
-    metric: "dps" | "hps";
     partition?: number;
     encounterId: number | null;
     specName?: string;
@@ -134,26 +132,56 @@ class CharacterService {
     const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
     const MYTHIC_DIFFICULTY = 5;
     const BATCH_SIZE = 200;
+    const MAX_WCL_REQUESTS_PER_RUN = 3200;
 
     try {
       // Find eligible characters
-      const eligibleChars = await Character.find({
+      const cutoffDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const eligibleFilter: any = {
         // Eligible if lastMythicSeenAt within 14 days, rankingsAvailable not false and cooldown passed
-        lastMythicSeenAt: {
-          $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-        },
+        lastMythicSeenAt: { $gte: cutoffDate },
         rankingsAvailable: { $ne: false },
         nextEligibleRefreshAt: { $lte: new Date() },
-      }).limit(BATCH_SIZE);
+      };
 
-      logger.info(
-        `Found ${eligibleChars.length} characters eligible for ranking check`,
-      );
+      let processedCount = 0;
+      let batchIndex = 0;
 
-      for (const char of eligibleChars) {
-        try {
-          const query = `
+      while (processedCount < MAX_WCL_REQUESTS_PER_RUN) {
+        const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
+        const batchSize = Math.min(BATCH_SIZE, remaining);
+        const eligibleChars = await Character.aggregate([
+          { $match: eligibleFilter },
+          {
+            $sort: {
+              lastMythicSeenAt: -1,
+              updatedAt: 1,
+            },
+          },
+          { $limit: batchSize },
+        ]);
+
+        if (eligibleChars.length === 0) {
+          break;
+        }
+
+        batchIndex += 1;
+        logger.info(
+          `Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`,
+        );
+
+        for (const char of eligibleChars) {
+          if (processedCount >= MAX_WCL_REQUESTS_PER_RUN) {
+            break;
+          }
+          try {
+            const query = `
             query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!) {
+              rateLimitData {
+                limitPerHour
+                pointsSpentThisHour
+                pointsResetIn
+              }
               characterData {
                 character(
                   name: $characterName,
@@ -177,163 +205,169 @@ class CharacterService {
             }
           `;
 
-          const variables = {
-            characterName: char.name,
-            serverSlug: char.realm.toLowerCase().replace(/\s+/g, "-"),
-            serverRegion: char.region.toLowerCase(),
-            zoneID: CURRENT_TIER_ID,
-          };
+            const variables = {
+              characterName: char.name,
+              serverSlug: char.realm.toLowerCase().replace(/\s+/g, "-"),
+              serverRegion: char.region.toLowerCase(),
+              zoneID: CURRENT_TIER_ID,
+            };
 
-          const result = await wclService.query<IWarcraftLogsResponse>(
-            query,
-            variables,
-          );
+            processedCount += 1;
 
-          const character = result.characterData?.character;
-          if (
-            !character ||
-            character.hidden ||
-            !character.zoneRankings ||
-            (character.zoneRankings as any).error
-          ) {
-            await Character.findByIdAndUpdate(char._id, {
-              wclProfileHidden: character?.hidden || false,
-              rankingsAvailable: false,
-              nextEligibleRefreshAt: new Date(
-                Date.now() + 7 * 24 * 60 * 60 * 1000,
-              ),
-            });
-            await Ranking.deleteMany({ characterId: char._id });
-            logger.info(
-              `No rankings available for ${char.name} (${char.realm})`,
+            const result = await wclService.query<IWarcraftLogsResponse>(
+              query,
+              variables,
             );
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            continue;
-          }
 
-          // Check if rankings have changed by comparing with stored Ranking docs
-          const zoneRankings = character.zoneRankings!;
-          const existingRankings = await Ranking.find({
-            characterId: char._id,
-            zoneId: CURRENT_TIER_ID,
-            difficulty: MYTHIC_DIFFICULTY,
-            metric: "dps",
-            partition: zoneRankings.partition,
-          }).lean();
+            const character = result.characterData?.character;
+            if (
+              !character ||
+              character.hidden ||
+              !character.zoneRankings ||
+              (character.zoneRankings as any).error
+            ) {
+              await Character.findByIdAndUpdate(char._id, {
+                wclProfileHidden: character?.hidden || false,
+                rankingsAvailable: false,
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 7 * 24 * 60 * 60 * 1000,
+                ),
+              });
+              await Ranking.deleteMany({ characterId: char._id });
+              logger.info(
+                `No rankings available for ${char.name} (${char.realm})`,
+              );
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
 
-          // Compute current totals from fresh WCL data
-          const freshPoints = (zoneRankings.allStars ?? []).reduce(
-            (sum, a) => sum + (a.points ?? 0),
-            0,
-          );
-          const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce(
-            (sum, a) => sum + (a.possiblePoints ?? 0),
-            0,
-          );
+            // Check if rankings have changed by comparing with stored Ranking docs
+            const zoneRankings = character.zoneRankings!;
+            const existingRankings = await Ranking.find({
+              characterId: char._id,
+              zoneId: CURRENT_TIER_ID,
+              difficulty: MYTHIC_DIFFICULTY,
+              partition: zoneRankings.partition,
+            }).lean();
 
-          // Compute stored totals from existing Ranking docs
-          const storedPoints = existingRankings.reduce(
-            (sum, r: any) => sum + (r.allStars?.points ?? 0),
-            0,
-          );
-          const storedPossiblePoints = existingRankings.reduce(
-            (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
-            0,
-          );
+            // Compute current totals from fresh WCL data
+            const freshPoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.points ?? 0),
+              0,
+            );
+            const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.possiblePoints ?? 0),
+              0,
+            );
 
-          const hasChanged =
-            existingRankings.length === 0 ||
-            freshPoints !== storedPoints ||
-            freshPossiblePoints !== storedPossiblePoints;
+            // Compute stored totals from existing Ranking docs
+            const storedPoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.points ?? 0),
+              0,
+            );
+            const storedPossiblePoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
+              0,
+            );
 
-          if (!hasChanged) {
+            const hasChanged =
+              existingRankings.length === 0 ||
+              freshPoints !== storedPoints ||
+              freshPossiblePoints !== storedPossiblePoints;
+
+            if (!hasChanged) {
+              await Character.findByIdAndUpdate(char._id, {
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 12 * 60 * 60 * 1000,
+                ),
+              });
+              logger.info(`No changes for ${char.name} (${char.realm})`);
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
+
+            // Update nextEligibleRefreshAt on Character
             await Character.findByIdAndUpdate(char._id, {
+              rankingsAvailable: true,
               nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
             });
-            logger.info(`No changes for ${char.name} (${char.realm})`);
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            continue;
-          }
 
-          // Update nextEligibleRefreshAt on Character
-          await Character.findByIdAndUpdate(char._id, {
-            rankingsAvailable: true,
-            nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
-          });
+            // Upsert rankings
+            for (const r of zoneRankings.rankings) {
+              const specName = r.spec?.trim().toLowerCase();
+              if (!specName) continue;
 
-          // Upsert rankings
-          for (const r of zoneRankings.rankings) {
-            const specName = r.spec?.trim().toLowerCase();
-            if (!specName) continue;
+              // Get the correct role for this spec
+              const role = resolveRole(char.classID, specName);
 
-            // Get the correct role for this spec
-            const role = resolveRole(char.classID, specName);
-
-            await Ranking.findOneAndUpdate(
-              {
-                characterId: char._id,
-                zoneId: CURRENT_TIER_ID,
-                difficulty: MYTHIC_DIFFICULTY,
-                metric: "dps",
-                partition: r.allStars?.partition,
-                "encounter.id": r.encounter.id,
-                specName,
-              },
-              {
-                characterId: char._id,
-                wclCanonicalCharacterId: character.canonicalID,
-
-                name: char.name,
-                realm: char.realm,
-                region: char.region,
-                classID: char.classID,
-
-                zoneId: CURRENT_TIER_ID,
-                difficulty: MYTHIC_DIFFICULTY,
-                metric: "dps",
-                partition: r.allStars?.partition,
-
-                encounter: {
-                  id: r.encounter.id,
-                  name: r.encounter.name,
+              await Ranking.findOneAndUpdate(
+                {
+                  characterId: char._id,
+                  zoneId: CURRENT_TIER_ID,
+                  difficulty: MYTHIC_DIFFICULTY,
+                  partition: r.allStars?.partition,
+                  "encounter.id": r.encounter.id,
+                  specName,
                 },
+                {
+                  characterId: char._id,
+                  wclCanonicalCharacterId: character.canonicalID,
 
-                specName,
-                role,
+                  name: char.name,
+                  realm: char.realm,
+                  region: char.region,
+                  classID: char.classID,
 
-                bestSpecName: r.bestSpec?.trim().toLowerCase(),
+                  zoneId: CURRENT_TIER_ID,
+                  difficulty: MYTHIC_DIFFICULTY,
+                  partition: r.allStars?.partition,
 
-                rankPercent: r.rankPercent ?? 0,
-                medianPercent: r.medianPercent ?? 0,
-                lockedIn: r.lockedIn,
-                totalKills: r.totalKills,
-                bestAmount: r.bestAmount ?? 0,
+                  encounter: {
+                    id: r.encounter.id,
+                    name: r.encounter.name,
+                  },
 
-                allStars: r.allStars
-                  ? {
-                      points:
-                        typeof r.allStars.points === "number"
-                          ? r.allStars.points
-                          : 0,
-                      possiblePoints:
-                        typeof r.allStars.possiblePoints === "number"
-                          ? r.allStars.possiblePoints
-                          : 0,
-                    }
-                  : { points: 0, possiblePoints: 0 },
+                  specName,
+                  role,
 
-                ilvl: r.bestRank?.ilvl,
-              },
-              { upsert: true, new: true },
-            );
+                  bestSpecName: r.bestSpec?.trim().toLowerCase(),
+
+                  rankPercent: r.rankPercent ?? 0,
+                  medianPercent: r.medianPercent ?? 0,
+                  lockedIn: r.lockedIn,
+                  totalKills: r.totalKills,
+                  bestAmount: r.bestAmount ?? 0,
+
+                  allStars: r.allStars
+                    ? {
+                        points:
+                          typeof r.allStars.points === "number"
+                            ? r.allStars.points
+                            : 0,
+                        possiblePoints:
+                          typeof r.allStars.possiblePoints === "number"
+                            ? r.allStars.possiblePoints
+                            : 0,
+                      }
+                    : { points: 0, possiblePoints: 0 },
+
+                  ilvl: r.bestRank?.ilvl,
+                },
+                { upsert: true, new: true },
+              );
+            }
+
+            logger.info(`Updated rankings for ${char.name} (${char.realm})`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          } catch (error) {
+            logger.error(`Error checking rankings for ${char.name}:`, error);
           }
-
-          logger.info(`Updated rankings for ${char.name} (${char.realm})`);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (error) {
-          logger.error(`Error checking rankings for ${char.name}:`, error);
         }
       }
+
+      logger.info(
+        `Character ranking check completed: processed ${processedCount} characters`,
+      );
 
       logger.info("Character ranking check and update completed");
     } catch (error) {
@@ -347,7 +381,6 @@ class CharacterService {
     classId?: number;
     specName?: string;
     role?: "dps" | "healer" | "tank";
-    metric?: "dps" | "hps";
     partition?: number; // If provided: filter by partition; if omitted: pick best per-boss across partitions
     limit?: number;
     page?: number;
@@ -358,7 +391,6 @@ class CharacterService {
       classId,
       specName,
       role,
-      metric = "dps",
       partition,
       limit = 100,
       page = 1,
@@ -379,7 +411,6 @@ class CharacterService {
     if (encounterId !== undefined) {
       const query: any = {
         zoneId,
-        metric,
         "encounter.id": encounterId,
         difficulty: MYTHIC_DIFFICULTY,
       };
@@ -391,7 +422,7 @@ class CharacterService {
       const totalItems = await Ranking.countDocuments(query);
       const rows = await Ranking.find(query)
         .select(
-          "wclCanonicalCharacterId name realm region classID zoneId difficulty metric encounter specName bestSpecName role " +
+          "wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
             "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
         )
         .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
@@ -410,7 +441,6 @@ class CharacterService {
         context: {
           zoneId,
           difficulty: r.difficulty,
-          metric,
           partition: r.partition,
           encounterId: encounterId ?? null,
           specName: r.specName,
@@ -450,7 +480,6 @@ class CharacterService {
     // All-boss allStars leaderboard
     const matchBase: any = {
       zoneId,
-      metric,
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchBase.classID = classId;
@@ -510,7 +539,6 @@ class CharacterService {
         context: {
           zoneId,
           difficulty: MYTHIC_DIFFICULTY,
-          metric,
           partition,
           encounterId: null,
           specName: normalizedSpecName,
@@ -545,7 +573,6 @@ class CharacterService {
     // Partition ignored: for each boss, pick BEST result across partitions, then sum per character
     const matchNoPartition: any = {
       zoneId,
-      metric,
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchNoPartition.classID = classId;
@@ -629,7 +656,6 @@ class CharacterService {
       context: {
         zoneId,
         difficulty: MYTHIC_DIFFICULTY,
-        metric,
         encounterId: null,
         specName: normalizedSpecName,
         role: normalizedRole,

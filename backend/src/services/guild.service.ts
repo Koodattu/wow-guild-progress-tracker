@@ -1398,9 +1398,7 @@ class GuildService {
                       wclProfileHidden: char.hidden,
                       lastMythicSeenAt: new Date(),
                       rankingsAvailable: char.hidden === true ? false : null,
-                      nextEligibleRefreshAt: new Date(
-                        Date.now() + 12 * 60 * 60 * 1000,
-                      ),
+                      nextEligibleRefreshAt: new Date(Date.now()),
                     },
                     { upsert: true, new: true },
                   );
@@ -2112,9 +2110,7 @@ class GuildService {
                     wclProfileHidden: char.hidden,
                     lastMythicSeenAt: new Date(),
                     rankingsAvailable: char.hidden === true ? false : null,
-                    nextEligibleRefreshAt: new Date(
-                      Date.now() + 12 * 60 * 60 * 1000,
-                    ),
+                    nextEligibleRefreshAt: new Date(),
                   },
                   { upsert: true, new: true },
                 );
