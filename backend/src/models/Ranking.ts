@@ -9,7 +9,7 @@ export interface IRanking extends Document {
   characterId: mongoose.Types.ObjectId; // mongoose ObjectId reference to Character
   wclCanonicalCharacterId: number; // WCL canonicalID for the character ranking belongs to
 
-  // character info (easier querying)
+  // character info
   name: string;
   realm: string;
   region: string;
@@ -18,6 +18,7 @@ export interface IRanking extends Document {
   zoneId: number;
   difficulty: number;
   metric: "dps" | "hps";
+  partition: number; // WCL partition (patch)
   encounter: {
     id: number;
     name: string;
@@ -32,6 +33,7 @@ export interface IRanking extends Document {
   totalKills: number;
   bestAmount: number;
   allStars: IAllStars;
+  ilvl?: number;
 
   createdAt: Date;
   updatedAt: Date;
@@ -69,6 +71,7 @@ const RankingSchema: Schema = new Schema(
       default: "dps",
       index: true,
     },
+    partition: { type: Number, required: true, index: true },
 
     encounter: {
       id: { type: Number, required: true },
@@ -91,43 +94,35 @@ const RankingSchema: Schema = new Schema(
     bestAmount: { type: Number, required: true, default: 0 },
 
     allStars: { type: AllStarsSchema, required: true, default: () => ({}) },
+    ilvl: { type: Number, required: false, index: true },
   },
   { timestamps: true },
 );
 
+// Unique index per partition (allows same boss/spec across partitions)
 RankingSchema.index(
   {
     characterId: 1,
     zoneId: 1,
     difficulty: 1,
     metric: 1,
+    partition: 1,
     "encounter.id": 1,
     specName: 1,
   },
   { unique: true },
 );
 
-// Spec leaderboard within a tier
+// Boss leaderboard query (sorted by bestAmount)
 RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
   metric: 1,
-  classID: 1,
-  specName: 1,
-  rankPercent: -1,
-  wclCanonicalCharacterId: 1,
-});
-
-// Boss+spec leaderboard
-RankingSchema.index({
-  zoneId: 1,
-  difficulty: 1,
-  metric: 1,
+  partition: 1,
   "encounter.id": 1,
   classID: 1,
   specName: 1,
-  rankPercent: -1,
-  wclCanonicalCharacterId: 1,
+  bestAmount: -1,
 });
 
 // Boss+role leaderboard
@@ -135,7 +130,26 @@ RankingSchema.index({
   zoneId: 1,
   difficulty: 1,
   metric: 1,
+  partition: 1,
   "encounter.id": 1,
+  role: 1,
+  bestAmount: -1,
+});
+
+// Aggregate all-boss view (spec/role filters)
+RankingSchema.index({
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
+  partition: 1,
+  classID: 1,
+  specName: 1,
+});
+
+RankingSchema.index({
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
   role: 1,
   rankPercent: -1,
 });

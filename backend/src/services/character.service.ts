@@ -142,11 +142,19 @@ class CharacterService {
 
       for (const char of eligibleChars) {
         try {
-          // Fetch DPS metric for all characters for now
           const query = `
             query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!) {
               characterData {
-                character(serverSlug: $serverSlug, serverRegion: $serverRegion, name: $characterName) {
+                character(
+                  name: $characterName,
+                  serverSlug: $serverSlug,
+                  serverRegion: $serverRegion
+                ) {
+                  id
+                  canonicalID
+                  name
+                  classID
+                  hidden
                   zoneRankings(
                     zoneID: $zoneID,
                     difficulty: 5,
@@ -160,9 +168,9 @@ class CharacterService {
           `;
 
           const variables = {
+            characterName: char.name,
             serverSlug: char.realm.toLowerCase().replace(/\s+/g, "-"),
             serverRegion: char.region.toLowerCase(),
-            characterName: char.name,
             zoneID: CURRENT_TIER_ID,
           };
 
@@ -193,18 +201,39 @@ class CharacterService {
             continue;
           }
 
-          //  Check if averages changed
+          // Check if rankings have changed by comparing with stored Ranking docs
           const zoneRankings = character.zoneRankings!;
+          const existingRankings = await Ranking.find({
+            characterId: char._id,
+            zoneId: CURRENT_TIER_ID,
+            metric: "dps",
+            partition: zoneRankings.partition,
+          }).lean();
+
+          // Compute current totals from fresh WCL data
+          const freshPoints = (zoneRankings.allStars ?? []).reduce(
+            (sum, a) => sum + (a.points ?? 0),
+            0,
+          );
+          const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce(
+            (sum, a) => sum + (a.possiblePoints ?? 0),
+            0,
+          );
+
+          // Compute stored totals from existing Ranking docs
+          const storedPoints = existingRankings.reduce(
+            (sum, r: any) => sum + (r.allStars?.points ?? 0),
+            0,
+          );
+          const storedPossiblePoints = existingRankings.reduce(
+            (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
+            0,
+          );
+
           const hasChanged =
-            !char.latestBestPerformanceAverage ||
-            Math.abs(
-              char.latestBestPerformanceAverage -
-                zoneRankings.bestPerformanceAverage,
-            ) > 0.001 ||
-            Math.abs(
-              (char.latestMedianPerformanceAverage ?? 0) -
-                zoneRankings.medianPerformanceAverage,
-            ) > 0.001;
+            existingRankings.length === 0 ||
+            freshPoints !== storedPoints ||
+            freshPossiblePoints !== storedPossiblePoints;
 
           if (!hasChanged) {
             await Character.findByIdAndUpdate(char._id, {
@@ -215,19 +244,8 @@ class CharacterService {
             continue;
           }
 
-          // Update character
+          // Update nextEligibleRefreshAt on Character
           await Character.findByIdAndUpdate(char._id, {
-            latestZoneId: CURRENT_TIER_ID,
-            latestBestPerformanceAverage: zoneRankings.bestPerformanceAverage,
-            latestMedianPerformanceAverage:
-              zoneRankings.medianPerformanceAverage,
-            latestAllStars:
-              zoneRankings.allStars && zoneRankings.allStars.length > 0
-                ? {
-                    points: zoneRankings.allStars[0].points,
-                    possiblePoints: zoneRankings.allStars[0].possiblePoints,
-                  }
-                : { points: 0, possiblePoints: 0 },
             rankingsAvailable: "true",
             nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
           });
@@ -246,6 +264,7 @@ class CharacterService {
                 zoneId: CURRENT_TIER_ID,
                 difficulty: 5,
                 metric: "dps",
+                partition: r.allStars?.partition,
                 "encounter.id": r.encounter.id,
                 specName,
               },
@@ -261,6 +280,7 @@ class CharacterService {
                 zoneId: CURRENT_TIER_ID,
                 difficulty: 5,
                 metric: "dps",
+                partition: r.allStars?.partition,
 
                 encounter: {
                   id: r.encounter.id,
@@ -290,6 +310,8 @@ class CharacterService {
                           : 0,
                     }
                   : { points: 0, possiblePoints: 0 },
+
+                ilvl: r.bestRank?.ilvl,
               },
               { upsert: true, new: true },
             );
@@ -315,6 +337,7 @@ class CharacterService {
     specName?: string;
     role?: "dps" | "healer" | "tank";
     metric?: "dps" | "hps";
+    partition?: number; // If provided: filter by partition; if omitted: pick best per-boss across partitions
     limit?: number;
     page?: number;
   }): Promise<CharacterRankingsResponse> {
@@ -325,6 +348,7 @@ class CharacterService {
       specName,
       role,
       metric = "dps",
+      partition,
       limit = 100,
       page = 1,
     } = options;
@@ -332,7 +356,7 @@ class CharacterService {
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
 
-    // Encounter selected -> bestAmount
+    // Boss leaderboard (encounterId provided)
     if (encounterId !== undefined) {
       const query: any = {
         zoneId,
@@ -340,6 +364,7 @@ class CharacterService {
         "encounter.id": encounterId,
         difficulty: 5,
       };
+      if (partition !== undefined) query.partition = partition;
       if (classId !== undefined) query.classID = classId;
       if (specName !== undefined) query.specName = specName;
       if (role !== undefined) query.role = role;
@@ -348,7 +373,7 @@ class CharacterService {
       const rows = await Ranking.find(query)
         .select(
           "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName role " +
-            "rankPercent medianPercent totalKills bestAmount allStars lockedIn updatedAt",
+            "rankPercent medianPercent totalKills bestAmount allStars ilvl partition updatedAt",
         )
         .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
         .skip(skip)
@@ -367,8 +392,9 @@ class CharacterService {
           zoneId,
           encounterId: encounterId ?? null,
           specName: r.specName,
-          role,
+          role: r.role,
           metric,
+          ...(partition !== undefined && { partition }),
         },
         score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
         stats: {
@@ -377,6 +403,7 @@ class CharacterService {
           medianPercent: r.medianPercent,
           totalKills: r.totalKills,
           allStars: r.allStars,
+          ...(r.ilvl && { ilvl: r.ilvl }),
         },
         updatedAt: r.updatedAt
           ? new Date(r.updatedAt).toISOString()
@@ -394,37 +421,57 @@ class CharacterService {
       };
     }
 
-    // No encounter -> allStar points
+    // All-boss allStars leaderboard
+    const matchBase: any = { zoneId, metric, difficulty: 5 };
+    if (classId !== undefined) matchBase.classID = classId;
+    if (specName !== undefined) matchBase.specName = specName;
+    if (role !== undefined) matchBase.role = role;
 
-    const needsRankingAggregate =
-      specName !== undefined || role !== undefined || metric !== "dps";
+    // Partition-filtered view: only consider rows with partition = X
+    if (partition !== undefined) {
+      matchBase.partition = partition;
 
-    if (!needsRankingAggregate) {
-      const query: any = {
-        latestZoneId: zoneId,
-        rankingsAvailable: "true",
-        wclProfileHidden: false,
-        latestAllStars: { $exists: true },
-      };
-      if (classId !== undefined) query.classID = classId;
+      // Count total unique characters
+      const countAgg = await Ranking.aggregate([
+        { $match: matchBase },
+        {
+          $group: {
+            _id: "$characterId",
+          },
+        },
+        { $count: "total" },
+      ]);
 
-      const totalItems = await Character.countDocuments(query);
-      const rows = await Character.find(query)
-        .select(
-          "wclCanonicalCharacterId name realm region classID latestAllStars updatedAt",
-        )
-        .sort({ "latestAllStars.points": -1, name: 1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .lean();
+      const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-      const data = rows.map((c: any) => ({
+      // Group by character and sum allStars across bosses
+      const agg = await Ranking.aggregate([
+        { $match: matchBase },
+        {
+          $group: {
+            _id: "$characterId",
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            name: { $first: "$name" },
+            realm: { $first: "$realm" },
+            region: { $first: "$region" },
+            classID: { $first: "$classID" },
+            points: { $sum: "$allStars.points" },
+            possiblePoints: { $sum: "$allStars.possiblePoints" },
+            updatedAt: { $max: "$updatedAt" },
+          },
+        },
+        { $sort: { points: -1, possiblePoints: -1, name: 1 } },
+        { $skip: skip },
+        { $limit: safeLimit },
+      ]);
+
+      const data = agg.map((r: any) => ({
         character: {
-          wclCanonicalCharacterId: c.wclCanonicalCharacterId,
-          name: c.name,
-          realm: c.realm,
-          region: c.region,
-          classID: c.classID,
+          wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+          name: r.name,
+          realm: r.realm,
+          region: r.region,
+          classID: r.classID,
         },
         context: {
           zoneId,
@@ -432,14 +479,17 @@ class CharacterService {
           specName,
           role,
           metric,
+          partition,
         },
-        score: {
-          type: "allStars" as const,
-          value: c.latestAllStars?.points ?? 0,
+        score: { type: "allStars" as const, value: r.points ?? 0 },
+        stats: {
+          allStars: {
+            points: r.points ?? 0,
+            possiblePoints: r.possiblePoints ?? 0,
+          },
         },
-        stats: { allStars: c.latestAllStars },
-        updatedAt: c.updatedAt
-          ? new Date(c.updatedAt).toISOString()
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
           : undefined,
       }));
 
@@ -454,15 +504,15 @@ class CharacterService {
       };
     }
 
-    // Filtered all-boss view (spec/role/metric) => aggregate rankings to compute allStars per character
-    const match: any = { zoneId, metric, difficulty: 5 };
-    if (classId !== undefined) match.classID = classId;
-    if (specName !== undefined) match.specName = specName;
-    if (role !== undefined) match.role = role;
+    // Partition ignored: for each boss, pick BEST result across partitions, then sum per character
+    const matchNoPartition: any = { zoneId, metric, difficulty: 5 };
+    if (classId !== undefined) matchNoPartition.classID = classId;
+    if (specName !== undefined) matchNoPartition.specName = specName;
+    if (role !== undefined) matchNoPartition.role = role;
 
-    // First, get total count without pagination
+    // Count unique characters first
     const countAgg = await Ranking.aggregate([
-      { $match: match },
+      { $match: matchNoPartition },
       {
         $group: {
           _id: "$characterId",
@@ -473,20 +523,43 @@ class CharacterService {
 
     const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
+    // For each character+encounter combo, pick the BEST row across partitions (max allStars.points)
+    // Then group by character and sum the best per-boss values
     const agg = await Ranking.aggregate([
-      { $match: match },
+      { $match: matchNoPartition },
 
-      // group per character across bosses
+      // Sort by allStars.points descending to pick the best partition per encounter
+      { $sort: { "allStars.points": -1, partition: -1 } },
+
+      // Group by character + encounter, pick first (best) from each group
       {
         $group: {
-          _id: "$characterId",
+          _id: {
+            characterId: "$characterId",
+            encounterId: "$encounter.id",
+          },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
           region: { $first: "$region" },
           classID: { $first: "$classID" },
-          points: { $sum: "$allStars.points" },
-          possiblePoints: { $sum: "$allStars.possiblePoints" },
+          points: { $first: "$allStars.points" },
+          possiblePoints: { $first: "$allStars.possiblePoints" },
+          updatedAt: { $first: "$updatedAt" },
+        },
+      },
+
+      // Now group by character and sum the best per-boss points/possiblePoints
+      {
+        $group: {
+          _id: "$_id.characterId",
+          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+          name: { $first: "$name" },
+          realm: { $first: "$realm" },
+          region: { $first: "$region" },
+          classID: { $first: "$classID" },
+          points: { $sum: "$points" },
+          possiblePoints: { $sum: "$possiblePoints" },
           updatedAt: { $max: "$updatedAt" },
         },
       },

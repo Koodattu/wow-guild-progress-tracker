@@ -58,12 +58,15 @@ const specColumn: ColumnDef<CharacterRankingRow> = {
   accessor: (row) => row.context.specName || "—",
 };
 
-const rankColumn: ColumnDef<CharacterRankingRow> = {
+const getRankColumn = (
+  currentPage: number,
+  pageSize: number,
+): ColumnDef<CharacterRankingRow> => ({
   id: "rank",
   header: "Rank",
-  accessor: (row, index) => index + 1,
+  accessor: (row, index) => (currentPage - 1) * pageSize + index + 1,
   width: "w-16",
-};
+});
 
 const allStarsColumn: ColumnDef<CharacterRankingRow> = {
   id: "allstars",
@@ -76,20 +79,6 @@ const damageColumn: ColumnDef<CharacterRankingRow> = {
   header: "DPS",
   accessor: (row) => row.stats.bestAmount?.toFixed(2) ?? "—",
 };
-
-const allStarsColumns: ColumnDef<CharacterRankingRow>[] = [
-  rankColumn,
-  characterColumn,
-  specColumn,
-  allStarsColumn,
-];
-
-const damageColumns: ColumnDef<CharacterRankingRow>[] = [
-  rankColumn,
-  characterColumn,
-  specColumn,
-  damageColumn,
-];
 
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
@@ -110,6 +99,20 @@ export default function CharacterRankingsPage() {
   });
 
   const isShowingDamage = selectedBoss !== null;
+  const rankCol = getRankColumn(pagination.currentPage, pagination.pageSize);
+  const allStarsColumns: ColumnDef<CharacterRankingRow>[] = [
+    rankCol,
+    characterColumn,
+    specColumn,
+    allStarsColumn,
+  ];
+
+  const damageColumns: ColumnDef<CharacterRankingRow>[] = [
+    rankCol,
+    characterColumn,
+    specColumn,
+    damageColumn,
+  ];
   const columns = isShowingDamage ? damageColumns : allStarsColumns;
   const title = isShowingDamage
     ? `Rankings for ${selectedBoss?.name || "Boss"}`
@@ -136,7 +139,6 @@ export default function CharacterRankingsPage() {
         const response = await api.getCharacterRankings(qs);
         setRows(response.data);
         setPagination(response.pagination);
-        console.log(pagination);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed");
       } finally {
@@ -144,6 +146,8 @@ export default function CharacterRankingsPage() {
       }
     })();
   }, [filters]);
+
+  console.log(rows);
 
   return (
     <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[90%] py-6">
