@@ -23,7 +23,7 @@ export interface IReport extends Document {
 
 const ReportSchema: Schema = new Schema(
   {
-    code: { type: String, required: true, unique: true },
+    code: { type: String, required: true },
     guildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true },
     zoneId: { type: Number, required: true },
     startTime: { type: Number, required: true },
@@ -35,7 +35,7 @@ const ReportSchema: Schema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index for efficient lookups

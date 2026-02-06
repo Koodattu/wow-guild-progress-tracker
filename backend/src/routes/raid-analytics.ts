@@ -1,26 +1,31 @@
 import { Router, Request, Response } from "express";
 import raidAnalyticsService from "../services/raid-analytics.service";
+import cacheService from "../services/cache.service";
 import { cacheMiddleware } from "../middleware/cache.middleware";
 import logger from "../utils/logger";
 
 const router = Router();
 
-// Cache TTL for raid analytics (1 hour - data is calculated nightly)
-const RAID_ANALYTICS_TTL = 60 * 60 * 1000;
-
 /**
  * Get list of raids that have analytics available
  * GET /api/raid-analytics/raids
  */
-router.get("/raids", async (req: Request, res: Response) => {
-  try {
-    const raids = await raidAnalyticsService.getAvailableRaids();
-    res.json(raids);
-  } catch (error) {
-    logger.error("Error fetching available raids for analytics:", error);
-    res.status(500).json({ error: "Failed to fetch available raids" });
-  }
-});
+router.get(
+  "/raids",
+  cacheMiddleware(
+    () => cacheService.getRaidAnalyticsRaidsKey(),
+    () => cacheService.RAID_ANALYTICS_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const raids = await raidAnalyticsService.getAvailableRaids();
+      res.json(raids);
+    } catch (error) {
+      logger.error("Error fetching available raids for analytics:", error);
+      res.status(500).json({ error: "Failed to fetch available raids" });
+    }
+  },
+);
 
 /**
  * Get analytics for all raids in a single request
@@ -30,8 +35,8 @@ router.get("/raids", async (req: Request, res: Response) => {
 router.get(
   "/all",
   cacheMiddleware(
-    () => "raid-analytics:all",
-    () => RAID_ANALYTICS_TTL,
+    () => cacheService.getRaidAnalyticsAllKey(),
+    () => cacheService.RAID_ANALYTICS_TTL,
   ),
   async (req: Request, res: Response) => {
     try {
@@ -52,8 +57,8 @@ router.get(
 router.get(
   "/:raidId",
   cacheMiddleware(
-    (req) => `raid-analytics:${req.params.raidId}`,
-    () => RAID_ANALYTICS_TTL,
+    (req) => cacheService.getRaidAnalyticsKey(parseInt(req.params.raidId)),
+    () => cacheService.RAID_ANALYTICS_TTL,
   ),
   async (req: Request, res: Response) => {
     try {

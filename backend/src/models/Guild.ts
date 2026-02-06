@@ -108,6 +108,11 @@ export interface IGuild extends Document {
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
   activityStatus?: "active" | "inactive"; // active = logs within 30 days, inactive = no logs for 30+ days
+  wclStatus?: "active" | "not_found" | "unclaimed" | "unknown"; // Tracks whether the guild exists on WarcraftLogs
+  wclStatusUpdatedAt?: Date; // When the WCL status was last checked/updated
+  wclNotFoundCount?: number; // Consecutive "guild not found" errors count
+  initialFetchCompleted?: boolean; // Whether initial background fetch was completed (even if no reports were found)
+  initialFetchCompletedAt?: Date; // When the initial fetch was completed
   lastFetched?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -145,7 +150,7 @@ const BossProgressSchema: Schema = new Schema(
     ],
     lastUpdated: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const RaidProgressSchema: Schema = new Schema(
@@ -162,7 +167,7 @@ const RaidProgressSchema: Schema = new Schema(
     guildRank: { type: Number }, // Rank among tracked guilds (1 = best)
     lastUpdated: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const GuildSchema: Schema = new Schema(
@@ -220,14 +225,34 @@ const GuildSchema: Schema = new Schema(
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log
     activityStatus: { type: String, enum: ["active", "inactive"], default: "active" }, // Track guild activity
+    wclStatus: { type: String, enum: ["active", "not_found", "unclaimed", "unknown"], default: "unknown" }, // Tracks whether the guild exists on WarcraftLogs
+    wclStatusUpdatedAt: { type: Date }, // When the WCL status was last checked/updated
+    wclNotFoundCount: { type: Number, default: 0 }, // Consecutive "guild not found" errors count
+    initialFetchCompleted: { type: Boolean, default: false }, // Whether initial background fetch was completed
+    initialFetchCompletedAt: { type: Date }, // When the initial fetch was completed
     lastFetched: { type: Date },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index for guild lookup
 GuildSchema.index({ name: 1, realm: 1, region: 1 }, { unique: true });
+
+// Compound index for progress queries (used by getAllGuildsForRaid)
+GuildSchema.index({ "progress.raidId": 1, "progress.bossesDefeated": -1 });
+
+// Index for isCurrentlyRaiding (used to filter active guilds)
+GuildSchema.index({ isCurrentlyRaiding: 1 });
+
+// Index for guildStatus (used to filter by status)
+GuildSchema.index({ guildStatus: 1 });
+
+// Index for lastFetched (used in background processing to find outdated guilds)
+GuildSchema.index({ lastFetched: 1 });
+
+// Index for lastLogDate (used to find inactive guilds)
+GuildSchema.index({ lastLogDate: 1 });
 
 export default mongoose.model<IGuild>("Guild", GuildSchema);

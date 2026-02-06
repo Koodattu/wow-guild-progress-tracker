@@ -1,6 +1,6 @@
 import { WoWCharacter } from "@/types";
 import { useTranslations } from "next-intl";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 interface CharacterSelectorDialogProps {
   characters: WoWCharacter[];
@@ -32,6 +32,11 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(characters.filter((c) => c.selected).map((c) => c.id)));
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Sync selectedIds when characters prop changes
+  useEffect(() => {
+    setSelectedIds(new Set(characters.filter((c) => c.selected).map((c) => c.id)));
+  }, [characters]);
+
   // Filter characters based on search query
   const filteredCharacters = useMemo(() => {
     if (!searchQuery.trim()) return characters;
@@ -44,7 +49,7 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
         char.class.toLowerCase().includes(query) ||
         char.race.toLowerCase().includes(query) ||
         char.level.toString().includes(query) ||
-        (char.guild && char.guild.toLowerCase().includes(query))
+        (char.guild && char.guild.toLowerCase().includes(query)),
     );
   }, [characters, searchQuery]);
 
@@ -156,7 +161,7 @@ export default function CharacterSelectorDialog({ characters, onSave, onCancel, 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredCharacters.map((character) => (
                 <label
-                  key={character.id}
+                  key={`${character.id}-${character.name}-${character.realm}`}
                   className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
                     selectedIds.has(character.id)
                       ? "bg-gray-700 border-2 border-blue-500 shadow-lg"

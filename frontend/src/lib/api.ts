@@ -26,7 +26,8 @@ import {
   AnalyticsTrends,
   AnalyticsSlowEndpoint,
   AnalyticsErrors,
-  User,
+  AuthUser,
+  UserProfile,
   WoWCharacter,
   AdminUsersResponse,
   AdminGuildsResponse,
@@ -46,6 +47,23 @@ import {
   RaidAnalytics,
   RaidAnalyticsListItem,
   CharacterRankingRow,
+  RateLimitResponse,
+  RateLimitStatus,
+  ProcessingQueueStatsResponse,
+  ProcessingQueueResponse,
+  ProcessingQueueErrorsResponse,
+  ProcessingStatus,
+  ProcessorStatus,
+  QueueItem,
+  ErrorType,
+  TriggerResponse,
+  AdminGuildDetail,
+  VerifyReportsResponse,
+  QueueRescanResponse,
+  CreateGuildInput,
+  CreateGuildResponse,
+  DeleteGuildPreviewResponse,
+  DeleteGuildResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -385,13 +403,26 @@ export const api = {
     return response.json();
   },
 
-  async getCurrentUser(): Promise<User | null> {
+  async getCurrentUser(): Promise<AuthUser | null> {
     try {
       const response = await fetch(`${API_URL}/api/auth/me`, {
         credentials: "include",
       });
       if (response.status === 401) return null;
       if (!response.ok) throw new Error("Failed to get current user");
+      return response.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getProfile(): Promise<UserProfile | null> {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
+        credentials: "include",
+      });
+      if (response.status === 401) return null;
+      if (!response.ok) throw new Error("Failed to get user profile");
       return response.json();
     } catch {
       return null;
@@ -517,13 +548,17 @@ export const api = {
   async getAdminGuilds(
     page: number = 1,
     limit: number = 20,
+    search?: string,
   ): Promise<AdminGuildsResponse> {
-    const response = await fetch(
-      `${API_URL}/api/admin/guilds?page=${page}&limit=${limit}`,
-      {
-        credentials: "include",
-      },
-    );
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (search) params.append("search", search);
+
+    const response = await fetch(`${API_URL}/api/admin/guilds?${params}`, {
+      credentials: "include",
+    });
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
   },
@@ -533,6 +568,50 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch guild stats");
+    return response.json();
+  },
+
+  async createAdminGuild(
+    input: CreateGuildInput,
+  ): Promise<CreateGuildResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to create guild");
+    }
+    return response.json();
+  },
+
+  async getAdminGuildDeletePreview(
+    guildId: string,
+  ): Promise<DeleteGuildPreviewResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/guilds/${guildId}/delete-preview`,
+      {
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to fetch deletion preview");
+    return response.json();
+  },
+
+  async deleteAdminGuild(guildId: string): Promise<DeleteGuildResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/guilds/${guildId}?confirm=true`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete guild");
+    }
     return response.json();
   },
 
@@ -789,4 +868,414 @@ export const api = {
     }
     return response.json();
   },
+
+  // ============================================================================
+  // RATE LIMIT & PROCESSING QUEUE (Admin)
+  // ============================================================================
+
+  async getAdminRateLimitStatus(): Promise<RateLimitResponse> {
+    const response = await fetch(`${API_URL}/api/admin/rate-limit`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch rate limit status");
+    return response.json();
+  },
+
+  async setAdminRateLimitPause(
+    paused: boolean,
+  ): Promise<{ success: boolean; isPaused: boolean; status: RateLimitStatus }> {
+    const response = await fetch(`${API_URL}/api/admin/rate-limit/pause`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ paused }),
+    });
+    if (!response.ok) throw new Error("Failed to toggle rate limit pause");
+    return response.json();
+  },
+
+  async getAdminProcessingQueueStats(): Promise<ProcessingQueueStatsResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/stats`,
+      {
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to fetch processing queue stats");
+    return response.json();
+  },
+
+  async getAdminProcessingQueue(
+    page: number = 1,
+    limit: number = 20,
+    status?: ProcessingStatus,
+  ): Promise<ProcessingQueueResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (status) params.append("status", status);
+
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue?${params}`,
+      {
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to fetch processing queue");
+    return response.json();
+  },
+
+  async setAdminProcessingQueuePauseAll(
+    paused: boolean,
+  ): Promise<{ success: boolean; processor: ProcessorStatus }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/pause-all`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ paused }),
+      },
+    );
+    if (!response.ok)
+      throw new Error("Failed to toggle processing queue pause");
+    return response.json();
+  },
+
+  async pauseAdminProcessingQueueGuild(
+    guildId: string,
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/${guildId}/pause`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to pause guild processing");
+    return response.json();
+  },
+
+  async resumeAdminProcessingQueueGuild(
+    guildId: string,
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/${guildId}/resume`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to resume guild processing");
+    return response.json();
+  },
+
+  async retryAdminProcessingQueueGuild(
+    guildId: string,
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/${guildId}/retry`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to retry guild processing");
+    return response.json();
+  },
+
+  async removeAdminProcessingQueueGuild(
+    guildId: string,
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/${guildId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    if (!response.ok)
+      throw new Error("Failed to remove guild from processing queue");
+    return response.json();
+  },
+
+  async queueAdminGuildForProcessing(
+    guildId: string,
+    priority?: number,
+  ): Promise<{ success: boolean; queueItem: QueueItem }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/queue-guild`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ guildId, priority }),
+      },
+    );
+    if (!response.ok) throw new Error("Failed to queue guild for processing");
+    return response.json();
+  },
+
+  async getAdminProcessingQueueErrors(
+    page: number = 1,
+    limit: number = 20,
+    errorType?: ErrorType,
+  ): Promise<ProcessingQueueErrorsResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+
+    if (errorType) {
+      params.append("errorType", errorType);
+    }
+
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/errors?${params}`,
+      {
+        credentials: "include",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch processing queue errors");
+    }
+
+    return response.json();
+  },
+
+  async clearAdminProcessingQueueCompleted(): Promise<{
+    success: boolean;
+    deletedCount: number;
+    message: string;
+  }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/clear-completed`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to clear completed guilds");
+    return response.json();
+  },
+
+  async clearAdminProcessingQueueErrors(
+    action: "reset" | "remove" = "reset",
+  ): Promise<{
+    success: boolean;
+    deletedCount?: number;
+    modifiedCount?: number;
+    message: string;
+  }> {
+    const response = await fetch(
+      `${API_URL}/api/admin/processing-queue/clear-errors?action=${action}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) throw new Error("Failed to clear errors");
+    return response.json();
+  },
 };
+
+// ==================== Admin Trigger Functions ====================
+
+export async function triggerCalculateAllStatistics(
+  currentTierOnly: boolean = true,
+): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/calculate-all-statistics`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentTierOnly }),
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger statistics calculation");
+  return response.json();
+}
+
+export async function triggerCalculateTierLists(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/calculate-tier-lists`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger tier list calculation");
+  return response.json();
+}
+
+export async function triggerCheckTwitchStreams(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/check-twitch-streams`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger Twitch stream check");
+  return response.json();
+}
+
+export async function triggerUpdateWorldRanks(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/update-world-ranks`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger world ranks update");
+  return response.json();
+}
+
+export async function triggerCalculateRaidAnalytics(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/calculate-raid-analytics`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok)
+    throw new Error("Failed to trigger raid analytics calculation");
+  return response.json();
+}
+
+export async function triggerUpdateActiveGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/update-active-guilds`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger active guilds update");
+  return response.json();
+}
+
+export async function triggerUpdateInactiveGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/update-inactive-guilds`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger inactive guilds update");
+  return response.json();
+}
+
+export async function triggerUpdateAllGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/update-all-guilds`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger all guilds update");
+  return response.json();
+}
+
+export async function triggerRefetchRecentReports(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/refetch-recent-reports`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger recent reports refetch");
+  return response.json();
+}
+
+export async function triggerUpdateGuildCrests(): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/trigger/update-guild-crests`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to trigger guild crests update");
+  return response.json();
+}
+
+// ==================== Admin Guild Management Functions ====================
+
+export async function getAdminGuildDetail(
+  guildId: string,
+): Promise<AdminGuildDetail> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}`, {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to fetch guild details");
+  return response.json();
+}
+
+export async function recalculateGuildStats(
+  guildId: string,
+): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/guilds/${guildId}/recalculate-stats`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok)
+    throw new Error("Failed to trigger guild stats recalculation");
+  return response.json();
+}
+
+export async function updateGuildWorldRanks(
+  guildId: string,
+): Promise<TriggerResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/guilds/${guildId}/update-world-ranks`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok)
+    throw new Error("Failed to trigger guild world ranks update");
+  return response.json();
+}
+
+export async function queueGuildRescan(
+  guildId: string,
+): Promise<QueueRescanResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/guilds/${guildId}/queue-rescan`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to queue guild for rescan");
+  }
+  return response.json();
+}
+
+export async function verifyGuildReports(
+  guildId: string,
+): Promise<VerifyReportsResponse> {
+  const response = await fetch(
+    `${API_URL}/api/admin/guilds/${guildId}/verify-reports`,
+    {
+      credentials: "include",
+    },
+  );
+  if (!response.ok) throw new Error("Failed to verify guild reports");
+  return response.json();
+}

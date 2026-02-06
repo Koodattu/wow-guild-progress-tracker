@@ -25,10 +25,13 @@ import adminRouter from "./routes/admin";
 import characterRankingsRouter from "./routes/character-rankings";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
+import backgroundGuildProcessor from "./services/background-guild-processor.service";
 import {
   analyticsMiddleware,
   flushAnalytics,
 } from "./middleware/analytics.middleware";
+import cacheService from "./services/cache.service";
+import cacheWarmerService from "./services/cache-warmer.service";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -289,6 +292,11 @@ async function runBackgroundInitialization(): Promise<void> {
     scheduler.start();
   });
 
+  // Start background guild processor (handles initial data fetch for new guilds)
+  await runStartupTask("Start background guild processor", async () => {
+    backgroundGuildProcessor.start();
+  });
+
   // Log death events fetching status
   const fetchDeathEvents = process.env.FETCH_DEATH_EVENTS === "true";
   if (fetchDeathEvents) {
@@ -411,6 +419,14 @@ async function runBackgroundInitialization(): Promise<void> {
   }
 
   // -------------------------------------------------------------------------
+  // Phase 5: Cache warming (always runs last)
+  // -------------------------------------------------------------------------
+
+  await runStartupTask("Warm API caches", async () => {
+    await cacheWarmerService.warmAllCaches();
+  });
+
+  // -------------------------------------------------------------------------
   // Initialization complete
   // -------------------------------------------------------------------------
 
@@ -453,6 +469,11 @@ const startServer = async () => {
     await connectDB();
     completeStartupTask("Connect to MongoDB");
 
+    // Initialize cache service (requires MongoDB connection)
+    setStartupTask("Initialize cache service");
+    await cacheService.initialize();
+    completeStartupTask("Initialize cache service");
+
     // Start Express server IMMEDIATELY after database connection
     app.listen(PORT, () => {
       logger.info(`[Startup] Server running on port ${PORT}`);
@@ -486,6 +507,7 @@ const startServer = async () => {
 process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  backgroundGuildProcessor.stop();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });
@@ -493,6 +515,7 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
   logger.info("Shutting down gracefully...");
   scheduler.stop();
+  backgroundGuildProcessor.stop();
   await flushAnalytics(); // Flush any pending analytics
   process.exit(0);
 });

@@ -7,8 +7,28 @@ import tierListService from "./tierlist.service";
 import characterService from "./character.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import cacheService from "./cache.service";
+import cacheWarmerService from "./cache-warmer.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
+
+/**
+ * Yield to the event loop to prevent blocking.
+ * Use this in loops to allow request handling.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Add a delay between operations to reduce CPU pressure.
+ * @param ms - Milliseconds to wait
+ */
+function throttleDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Minimum interval between cache warming operations (in ms) */
+const CACHE_WARM_DEBOUNCE_MS = 30000; // 30 seconds
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
@@ -27,6 +47,7 @@ class UpdateScheduler {
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
+  private lastCacheWarmTime: number = 0;
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -194,7 +215,7 @@ class UpdateScheduler {
     // NIGHTLY: Refresh character rankings (at 2 AM Finnish time)
     // Updates zone rankings and encounter rankings for eligible tracked characters
     cron.schedule(
-      "0 2 * * *",
+      "0 7 * * *",
       async () => {
         if (this.isUpdatingCharacterRankings) {
           logger.info(
@@ -245,6 +266,24 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Full cache warmup at 02:00 UTC (before all other nightly jobs)
+    // This ensures caches are fresh at the start of each day
+    cron.schedule(
+      "0 2 * * *",
+      async () => {
+        logger.info("[Nightly/CacheWarmup] Starting full cache warm-up...");
+        try {
+          await cacheWarmerService.warmAllCaches();
+          logger.info("[Nightly/CacheWarmup] Full cache warm-up completed");
+        } catch (error) {
+          logger.error("[Nightly/CacheWarmup] Error:", error);
+        }
+      },
+      {
+        timezone: "UTC",
+      },
+    );
+
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info("    * Active guilds: every 15 minutes");
@@ -255,7 +294,8 @@ class UpdateScheduler {
     logger.info("    * Inactive guilds: once daily at 10:00");
     logger.info("    * Twitch streams: all marked offline");
     logger.info("  - Nightly jobs:");
-    logger.info("    * Character rankings refresh: daily at 02:00");
+    logger.info("    * Character rankings refresh: daily at 07:00");
+    logger.info("    * Full cache warmup: daily at 02:00 UTC");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Guild crests update: daily at 04:00");
@@ -333,12 +373,17 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate tier lists
-  private async calculateTierLists(): Promise<void> {
+  async calculateTierLists(): Promise<void> {
     this.isUpdatingTierLists = true;
 
     try {
       logger.info("[Nightly/TierLists] Starting tier list calculation...");
       await tierListService.calculateTierLists();
+
+      // Invalidate tier list caches and warm them with fresh data
+      await cacheService.invalidateTierListCaches();
+      await cacheWarmerService.warmTierListCaches();
+
       logger.info("[Nightly/TierLists] Tier list calculation completed");
     } catch (error) {
       logger.error("[Nightly/TierLists] Error:", error);
@@ -348,7 +393,7 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate raid analytics
-  private async calculateRaidAnalytics(): Promise<void> {
+  async calculateRaidAnalytics(): Promise<void> {
     this.isUpdatingRaidAnalytics = true;
 
     try {
@@ -356,8 +401,11 @@ class UpdateScheduler {
         "[Nightly/RaidAnalytics] Starting raid analytics calculation...",
       );
       await raidAnalyticsService.calculateAllRaidAnalytics();
-      // Invalidate raid analytics cache
-      cacheService.invalidatePattern(/^raid-analytics:/);
+
+      // Invalidate raid analytics caches and warm them with fresh data
+      await cacheService.invalidateRaidAnalyticsCaches();
+      await cacheWarmerService.warmRaidAnalyticsCaches();
+
       logger.info(
         "[Nightly/RaidAnalytics] Raid analytics calculation completed",
       );
@@ -420,7 +468,7 @@ class UpdateScheduler {
   }
 
   // HOT HOURS: Update active guilds (every 15 minutes during 16:00-01:00)
-  private async updateActiveGuilds(): Promise<void> {
+  async updateActiveGuilds(): Promise<void> {
     this.isUpdatingHotActive = true;
 
     try {
@@ -428,9 +476,11 @@ class UpdateScheduler {
       await this.updateGuildActivityStatus();
 
       // Get active guilds that are NOT currently raiding (raiding guilds handled separately)
+      // Skip guilds marked as not found on WarcraftLogs
       const guilds = await Guild.find({
         activityStatus: "active",
         isCurrentlyRaiding: { $ne: true },
+        wclStatus: { $ne: "not_found" },
       });
 
       if (guilds.length === 0) {
@@ -441,7 +491,7 @@ class UpdateScheduler {
 
       logger.info(`[Hot/Active] Updating ${guilds.length} active guild(s)...`);
 
-      // Update all active guilds sequentially
+      // Update all active guilds sequentially with yielding to prevent blocking
       for (let i = 0; i < guilds.length; i++) {
         logger.info(
           `[Hot/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`,
@@ -449,12 +499,20 @@ class UpdateScheduler {
         await guildService.updateGuildProgress(
           (guilds[i]._id as mongoose.Types.ObjectId).toString(),
         );
+
+        // Yield to event loop after each guild to allow request handling
+        await yieldToEventLoop();
+
+        // Throttle between guilds to reduce CPU pressure
+        if (i < guilds.length - 1) {
+          await throttleDelay(100);
+        }
       }
 
       logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
 
-      // Invalidate guild caches after updates
-      cacheService.invalidateGuildCaches();
+      // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
+      await this.debouncedWarmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
     } finally {
@@ -467,8 +525,11 @@ class UpdateScheduler {
     this.isUpdatingHotRaiding = true;
 
     try {
-      // Get guilds that are currently raiding
-      const raidingGuilds = await guildService.getGuildsCurrentlyRaiding();
+      // Get guilds that are currently raiding (excluding guilds not found on WCL)
+      const allRaidingGuilds = await guildService.getGuildsCurrentlyRaiding();
+      const raidingGuilds = allRaidingGuilds.filter(
+        (guild) => guild.wclStatus !== "not_found",
+      );
 
       if (raidingGuilds.length === 0) {
         // No raiding guilds, nothing to do
@@ -480,7 +541,7 @@ class UpdateScheduler {
         `[Hot/Raiding] Updating ${raidingGuilds.length} actively raiding guild(s)...`,
       );
 
-      // Update all raiding guilds sequentially
+      // Update all raiding guilds sequentially with yielding to prevent blocking
       for (let i = 0; i < raidingGuilds.length; i++) {
         logger.info(
           `[Hot/Raiding] Guild ${i + 1}/${raidingGuilds.length}: ${raidingGuilds[i].name}`,
@@ -488,14 +549,22 @@ class UpdateScheduler {
         await guildService.updateGuildProgress(
           (raidingGuilds[i]._id as mongoose.Types.ObjectId).toString(),
         );
+
+        // Yield to event loop after each guild to allow request handling
+        await yieldToEventLoop();
+
+        // Throttle between guilds to reduce CPU pressure
+        if (i < raidingGuilds.length - 1) {
+          await throttleDelay(100);
+        }
       }
 
       logger.info(
         `[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`,
       );
 
-      // Invalidate guild caches after updates
-      cacheService.invalidateGuildCaches();
+      // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
+      await this.debouncedWarmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
     } finally {
@@ -512,9 +581,11 @@ class UpdateScheduler {
       await this.updateGuildActivityStatus();
 
       // Get active guilds (not currently raiding during off hours is unlikely, but check anyway)
+      // Skip guilds marked as not found on WarcraftLogs
       const guilds = await Guild.find({
         activityStatus: "active",
         isCurrentlyRaiding: { $ne: true },
+        wclStatus: { $ne: "not_found" },
       });
 
       if (guilds.length === 0) {
@@ -525,7 +596,7 @@ class UpdateScheduler {
 
       logger.info(`[Off/Active] Updating ${guilds.length} active guild(s)...`);
 
-      // Update all active guilds sequentially
+      // Update all active guilds sequentially with yielding to prevent blocking
       for (let i = 0; i < guilds.length; i++) {
         logger.info(
           `[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`,
@@ -534,11 +605,19 @@ class UpdateScheduler {
           (guilds[i]._id as mongoose.Types.ObjectId).toString(),
         );
 
-        // Invalidate guild caches after updates
-        cacheService.invalidateGuildCaches();
+        // Yield to event loop after each guild to allow request handling
+        await yieldToEventLoop();
+
+        // Throttle between guilds to reduce CPU pressure
+        if (i < guilds.length - 1) {
+          await throttleDelay(100);
+        }
       }
 
       logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
+
+      // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
+      await this.debouncedWarmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
     } finally {
@@ -547,15 +626,18 @@ class UpdateScheduler {
   }
 
   // OFF HOURS: Update inactive guilds (once daily at 10:00)
-  private async updateInactiveGuilds(): Promise<void> {
+  async updateInactiveGuilds(): Promise<void> {
     this.isUpdatingOffInactive = true;
 
     try {
       // First, update activity statuses
       await this.updateGuildActivityStatus();
 
-      // Get inactive guilds
-      const guilds = await Guild.find({ activityStatus: "inactive" });
+      // Get inactive guilds (excluding guilds not found on WCL)
+      const guilds = await Guild.find({
+        activityStatus: "inactive",
+        wclStatus: { $ne: "not_found" },
+      });
 
       if (guilds.length === 0) {
         logger.info("[Daily/Inactive] No inactive guilds to update");
@@ -576,18 +658,23 @@ class UpdateScheduler {
           (guilds[i]._id as mongoose.Types.ObjectId).toString(),
         );
 
-        // Small delay to avoid overwhelming the API
+        // Yield to event loop periodically (every 5 guilds) to allow request handling
+        if ((i + 1) % 5 === 0) {
+          await yieldToEventLoop();
+        }
 
-        // Invalidate guild caches after updates
-        cacheService.invalidateGuildCaches();
+        // Small delay to avoid overwhelming the API
         if (i < guilds.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await throttleDelay(2000);
         }
       }
 
       logger.info(
         `[Daily/Inactive] Completed updating ${guilds.length} guild(s)`,
       );
+
+      // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
+      await this.debouncedWarmCurrentRaidCaches();
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
     } finally {
@@ -598,7 +685,7 @@ class UpdateScheduler {
   // Manually trigger update of all guilds
   async updateAllGuilds(): Promise<void> {
     logger.info("Starting full update of all guilds...");
-    const guilds = await Guild.find();
+    const guilds = await Guild.find({ wclStatus: { $ne: "not_found" } });
 
     for (let i = 0; i < guilds.length; i++) {
       const guild = guilds[i];
@@ -608,8 +695,14 @@ class UpdateScheduler {
         await guildService.updateGuildProgress(
           (guild._id as mongoose.Types.ObjectId).toString(),
         );
+
+        // Yield to event loop periodically (every 5 guilds) to allow request handling
+        if ((i + 1) % 5 === 0) {
+          await yieldToEventLoop();
+        }
+
         // Small delay between guilds to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await throttleDelay(2000);
       } catch (error) {
         logger.error(`Failed to update ${guild.name}:`, error);
       }
@@ -620,12 +713,12 @@ class UpdateScheduler {
 
   // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)
   // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
-  private async updateAllGuildsWorldRanks(): Promise<void> {
+  async updateAllGuildsWorldRanks(): Promise<void> {
     this.isUpdatingNightlyWorldRanks = true;
 
     try {
-      // Get all guilds
-      const guilds = await Guild.find();
+      // Get all guilds (excluding guilds not found on WCL)
+      const guilds = await Guild.find({ wclStatus: { $ne: "not_found" } });
 
       if (guilds.length === 0) {
         logger.info("[Nightly/WorldRanks] No guilds to update");
@@ -649,9 +742,14 @@ class UpdateScheduler {
             (guild._id as mongoose.Types.ObjectId).toString(),
           );
 
+          // Yield to event loop periodically (every 5 guilds) to allow request handling
+          if ((i + 1) % 5 === 0) {
+            await yieldToEventLoop();
+          }
+
           // Small delay to avoid overwhelming the API (3 seconds between guilds)
           if (i < guilds.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await throttleDelay(3000);
           }
         } catch (error) {
           logger.error(
@@ -682,7 +780,7 @@ class UpdateScheduler {
 
   // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
   // Guild crests can be changed by guilds or sometimes fail to fetch initially
-  private async updateAllGuildCrests(): Promise<void> {
+  async updateAllGuildCrests(): Promise<void> {
     this.isUpdatingGuildCrests = true;
 
     try {
@@ -698,7 +796,7 @@ class UpdateScheduler {
 
   // NIGHTLY: Refetch 3 most recent reports for all active guilds (at 3 AM Finnish time)
   // This catches any fights that might have been missed during live polling or uploaded late
-  private async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
+  async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
     this.isUpdatingRefetchRecentReports = true;
 
     try {
@@ -725,7 +823,7 @@ class UpdateScheduler {
   }
 
   // HOT HOURS: Update Twitch stream status (every 15 minutes during 16:00-01:00)
-  private async updateTwitchStreamStatus(): Promise<void> {
+  async updateTwitchStreamStatus(): Promise<void> {
     this.isUpdatingTwitchStreams = true;
 
     try {
@@ -871,6 +969,33 @@ class UpdateScheduler {
       logger.info("[Off/Twitch] All streams marked as offline");
     } catch (error) {
       logger.error("[Off/Twitch] Error setting streams offline:", error);
+    }
+  }
+
+  /**
+   * Debounced cache warming for current raid caches.
+   * Prevents multiple cache warm operations from running in quick succession.
+   * Uses stale-while-revalidate pattern - old data is served while warming.
+   */
+  private async debouncedWarmCurrentRaidCaches(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastWarm = now - this.lastCacheWarmTime;
+
+    if (timeSinceLastWarm < CACHE_WARM_DEBOUNCE_MS) {
+      logger.info(
+        `[CacheWarm] Skipping cache warm - last warm was ${Math.round(timeSinceLastWarm / 1000)}s ago (debounce: ${CACHE_WARM_DEBOUNCE_MS / 1000}s)`,
+      );
+      return;
+    }
+
+    this.lastCacheWarmTime = now;
+    logger.info("[CacheWarm] Warming current raid caches...");
+
+    try {
+      await cacheWarmerService.warmCurrentRaidCaches();
+      logger.info("[CacheWarm] Current raid caches warmed successfully");
+    } catch (error) {
+      logger.error("[CacheWarm] Error warming current raid caches:", error);
     }
   }
 }

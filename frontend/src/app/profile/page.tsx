@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
-import { WoWCharacter } from "@/types";
+import { WoWCharacter, UserProfile } from "@/types";
 import { FaBattleNet } from "react-icons/fa";
 import { FaTwitch } from "react-icons/fa";
 
@@ -28,10 +28,14 @@ const CLASS_COLORS: { [key: string]: string } = {
 };
 
 export default function ProfilePage() {
-  const { user, isLoading, logout, refreshUser } = useAuth();
+  const { user: authUser, isLoading: isAuthLoading, logout } = useAuth();
   const t = useTranslations("profilePage");
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Profile data state (fetched separately from auth)
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   const [isConnectingTwitch, setIsConnectingTwitch] = useState(false);
   const [isConnectingBattleNet, setIsConnectingBattleNet] = useState(false);
@@ -47,10 +51,29 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const hasTriggeredRefresh = useRef(false);
 
+  // Fetch profile data
+  const refreshProfile = useCallback(async () => {
+    try {
+      const profileData = await api.getProfile();
+      setProfile(profileData);
+    } catch (error) {
+      console.error("Failed to fetch profile:", error);
+      setProfile(null);
+    }
+  }, []);
+
+  // Initial profile load
+  useEffect(() => {
+    if (!isAuthLoading && authUser) {
+      setIsLoadingProfile(true);
+      refreshProfile().finally(() => setIsLoadingProfile(false));
+    }
+  }, [isAuthLoading, authUser, refreshProfile]);
+
   // Check if we should open the dialog after Battle.net connection
   useEffect(() => {
     const connected = searchParams.get("connected");
-    if (connected === "battlenet" && user?.battlenet && !hasTriggeredRefresh.current) {
+    if (connected === "battlenet" && profile?.battlenet && !hasTriggeredRefresh.current) {
       hasTriggeredRefresh.current = true;
       // Trigger character refresh with guild enrichment
       handleRefreshCharacters();
@@ -60,7 +83,7 @@ export default function ProfilePage() {
       }, 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, user?.battlenet]);
+  }, [searchParams, profile?.battlenet]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -69,11 +92,11 @@ export default function ProfilePage() {
 
     if (connected === "twitch") {
       setMessage({ type: "success", text: t("twitchConnected") });
-      refreshUser();
+      refreshProfile();
       router.replace("/profile");
     } else if (connected === "battlenet") {
       setMessage({ type: "success", text: t("battlenetConnected") });
-      refreshUser();
+      refreshProfile();
       router.replace("/profile");
     } else if (error) {
       let errorText = t("connectionError");
@@ -89,7 +112,7 @@ export default function ProfilePage() {
       setMessage({ type: "error", text: errorText });
       router.replace("/profile");
     }
-  }, [searchParams, t, refreshUser, router]);
+  }, [searchParams, t, refreshProfile, router]);
 
   // Clear message after 5 seconds
   useEffect(() => {
@@ -99,11 +122,12 @@ export default function ProfilePage() {
     }
   }, [message]);
 
+  // Redirect if not authenticated
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isAuthLoading && !authUser) {
       router.push("/");
     }
-  }, [user, isLoading, router]);
+  }, [authUser, isAuthLoading, router]);
 
   const handleConnectTwitch = async () => {
     try {
@@ -121,7 +145,7 @@ export default function ProfilePage() {
     try {
       setIsDisconnectingTwitch(true);
       await api.disconnectTwitch();
-      await refreshUser();
+      await refreshProfile();
       setMessage({ type: "success", text: t("twitchDisconnected") });
     } catch (error) {
       console.error("Failed to disconnect Twitch:", error);
@@ -147,7 +171,7 @@ export default function ProfilePage() {
     try {
       setIsDisconnectingBattleNet(true);
       await api.disconnectBattleNet();
-      await refreshUser();
+      await refreshProfile();
       setMessage({ type: "success", text: t("battlenetDisconnected") });
     } catch (error) {
       console.error("Failed to disconnect Battle.net:", error);
@@ -166,7 +190,7 @@ export default function ProfilePage() {
     try {
       setIsRefreshingCharacters(true);
       await api.refreshWoWCharacters();
-      await refreshUser();
+      await refreshProfile();
 
       // Always fetch the full character list after refresh (for dialog updates)
       // This ensures the dialog gets updated enriched data even if opened during refresh
@@ -178,20 +202,21 @@ export default function ProfilePage() {
       }
 
       setMessage({ type: "success", text: t("charactersRefreshed") });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to refresh characters:", error);
       // Check if it's a rate limit error
-      const errorMessage = error?.response?.data?.error || error?.message || t("refreshError");
+      const errorObj = error as { response?: { data?: { error?: string } }; message?: string };
+      const errorMessage = errorObj?.response?.data?.error || errorObj?.message || t("refreshError");
       setMessage({ type: "error", text: errorMessage });
     } finally {
       setIsRefreshingCharacters(false);
     }
-  }, [isRefreshingCharacters, refreshUser, t]);
+  }, [isRefreshingCharacters, refreshProfile, t]);
 
   const handleRefreshTwitch = async () => {
     try {
       setIsRefreshingTwitch(true);
-      await refreshUser();
+      await refreshProfile();
       setMessage({ type: "success", text: "Twitch data refreshed!" });
     } catch (error) {
       console.error("Failed to refresh Twitch:", error);
@@ -204,7 +229,7 @@ export default function ProfilePage() {
   const handleRefreshBattleNet = async () => {
     try {
       setIsRefreshingBattleNet(true);
-      await refreshUser();
+      await refreshProfile();
       setMessage({ type: "success", text: "Battle.net data refreshed!" });
     } catch (error) {
       console.error("Failed to refresh Battle.net:", error);
@@ -218,7 +243,7 @@ export default function ProfilePage() {
     try {
       setIsSavingCharacters(true);
       await api.updateCharacterSelection(selectedIds);
-      await refreshUser();
+      await refreshProfile();
       setMessage({ type: "success", text: t("charactersSaved") });
       setShowCharacterDialog(false);
     } catch (error) {
@@ -257,7 +282,8 @@ export default function ProfilePage() {
     return faction === "ALLIANCE" ? "#3B82F6" : "#EF4444";
   };
 
-  if (isLoading) {
+  // Show loading while checking auth or loading profile
+  if (isAuthLoading || isLoadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-white text-lg">Loading...</div>
@@ -265,11 +291,12 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user) {
+  // Don't render if not authenticated
+  if (!authUser || !profile) {
     return null;
   }
 
-  const selectedCharacters = user.battlenet?.characters.filter((c) => c.selected) || [];
+  const selectedCharacters = profile.battlenet?.characters.filter((c) => c.selected) || [];
 
   return (
     <main className="min-h-screen px-4 md:px-6 py-8">
@@ -291,9 +318,9 @@ export default function ProfilePage() {
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
           {/* Discord Profile Section */}
           <div className="flex items-center gap-6 mb-6">
-            <img src={user.discord.avatarUrl} alt={user.discord.username} className="w-24 h-24 rounded-full border-4 border-indigo-500" />
+            <img src={profile.discord.avatarUrl} alt={profile.discord.username} className="w-24 h-24 rounded-full border-4 border-indigo-500" />
             <div>
-              <h2 className="text-2xl font-bold text-white">{user.discord.username}</h2>
+              <h2 className="text-2xl font-bold text-white">{profile.discord.username}</h2>
               <p className="text-gray-400">{t("discordAccount")}</p>
             </div>
           </div>
@@ -303,7 +330,7 @@ export default function ProfilePage() {
             <div>
               <label className="text-sm text-gray-400">{t("memberSince")}</label>
               <p className="text-white">
-                {new Date(user.createdAt).toLocaleDateString(undefined, {
+                {new Date(profile.createdAt).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -313,7 +340,7 @@ export default function ProfilePage() {
             <div>
               <label className="text-sm text-gray-400">{t("lastLogin")}</label>
               <p className="text-white">
-                {new Date(user.lastLoginAt).toLocaleDateString(undefined, {
+                {new Date(profile.lastLoginAt).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -347,18 +374,18 @@ export default function ProfilePage() {
           <div className="mb-6 pb-6 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {user.twitch && user.twitch.profileImageUrl ? (
-                  <img src={user.twitch.profileImageUrl} alt={user.twitch.displayName} className="w-12 h-12 rounded-full border-2 border-purple-500" />
+                {profile.twitch && profile.twitch.profileImageUrl ? (
+                  <img src={profile.twitch.profileImageUrl} alt={profile.twitch.displayName} className="w-12 h-12 rounded-full border-2 border-purple-500" />
                 ) : (
                   <FaTwitch className="w-8 h-8 text-purple-500" />
                 )}
                 <div>
                   <h4 className="text-white font-medium">{t("twitchAccount")}</h4>
-                  {user.twitch ? <p className="text-purple-400 text-sm">{user.twitch.displayName}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
+                  {profile.twitch ? <p className="text-purple-400 text-sm">{profile.twitch.displayName}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
                 </div>
               </div>
               <div className="flex gap-2">
-                {user.twitch ? (
+                {profile.twitch ? (
                   <>
                     <button
                       onClick={handleRefreshTwitch}
@@ -394,10 +421,10 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            {user.twitch && (
+            {profile.twitch && (
               <p className="text-gray-500 text-xs mt-2">
                 {t("connectedOn")}{" "}
-                {new Date(user.twitch.connectedAt).toLocaleDateString(undefined, {
+                {new Date(profile.twitch.connectedAt).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -413,11 +440,11 @@ export default function ProfilePage() {
                 <FaBattleNet className="w-8 h-8 text-blue-400" />
                 <div>
                   <h4 className="text-white font-medium">{t("battlenetAccount")}</h4>
-                  {user.battlenet ? <p className="text-blue-400 text-sm">{user.battlenet.battletag}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
+                  {profile.battlenet ? <p className="text-blue-400 text-sm">{profile.battlenet.battletag}</p> : <p className="text-gray-500 text-sm">{t("notConnected")}</p>}
                 </div>
               </div>
               <div className="flex gap-2">
-                {user.battlenet ? (
+                {profile.battlenet ? (
                   <>
                     <button
                       onClick={handleRefreshBattleNet}
@@ -453,10 +480,10 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            {user.battlenet && (
+            {profile.battlenet && (
               <p className="text-gray-500 text-xs mt-2">
                 {t("connectedOn")}{" "}
-                {new Date(user.battlenet.connectedAt).toLocaleDateString(undefined, {
+                {new Date(profile.battlenet.connectedAt).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -467,7 +494,7 @@ export default function ProfilePage() {
         </div>
 
         {/* WoW Characters Section */}
-        {user.battlenet && (
+        {profile.battlenet && (
           <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">{t("wowCharacters")}</h3>
@@ -511,10 +538,10 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {user.battlenet.lastCharacterSync && (
+            {profile.battlenet.lastCharacterSync && (
               <p className="text-gray-500 text-xs mt-4">
                 {t("lastSynced")}{" "}
-                {new Date(user.battlenet.lastCharacterSync).toLocaleString(undefined, {
+                {new Date(profile.battlenet.lastCharacterSync).toLocaleString(undefined, {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
@@ -527,9 +554,9 @@ export default function ProfilePage() {
         )}
 
         {/* Character Selector Dialog */}
-        {showCharacterDialog && user.battlenet && (
+        {showCharacterDialog && profile.battlenet && (
           <CharacterSelectorDialog
-            characters={allCharacters.length > 0 ? allCharacters : user.battlenet.characters}
+            characters={allCharacters.length > 0 ? allCharacters : profile.battlenet.characters}
             onSave={handleSaveCharacters}
             onCancel={() => setShowCharacterDialog(false)}
             onRefresh={handleRefreshCharacters}
