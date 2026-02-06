@@ -485,11 +485,13 @@ export function RankingTableWrapper({
     ? `Rankings for ${selectedBoss.name}`
     : "All Star Rankings";
 
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (error) return <div className="p-6 text-red-300">{error}</div>;
-
   return (
     <div className="space-y-4">
+      {error ? (
+        <div className="rounded-md border border-red-500/40 bg-red-950/30 px-4 py-3 text-red-200">
+          {error}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
         <div className="flex gap-4 w-full">
@@ -547,6 +549,7 @@ export function RankingTableWrapper({
       <Table
         columns={columns}
         data={data}
+        loading={loading}
         pagination={pagination}
         onPageChange={handlePageChange}
       />

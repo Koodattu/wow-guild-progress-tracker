@@ -4,6 +4,21 @@ import { CURRENT_RAID_IDS } from "../config/guilds";
 
 const router = Router();
 
+const ALLOWED_ROLES = new Set(["dps", "healer", "tank"] as const);
+const ALLOWED_METRICS = new Set(["dps", "hps"] as const);
+
+const parseNumberQuery = (value: unknown): number | undefined => {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
+const parseStringQuery = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  const parsed = String(value).trim();
+  return parsed.length > 0 ? parsed : undefined;
+};
+
 router.get("/", async (req: Request, res: Response) => {
   try {
     const zoneId = CURRENT_RAID_IDS[0];
@@ -11,48 +26,44 @@ router.get("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid zone ID" });
     }
 
-    const encounterId =
-      req.query.encounterId !== undefined
-        ? Number(req.query.encounterId)
-        : undefined;
-    const classId =
-      req.query.classId !== undefined ? Number(req.query.classId) : undefined;
-    const page =
-      req.query.page !== undefined ? Number(req.query.page) : undefined;
-    const limit =
-      req.query.limit !== undefined ? Number(req.query.limit) : undefined;
-    const partition =
-      req.query.partition !== undefined
-        ? Number(req.query.partition)
-        : undefined;
+    const encounterId = parseNumberQuery(req.query.encounterId);
+    const classId = parseNumberQuery(req.query.classId);
+    const page = parseNumberQuery(req.query.page);
+    const limit = parseNumberQuery(req.query.limit);
+    const partition = parseNumberQuery(req.query.partition);
 
-    const specName =
-      req.query.specName !== undefined ? String(req.query.specName) : undefined;
+    const specNameRaw = parseStringQuery(req.query.specName);
+    const specName = specNameRaw?.toLowerCase();
 
-    const role =
-      req.query.role !== undefined
-        ? (String(req.query.role) as "dps" | "healer" | "tank")
-        : undefined;
+    const roleRaw = parseStringQuery(req.query.role)?.toLowerCase();
+    const role = roleRaw as "dps" | "healer" | "tank" | undefined;
 
-    const metric =
-      req.query.metric !== undefined
-        ? (String(req.query.metric) as "dps" | "hps")
-        : undefined;
+    const metricRaw = parseStringQuery(req.query.metric)?.toLowerCase();
+    const metric = metricRaw as "dps" | "hps" | undefined;
 
-    if (encounterId !== undefined && Number.isNaN(encounterId)) {
+    if (encounterId !== undefined && !Number.isFinite(encounterId)) {
       return res.status(400).json({ error: "Invalid encounterId" });
     }
-    if (classId !== undefined && Number.isNaN(classId)) {
+    if (classId !== undefined && !Number.isFinite(classId)) {
       return res.status(400).json({ error: "Invalid classId" });
     }
-    if (page !== undefined && (Number.isNaN(page) || page < 1)) {
+    if (page !== undefined && (!Number.isFinite(page) || page < 1)) {
       return res.status(400).json({ error: "Invalid page" });
     }
-    if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
       return res.status(400).json({ error: "Invalid limit" });
     }
-    if (partition !== undefined && (Number.isNaN(partition) || partition < 1)) {
+    if (
+      partition !== undefined &&
+      (!Number.isFinite(partition) || partition < 1)
+    ) {
       return res.status(400).json({ error: "Invalid partition" });
+    }
+    if (role !== undefined && !ALLOWED_ROLES.has(role)) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
+    if (metric !== undefined && !ALLOWED_METRICS.has(metric)) {
+      return res.status(400).json({ error: "Invalid metric" });
     }
 
     const rankings = await characterService.getCharacterRankings({

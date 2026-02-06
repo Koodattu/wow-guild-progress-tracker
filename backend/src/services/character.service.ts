@@ -132,16 +132,17 @@ class CharacterService {
     logger.info("Starting character ranking check and update...");
 
     const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
+    const MYTHIC_DIFFICULTY = 5;
     const BATCH_SIZE = 200;
 
     try {
       // Find eligible characters
       const eligibleChars = await Character.find({
-        // Eligible if lastMythicSeenAt within 14 days, rankingsAvailable not "false" and cooldown passed
+        // Eligible if lastMythicSeenAt within 14 days, rankingsAvailable not false and cooldown passed
         lastMythicSeenAt: {
           $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         },
-        rankingsAvailable: { $ne: "false" },
+        rankingsAvailable: { $ne: false },
         nextEligibleRefreshAt: { $lte: new Date() },
       }).limit(BATCH_SIZE);
 
@@ -166,7 +167,7 @@ class CharacterService {
                   hidden
                   zoneRankings(
                     zoneID: $zoneID,
-                    difficulty: 5,
+                    difficulty: ${MYTHIC_DIFFICULTY},
                     metric: dps,
                     compare: Rankings,
                     timeframe: Historical
@@ -197,7 +198,7 @@ class CharacterService {
           ) {
             await Character.findByIdAndUpdate(char._id, {
               wclProfileHidden: character?.hidden || false,
-              rankingsAvailable: "false",
+              rankingsAvailable: false,
               nextEligibleRefreshAt: new Date(
                 Date.now() + 7 * 24 * 60 * 60 * 1000,
               ),
@@ -215,6 +216,7 @@ class CharacterService {
           const existingRankings = await Ranking.find({
             characterId: char._id,
             zoneId: CURRENT_TIER_ID,
+            difficulty: MYTHIC_DIFFICULTY,
             metric: "dps",
             partition: zoneRankings.partition,
           }).lean();
@@ -255,7 +257,7 @@ class CharacterService {
 
           // Update nextEligibleRefreshAt on Character
           await Character.findByIdAndUpdate(char._id, {
-            rankingsAvailable: "true",
+            rankingsAvailable: true,
             nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
           });
 
@@ -271,7 +273,7 @@ class CharacterService {
               {
                 characterId: char._id,
                 zoneId: CURRENT_TIER_ID,
-                difficulty: 5,
+                difficulty: MYTHIC_DIFFICULTY,
                 metric: "dps",
                 partition: r.allStars?.partition,
                 "encounter.id": r.encounter.id,
@@ -287,7 +289,7 @@ class CharacterService {
                 classID: char.classID,
 
                 zoneId: CURRENT_TIER_ID,
-                difficulty: 5,
+                difficulty: MYTHIC_DIFFICULTY,
                 metric: "dps",
                 partition: r.allStars?.partition,
 
@@ -362,6 +364,14 @@ class CharacterService {
       page = 1,
     } = options;
 
+    const MYTHIC_DIFFICULTY = 5;
+    const normalizedSpecName = specName?.trim().toLowerCase();
+    const normalizedRole = role?.toLowerCase() as
+      | "dps"
+      | "healer"
+      | "tank"
+      | undefined;
+
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
 
@@ -371,12 +381,12 @@ class CharacterService {
         zoneId,
         metric,
         "encounter.id": encounterId,
-        difficulty: 5,
+        difficulty: MYTHIC_DIFFICULTY,
       };
       if (partition !== undefined) query.partition = partition;
       if (classId !== undefined) query.classID = classId;
-      if (specName !== undefined) query.specName = specName;
-      if (role !== undefined) query.role = role;
+      if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
+      if (normalizedRole !== undefined) query.role = normalizedRole;
 
       const totalItems = await Ranking.countDocuments(query);
       const rows = await Ranking.find(query)
@@ -438,10 +448,15 @@ class CharacterService {
     }
 
     // All-boss allStars leaderboard
-    const matchBase: any = { zoneId, metric, difficulty: 5 };
+    const matchBase: any = {
+      zoneId,
+      metric,
+      difficulty: MYTHIC_DIFFICULTY,
+    };
     if (classId !== undefined) matchBase.classID = classId;
-    if (specName !== undefined) matchBase.specName = specName;
-    if (role !== undefined) matchBase.role = role;
+    if (normalizedSpecName !== undefined)
+      matchBase.specName = normalizedSpecName;
+    if (normalizedRole !== undefined) matchBase.role = normalizedRole;
 
     // Partition-filtered view: only consider rows with partition = X
     if (partition !== undefined) {
@@ -494,12 +509,12 @@ class CharacterService {
         },
         context: {
           zoneId,
-          difficulty: 5,
+          difficulty: MYTHIC_DIFFICULTY,
           metric,
           partition,
           encounterId: null,
-          specName,
-          role,
+          specName: normalizedSpecName,
+          role: normalizedRole,
           ilvl: r.ilvl,
         },
         score: { type: "allStars" as const, value: r.points ?? 0 },
@@ -528,10 +543,15 @@ class CharacterService {
     }
 
     // Partition ignored: for each boss, pick BEST result across partitions, then sum per character
-    const matchNoPartition: any = { zoneId, metric, difficulty: 5 };
+    const matchNoPartition: any = {
+      zoneId,
+      metric,
+      difficulty: MYTHIC_DIFFICULTY,
+    };
     if (classId !== undefined) matchNoPartition.classID = classId;
-    if (specName !== undefined) matchNoPartition.specName = specName;
-    if (role !== undefined) matchNoPartition.role = role;
+    if (normalizedSpecName !== undefined)
+      matchNoPartition.specName = normalizedSpecName;
+    if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
 
     // Count unique characters first
     const countAgg = await Ranking.aggregate([
@@ -608,11 +628,11 @@ class CharacterService {
       },
       context: {
         zoneId,
-        difficulty: 5,
+        difficulty: MYTHIC_DIFFICULTY,
         metric,
         encounterId: null,
-        specName,
-        role,
+        specName: normalizedSpecName,
+        role: normalizedRole,
         ilvl: r.ilvl,
       },
       score: { type: "allStars" as const, value: r.points ?? 0 },

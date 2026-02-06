@@ -9,7 +9,7 @@ export interface ICharacter extends Document {
   wclProfileHidden: boolean;
 
   lastMythicSeenAt: Date;
-  rankingsAvailable: "unknown" | "true" | "false";
+  rankingsAvailable: boolean | null;
   nextEligibleRefreshAt?: Date;
 
   createdAt: Date;
@@ -26,17 +26,17 @@ const CharacterSchema: Schema = new Schema(
     wclProfileHidden: { type: Boolean, required: true, default: false },
 
     lastMythicSeenAt: { type: Date, required: true },
-    rankingsAvailable: {
-      type: String,
-      enum: ["unknown", "true", "false"],
-      required: true,
-      default: "unknown",
-    },
+    rankingsAvailable: { type: Boolean, required: false, default: null },
     nextEligibleRefreshAt: { type: Date, required: false },
   },
   { timestamps: true },
 );
 
 CharacterSchema.index({ name: 1, realm: 1, region: 1 });
+CharacterSchema.index({
+  lastMythicSeenAt: -1,
+  rankingsAvailable: 1,
+  nextEligibleRefreshAt: 1,
+});
 
 export default mongoose.model<ICharacter>("Character", CharacterSchema);

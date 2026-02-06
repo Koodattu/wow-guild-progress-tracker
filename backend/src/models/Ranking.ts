@@ -154,4 +154,29 @@ RankingSchema.index({
   rankPercent: -1,
 });
 
+// Refresh check query (without encounter/spec filter)
+RankingSchema.index({
+  characterId: 1,
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
+  partition: 1,
+});
+
+// All-boss aggregation (partition ignored)
+RankingSchema.index({
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
+  classID: 1,
+  specName: 1,
+});
+
+RankingSchema.index({
+  zoneId: 1,
+  difficulty: 1,
+  metric: 1,
+  role: 1,
+});
+
 export default mongoose.model<IRanking>("Ranking", RankingSchema);

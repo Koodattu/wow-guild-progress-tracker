@@ -6,6 +6,8 @@ import { getRankColor } from "@/lib/utils";
 interface TableProps<T> {
   columns: ColumnDef<T>[];
   data: T[];
+  loading?: boolean;
+  skeletonRowCount?: number;
   pagination?: {
     totalItems: number;
     totalPages: number;
@@ -18,12 +20,78 @@ interface TableProps<T> {
 export function Table<T>({
   columns,
   data,
+  loading = false,
+  skeletonRowCount,
   pagination,
   onPageChange,
 }: TableProps<T>) {
   const currentPage = pagination?.currentPage ?? 1;
   const totalPages = pagination?.totalPages ?? 1;
   const totalItems = pagination?.totalItems ?? data.length;
+  const rowsToRender =
+    skeletonRowCount ?? Math.min(10, pagination?.pageSize ?? 10);
+
+  if (loading) {
+    return (
+      <div className="space-y-4" aria-busy="true" aria-live="polite">
+        <div className="overflow-x-auto border border-gray-700">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-700 bg-gray-900">
+                {columns.map((column, colIndex) => (
+                  <th
+                    key={column.id}
+                    className={`py-3 px-4 text-left font-semibold text-gray-200 ${
+                      colIndex !== columns.length - 1
+                        ? "border-r border-gray-700"
+                        : ""
+                    } ${column.width || ""}`}
+                  >
+                    {column.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: rowsToRender }).map((_, rowIndex) => (
+                <tr
+                  key={`skeleton-row-${rowIndex}`}
+                  className={`border-b border-gray-700 ${
+                    rowIndex % 2 === 0 ? "bg-gray-950" : "bg-gray-900"
+                  }`}
+                >
+                  {columns.map((column, colIndex) => (
+                    <td
+                      key={`skeleton-cell-${column.id}-${rowIndex}`}
+                      className={`py-3 px-4 ${
+                        colIndex !== columns.length - 1
+                          ? "border-r border-gray-700"
+                          : ""
+                      } ${column.width || ""}`}
+                    >
+                      <div className="h-4 w-full max-w-[140px] animate-pulse rounded bg-gray-800" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 px-4 py-4">
+          <div className="h-4 w-40 animate-pulse rounded bg-gray-800" />
+          <div className="flex gap-2">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={`skeleton-page-${index}`}
+                className="h-9 w-16 animate-pulse rounded-md bg-gray-800"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

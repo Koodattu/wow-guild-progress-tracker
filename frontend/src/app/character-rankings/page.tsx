@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
+import type { Boss, CharacterRankingRow } from "@/types";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 
 type Filters = {
@@ -31,6 +31,7 @@ export default function CharacterRankingsPage() {
   const [bosses, setBosses] = useState<Boss[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const [pagination, setPagination] = useState({
     totalItems: 0,
     totalPages: 0,
@@ -44,33 +45,47 @@ export default function CharacterRankingsPage() {
   });
 
   useEffect(() => {
+    let isActive = true;
     const fetchBosses = async () => {
       try {
         const bossesData = await api.getBosses(44);
+        if (!isActive) return;
         setBosses(bossesData);
       } catch (error) {
         console.error("Error fetching bosses:", error);
       }
     };
     fetchBosses();
+    return () => {
+      isActive = false;
+    };
   }, []);
 
+  const queryString = useMemo(() => buildQuery(filters), [filters]);
+
   useEffect(() => {
+    const requestId = (requestIdRef.current += 1);
+    let isActive = true;
     (async () => {
       try {
         setLoading(true);
         setError(null);
-        const qs = buildQuery(filters);
-        const response = await api.getCharacterRankings(qs);
+        const response = await api.getCharacterRankings(queryString);
+        if (!isActive || requestId !== requestIdRef.current) return;
         setRows(response.data);
         setPagination(response.pagination);
       } catch (e) {
+        if (!isActive || requestId !== requestIdRef.current) return;
         setError(e instanceof Error ? e.message : "Failed");
       } finally {
+        if (!isActive || requestId !== requestIdRef.current) return;
         setLoading(false);
       }
     })();
-  }, [filters]);
+    return () => {
+      isActive = false;
+    };
+  }, [queryString]);
 
   return (
     <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[90%] py-6">
