@@ -65,7 +65,6 @@ router.get("/", async (req: Request, res: Response) => {
       classId,
       specName,
       role,
-
       partition,
       page,
       limit,

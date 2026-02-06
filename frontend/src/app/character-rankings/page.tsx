@@ -10,7 +10,6 @@ type Filters = {
   classId?: number | null;
   specName?: string | null;
   role?: "dps" | "healer" | "tank";
-  metric?: "dps" | "hps";
   page?: number;
   limit?: number;
   partition?: number | null;
@@ -36,11 +35,11 @@ export default function CharacterRankingsPage() {
     totalItems: 0,
     totalPages: 0,
     currentPage: 1,
-    pageSize: 50,
+    pageSize: 100,
   });
 
   const [filters, setFilters] = useState<Filters>({
-    limit: 50,
+    limit: 100,
     page: 1,
   });
 
@@ -48,7 +47,10 @@ export default function CharacterRankingsPage() {
     let isActive = true;
     const fetchBosses = async () => {
       try {
-        const bossesData = await api.getBosses(44);
+        const homeData = await api.getHomeData();
+        const currentRaidId = homeData.raid?.id;
+        if (!currentRaidId) return;
+        const bossesData = await api.getBosses(currentRaidId);
         if (!isActive) return;
         setBosses(bossesData);
       } catch (error) {

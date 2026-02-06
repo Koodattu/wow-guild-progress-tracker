@@ -419,18 +419,115 @@ class CharacterService {
       if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
       if (normalizedRole !== undefined) query.role = normalizedRole;
 
-      const totalItems = await Ranking.countDocuments(query);
-      const rows = await Ranking.find(query)
-        .select(
-          "wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
-            "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
-        )
-        .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .lean();
+      if (partition !== undefined) {
+        const totalItems = await Ranking.countDocuments(query);
+        const rows = await Ranking.find(query)
+          .select(
+            "wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
+              "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
+          )
+          .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
+          .skip(skip)
+          .limit(safeLimit)
+          .lean();
 
-      const data = rows.map((r: any) => ({
+        const data = rows.map((r: any) => ({
+          character: {
+            wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+            name: r.name,
+            realm: r.realm,
+            region: r.region,
+            classID: r.classID,
+          },
+          context: {
+            zoneId,
+            difficulty: r.difficulty,
+            partition: r.partition,
+            encounterId: encounterId ?? null,
+            specName: r.specName,
+            bestSpecName: r.bestSpecName,
+            role: r.role,
+            ilvl: r.ilvl,
+          },
+          encounter: {
+            id: r.encounter.id,
+            name: r.encounter.name,
+          },
+          score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
+          stats: {
+            bestAmount: r.bestAmount ?? 0,
+            rankPercent: r.rankPercent,
+            medianPercent: r.medianPercent,
+            lockedIn: r.lockedIn,
+            totalKills: r.totalKills,
+            allStars: r.allStars,
+          },
+          updatedAt: r.updatedAt
+            ? new Date(r.updatedAt).toISOString()
+            : undefined,
+        }));
+
+        return {
+          data,
+          pagination: {
+            totalItems,
+            totalPages: Math.ceil(totalItems / safeLimit),
+            currentPage: Math.max(page, 1),
+            pageSize: safeLimit,
+          },
+        };
+      }
+
+      // Partition ignored: return only the best row per character across partitions
+      const countAgg = await Ranking.aggregate([
+        { $match: query },
+        { $group: { _id: "$wclCanonicalCharacterId" } },
+        { $count: "total" },
+      ]);
+
+      const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
+
+      const agg = await Ranking.aggregate([
+        { $match: query },
+        {
+          $sort: {
+            bestAmount: -1,
+            rankPercent: -1,
+            totalKills: -1,
+            partition: -1,
+          },
+        },
+        {
+          $group: {
+            _id: "$wclCanonicalCharacterId",
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            name: { $first: "$name" },
+            realm: { $first: "$realm" },
+            region: { $first: "$region" },
+            classID: { $first: "$classID" },
+            zoneId: { $first: "$zoneId" },
+            difficulty: { $first: "$difficulty" },
+            encounter: { $first: "$encounter" },
+            specName: { $first: "$specName" },
+            bestSpecName: { $first: "$bestSpecName" },
+            role: { $first: "$role" },
+            rankPercent: { $first: "$rankPercent" },
+            medianPercent: { $first: "$medianPercent" },
+            lockedIn: { $first: "$lockedIn" },
+            totalKills: { $first: "$totalKills" },
+            bestAmount: { $first: "$bestAmount" },
+            allStars: { $first: "$allStars" },
+            ilvl: { $first: "$ilvl" },
+            partition: { $first: "$partition" },
+            updatedAt: { $first: "$updatedAt" },
+          },
+        },
+        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, name: 1 } },
+        { $skip: skip },
+        { $limit: safeLimit },
+      ]);
+
+      const data = agg.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -439,7 +536,7 @@ class CharacterService {
           classID: r.classID,
         },
         context: {
-          zoneId,
+          zoneId: r.zoneId,
           difficulty: r.difficulty,
           partition: r.partition,
           encounterId: encounterId ?? null,
@@ -585,7 +682,7 @@ class CharacterService {
       { $match: matchNoPartition },
       {
         $group: {
-          _id: "$characterId",
+          _id: "$wclCanonicalCharacterId",
         },
       },
       { $count: "total" },
@@ -605,7 +702,7 @@ class CharacterService {
       {
         $group: {
           _id: {
-            characterId: "$characterId",
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             encounterId: "$encounter.id",
           },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
@@ -625,7 +722,7 @@ class CharacterService {
       // Now group by character and sum the best per-boss points/possiblePoints
       {
         $group: {
-          _id: "$_id.characterId",
+          _id: "$_id.wclCanonicalCharacterId",
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
