@@ -791,6 +791,7 @@ export type CharacterRankingRow = {
     specName?: string;
     bestSpecName?: string;
     role?: "dps" | "healer" | "tank";
+    ilvl?: number;
   };
   encounter?: {
     id: number;
@@ -807,7 +808,6 @@ export type CharacterRankingRow = {
     medianPercent?: number;
     lockedIn?: boolean;
     totalKills?: number;
-    ilvl?: number;
   };
   updatedAt?: string;
 };

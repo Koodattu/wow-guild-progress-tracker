@@ -406,6 +406,7 @@ class CharacterService {
           specName: r.specName,
           bestSpecName: r.bestSpecName,
           role: r.role,
+          ilvl: r.ilvl,
         },
         encounter: {
           id: r.encounter.id,
@@ -419,7 +420,6 @@ class CharacterService {
           lockedIn: r.lockedIn,
           totalKills: r.totalKills,
           allStars: r.allStars,
-          ...(r.ilvl && { ilvl: r.ilvl }),
         },
         updatedAt: r.updatedAt
           ? new Date(r.updatedAt).toISOString()
@@ -473,6 +473,9 @@ class CharacterService {
             classID: { $first: "$classID" },
             points: { $sum: "$allStars.points" },
             possiblePoints: { $sum: "$allStars.possiblePoints" },
+            ilvl: { $first: "$ilvl" },
+            rankPercent: { $max: "$rankPercent" },
+            medianPercent: { $max: "$medianPercent" },
             updatedAt: { $max: "$updatedAt" },
           },
         },
@@ -497,6 +500,7 @@ class CharacterService {
           encounterId: null,
           specName,
           role,
+          ilvl: r.ilvl,
         },
         score: { type: "allStars" as const, value: r.points ?? 0 },
         stats: {
@@ -504,6 +508,8 @@ class CharacterService {
             points: r.points ?? 0,
             possiblePoints: r.possiblePoints ?? 0,
           },
+          rankPercent: r.rankPercent,
+          medianPercent: r.medianPercent,
         },
         updatedAt: r.updatedAt
           ? new Date(r.updatedAt).toISOString()
@@ -562,6 +568,9 @@ class CharacterService {
           classID: { $first: "$classID" },
           points: { $first: "$allStars.points" },
           possiblePoints: { $first: "$allStars.possiblePoints" },
+          ilvl: { $first: "$ilvl" },
+          rankPercent: { $first: "$rankPercent" },
+          medianPercent: { $first: "$medianPercent" },
           updatedAt: { $first: "$updatedAt" },
         },
       },
@@ -577,6 +586,9 @@ class CharacterService {
           classID: { $first: "$classID" },
           points: { $sum: "$points" },
           possiblePoints: { $sum: "$possiblePoints" },
+          ilvl: { $first: "$ilvl" },
+          rankPercent: { $max: "$rankPercent" },
+          medianPercent: { $max: "$medianPercent" },
           updatedAt: { $max: "$updatedAt" },
         },
       },
@@ -601,6 +613,7 @@ class CharacterService {
         encounterId: null,
         specName,
         role,
+        ilvl: r.ilvl,
       },
       score: { type: "allStars" as const, value: r.points ?? 0 },
       stats: {
@@ -608,6 +621,8 @@ class CharacterService {
           points: r.points ?? 0,
           possiblePoints: r.possiblePoints ?? 0,
         },
+        rankPercent: r.rankPercent,
+        medianPercent: r.medianPercent,
       },
       updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
     }));

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@/types/index";
+import { getRankColor } from "@/lib/utils";
 
 interface TableProps<T> {
   columns: ColumnDef<T>[];
@@ -12,7 +13,6 @@ interface TableProps<T> {
     pageSize: number;
   };
   onPageChange?: (page: number) => void;
-  rowKey?: (row: T, index: number) => string;
 }
 
 export function Table<T>({
@@ -20,10 +20,10 @@ export function Table<T>({
   data,
   pagination,
   onPageChange,
-  rowKey,
 }: TableProps<T>) {
   const currentPage = pagination?.currentPage ?? 1;
   const totalPages = pagination?.totalPages ?? 1;
+  const totalItems = pagination?.totalItems ?? data.length;
 
   return (
     <div className="space-y-4">
@@ -31,12 +31,14 @@ export function Table<T>({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-900">
-              {columns.map((column) => (
+              {columns.map((column, colIndex) => (
                 <th
                   key={column.id}
                   className={`py-3 px-4 text-left font-semibold text-gray-200 ${
-                    column.width || ""
-                  }`}
+                    colIndex !== columns.length - 1
+                      ? "border-r border-gray-700"
+                      : ""
+                  } ${column.width || ""}`}
                 >
                   {column.header}
                 </th>
@@ -54,21 +56,41 @@ export function Table<T>({
                 </td>
               </tr>
             ) : (
-              data.map((row, index) => (
-                <tr
-                  key={index}
-                  className="border-b border-gray-700 transition-colors hover:bg-gray-800"
-                >
-                  {columns.map((column) => (
-                    <td
-                      key={column.id}
-                      className={`py-3 px-4 ${column.width || ""}`}
-                    >
-                      {column.accessor ? column.accessor(row, index) : null}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row, index) => {
+                const actualRank =
+                  (currentPage - 1) * (pagination?.pageSize ?? 50) + index + 1;
+                return (
+                  <tr
+                    key={index}
+                    className={`border-b border-gray-700 transition-colors hover:bg-gray-800 ${
+                      index % 2 === 0 ? "bg-gray-950" : "bg-gray-900"
+                    }`}
+                  >
+                    {columns.map((column, colIndex) => {
+                      const isRankColumn = column.id === "rank";
+                      const rankStyle = isRankColumn
+                        ? getRankColor(actualRank, totalItems)
+                        : {};
+
+                      return (
+                        <td
+                          key={column.id}
+                          className={`py-3 px-4 ${
+                            colIndex !== columns.length - 1
+                              ? "border-r border-gray-700"
+                              : ""
+                          } ${column.width || ""} ${
+                            isRankColumn ? "font-bold text-right" : ""
+                          }`}
+                          style={rankStyle}
+                        >
+                          {column.accessor ? column.accessor(row, index) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

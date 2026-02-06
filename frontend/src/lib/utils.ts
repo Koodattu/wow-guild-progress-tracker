@@ -139,6 +139,28 @@ export function getWorldRankColor(color: string | undefined): string {
   }
 }
 
+export function getRankColor(
+  rank: number,
+  totalItems: number,
+): { color: string } {
+  if (rank === 1) {
+    return { color: "var(--rank-gold)" }; // Gold for first place
+  }
+
+  // Calculate the rank threshold for each percentile tier
+  const top1Percent = (totalItems * 1) / 100;
+  const top5Percent = (totalItems * 5) / 100;
+  const top25Percent = (totalItems * 25) / 100;
+  const top50Percent = (totalItems * 50) / 100;
+  const top75Percent = (totalItems * 75) / 100;
+
+  if (rank <= top1Percent) return { color: "var(--rank-pink)" }; // Top 1%
+  if (rank <= top5Percent) return { color: "var(--rank-orange)" }; // Top 5%
+  if (rank <= top25Percent) return { color: "var(--rank-purple)" }; // Top 25%
+  if (rank <= top50Percent) return { color: "var(--rank-blue)" }; // Top 50%
+  if (rank <= top75Percent) return { color: "var(--rank-green)" }; // Top 75%
+  return { color: "var(--rank-gray)" }; // Rest
+}
 // Get Tailwind color class for leaderboard rank (1-5 orange, 6-20 purple, 21-50 blue, rest green)
 export function getLeaderboardRankColor(rank: number): string {
   if (rank <= 5) return "text-orange-500"; // Legendary

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
-import { getAllClasses } from "@/lib/utils";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 
 type Filters = {
@@ -55,7 +54,6 @@ export default function CharacterRankingsPage() {
       }
     };
     fetchBosses();
-    setClasses(getAllClasses());
   }, []);
 
   useEffect(() => {
@@ -80,7 +78,6 @@ export default function CharacterRankingsPage() {
       <RankingTableWrapper
         data={rows}
         bosses={bosses}
-        classes={classes}
         loading={loading}
         error={error}
         pagination={pagination}
