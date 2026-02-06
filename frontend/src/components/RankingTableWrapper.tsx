@@ -2,7 +2,7 @@
 
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
 import { getAllClasses, getClassInfoById, getSpecIconUrl } from "@/lib/utils";
@@ -32,6 +32,378 @@ interface RankingTableWrapperProps {
   }) => void;
 }
 
+type RankingFilters = {
+  encounterId?: number;
+  classId?: number | null;
+  specName?: string | null;
+  partition?: number | null;
+  page?: number;
+};
+
+type ClassSpecSelectorProps = {
+  selectedClass: ClassInfo | null;
+  selectedSpec: string | null;
+  onClassSelect: (classInfo: ClassInfo) => void;
+  onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
+  onClear: () => void;
+};
+
+type ClassSpecButtonProps = {
+  selectedClass: ClassInfo | null;
+  selectedSpec: string | null;
+  onToggle: () => void;
+};
+
+type ClassMenuProps = {
+  classes: ClassInfo[];
+  selectedClass: ClassInfo | null;
+  selectedSpec: string | null;
+  hoveredClass: ClassInfo | null;
+  onHoverClass: (classInfo: ClassInfo) => void;
+  onClear: () => void;
+  onClassSelect: (classInfo: ClassInfo) => void;
+  onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
+  onMenuEnter: () => void;
+  onMenuLeave: () => void;
+};
+
+type SpecMenuProps = {
+  classInfo: ClassInfo;
+  selectedSpec: string | null;
+  onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
+  onMenuEnter: () => void;
+  onMenuLeave: () => void;
+};
+
+type UseHoverMenuOptions = {
+  closeDelayMs?: number;
+};
+
+function formatSpecLabel(specName: string) {
+  return specName.charAt(0).toUpperCase() + specName.slice(1);
+}
+
+function getSelectedIcon(
+  selectedClass: ClassInfo | null,
+  selectedSpec: string | null,
+) {
+  if (!selectedClass) return null;
+  if (!selectedSpec) return `${selectedClass.iconUrl}.jpg`;
+  return (
+    getSpecIconUrl(selectedClass.id, selectedSpec) ??
+    `${selectedClass.iconUrl}.jpg`
+  );
+}
+
+function useHoverMenu({ closeDelayMs = 250 }: UseHoverMenuOptions = {}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [hoveredClass, setHoveredClass] = useState<ClassInfo | null>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
+
+  const cancelClose = useCallback(() => {
+    if (closeTimeoutRef.current) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    cancelClose();
+    closeTimeoutRef.current = window.setTimeout(() => {
+      setHoveredClass(null);
+      setIsOpen(false);
+      closeTimeoutRef.current = null;
+    }, closeDelayMs);
+  }, [cancelClose, closeDelayMs]);
+
+  const closeMenu = useCallback(() => {
+    cancelClose();
+    setHoveredClass(null);
+    setIsOpen(false);
+  }, [cancelClose]);
+
+  const toggleMenu = useCallback(() => {
+    setIsOpen((open) => !open);
+  }, []);
+
+  return {
+    isOpen,
+    hoveredClass,
+    setHoveredClass,
+    toggleMenu,
+    closeMenu,
+    cancelClose,
+    scheduleClose,
+  };
+}
+
+function ClassSpecButton({
+  selectedClass,
+  selectedSpec,
+  onToggle,
+}: ClassSpecButtonProps) {
+  const icon = getSelectedIcon(selectedClass, selectedSpec);
+  const label = selectedSpec
+    ? formatSpecLabel(selectedSpec)
+    : (selectedClass?.name ?? "All classes");
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="relative w-full min-h-[40px] cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+    >
+      <div className="flex items-center gap-3">
+        {icon ? (
+          <IconImage
+            iconFilename={icon}
+            alt={selectedSpec ?? selectedClass?.name ?? "All classes"}
+            width={24}
+            height={24}
+            style={{ objectFit: "cover" }}
+          />
+        ) : null}
+        <span className="font-bold">{label}</span>
+      </div>
+    </button>
+  );
+}
+
+function SpecMenu({
+  classInfo,
+  selectedSpec,
+  onSpecSelect,
+  onMenuEnter,
+  onMenuLeave,
+}: SpecMenuProps) {
+  return (
+    <div
+      className="absolute left-full top-0 z-30 ml-2 min-w-[220px] rounded-md bg-gray-900 py-2 shadow-xl ring-1 ring-black ring-opacity-30"
+      onMouseEnter={onMenuEnter}
+      onMouseLeave={onMenuLeave}
+    >
+      {classInfo.specs.map((spec) => {
+        const specLabel = formatSpecLabel(spec.name);
+        const isSelected = selectedSpec === spec.name;
+        return (
+          <button
+            key={spec.name}
+            type="button"
+            onClick={() => onSpecSelect(classInfo, spec.name)}
+            className={`flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-blue-600 hover:text-white ${
+              isSelected ? "text-white" : "text-gray-300"
+            } font-bold`}
+          >
+            <IconImage
+              iconFilename={
+                getSpecIconUrl(classInfo.id, spec.name) ??
+                `${classInfo.iconUrl}.jpg`
+              }
+              alt={`${classInfo.name} ${specLabel}`}
+              width={22}
+              height={22}
+              style={{ objectFit: "cover" }}
+            />
+            <span className="font-bold">{specLabel}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ClassMenu({
+  classes,
+  selectedClass,
+  selectedSpec,
+  hoveredClass,
+  onHoverClass,
+  onClear,
+  onClassSelect,
+  onSpecSelect,
+  onMenuEnter,
+  onMenuLeave,
+}: ClassMenuProps) {
+  return (
+    <div
+      className="absolute z-20 mt-1 w-full rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
+      onMouseEnter={onMenuEnter}
+      onMouseLeave={onMenuLeave}
+    >
+      <button
+        type="button"
+        onClick={onClear}
+        className="relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-gray-300 hover:bg-blue-600 hover:text-white font-bold"
+      >
+        All classes
+      </button>
+      {classes.map((classInfo) => {
+        const isSelected = selectedClass?.id === classInfo.id;
+        const isHovered = hoveredClass?.id === classInfo.id;
+        return (
+          <div
+            key={classInfo.id}
+            className="relative"
+            onMouseEnter={() => onHoverClass(classInfo)}
+          >
+            <button
+              type="button"
+              onClick={() => onClassSelect(classInfo)}
+              className={`relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left hover:bg-blue-600 hover:text-white ${
+                isSelected ? "text-white" : "text-gray-300"
+              } font-bold`}
+            >
+              <IconImage
+                iconFilename={`${classInfo.iconUrl}.jpg`}
+                alt={classInfo.name}
+                width={24}
+                height={24}
+                style={{ objectFit: "cover" }}
+              />
+              {classInfo.name}
+            </button>
+
+            {isHovered ? (
+              <SpecMenu
+                classInfo={classInfo}
+                selectedSpec={isSelected ? selectedSpec : null}
+                onSpecSelect={onSpecSelect}
+                onMenuEnter={onMenuEnter}
+                onMenuLeave={onMenuLeave}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ClassSpecSelector({
+  selectedClass,
+  selectedSpec,
+  onClassSelect,
+  onSpecSelect,
+  onClear,
+}: ClassSpecSelectorProps) {
+  const classes = getAllClasses();
+  const menu = useHoverMenu();
+
+  const handleClassSelect = useCallback(
+    (classInfo: ClassInfo) => {
+      onClassSelect(classInfo);
+      menu.closeMenu();
+    },
+    [menu, onClassSelect],
+  );
+
+  const handleSpecSelect = useCallback(
+    (classInfo: ClassInfo, specName: string) => {
+      onSpecSelect(classInfo, specName);
+      menu.closeMenu();
+    },
+    [menu, onSpecSelect],
+  );
+
+  const handleClear = useCallback(() => {
+    onClear();
+    menu.closeMenu();
+  }, [menu, onClear]);
+
+  return (
+    <div
+      className="relative w-full max-w-xs"
+      onMouseEnter={menu.cancelClose}
+      onMouseLeave={menu.scheduleClose}
+    >
+      <ClassSpecButton
+        selectedClass={selectedClass}
+        selectedSpec={selectedSpec}
+        onToggle={menu.toggleMenu}
+      />
+
+      {menu.isOpen ? (
+        <ClassMenu
+          classes={classes}
+          selectedClass={selectedClass}
+          selectedSpec={selectedSpec}
+          hoveredClass={menu.hoveredClass}
+          onHoverClass={menu.setHoveredClass}
+          onClear={handleClear}
+          onClassSelect={handleClassSelect}
+          onSpecSelect={handleSpecSelect}
+          onMenuEnter={menu.cancelClose}
+          onMenuLeave={menu.scheduleClose}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type BuildRankingColumnsOptions = {
+  selectedBoss: Boss | null;
+  currentPage: number;
+  pageSize: number;
+};
+
+function buildRankingColumns({
+  selectedBoss,
+  currentPage,
+  pageSize,
+}: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+  const isShowingDamage = selectedBoss !== null;
+
+  return [
+    {
+      id: "rank",
+      header: "Rank",
+      accessor: (_row: CharacterRankingRow, index: number) =>
+        (currentPage - 1) * pageSize + index + 1,
+      width: "w-16",
+    },
+    {
+      id: "character",
+      header: "Name",
+      width: "w-1/5",
+      accessor: (row: CharacterRankingRow) => (
+        <div className="flex gap-4 items-center">
+          <div style={{ width: "24px", height: "24px", position: "relative" }}>
+            <IconImage
+              iconFilename={
+                row.context.specName
+                  ? getSpecIconUrl(row.character.classID, row.context.specName)
+                  : getClassInfoById(row.character.classID)?.iconUrl
+              }
+              alt={row.character.name}
+              fill
+              style={{ objectFit: "cover" }}
+            />
+          </div>
+          {row.character.name}
+        </div>
+      ),
+    },
+    {
+      id: "ilvl",
+      header: "Ilvl",
+      accessor: (row: CharacterRankingRow) =>
+        row.context.ilvl ? row.context.ilvl.toFixed(0) : "—",
+      width: "w-4",
+    },
+    {
+      id: "metric",
+      header: isShowingDamage ? "DPS" : "Score",
+      accessor: (row: CharacterRankingRow) => {
+        const value = isShowingDamage
+          ? row.stats.bestAmount?.toFixed(1)
+          : row.stats.allStars?.points?.toFixed(1);
+        if (!value) return "—";
+        return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      },
+    },
+  ];
+}
+
 export function RankingTableWrapper({
   data,
   bosses,
@@ -43,188 +415,70 @@ export function RankingTableWrapper({
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
-  const [isClassMenuOpen, setIsClassMenuOpen] = useState(false);
-  const [hoveredClass, setHoveredClass] = useState<ClassInfo | null>(null);
-  const classMenuCloseTimeout = useRef<number | null>(null);
   const [selectedPartition, setSelectedPartition] =
     useState<PatchPartitionOption | null>(null);
-  const classes = getAllClasses();
   const partitionOptions = getPatchPartitionOptions();
+
+  const applyFilters = useCallback(
+    (overrides: Partial<RankingFilters> = {}) => {
+      onFiltersChange?.({
+        encounterId: selectedBoss?.id,
+        classId: selectedClass?.id ?? null,
+        specName: selectedSpec,
+        partition: selectedPartition?.value ?? null,
+        page: 1,
+        ...overrides,
+      });
+    },
+    [
+      onFiltersChange,
+      selectedBoss?.id,
+      selectedClass?.id,
+      selectedPartition?.value,
+      selectedSpec,
+    ],
+  );
 
   const handleBossChange = (boss: Boss | null) => {
     setSelectedBoss(boss);
-    onFiltersChange?.({
-      encounterId: boss?.id,
-      classId: selectedClass?.id ?? null,
-      specName: selectedSpec,
-      partition: selectedPartition?.value ?? null,
-      page: 1,
-    });
+    applyFilters({ encounterId: boss?.id, page: 1 });
   };
 
-  const handleClassChange = (classInfo: ClassInfo | null) => {
+  const handleClassChange = (classInfo: ClassInfo) => {
     setSelectedClass(classInfo);
     setSelectedSpec(null);
-    setIsClassMenuOpen(false);
-    setHoveredClass(null);
-    if (classMenuCloseTimeout.current) {
-      window.clearTimeout(classMenuCloseTimeout.current);
-      classMenuCloseTimeout.current = null;
-    }
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: classInfo?.id ?? null,
-      specName: null,
-      partition: selectedPartition?.value ?? null,
-      page: 1,
-    });
+    applyFilters({ classId: classInfo.id, specName: null, page: 1 });
   };
 
   const handleSpecSelect = (classInfo: ClassInfo, specName: string) => {
     setSelectedClass(classInfo);
     setSelectedSpec(specName);
-    setIsClassMenuOpen(false);
-    setHoveredClass(null);
-    if (classMenuCloseTimeout.current) {
-      window.clearTimeout(classMenuCloseTimeout.current);
-      classMenuCloseTimeout.current = null;
-    }
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: classInfo.id,
-      specName,
-      partition: selectedPartition?.value ?? null,
-      page: 1,
-    });
+    applyFilters({ classId: classInfo.id, specName, page: 1 });
   };
 
   const clearClassAndSpec = () => {
     setSelectedClass(null);
     setSelectedSpec(null);
-    setIsClassMenuOpen(false);
-    setHoveredClass(null);
-    if (classMenuCloseTimeout.current) {
-      window.clearTimeout(classMenuCloseTimeout.current);
-      classMenuCloseTimeout.current = null;
-    }
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: null,
-      specName: null,
-      partition: selectedPartition?.value ?? null,
-      page: 1,
-    });
-  };
-
-  const scheduleClassMenuClose = () => {
-    if (classMenuCloseTimeout.current) {
-      window.clearTimeout(classMenuCloseTimeout.current);
-    }
-    classMenuCloseTimeout.current = window.setTimeout(() => {
-      setHoveredClass(null);
-      setIsClassMenuOpen(false);
-      classMenuCloseTimeout.current = null;
-    }, 250);
-  };
-
-  const cancelClassMenuClose = () => {
-    if (classMenuCloseTimeout.current) {
-      window.clearTimeout(classMenuCloseTimeout.current);
-      classMenuCloseTimeout.current = null;
-    }
-  };
-
-  const handleSpecChange = (spec: string | null) => {
-    setSelectedSpec(spec);
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: selectedClass?.id ?? null,
-      specName: spec,
-      partition: selectedPartition?.value ?? null,
-      page: 1,
-    });
+    applyFilters({ classId: null, specName: null, page: 1 });
   };
 
   const handlePartitionChange = (partition: PatchPartitionOption | null) => {
     setSelectedPartition(partition);
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: selectedClass?.id ?? null,
-      specName: selectedSpec,
-      partition: partition?.value ?? null,
-      page: 1,
-    });
+    applyFilters({ partition: partition?.value ?? null, page: 1 });
   };
 
   const handlePageChange = (page: number) => {
-    onFiltersChange?.({
-      encounterId: selectedBoss?.id,
-      classId: selectedClass?.id ?? null,
-      specName: selectedSpec,
-      partition: selectedPartition?.value ?? null,
-      page,
-    });
+    applyFilters({ page });
   };
 
   const columns = useMemo(() => {
     const currentPage = pagination?.currentPage ?? 1;
     const pageSize = pagination?.pageSize ?? 50;
-    const isShowingDamage = selectedBoss !== null;
-
-    return [
-      {
-        id: "rank",
-        header: "Rank",
-        accessor: (row: CharacterRankingRow, index: number) =>
-          (currentPage - 1) * pageSize + index + 1,
-        width: "w-16",
-      },
-      {
-        id: "character",
-        header: "Name",
-        width: "w-1/5",
-        accessor: (row: CharacterRankingRow) => (
-          <div className="flex gap-4 items-center">
-            <div
-              style={{ width: "24px", height: "24px", position: "relative" }}
-            >
-              <IconImage
-                iconFilename={
-                  row.context.specName
-                    ? getSpecIconUrl(
-                        row.character.classID,
-                        row.context.specName,
-                      )
-                    : getClassInfoById(row.character.classID)?.iconUrl
-                }
-                alt={row.character.name}
-                fill
-                style={{ objectFit: "cover" }}
-              />
-            </div>
-            {row.character.name}
-          </div>
-        ),
-      },
-      {
-        id: "ilvl",
-        header: "Ilvl",
-        accessor: (row: CharacterRankingRow) =>
-          row.context.ilvl ? row.context.ilvl.toFixed(0) : "—",
-        width: "w-4",
-      },
-      {
-        id: "metric",
-        header: isShowingDamage ? "DPS" : "Score",
-        accessor: (row: CharacterRankingRow) => {
-          const value = isShowingDamage
-            ? row.stats.bestAmount?.toFixed(1)
-            : row.stats.allStars?.points?.toFixed(1);
-          if (!value) return "—";
-          return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        },
-      },
-    ] as ColumnDef<CharacterRankingRow>[];
+    return buildRankingColumns({
+      selectedBoss,
+      currentPage,
+      pageSize,
+    });
   }, [selectedBoss, pagination?.currentPage, pagination?.pageSize]);
 
   const title = selectedBoss
@@ -270,123 +524,13 @@ export function RankingTableWrapper({
           />
 
           {/* Class / Spec Selector */}
-          <div
-            className="relative w-full max-w-xs"
-            onMouseEnter={cancelClassMenuClose}
-            onMouseLeave={scheduleClassMenuClose}
-          >
-            <button
-              type="button"
-              onClick={() => setIsClassMenuOpen((open) => !open)}
-              className="relative w-full min-h-[40px] cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
-            >
-              <div className="flex items-center gap-3">
-                {selectedClass ? (
-                  <IconImage
-                    iconFilename={
-                      selectedSpec
-                        ? (getSpecIconUrl(selectedClass.id, selectedSpec) ??
-                          `${selectedClass.iconUrl}.jpg`)
-                        : `${selectedClass.iconUrl}.jpg`
-                    }
-                    alt={selectedSpec ?? selectedClass.name}
-                    width={24}
-                    height={24}
-                    style={{ objectFit: "cover" }}
-                  />
-                ) : null}
-                <span className="font-bold">
-                  {selectedSpec
-                    ? selectedSpec.charAt(0).toUpperCase() +
-                      selectedSpec.slice(1)
-                    : (selectedClass?.name ?? "All classes")}
-                </span>
-              </div>
-            </button>
-
-            {isClassMenuOpen ? (
-              <div
-                className="absolute z-20 mt-1 w-full rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
-                onMouseEnter={cancelClassMenuClose}
-                onMouseLeave={scheduleClassMenuClose}
-              >
-                <button
-                  type="button"
-                  onClick={clearClassAndSpec}
-                  className="relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-gray-300 hover:bg-blue-600 hover:text-white font-bold"
-                >
-                  All classes
-                </button>
-                {classes.map((classInfo) => (
-                  <div
-                    key={classInfo.id}
-                    className="relative"
-                    onMouseEnter={() => setHoveredClass(classInfo)}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleClassChange(classInfo)}
-                      className={`relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left hover:bg-blue-600 hover:text-white ${
-                        selectedClass?.id === classInfo.id
-                          ? "text-white"
-                          : "text-gray-300"
-                      } font-bold`}
-                    >
-                      <IconImage
-                        iconFilename={`${classInfo.iconUrl}.jpg`}
-                        alt={classInfo.name}
-                        width={24}
-                        height={24}
-                        style={{ objectFit: "cover" }}
-                      />
-                      {classInfo.name}
-                    </button>
-
-                    {hoveredClass?.id === classInfo.id ? (
-                      <div
-                        className="absolute left-full top-0 z-30 ml-2 min-w-[220px] rounded-md bg-gray-900 py-2 shadow-xl ring-1 ring-black ring-opacity-30"
-                        onMouseEnter={cancelClassMenuClose}
-                        onMouseLeave={scheduleClassMenuClose}
-                      >
-                        {classInfo.specs.map((spec) => {
-                          const specLabel =
-                            spec.name.charAt(0).toUpperCase() +
-                            spec.name.slice(1);
-                          return (
-                            <button
-                              key={spec.name}
-                              type="button"
-                              onClick={() =>
-                                handleSpecSelect(classInfo, spec.name)
-                              }
-                              className={`flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-blue-600 hover:text-white ${
-                                selectedClass?.id === classInfo.id &&
-                                selectedSpec === spec.name
-                                  ? "text-white"
-                                  : "text-gray-300"
-                              } font-bold`}
-                            >
-                              <IconImage
-                                iconFilename={
-                                  getSpecIconUrl(classInfo.id, spec.name) ??
-                                  `${classInfo.iconUrl}.jpg`
-                                }
-                                alt={`${classInfo.name} ${specLabel}`}
-                                width={22}
-                                height={22}
-                                style={{ objectFit: "cover" }}
-                              />
-                              <span className="font-bold">{specLabel}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <ClassSpecSelector
+            selectedClass={selectedClass}
+            selectedSpec={selectedSpec}
+            onClassSelect={handleClassChange}
+            onSpecSelect={handleSpecSelect}
+            onClear={clearClassAndSpec}
+          />
 
           {/* Patch Selector */}
           <Selector
