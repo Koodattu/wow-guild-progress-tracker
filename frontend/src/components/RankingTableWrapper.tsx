@@ -2,10 +2,14 @@
 
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
 import { getAllClasses, getClassInfoById, getSpecIconUrl } from "@/lib/utils";
+import {
+  getPatchPartitionOptions,
+  type PatchPartitionOption,
+} from "@/lib/patch-partitions";
 import { Selector } from "./Selector";
 
 interface RankingTableWrapperProps {
@@ -23,6 +27,7 @@ interface RankingTableWrapperProps {
     encounterId?: number;
     classId?: number | null;
     specName?: string | null;
+    partition?: number | null;
     page?: number;
   }) => void;
 }
@@ -38,9 +43,13 @@ export function RankingTableWrapper({
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
+  const [isClassMenuOpen, setIsClassMenuOpen] = useState(false);
+  const [hoveredClass, setHoveredClass] = useState<ClassInfo | null>(null);
+  const classMenuCloseTimeout = useRef<number | null>(null);
+  const [selectedPartition, setSelectedPartition] =
+    useState<PatchPartitionOption | null>(null);
   const classes = getAllClasses();
-
-  console.log(selectedClass);
+  const partitionOptions = getPatchPartitionOptions();
 
   const handleBossChange = (boss: Boss | null) => {
     setSelectedBoss(boss);
@@ -48,18 +57,81 @@ export function RankingTableWrapper({
       encounterId: boss?.id,
       classId: selectedClass?.id ?? null,
       specName: selectedSpec,
+      partition: selectedPartition?.value ?? null,
       page: 1,
     });
   };
 
   const handleClassChange = (classInfo: ClassInfo | null) => {
     setSelectedClass(classInfo);
+    setSelectedSpec(null);
+    setIsClassMenuOpen(false);
+    setHoveredClass(null);
+    if (classMenuCloseTimeout.current) {
+      window.clearTimeout(classMenuCloseTimeout.current);
+      classMenuCloseTimeout.current = null;
+    }
     onFiltersChange?.({
       encounterId: selectedBoss?.id,
       classId: classInfo?.id ?? null,
-      specName: selectedSpec,
+      specName: null,
+      partition: selectedPartition?.value ?? null,
       page: 1,
     });
+  };
+
+  const handleSpecSelect = (classInfo: ClassInfo, specName: string) => {
+    setSelectedClass(classInfo);
+    setSelectedSpec(specName);
+    setIsClassMenuOpen(false);
+    setHoveredClass(null);
+    if (classMenuCloseTimeout.current) {
+      window.clearTimeout(classMenuCloseTimeout.current);
+      classMenuCloseTimeout.current = null;
+    }
+    onFiltersChange?.({
+      encounterId: selectedBoss?.id,
+      classId: classInfo.id,
+      specName,
+      partition: selectedPartition?.value ?? null,
+      page: 1,
+    });
+  };
+
+  const clearClassAndSpec = () => {
+    setSelectedClass(null);
+    setSelectedSpec(null);
+    setIsClassMenuOpen(false);
+    setHoveredClass(null);
+    if (classMenuCloseTimeout.current) {
+      window.clearTimeout(classMenuCloseTimeout.current);
+      classMenuCloseTimeout.current = null;
+    }
+    onFiltersChange?.({
+      encounterId: selectedBoss?.id,
+      classId: null,
+      specName: null,
+      partition: selectedPartition?.value ?? null,
+      page: 1,
+    });
+  };
+
+  const scheduleClassMenuClose = () => {
+    if (classMenuCloseTimeout.current) {
+      window.clearTimeout(classMenuCloseTimeout.current);
+    }
+    classMenuCloseTimeout.current = window.setTimeout(() => {
+      setHoveredClass(null);
+      setIsClassMenuOpen(false);
+      classMenuCloseTimeout.current = null;
+    }, 250);
+  };
+
+  const cancelClassMenuClose = () => {
+    if (classMenuCloseTimeout.current) {
+      window.clearTimeout(classMenuCloseTimeout.current);
+      classMenuCloseTimeout.current = null;
+    }
   };
 
   const handleSpecChange = (spec: string | null) => {
@@ -68,6 +140,18 @@ export function RankingTableWrapper({
       encounterId: selectedBoss?.id,
       classId: selectedClass?.id ?? null,
       specName: spec,
+      partition: selectedPartition?.value ?? null,
+      page: 1,
+    });
+  };
+
+  const handlePartitionChange = (partition: PatchPartitionOption | null) => {
+    setSelectedPartition(partition);
+    onFiltersChange?.({
+      encounterId: selectedBoss?.id,
+      classId: selectedClass?.id ?? null,
+      specName: selectedSpec,
+      partition: partition?.value ?? null,
       page: 1,
     });
   };
@@ -77,6 +161,7 @@ export function RankingTableWrapper({
       encounterId: selectedBoss?.id,
       classId: selectedClass?.id ?? null,
       specName: selectedSpec,
+      partition: selectedPartition?.value ?? null,
       page,
     });
   };
@@ -131,10 +216,13 @@ export function RankingTableWrapper({
       {
         id: "metric",
         header: isShowingDamage ? "DPS" : "Score",
-        accessor: (row: CharacterRankingRow) =>
-          isShowingDamage
-            ? (row.stats.bestAmount?.toFixed(2) ?? "—")
-            : (row.stats.allStars?.points?.toFixed(2) ?? "—"),
+        accessor: (row: CharacterRankingRow) => {
+          const value = isShowingDamage
+            ? row.stats.bestAmount?.toFixed(1)
+            : row.stats.allStars?.points?.toFixed(1);
+          if (!value) return "—";
+          return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        },
       },
     ] as ColumnDef<CharacterRankingRow>[];
   }, [selectedBoss, pagination?.currentPage, pagination?.pageSize]);
@@ -182,35 +270,132 @@ export function RankingTableWrapper({
           />
 
           {/* Class / Spec Selector */}
+          <div
+            className="relative w-full max-w-xs"
+            onMouseEnter={cancelClassMenuClose}
+            onMouseLeave={scheduleClassMenuClose}
+          >
+            <button
+              type="button"
+              onClick={() => setIsClassMenuOpen((open) => !open)}
+              className="relative w-full min-h-[40px] cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+            >
+              <div className="flex items-center gap-3">
+                {selectedClass ? (
+                  <IconImage
+                    iconFilename={
+                      selectedSpec
+                        ? (getSpecIconUrl(selectedClass.id, selectedSpec) ??
+                          `${selectedClass.iconUrl}.jpg`)
+                        : `${selectedClass.iconUrl}.jpg`
+                    }
+                    alt={selectedSpec ?? selectedClass.name}
+                    width={24}
+                    height={24}
+                    style={{ objectFit: "cover" }}
+                  />
+                ) : null}
+                <span className="font-bold">
+                  {selectedSpec
+                    ? selectedSpec.charAt(0).toUpperCase() +
+                      selectedSpec.slice(1)
+                    : (selectedClass?.name ?? "All classes")}
+                </span>
+              </div>
+            </button>
+
+            {isClassMenuOpen ? (
+              <div
+                className="absolute z-20 mt-1 w-full rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm"
+                onMouseEnter={cancelClassMenuClose}
+                onMouseLeave={scheduleClassMenuClose}
+              >
+                <button
+                  type="button"
+                  onClick={clearClassAndSpec}
+                  className="relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-gray-300 hover:bg-blue-600 hover:text-white font-bold"
+                >
+                  All classes
+                </button>
+                {classes.map((classInfo) => (
+                  <div
+                    key={classInfo.id}
+                    className="relative"
+                    onMouseEnter={() => setHoveredClass(classInfo)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleClassChange(classInfo)}
+                      className={`relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left hover:bg-blue-600 hover:text-white ${
+                        selectedClass?.id === classInfo.id
+                          ? "text-white"
+                          : "text-gray-300"
+                      } font-bold`}
+                    >
+                      <IconImage
+                        iconFilename={`${classInfo.iconUrl}.jpg`}
+                        alt={classInfo.name}
+                        width={24}
+                        height={24}
+                        style={{ objectFit: "cover" }}
+                      />
+                      {classInfo.name}
+                    </button>
+
+                    {hoveredClass?.id === classInfo.id ? (
+                      <div
+                        className="absolute left-full top-0 z-30 ml-2 min-w-[220px] rounded-md bg-gray-900 py-2 shadow-xl ring-1 ring-black ring-opacity-30"
+                        onMouseEnter={cancelClassMenuClose}
+                        onMouseLeave={scheduleClassMenuClose}
+                      >
+                        {classInfo.specs.map((spec) => {
+                          const specLabel =
+                            spec.name.charAt(0).toUpperCase() +
+                            spec.name.slice(1);
+                          return (
+                            <button
+                              key={spec.name}
+                              type="button"
+                              onClick={() =>
+                                handleSpecSelect(classInfo, spec.name)
+                              }
+                              className={`flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-blue-600 hover:text-white ${
+                                selectedClass?.id === classInfo.id &&
+                                selectedSpec === spec.name
+                                  ? "text-white"
+                                  : "text-gray-300"
+                              } font-bold`}
+                            >
+                              <IconImage
+                                iconFilename={
+                                  getSpecIconUrl(classInfo.id, spec.name) ??
+                                  `${classInfo.iconUrl}.jpg`
+                                }
+                                alt={`${classInfo.name} ${specLabel}`}
+                                width={22}
+                                height={22}
+                                style={{ objectFit: "cover" }}
+                              />
+                              <span className="font-bold">{specLabel}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Patch Selector */}
           <Selector
-            items={classes}
-            selectedItem={selectedClass}
-            onChange={handleClassChange}
-            placeholder="All classes"
-            renderButton={(classInfo) => (
-              <div className="flex items-center gap-2">
-                <IconImage
-                  iconFilename={`${classInfo?.iconUrl}.jpg`}
-                  alt={classInfo?.name ?? "Class icon"}
-                  width={24}
-                  height={24}
-                  style={{ objectFit: "cover" }}
-                />
-                {classInfo?.name}
-              </div>
-            )}
-            renderOption={(classInfo) => (
-              <div className="flex items-center gap-2">
-                <IconImage
-                  iconFilename={`${classInfo?.iconUrl}.jpg`}
-                  alt={classInfo?.name ?? "Class icon"}
-                  width={24}
-                  height={24}
-                  style={{ objectFit: "cover" }}
-                />
-                {classInfo?.name}
-              </div>
-            )}
+            items={partitionOptions}
+            selectedItem={selectedPartition}
+            onChange={handlePartitionChange}
+            placeholder="All patches"
+            renderButton={(partition) => <span>{partition?.label}</span>}
+            renderOption={(partition) => <span>{partition.label}</span>}
           />
         </div>
       </div>

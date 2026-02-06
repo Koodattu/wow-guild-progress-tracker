@@ -13,7 +13,7 @@ type Filters = {
   metric?: "dps" | "hps";
   page?: number;
   limit?: number;
-  partition?: number;
+  partition?: number | null;
 };
 
 function buildQuery(filters: Filters) {
@@ -29,7 +29,6 @@ function buildQuery(filters: Filters) {
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
-  const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({

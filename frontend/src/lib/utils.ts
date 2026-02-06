@@ -390,6 +390,7 @@ export const CLASSES: ClassInfo[] = [
     specs: [
       { name: "havoc", role: "dps" },
       { name: "vengeance", role: "tank" },
+      { name: "devourer", role: "dps" },
     ],
   },
   {

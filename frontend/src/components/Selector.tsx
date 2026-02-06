@@ -28,14 +28,14 @@ export function Selector<T>({
   return (
     <Listbox value={selectedItem} onChange={onChange}>
       <div className="relative w-full max-w-xs">
-        <ListboxButton className="relative w-full cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm">
+        <ListboxButton className="relative w-full min-h-[40px] cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold">
           {selectedItem ? renderButton(selectedItem) : placeholder}
         </ListboxButton>
-        <ListboxOptions className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+        <ListboxOptions className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm font-bold">
           <ListboxOption
             value={null}
             className={({ active }) =>
-              `relative cursor-default select-none py-2 pl-10 pr-4 ${
+              `relative cursor-default select-none py-2 pl-10 pr-4 font-bold ${
                 active ? "bg-blue-600 text-white" : "text-gray-300"
               }`
             }
@@ -56,7 +56,7 @@ export function Selector<T>({
               key={idx}
               value={item}
               className={({ active }) =>
-                `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                `relative cursor-default select-none py-2 pl-10 pr-4 font-bold ${
                   active ? "bg-blue-600 text-white" : "text-gray-300"
                 }`
               }

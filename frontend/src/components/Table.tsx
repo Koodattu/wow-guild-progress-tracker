@@ -27,7 +27,7 @@ export function Table<T>({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-lg border border-gray-700">
+      <div className="overflow-x-auto border border-gray-700">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-900">
@@ -50,7 +50,7 @@ export function Table<T>({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="py-8 px-4 text-center text-gray-400"
+                  className="py-8 px-4 text-center text-gray-400 font-bold"
                 >
                   No data available
                 </td>
@@ -68,6 +68,7 @@ export function Table<T>({
                   >
                     {columns.map((column, colIndex) => {
                       const isRankColumn = column.id === "rank";
+                      const isMetricColumn = column.id === "metric";
                       const rankStyle = isRankColumn
                         ? getRankColor(actualRank, totalItems)
                         : {};
@@ -75,13 +76,13 @@ export function Table<T>({
                       return (
                         <td
                           key={column.id}
-                          className={`py-3 px-4 ${
+                          className={`py-3 px-4 font-bold ${
                             colIndex !== columns.length - 1
                               ? "border-r border-gray-700"
                               : ""
                           } ${column.width || ""} ${
                             isRankColumn ? "font-bold text-right" : ""
-                          }`}
+                          } ${isMetricColumn ? "font-bold" : ""}`}
                           style={rankStyle}
                         >
                           {column.accessor ? column.accessor(row, index) : null}
