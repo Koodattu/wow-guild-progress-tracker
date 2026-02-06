@@ -88,10 +88,17 @@ export type CharacterRankingRow = {
   };
   context: {
     zoneId: number;
+    difficulty: number;
+    metric: "dps" | "hps";
+    partition?: number;
     encounterId: number | null;
     specName?: string;
+    bestSpecName?: string;
     role?: "dps" | "healer" | "tank";
-    metric: "dps" | "hps";
+  };
+  encounter?: {
+    id: number;
+    name: string;
   };
   score: {
     type: "allStars" | "bestAmount";
@@ -102,7 +109,9 @@ export type CharacterRankingRow = {
     bestAmount?: number;
     rankPercent?: number;
     medianPercent?: number;
+    lockedIn?: boolean;
     totalKills?: number;
+    ilvl?: number;
   };
   updatedAt?: string;
 };
@@ -372,8 +381,8 @@ class CharacterService {
       const totalItems = await Ranking.countDocuments(query);
       const rows = await Ranking.find(query)
         .select(
-          "wclCanonicalCharacterId name realm region classID zoneId metric encounter specName role " +
-            "rankPercent medianPercent totalKills bestAmount allStars ilvl partition updatedAt",
+          "wclCanonicalCharacterId name realm region classID zoneId difficulty metric encounter specName bestSpecName role " +
+            "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
         )
         .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
         .skip(skip)
@@ -390,17 +399,24 @@ class CharacterService {
         },
         context: {
           zoneId,
+          difficulty: r.difficulty,
+          metric,
+          partition: r.partition,
           encounterId: encounterId ?? null,
           specName: r.specName,
+          bestSpecName: r.bestSpecName,
           role: r.role,
-          metric,
-          ...(partition !== undefined && { partition }),
+        },
+        encounter: {
+          id: r.encounter.id,
+          name: r.encounter.name,
         },
         score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
         stats: {
           bestAmount: r.bestAmount ?? 0,
           rankPercent: r.rankPercent,
           medianPercent: r.medianPercent,
+          lockedIn: r.lockedIn,
           totalKills: r.totalKills,
           allStars: r.allStars,
           ...(r.ilvl && { ilvl: r.ilvl }),
@@ -475,11 +491,12 @@ class CharacterService {
         },
         context: {
           zoneId,
+          difficulty: 5,
+          metric,
+          partition,
           encounterId: null,
           specName,
           role,
-          metric,
-          partition,
         },
         score: { type: "allStars" as const, value: r.points ?? 0 },
         stats: {
@@ -579,10 +596,11 @@ class CharacterService {
       },
       context: {
         zoneId,
+        difficulty: 5,
+        metric,
         encounterId: null,
         specName,
         role,
-        metric,
       },
       score: { type: "allStars" as const, value: r.points ?? 0 },
       stats: {

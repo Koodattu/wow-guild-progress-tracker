@@ -276,7 +276,7 @@ export const CLASSES: ClassInfo[] = [
     name: "Hunter",
     iconUrl: "classicon_hunter",
     specs: [
-      { name: "beast-mastery", role: "dps" },
+      { name: "beastmastery", role: "dps" },
       { name: "marksmanship", role: "dps" },
       { name: "survival", role: "dps" },
     ],

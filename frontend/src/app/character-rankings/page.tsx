@@ -2,20 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Boss, CharacterRankingRow } from "@/types";
-import type { ColumnDef } from "@/types/index";
-import IconImage from "@/components/IconImage";
-import { getClassInfoById, getSpecIconUrl } from "@/lib/utils";
-import { RankingTable } from "@/components/RankingTable";
+import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
+import { getAllClasses } from "@/lib/utils";
+import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 
 type Filters = {
   encounterId?: number;
-  classId?: number;
-  specName?: string;
+  classId?: number | null;
+  specName?: string | null;
   role?: "dps" | "healer" | "tank";
   metric?: "dps" | "hps";
   page?: number;
   limit?: number;
+  partition?: number;
 };
 
 function buildQuery(filters: Filters) {
@@ -28,64 +27,12 @@ function buildQuery(filters: Filters) {
   return s ? `?${s}` : "";
 }
 
-const characterColumn: ColumnDef<CharacterRankingRow> = {
-  id: "character",
-  header: "Name",
-  accessor: (row) => (
-    <div className="flex gap-4 items-center">
-      <div style={{ width: "24px", height: "24px", position: "relative" }}>
-        <IconImage
-          iconFilename={`
-            ${
-              row.context.specName
-                ? getSpecIconUrl(row.character.classID, row.context.specName)
-                : getClassInfoById(row.character.classID)?.iconUrl
-            }
-          `.trim()}
-          alt={`${row.character.name} icon`}
-          fill
-          style={{ objectFit: "cover" }}
-        />
-      </div>
-      {row.character.name}
-    </div>
-  ),
-};
-
-const specColumn: ColumnDef<CharacterRankingRow> = {
-  id: "spec",
-  header: "Spec",
-  accessor: (row) => row.context.specName || "—",
-};
-
-const getRankColumn = (
-  currentPage: number,
-  pageSize: number,
-): ColumnDef<CharacterRankingRow> => ({
-  id: "rank",
-  header: "Rank",
-  accessor: (row, index) => (currentPage - 1) * pageSize + index + 1,
-  width: "w-16",
-});
-
-const allStarsColumn: ColumnDef<CharacterRankingRow> = {
-  id: "allstars",
-  header: "All Star Points",
-  accessor: (row) => row.stats.allStars?.points?.toFixed(2) ?? "—",
-};
-
-const damageColumn: ColumnDef<CharacterRankingRow> = {
-  id: "dps",
-  header: "DPS",
-  accessor: (row) => row.stats.bestAmount?.toFixed(2) ?? "—",
-};
-
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
+  const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [pagination, setPagination] = useState({
     totalItems: 0,
     totalPages: 0,
@@ -98,26 +45,6 @@ export default function CharacterRankingsPage() {
     page: 1,
   });
 
-  const isShowingDamage = selectedBoss !== null;
-  const rankCol = getRankColumn(pagination.currentPage, pagination.pageSize);
-  const allStarsColumns: ColumnDef<CharacterRankingRow>[] = [
-    rankCol,
-    characterColumn,
-    specColumn,
-    allStarsColumn,
-  ];
-
-  const damageColumns: ColumnDef<CharacterRankingRow>[] = [
-    rankCol,
-    characterColumn,
-    specColumn,
-    damageColumn,
-  ];
-  const columns = isShowingDamage ? damageColumns : allStarsColumns;
-  const title = isShowingDamage
-    ? `Rankings for ${selectedBoss?.name || "Boss"}`
-    : "All Star Rankings";
-
   useEffect(() => {
     const fetchBosses = async () => {
       try {
@@ -128,6 +55,7 @@ export default function CharacterRankingsPage() {
       }
     };
     fetchBosses();
+    setClasses(getAllClasses());
   }, []);
 
   useEffect(() => {
@@ -147,25 +75,17 @@ export default function CharacterRankingsPage() {
     })();
   }, [filters]);
 
-  console.log(rows);
-
   return (
     <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[90%] py-6">
-      <RankingTable
-        columns={columns}
+      <RankingTableWrapper
         data={rows}
         bosses={bosses}
-        selectedBoss={selectedBoss}
-        onBossChange={(boss) => {
-          setSelectedBoss(boss);
-          setFilters((prev) => ({ ...prev, encounterId: boss?.id, page: 1 }));
-        }}
-        title={title}
+        classes={classes}
         loading={loading}
         error={error}
         pagination={pagination}
-        onPageChange={(page) => {
-          setFilters((prev) => ({ ...prev, page }));
+        onFiltersChange={(newFilters) => {
+          setFilters((prev) => ({ ...prev, ...newFilters }));
         }}
       />
     </div>

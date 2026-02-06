@@ -1,18 +1,10 @@
 "use client";
 
-import type { Boss, CharacterRankingRow } from "@/types";
 import type { ColumnDef } from "@/types/index";
-import { BossSelector } from "./BossSelector";
 
-interface RankingTableProps {
-  columns: ColumnDef<CharacterRankingRow>[];
-  data: CharacterRankingRow[];
-  bosses: Boss[];
-  selectedBoss: Boss | null;
-  onBossChange: (boss: Boss | null) => void;
-  title: string;
-  loading?: boolean;
-  error?: string | null;
+interface TableProps<T> {
+  columns: ColumnDef<T>[];
+  data: T[];
   pagination?: {
     totalItems: number;
     totalPages: number;
@@ -20,37 +12,21 @@ interface RankingTableProps {
     pageSize: number;
   };
   onPageChange?: (page: number) => void;
+  rowKey?: (row: T, index: number) => string;
 }
 
-export function RankingTable({
+export function Table<T>({
   columns,
   data,
-  bosses,
-  selectedBoss,
-  onBossChange,
-  title,
-  loading = false,
-  error = null,
   pagination,
   onPageChange,
-}: RankingTableProps) {
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (error) return <div className="p-6 text-red-300">{error}</div>;
-
+  rowKey,
+}: TableProps<T>) {
   const currentPage = pagination?.currentPage ?? 1;
   const totalPages = pagination?.totalPages ?? 1;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-        <BossSelector
-          bosses={bosses}
-          selectedBoss={selectedBoss}
-          onChange={onBossChange}
-        />
-      </div>
-
       <div className="overflow-x-auto rounded-lg border border-gray-700">
         <table className="w-full text-sm">
           <thead>
@@ -80,7 +56,7 @@ export function RankingTable({
             ) : (
               data.map((row, index) => (
                 <tr
-                  key={`${row.character.wclCanonicalCharacterId}-${index}`}
+                  key={index}
                   className="border-b border-gray-700 transition-colors hover:bg-gray-800"
                 >
                   {columns.map((column) => (

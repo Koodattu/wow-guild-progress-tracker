@@ -21,6 +21,10 @@ router.get("/", async (req: Request, res: Response) => {
       req.query.page !== undefined ? Number(req.query.page) : undefined;
     const limit =
       req.query.limit !== undefined ? Number(req.query.limit) : undefined;
+    const partition =
+      req.query.partition !== undefined
+        ? Number(req.query.partition)
+        : undefined;
 
     const specName =
       req.query.specName !== undefined ? String(req.query.specName) : undefined;
@@ -47,6 +51,9 @@ router.get("/", async (req: Request, res: Response) => {
     if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
       return res.status(400).json({ error: "Invalid limit" });
     }
+    if (partition !== undefined && (Number.isNaN(partition) || partition < 1)) {
+      return res.status(400).json({ error: "Invalid partition" });
+    }
 
     const rankings = await characterService.getCharacterRankings({
       zoneId,
@@ -55,6 +62,7 @@ router.get("/", async (req: Request, res: Response) => {
       specName,
       role,
       metric,
+      partition,
       page,
       limit,
     });

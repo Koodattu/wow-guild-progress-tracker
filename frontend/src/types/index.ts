@@ -784,10 +784,17 @@ export type CharacterRankingRow = {
   };
   context: {
     zoneId: number;
+    difficulty: number;
+    metric: "dps" | "hps";
+    partition?: number;
     encounterId: number | null;
     specName?: string;
+    bestSpecName?: string;
     role?: "dps" | "healer" | "tank";
-    metric: "dps" | "hps";
+  };
+  encounter?: {
+    id: number;
+    name: string;
   };
   score: {
     type: "allStars" | "bestAmount";
@@ -798,7 +805,9 @@ export type CharacterRankingRow = {
     bestAmount?: number;
     rankPercent?: number;
     medianPercent?: number;
+    lockedIn?: boolean;
     totalKills?: number;
+    ilvl?: number;
   };
   updatedAt?: string;
 };
