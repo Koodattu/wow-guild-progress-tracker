@@ -161,13 +161,14 @@ function ClassSpecButton({
     >
       <div className="flex items-center gap-3">
         {icon ? (
-          <IconImage
-            iconFilename={icon}
-            alt={selectedSpec ?? selectedClass?.name ?? "All classes"}
-            width={24}
-            height={24}
-            style={{ objectFit: "cover" }}
-          />
+          <div style={{ width: "22px", height: "22px", position: "relative" }}>
+            <IconImage
+              iconFilename={icon}
+              alt={selectedSpec ?? selectedClass?.name ?? "All classes"}
+              fill
+              style={{ objectFit: "cover" }}
+            />
+          </div>
         ) : null}
         <span className="font-bold">{label}</span>
       </div>
@@ -208,16 +209,19 @@ function SpecMenu({
               isSelected ? "text-white" : "text-gray-300"
             } font-bold`}
           >
-            <IconImage
-              iconFilename={
-                getSpecIconUrl(classInfo.id, spec.name) ??
-                `${classInfo.iconUrl}.jpg`
-              }
-              alt={`${classInfo.name} ${specLabel}`}
-              width={22}
-              height={22}
-              style={{ objectFit: "cover" }}
-            />
+            <div
+              style={{ width: "22px", height: "22px", position: "relative" }}
+            >
+              <IconImage
+                iconFilename={
+                  getSpecIconUrl(classInfo.id, spec.name) ??
+                  `${classInfo.iconUrl}.jpg`
+                }
+                alt={`${classInfo.name} ${specLabel}`}
+                fill
+                style={{ objectFit: "cover" }}
+              />
+            </div>
             <span className="font-bold">{specLabel}</span>
           </button>
         );
@@ -268,13 +272,16 @@ function ClassMenu({
                 isSelected ? "text-white" : "text-gray-300"
               } font-bold`}
             >
-              <IconImage
-                iconFilename={`${classInfo.iconUrl}.jpg`}
-                alt={classInfo.name}
-                width={24}
-                height={24}
-                style={{ objectFit: "cover" }}
-              />
+              <div
+                style={{ width: "22px", height: "22px", position: "relative" }}
+              >
+                <IconImage
+                  iconFilename={`${classInfo.iconUrl}.jpg`}
+                  alt={classInfo.name}
+                  fill
+                  style={{ objectFit: "cover" }}
+                />
+              </div>
               {classInfo.name}
             </button>
 
@@ -365,26 +372,28 @@ type BuildRankingColumnsOptions = {
   selectedBoss: Boss | null;
   currentPage: number;
   pageSize: number;
+  t: (key: string) => string;
 };
 
 function buildRankingColumns({
   selectedBoss,
   currentPage,
   pageSize,
+  t,
 }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
 
   return [
     {
       id: "rank",
-      header: "Rank",
+      header: t("columnRank"),
       accessor: (_row: CharacterRankingRow, index: number) =>
         (currentPage - 1) * pageSize + index + 1,
       width: "w-16",
     },
     {
       id: "character",
-      header: "Name",
+      header: t("columnName"),
       width: "w-1/5",
       accessor: (row: CharacterRankingRow) => (
         <div className="flex gap-4 items-center">
@@ -406,14 +415,14 @@ function buildRankingColumns({
     },
     {
       id: "ilvl",
-      header: "Ilvl",
+      header: t("columnIlvl"),
       accessor: (row: CharacterRankingRow) =>
         row.context.ilvl ? row.context.ilvl.toFixed(0) : "—",
       width: "w-4",
     },
     {
       id: "metric",
-      header: isShowingDamage ? "DPS" : "Score",
+      header: isShowingDamage ? t("columnDps") : t("columnScore"),
       accessor: (row: CharacterRankingRow) => {
         const value = isShowingDamage
           ? row.stats.bestAmount?.toFixed(1)
@@ -500,11 +509,12 @@ export function RankingTableWrapper({
       selectedBoss,
       currentPage,
       pageSize,
+      t,
     });
-  }, [selectedBoss, pagination?.currentPage, pagination?.pageSize]);
+  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, t]);
 
   const title = selectedBoss
-    ? t("titleForBoss") + selectedBoss.name
+    ? `${t("titleForBoss")} ${selectedBoss.name}`
     : t("titleAllStars");
 
   return (
