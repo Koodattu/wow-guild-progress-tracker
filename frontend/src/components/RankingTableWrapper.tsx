@@ -2,7 +2,7 @@
 
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { use, useCallback, useMemo, useRef, useState } from "react";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
 import {
@@ -16,6 +16,7 @@ import {
   type PatchPartitionOption,
 } from "@/lib/patch-partitions";
 import { Selector } from "./Selector";
+import { useTranslations } from "next-intl";
 
 interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
@@ -48,6 +49,7 @@ type RankingFilters = {
 type ClassSpecSelectorProps = {
   selectedClass: ClassInfo | null;
   selectedSpec: string | null;
+  allClassesLabel: string;
   onClassSelect: (classInfo: ClassInfo) => void;
   onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
   onClear: () => void;
@@ -56,6 +58,7 @@ type ClassSpecSelectorProps = {
 type ClassSpecButtonProps = {
   selectedClass: ClassInfo | null;
   selectedSpec: string | null;
+  allClassesLabel: string;
   onToggle: () => void;
 };
 
@@ -64,6 +67,7 @@ type ClassMenuProps = {
   selectedClass: ClassInfo | null;
   selectedSpec: string | null;
   hoveredClass: ClassInfo | null;
+  allClassesLabel: string;
   onHoverClass: (classInfo: ClassInfo) => void;
   onClear: () => void;
   onClassSelect: (classInfo: ClassInfo) => void;
@@ -141,12 +145,13 @@ function useHoverMenu({ closeDelayMs = 250 }: UseHoverMenuOptions = {}) {
 function ClassSpecButton({
   selectedClass,
   selectedSpec,
+  allClassesLabel,
   onToggle,
 }: ClassSpecButtonProps) {
   const icon = getSelectedIcon(selectedClass, selectedSpec);
   const label = selectedSpec
     ? formatSpecName(selectedSpec)
-    : (selectedClass?.name ?? "All classes");
+    : (selectedClass?.name ?? allClassesLabel);
 
   return (
     <button
@@ -226,6 +231,7 @@ function ClassMenu({
   selectedClass,
   selectedSpec,
   hoveredClass,
+  allClassesLabel,
   onHoverClass,
   onClear,
   onClassSelect,
@@ -244,7 +250,7 @@ function ClassMenu({
         onClick={onClear}
         className="relative flex w-full items-center gap-2 py-2 pl-10 pr-4 text-left text-gray-300 hover:bg-blue-600 hover:text-white font-bold"
       >
-        All classes
+        {allClassesLabel}
       </button>
       {classes.map((classInfo) => {
         const isSelected = selectedClass?.id === classInfo.id;
@@ -291,6 +297,7 @@ function ClassMenu({
 function ClassSpecSelector({
   selectedClass,
   selectedSpec,
+  allClassesLabel,
   onClassSelect,
   onSpecSelect,
   onClear,
@@ -331,6 +338,7 @@ function ClassSpecSelector({
       <ClassSpecButton
         selectedClass={selectedClass}
         selectedSpec={selectedSpec}
+        allClassesLabel={allClassesLabel}
         onToggle={menu.toggleMenu}
       />
 
@@ -340,6 +348,7 @@ function ClassSpecSelector({
           selectedClass={selectedClass}
           selectedSpec={selectedSpec}
           hoveredClass={menu.hoveredClass}
+          allClassesLabel={allClassesLabel}
           onHoverClass={menu.setHoveredClass}
           onClear={handleClear}
           onClassSelect={handleClassSelect}
@@ -424,6 +433,7 @@ export function RankingTableWrapper({
   pagination,
   onFiltersChange,
 }: RankingTableWrapperProps) {
+  const t = useTranslations("characterRankingsPage");
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
@@ -494,8 +504,8 @@ export function RankingTableWrapper({
   }, [selectedBoss, pagination?.currentPage, pagination?.pageSize]);
 
   const title = selectedBoss
-    ? `Rankings for ${selectedBoss.name}`
-    : "All Star Rankings";
+    ? t("titleForBoss") + selectedBoss.name
+    : t("titleAllStars");
 
   return (
     <div className="space-y-4">
@@ -512,7 +522,7 @@ export function RankingTableWrapper({
             items={bosses}
             selectedItem={selectedBoss}
             onChange={handleBossChange}
-            placeholder="All bosses"
+            placeholder={t("placeholderAllBosses")}
             renderButton={(boss) => (
               <div className="flex items-center gap-2">
                 <IconImage
@@ -541,6 +551,7 @@ export function RankingTableWrapper({
           <ClassSpecSelector
             selectedClass={selectedClass}
             selectedSpec={selectedSpec}
+            allClassesLabel={t("allClasses")}
             onClassSelect={handleClassChange}
             onSpecSelect={handleSpecSelect}
             onClear={clearClassAndSpec}
@@ -551,7 +562,7 @@ export function RankingTableWrapper({
             items={partitionOptions}
             selectedItem={selectedPartition}
             onChange={handlePartitionChange}
-            placeholder="All patches"
+            placeholder={t("placeholderAllPatches")}
             renderButton={(partition) => <span>{partition?.label}</span>}
             renderOption={(partition) => <span>{partition.label}</span>}
           />

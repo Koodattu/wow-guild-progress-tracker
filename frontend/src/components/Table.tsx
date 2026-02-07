@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@/types/index";
 import { getRankColor } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface TableProps<T> {
   columns: ColumnDef<T>[];
@@ -25,6 +26,7 @@ export function Table<T>({
   pagination,
   onPageChange,
 }: TableProps<T>) {
+  const t = useTranslations("table");
   const currentPage = pagination?.currentPage ?? 1;
   const totalPages = pagination?.totalPages ?? 1;
   const totalItems = pagination?.totalItems ?? data.length;
@@ -120,7 +122,7 @@ export function Table<T>({
                   colSpan={columns.length}
                   className="py-8 px-4 text-center text-gray-400 font-bold"
                 >
-                  No data available
+                  {t("noData")}
                 </td>
               </tr>
             ) : (
@@ -168,7 +170,8 @@ export function Table<T>({
       {pagination && onPageChange && (
         <div className="flex items-center justify-between gap-4 px-4 py-4">
           <div className="text-sm text-gray-400">
-            Page {currentPage} of {totalPages} ({pagination.totalItems} total)
+            {t("page")} {currentPage} {t("of")} {totalPages} (
+            {pagination.totalItems} {t("total")})
           </div>
 
           <div className="flex gap-2">
@@ -177,7 +180,7 @@ export function Table<T>({
               disabled={currentPage <= 1}
               className="px-3 py-2 rounded-md bg-gray-800 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-gray-700 transition-colors"
             >
-              ← Previous
+              ← {t("previous")}
             </button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -204,7 +207,7 @@ export function Table<T>({
               disabled={currentPage >= totalPages}
               className="px-3 py-2 rounded-md bg-gray-800 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-gray-700 transition-colors"
             >
-              Next →
+              {t("next")} →
             </button>
           </div>
         </div>

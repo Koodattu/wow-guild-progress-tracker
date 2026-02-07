@@ -177,6 +177,11 @@ export function formatSpecName(specName: string): string {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+export function normalizeSpecNameForApi(specName: string): string {
+  if (specName === "beast-mastery") return "beastmastery";
+  return specName;
+}
+
 // Format guild name with parent guild if applicable
 // Format: parent_guild (guild_name) - server_name
 // Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)
@@ -438,9 +443,10 @@ export function getSpecIconUrl(
   const classInfo = getClassInfoById(classId);
   if (!classInfo) return undefined;
 
+  const normalizedSpecName = normalizeSpecNameForApi(specName);
   const specIconFilename = classInfo.iconUrl.replace(
     ".jpg",
-    `_${specName}.jpg`,
+    `_${normalizedSpecName}.jpg`,
   );
   return specIconFilename;
 }

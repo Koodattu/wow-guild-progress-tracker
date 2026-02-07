@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { normalizeSpecNameForApi } from "@/lib/utils";
 import type { Boss, CharacterRankingRow } from "@/types";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 
@@ -16,8 +17,14 @@ type Filters = {
 };
 
 function buildQuery(filters: Filters) {
+  const normalizedFilters = {
+    ...filters,
+    specName: filters.specName
+      ? normalizeSpecNameForApi(filters.specName)
+      : filters.specName,
+  };
   const sp = new URLSearchParams();
-  Object.entries(filters).forEach(([k, v]) => {
+  Object.entries(normalizedFilters).forEach(([k, v]) => {
     if (v === undefined || v === null || v === "") return;
     sp.set(k, String(v));
   });

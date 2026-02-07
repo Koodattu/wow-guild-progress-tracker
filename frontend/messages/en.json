@@ -40,6 +40,16 @@
     "termsOfService": "Terms of Service",
     "privacyPolicy": "Privacy Policy"
   },
+  "table": {
+    "noData": "No data available",
+    "loading": "Loading...",
+    "error": "Failed to load data. Make sure the backend server is running.",
+    "page": "Page",
+    "of": "of",
+    "total": "total",
+    "previous": "Previous",
+    "next": "Next"
+  },
   "guildTable": {
     "rank": "Rank",
     "world": "World",
@@ -469,5 +479,17 @@
     "progressing": "progressing",
     "noBossKills": "No guilds have killed this boss yet",
     "showingOverallStatsForAllRaids": "Showing overall statistics for all raids"
+  },
+  "characterRankingsPage": {
+    "titleAllStars": "All Star Rankings",
+    "titleForBoss": "Rankings for",
+    "placeholderAllBosses": "All bosses",
+    "placeholderAllPatches": "All patches",
+    "allClasses": "All classes",
+    "columnRank": "Rank",
+    "columnName": "Name",
+    "columnIlvl": "Ilvl",
+    "columnDps": "DPS",
+    "columnScore": "Score"
   }
 }
