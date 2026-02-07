@@ -22,10 +22,14 @@ import analyticsRouter from "./routes/analytics";
 import raidAnalyticsRouter from "./routes/raid-analytics";
 import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
+import characterRankingsRouter from "./routes/character-rankings";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
-import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
+import {
+  analyticsMiddleware,
+  flushAnalytics,
+} from "./middleware/analytics.middleware";
 import cacheService from "./services/cache.service";
 import cacheWarmerService from "./services/cache-warmer.service";
 
@@ -92,7 +96,10 @@ function failStartupTask(task: string, error: unknown): void {
 // ============================================================================
 app.use(
   cors({
-    origin: process.env.NODE_ENV === "production" ? "https://suomiwow.vaarattu.tv" : "http://localhost:3000",
+    origin:
+      process.env.NODE_ENV === "production"
+        ? "https://suomiwow.vaarattu.tv"
+        : "http://localhost:3000",
     credentials: true,
   }),
 );
@@ -104,7 +111,8 @@ const sessionConfig: any = {
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || "mongodb://localhost:27017/wow_guild_tracker",
+    mongoUrl:
+      process.env.MONGODB_URI || "mongodb://localhost:27017/wow_guild_tracker",
     collectionName: "sessions",
     ttl: 7 * 24 * 60 * 60, // 7 days
   }),
@@ -145,6 +153,7 @@ app.use("/api/raid-analytics", raidAnalyticsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/pickems", pickemsRouter);
+app.use("/api/character-rankings", characterRankingsRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS
@@ -191,7 +200,10 @@ app.get("/health/startup", (req: Request, res: Response) => {
  * Run a startup task with error handling and state tracking.
  * Non-fatal errors are logged but don't stop other tasks.
  */
-async function runStartupTask(taskName: string, task: () => Promise<void>): Promise<boolean> {
+async function runStartupTask(
+  taskName: string,
+  task: () => Promise<void>,
+): Promise<boolean> {
   setStartupTask(taskName);
   try {
     await task();
@@ -220,9 +232,12 @@ async function runBackgroundInitialization(): Promise<void> {
   // -------------------------------------------------------------------------
 
   // Initialize Blizzard API (check if achievements exist)
-  await runStartupTask("Initialize Blizzard API (achievements, crest components)", async () => {
-    await blizzardService.initializeIfNeeded();
-  });
+  await runStartupTask(
+    "Initialize Blizzard API (achievements, crest components)",
+    async () => {
+      await blizzardService.initializeIfNeeded();
+    },
+  );
 
   // Sync raid data from WarcraftLogs (zones, bosses, etc.)
   await runStartupTask("Sync raid data from WarcraftLogs", async () => {
@@ -248,7 +263,8 @@ async function runBackgroundInitialization(): Promise<void> {
   // Phase 2: Statistics and migrations (conditional)
   // -------------------------------------------------------------------------
 
-  const calculateOnStartup = process.env.CALCULATE_GUILD_STATISTICS_ON_STARTUP !== "false";
+  const calculateOnStartup =
+    process.env.CALCULATE_GUILD_STATISTICS_ON_STARTUP !== "false";
   const currentTierOnly = process.env.CURRENT_TIER_ONLY !== "false";
 
   if (calculateOnStartup) {
@@ -262,7 +278,9 @@ async function runBackgroundInitialization(): Promise<void> {
       await guildService.migrateGuildsWarcraftLogsId();
     });
   } else {
-    logger.info("CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation");
+    logger.info(
+      "CALCULATE_GUILD_STATISTICS_ON_STARTUP is disabled, skipping statistics recalculation",
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -282,9 +300,13 @@ async function runBackgroundInitialization(): Promise<void> {
   // Log death events fetching status
   const fetchDeathEvents = process.env.FETCH_DEATH_EVENTS === "true";
   if (fetchDeathEvents) {
-    logger.info("FETCH_DEATH_EVENTS is enabled, death events and actor data will be fetched for fights");
+    logger.info(
+      "FETCH_DEATH_EVENTS is enabled, death events and actor data will be fetched for fights",
+    );
   } else {
-    logger.info("FETCH_DEATH_EVENTS is disabled (default), death events will not be fetched to reduce data volume");
+    logger.info(
+      "FETCH_DEATH_EVENTS is disabled (default), death events will not be fetched to reduce data volume",
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -302,7 +324,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check");
+    logger.info(
+      "CHECK_TWITCH_STREAMS_ON_STARTUP is disabled, skipping startup stream check",
+    );
   }
 
   // Update inactive guilds on startup
@@ -314,7 +338,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("UPDATE_INACTIVE_GUILDS_ON_STARTUP is disabled, skipping startup inactive guilds update");
+    logger.info(
+      "UPDATE_INACTIVE_GUILDS_ON_STARTUP is disabled, skipping startup inactive guilds update",
+    );
   }
 
   // Update world ranks on startup
@@ -326,7 +352,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("UPDATE_WORLD_RANKS_ON_STARTUP is disabled, skipping startup world ranks update");
+    logger.info(
+      "UPDATE_WORLD_RANKS_ON_STARTUP is disabled, skipping startup world ranks update",
+    );
   }
 
   // Update guild crests on startup
@@ -338,7 +366,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("UPDATE_GUILD_CRESTS_ON_STARTUP is disabled, skipping startup guild crests update");
+    logger.info(
+      "UPDATE_GUILD_CRESTS_ON_STARTUP is disabled, skipping startup guild crests update",
+    );
   }
 
   // Refetch recent reports on startup
@@ -350,7 +380,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("REFETCH_RECENT_REPORTS_ON_STARTUP is disabled, skipping startup recent reports refetch");
+    logger.info(
+      "REFETCH_RECENT_REPORTS_ON_STARTUP is disabled, skipping startup recent reports refetch",
+    );
   }
 
   // Calculate tier lists on startup
@@ -362,7 +394,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("CALCULATE_TIER_LISTS_ON_STARTUP is disabled, skipping startup tier list calculation");
+    logger.info(
+      "CALCULATE_TIER_LISTS_ON_STARTUP is disabled, skipping startup tier list calculation",
+    );
   }
 
   // Calculate raid analytics on startup
@@ -374,7 +408,9 @@ async function runBackgroundInitialization(): Promise<void> {
       }).then(() => {}),
     );
   } else {
-    logger.info("CALCULATE_RAID_ANALYTICS_ON_STARTUP is disabled, skipping startup raid analytics calculation");
+    logger.info(
+      "CALCULATE_RAID_ANALYTICS_ON_STARTUP is disabled, skipping startup raid analytics calculation",
+    );
   }
 
   // Wait for all optional tasks to complete
@@ -401,10 +437,14 @@ async function runBackgroundInitialization(): Promise<void> {
 
   logger.info("=".repeat(60));
   logger.info(`[Startup] Background initialization complete in ${duration}s`);
-  logger.info(`[Startup] Completed tasks: ${startupState.completedTasks.length}`);
+  logger.info(
+    `[Startup] Completed tasks: ${startupState.completedTasks.length}`,
+  );
   logger.info(`[Startup] Failed tasks: ${startupState.failedTasks.length}`);
   if (startupState.failedTasks.length > 0) {
-    logger.warn(`[Startup] Failed tasks: ${startupState.failedTasks.map((t) => t.task).join(", ")}`);
+    logger.warn(
+      `[Startup] Failed tasks: ${startupState.failedTasks.map((t) => t.task).join(", ")}`,
+    );
   }
   logger.info("=".repeat(60));
 }
@@ -439,15 +479,22 @@ const startServer = async () => {
       logger.info(`[Startup] Server running on port ${PORT}`);
       logger.info(`[Startup] API available at http://localhost:${PORT}/api`);
       logger.info(`[Startup] Health check: http://localhost:${PORT}/health`);
-      logger.info("[Startup] API is now accepting requests (initialization continuing in background)");
+      logger.info(
+        "[Startup] API is now accepting requests (initialization continuing in background)",
+      );
     });
 
     // Run all other initialization tasks in the background
     // This is intentionally not awaited - we want the server to be available immediately
     runBackgroundInitialization().catch((error) => {
       startupState.status = "error";
-      startupState.errors.push(error instanceof Error ? error.message : String(error));
-      logger.error("[Startup] Fatal error during background initialization:", error);
+      startupState.errors.push(
+        error instanceof Error ? error.message : String(error),
+      );
+      logger.error(
+        "[Startup] Fatal error during background initialization:",
+        error,
+      );
     });
   } catch (error) {
     startupState.status = "error";

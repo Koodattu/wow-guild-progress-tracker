@@ -3,6 +3,13 @@
 :root {
   --background: #000412;
   --foreground: #ededed;
+  --rank-gold: #e5cc80;
+  --rank-pink: #e268a8;
+  --rank-orange: #ff8000;
+  --rank-purple: #a855f7;
+  --rank-blue: #60a5fa;
+  --rank-green: #4ade80;
+  --rank-gray: #9ca3af;
 }
 
 @theme inline {
