@@ -169,6 +169,14 @@ export function getLeaderboardRankColor(rank: number): string {
   return "text-green-500"; // Uncommon
 }
 
+export function formatSpecName(specName: string): string {
+  const normalized = specName.replace(/-/g, " ").trim();
+  if (!normalized) return "";
+  return normalized
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 // Format guild name with parent guild if applicable
 // Format: parent_guild (guild_name) - server_name
 // Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)
@@ -298,7 +306,7 @@ export const CLASSES: ClassInfo[] = [
     name: "Hunter",
     iconUrl: "classicon_hunter",
     specs: [
-      { name: "beastmastery", role: "dps" },
+      { name: "beast-mastery", role: "dps" },
       { name: "marksmanship", role: "dps" },
       { name: "survival", role: "dps" },
     ],

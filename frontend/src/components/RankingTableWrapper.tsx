@@ -5,7 +5,12 @@ import type { ColumnDef } from "@/types/index";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
-import { getAllClasses, getClassInfoById, getSpecIconUrl } from "@/lib/utils";
+import {
+  formatSpecName,
+  getAllClasses,
+  getClassInfoById,
+  getSpecIconUrl,
+} from "@/lib/utils";
 import {
   getPatchPartitionOptions,
   type PatchPartitionOption,
@@ -79,10 +84,6 @@ type UseHoverMenuOptions = {
   closeDelayMs?: number;
 };
 
-function formatSpecLabel(specName: string) {
-  return specName.charAt(0).toUpperCase() + specName.slice(1);
-}
-
 function getSelectedIcon(
   selectedClass: ClassInfo | null,
   selectedSpec: string | null,
@@ -144,7 +145,7 @@ function ClassSpecButton({
 }: ClassSpecButtonProps) {
   const icon = getSelectedIcon(selectedClass, selectedSpec);
   const label = selectedSpec
-    ? formatSpecLabel(selectedSpec)
+    ? formatSpecName(selectedSpec)
     : (selectedClass?.name ?? "All classes");
 
   return (
@@ -176,14 +177,22 @@ function SpecMenu({
   onMenuEnter,
   onMenuLeave,
 }: SpecMenuProps) {
+  const sortedSpecs = useMemo(
+    () =>
+      [...classInfo.specs].sort((a, b) =>
+        formatSpecName(a.name).localeCompare(formatSpecName(b.name)),
+      ),
+    [classInfo.specs],
+  );
+
   return (
     <div
       className="absolute left-full top-0 z-30 ml-2 min-w-[220px] rounded-md bg-gray-900 py-2 shadow-xl ring-1 ring-black ring-opacity-30"
       onMouseEnter={onMenuEnter}
       onMouseLeave={onMenuLeave}
     >
-      {classInfo.specs.map((spec) => {
-        const specLabel = formatSpecLabel(spec.name);
+      {sortedSpecs.map((spec) => {
+        const specLabel = formatSpecName(spec.name);
         const isSelected = selectedSpec === spec.name;
         return (
           <button
@@ -286,7 +295,10 @@ function ClassSpecSelector({
   onSpecSelect,
   onClear,
 }: ClassSpecSelectorProps) {
-  const classes = getAllClasses();
+  const classes = useMemo(
+    () => [...getAllClasses()].sort((a, b) => a.name.localeCompare(b.name)),
+    [],
+  );
   const menu = useHoverMenu();
 
   const handleClassSelect = useCallback(
