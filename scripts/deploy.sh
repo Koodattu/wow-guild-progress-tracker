@@ -8,7 +8,7 @@ PROJECT_DIR="$HOME/wow-guild-progress-tracker"
 REPO_URL="https://github.com/Koodattu/wow-guild-progress-tracker.git"
 LOCKFILE="$PROJECT_DIR/.deploy.lock"
 COMPOSE_FILE="docker-compose.prod.yml"
-LOCK_TIMEOUT=600
+LOCK_TIMEOUT=1200
 
 # --- BACKUP CONFIGURATION ---
 BACKUP_DIR="$HOME/wow-backups"
