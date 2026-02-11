@@ -623,9 +623,11 @@ class GuildService {
       // Note: performUpdate now handles raiding status internally
       const hasNewData = await this.fetchAndProcessReports(guild, isInitialFetch);
 
-      // For initial fetch, ensure raiding status is set to false
+      // For initial fetch, ensure raiding status is set to false and mark as completed
       if (isInitialFetch) {
         guild.isCurrentlyRaiding = false;
+        guild.initialFetchCompleted = true;
+        guild.initialFetchCompletedAt = new Date();
       }
 
       guild.lastFetched = new Date();
