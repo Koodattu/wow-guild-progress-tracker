@@ -1,3 +1,5 @@
+import { ClassInfo } from "@/types";
+
 // Format seconds to a readable time string
 export function formatTime(seconds: number): string {
   if (seconds === 0) return "0m";
@@ -12,11 +14,16 @@ export function formatTime(seconds: number): string {
 }
 
 // Get the full icon URL from filename
-export function getIconUrl(iconFilename: string | undefined): string | undefined {
+export function getIconUrl(
+  iconFilename: string | undefined,
+): string | undefined {
   if (!iconFilename) return undefined;
 
   // If it's already a full URL (for backwards compatibility), return as-is
-  if (iconFilename.startsWith("http://") || iconFilename.startsWith("https://")) {
+  if (
+    iconFilename.startsWith("http://") ||
+    iconFilename.startsWith("https://")
+  ) {
     return iconFilename;
   }
 
@@ -132,6 +139,28 @@ export function getWorldRankColor(color: string | undefined): string {
   }
 }
 
+export function getRankColor(
+  rank: number,
+  totalItems: number,
+): { color: string } {
+  if (rank === 1) {
+    return { color: "var(--rank-gold)" }; // Gold for first place
+  }
+
+  // Calculate the rank threshold for each percentile tier
+  const top1Percent = (totalItems * 1) / 100;
+  const top5Percent = (totalItems * 5) / 100;
+  const top25Percent = (totalItems * 25) / 100;
+  const top50Percent = (totalItems * 50) / 100;
+  const top75Percent = (totalItems * 75) / 100;
+
+  if (rank <= top1Percent) return { color: "var(--rank-pink)" }; // Top 1%
+  if (rank <= top5Percent) return { color: "var(--rank-orange)" }; // Top 5%
+  if (rank <= top25Percent) return { color: "var(--rank-purple)" }; // Top 25%
+  if (rank <= top50Percent) return { color: "var(--rank-blue)" }; // Top 50%
+  if (rank <= top75Percent) return { color: "var(--rank-green)" }; // Top 75%
+  return { color: "var(--rank-gray)" }; // Rest
+}
 // Get Tailwind color class for leaderboard rank (1-5 orange, 6-20 purple, 21-50 blue, rest green)
 export function getLeaderboardRankColor(rank: number): string {
   if (rank <= 5) return "text-orange-500"; // Legendary
@@ -140,10 +169,27 @@ export function getLeaderboardRankColor(rank: number): string {
   return "text-green-500"; // Uncommon
 }
 
+export function formatSpecName(specName: string): string {
+  const normalized = specName.replace(/-/g, " ").trim();
+  if (!normalized) return "";
+  return normalized
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+export function normalizeSpecNameForApi(specName: string): string {
+  if (specName === "beast-mastery") return "beastmastery";
+  return specName;
+}
+
 // Format guild name with parent guild if applicable
 // Format: parent_guild (guild_name) - server_name
 // Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)
-export function formatGuildName(guildName: string, realm: string, parentGuild?: string): string {
+export function formatGuildName(
+  guildName: string,
+  realm: string,
+  parentGuild?: string,
+): string {
   if (parentGuild) {
     return `${parentGuild} (${guildName}) - ${realm}`;
   }
@@ -158,8 +204,14 @@ export function getGuildProfileUrl(realm: string, name: string): string {
 }
 
 // Generate Raider.IO guild URL
-export function getRaiderIOGuildUrl(region: string, realm: string, guildName: string): string {
-  const encodedRealm = encodeURIComponent(realm.toLowerCase().replace(/\s+/g, "-"));
+export function getRaiderIOGuildUrl(
+  region: string,
+  realm: string,
+  guildName: string,
+): string {
+  const encodedRealm = encodeURIComponent(
+    realm.toLowerCase().replace(/\s+/g, "-"),
+  );
   const encodedGuildName = encodeURIComponent(guildName);
   return `https://raider.io/guilds/${region.toLowerCase()}/${encodedRealm}/${encodedGuildName}`;
 }
@@ -230,4 +282,171 @@ export function getTierBgColor(tier: TierLetter): string {
     default:
       return "bg-gray-400";
   }
+}
+
+export const CLASSES: ClassInfo[] = [
+  {
+    id: 1,
+    name: "Death Knight",
+    iconUrl: "classicon_deathknight",
+    specs: [
+      { name: "blood", role: "tank" },
+      { name: "frost", role: "dps" },
+      { name: "unholy", role: "dps" },
+    ],
+  },
+  {
+    id: 2,
+    name: "Druid",
+    iconUrl: "classicon_druid",
+    specs: [
+      { name: "balance", role: "dps" },
+      { name: "feral", role: "dps" },
+      { name: "guardian", role: "tank" },
+      { name: "restoration", role: "healer" },
+    ],
+  },
+  {
+    id: 3,
+    name: "Hunter",
+    iconUrl: "classicon_hunter",
+    specs: [
+      { name: "beast-mastery", role: "dps" },
+      { name: "marksmanship", role: "dps" },
+      { name: "survival", role: "dps" },
+    ],
+  },
+  {
+    id: 4,
+    name: "Mage",
+    iconUrl: "classicon_mage",
+    specs: [
+      { name: "arcane", role: "dps" },
+      { name: "fire", role: "dps" },
+      { name: "frost", role: "dps" },
+    ],
+  },
+  {
+    id: 5,
+    name: "Monk",
+    iconUrl: "classicon_monk",
+    specs: [
+      { name: "brewmaster", role: "tank" },
+      { name: "mistweaver", role: "healer" },
+      { name: "windwalker", role: "dps" },
+    ],
+  },
+  {
+    id: 6,
+    name: "Paladin",
+    iconUrl: "classicon_paladin",
+    specs: [
+      { name: "holy", role: "healer" },
+      { name: "protection", role: "tank" },
+      { name: "retribution", role: "dps" },
+    ],
+  },
+  {
+    id: 7,
+    name: "Priest",
+    iconUrl: "classicon_priest",
+    specs: [
+      { name: "discipline", role: "healer" },
+      { name: "holy", role: "healer" },
+      { name: "shadow", role: "dps" },
+    ],
+  },
+  {
+    id: 8,
+    name: "Rogue",
+    iconUrl: "classicon_rogue",
+    specs: [
+      { name: "assassination", role: "dps" },
+      { name: "outlaw", role: "dps" },
+      { name: "subtlety", role: "dps" },
+    ],
+  },
+  {
+    id: 9,
+    name: "Shaman",
+    iconUrl: "classicon_shaman",
+    specs: [
+      { name: "elemental", role: "dps" },
+      { name: "enhancement", role: "dps" },
+      { name: "restoration", role: "healer" },
+    ],
+  },
+  {
+    id: 10,
+    name: "Warlock",
+    iconUrl: "classicon_warlock",
+    specs: [
+      { name: "affliction", role: "dps" },
+      { name: "demonology", role: "dps" },
+      { name: "destruction", role: "dps" },
+    ],
+  },
+  {
+    id: 11,
+    name: "Warrior",
+    iconUrl: "classicon_warrior",
+    specs: [
+      { name: "arms", role: "dps" },
+      { name: "fury", role: "dps" },
+      { name: "protection", role: "tank" },
+    ],
+  },
+  {
+    id: 12,
+    name: "Demon Hunter",
+    iconUrl: "classicon_demonhunter",
+    specs: [
+      { name: "havoc", role: "dps" },
+      { name: "vengeance", role: "tank" },
+      { name: "devourer", role: "dps" },
+    ],
+  },
+  {
+    id: 13,
+    name: "Evoker",
+    iconUrl: "classicon_evoker",
+    specs: [
+      { name: "devastation", role: "dps" },
+      { name: "preservation", role: "healer" },
+      { name: "augmentation", role: "dps" },
+    ],
+  },
+];
+
+export function getClassInfoById(classId: number): {
+  name: string;
+  iconUrl: string;
+} {
+  const classInfo = CLASSES.find((c) => c.id === classId);
+  return classInfo
+    ? { name: classInfo.name, iconUrl: classInfo.iconUrl + ".jpg" }
+    : { name: "Unknown", iconUrl: "classicon_unknown.jpg" };
+}
+
+export function getClassById(classId: number): ClassInfo | undefined {
+  return CLASSES.find((c) => c.id === classId);
+}
+
+export function getAllClasses(): ClassInfo[] {
+  return CLASSES;
+}
+
+export function getSpecIconUrl(
+  classId: number,
+  specName: string,
+): string | undefined {
+  const classInfo = getClassInfoById(classId);
+  if (!classInfo) return undefined;
+
+  const normalizedSpecName = normalizeSpecNameForApi(specName);
+  const specIconFilename = classInfo.iconUrl.replace(
+    ".jpg",
+    `_${normalizedSpecName}.jpg`,
+  );
+  return specIconFilename;
 }

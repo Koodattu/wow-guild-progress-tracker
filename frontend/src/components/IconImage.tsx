@@ -6,9 +6,11 @@ import { useState } from "react";
 interface IconImageProps {
   iconFilename: string | undefined;
   alt: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
+  fill?: boolean;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 /**
@@ -17,22 +19,60 @@ interface IconImageProps {
  * 2. If not found, try to load from backend API
  * 3. If still not found, show placeholder
  */
-export default function IconImage({ iconFilename, alt, width, height, className = "" }: IconImageProps) {
-  const [imageState, setImageState] = useState<"local" | "backend" | "placeholder">("local");
+export default function IconImage({
+  iconFilename,
+  alt,
+  width,
+  height,
+  fill = false,
+  className = "",
+  style,
+}: IconImageProps) {
+  const [imageState, setImageState] = useState<
+    "local" | "backend" | "placeholder"
+  >("local");
   const [backendFailed, setBackendFailed] = useState(false);
 
   if (!iconFilename) {
-    return <div className={`bg-gray-700 rounded ${className}`} style={{ width, height }} />;
+    return (
+      <div
+        className={`bg-gray-700 rounded ${className}`}
+        style={
+          fill
+            ? { ...style, position: "absolute", inset: 0 }
+            : { width, height, ...style }
+        }
+      />
+    );
   }
 
   // If it's already a full URL, use it directly
-  if (iconFilename.startsWith("http://") || iconFilename.startsWith("https://")) {
-    return <Image src={iconFilename} alt={alt} width={width} height={height} className={className} onError={() => setImageState("placeholder")} />;
+  if (
+    iconFilename.startsWith("http://") ||
+    iconFilename.startsWith("https://")
+  ) {
+    return (
+      <Image
+        src={iconFilename}
+        alt={alt}
+        width={fill ? undefined : width}
+        height={fill ? undefined : height}
+        fill={fill}
+        className={className}
+        style={style}
+        onError={() => setImageState("placeholder")}
+      />
+    );
   }
 
   // Show placeholder if both local and backend failed
   if (imageState === "placeholder" || backendFailed) {
-    return <div className={`bg-gray-700 rounded ${className}`} style={{ width, height }} />;
+    return (
+      <div
+        className={`bg-gray-700 rounded ${className}`}
+        style={{ width, height }}
+      />
+    );
   }
 
   // Try local first, then backend
@@ -46,9 +86,11 @@ export default function IconImage({ iconFilename, alt, width, height, className 
     <Image
       src={currentSrc}
       alt={alt}
-      width={width}
-      height={height}
+      width={fill ? undefined : width}
+      height={fill ? undefined : height}
+      fill={fill}
       className={className}
+      style={style}
       onError={() => {
         if (imageState === "local") {
           // Local failed, try backend

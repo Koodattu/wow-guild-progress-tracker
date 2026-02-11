@@ -1,3 +1,5 @@
+import { ReactNode } from "react";
+
 export interface BestPullPhase {
   phaseId: number;
   phaseName: string;
@@ -782,6 +784,64 @@ export interface UpdatePickemInput {
   scoringConfig?: Partial<ScoringConfig>;
   streakConfig?: Partial<StreakConfig>;
 }
+
+export type CharacterRankingRow = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+  };
+  context: {
+    zoneId: number;
+    difficulty: number;
+    metric: "dps" | "hps";
+    partition?: number;
+    encounterId: number | null;
+    specName?: string;
+    bestSpecName?: string;
+    role?: "dps" | "healer" | "tank";
+    ilvl?: number;
+  };
+  encounter?: {
+    id: number;
+    name: string;
+  };
+  score: {
+    type: "allStars" | "bestAmount";
+    value: number;
+  };
+  stats: {
+    allStars?: { points: number; possiblePoints: number };
+    bestAmount?: number;
+    rankPercent?: number;
+    medianPercent?: number;
+    lockedIn?: boolean;
+    totalKills?: number;
+  };
+  updatedAt?: string;
+};
+
+export type Spec = {
+  name: string;
+  role: "dps" | "healer" | "tank";
+};
+
+export type ClassInfo = {
+  id: number;
+  name: string;
+  iconUrl: string;
+  specs: Spec[];
+};
+
+export type ColumnDef<T> = {
+  id: string;
+  header: string;
+  accessor?: (row: T, index: number) => ReactNode;
+  width?: string; // e.g., "w-1/6"
+  sortable?: boolean;
+};
 
 // ============================================================================
 // RAID ANALYTICS TYPES

@@ -4,6 +4,7 @@
     "progressLeaderboard": "Edistymistilastot",
     "allGuilds": "Kaikki Kiltat",
     "raidTimetable": "Raidi-aikataulu",
+    "characterRankings": "Hahmojen Sijoitukset",
     "livestreams": "Suoratoistot",
     "tierLists": "Tier Listat",
     "raidAnalytics": "Raidi-analytiikka",
@@ -38,6 +39,16 @@
     "sendFeedback": "Lähetä palautetta",
     "termsOfService": "Käyttöehdot",
     "privacyPolicy": "Tietosuojakäytäntö"
+  },
+  "table": {
+    "noData": "Ei tietoja saatavilla",
+    "loading": "Ladataan...",
+    "error": "Tietojen lataaminen epäonnistui. Varmista, että palvelin on käynnissä.",
+    "page": "Sivu",
+    "of": "/",
+    "total": "yhteensä",
+    "previous": "Edellinen",
+    "next": "Seuraava"
   },
   "guildTable": {
     "rank": "Sija",
@@ -468,5 +479,17 @@
     "progressing": "edistymässä",
     "noBossKills": "Yksikään kilta ei ole vielä tappanut tätä bossia",
     "showingOverallStatsForAllRaids": "Näytetään kokonaistilastot kaikille raideille"
+  },
+  "characterRankingsPage": {
+    "titleAllStars": "Pistesijoitukset",
+    "titleForBoss": "Vahinkosijoitukset pomolle",
+    "placeholderAllBosses": "Kaikki pomot",
+    "placeholderAllPatches": "Kaikki päivitykset",
+    "allClasses": "Kaikki luokat",
+    "columnRank": "Sija",
+    "columnName": "Nimi",
+    "columnIlvl": "Ilvl",
+    "columnDps": "DPS",
+    "columnScore": "Pisteet"
   }
 }
