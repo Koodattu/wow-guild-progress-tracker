@@ -339,6 +339,17 @@ class UpdateScheduler {
     logger.info("Startup character rankings refresh completed");
   }
 
+  // Trigger character rankings refresh from admin panel (returns false if already running)
+  triggerCharacterRankingsRefresh(): boolean {
+    if (this.isUpdatingCharacterRankings) {
+      return false;
+    }
+    this.refreshCharacterRankings()
+      .then(() => logger.info("[Admin] Character rankings refresh completed"))
+      .catch((err) => logger.error("[Admin] Character rankings refresh failed:", err));
+    return true;
+  }
+
   // Calculate tier lists on startup (if enabled)
   async calculateTierListsOnStartup(): Promise<void> {
     logger.info("Calculating tier lists on startup...");

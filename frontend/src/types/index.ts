@@ -618,6 +618,28 @@ export interface AdminGuildStats {
   factions: Record<string, number>;
 }
 
+export interface AdminCharacter {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  className: string;
+  lastMythicSeenAt: string | null;
+  rankingsAvailable: boolean | null;
+}
+
+export interface AdminCharactersResponse {
+  characters: AdminCharacter[];
+  pagination: AdminPagination;
+}
+
+export interface AdminCharacterStats {
+  total: number;
+  withRankings: number;
+  recentlyActive: number;
+}
+
 export interface AdminOverview {
   users: {
     total: number;

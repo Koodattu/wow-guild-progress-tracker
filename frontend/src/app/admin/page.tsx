@@ -21,6 +21,7 @@ import {
   triggerUpdateGuildCrests,
   triggerRescanDeathEvents,
   triggerRescanCharacters,
+  triggerRefreshCharacterRankings,
   getAdminGuildDetail,
   recalculateGuildStats,
   updateGuildWorldRanks,
@@ -55,9 +56,11 @@ import {
   CreateGuildInput,
   DeleteGuildPreviewResponse,
   DeleteGuildResponse,
+  AdminCharacter,
+  AdminCharacterStats,
 } from "@/types";
 
-type TabType = "overview" | "users" | "guilds" | "pickems" | "system";
+type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system";
 
 // Sortable item for finalization ranking
 function SortableRankingItem({ id, rank }: { id: string; rank: number }) {
@@ -107,6 +110,14 @@ export default function AdminPage() {
   const [guildsTotalPages, setGuildsTotalPages] = useState(1);
   const [guildSearch, setGuildSearch] = useState("");
   const [guildSearchDebounced, setGuildSearchDebounced] = useState("");
+
+  // Characters data
+  const [characters, setCharacters] = useState<AdminCharacter[]>([]);
+  const [characterStats, setCharacterStats] = useState<AdminCharacterStats | null>(null);
+  const [charactersPage, setCharactersPage] = useState(1);
+  const [charactersTotalPages, setCharactersTotalPages] = useState(1);
+  const [characterSearch, setCharacterSearch] = useState("");
+  const [characterSearchDebounced, setCharacterSearchDebounced] = useState("");
 
   // Pickems data
   const [pickems, setPickems] = useState<AdminPickem[]>([]);
@@ -235,6 +246,14 @@ export default function AdminPage() {
             break;
           }
 
+          case "characters": {
+            const [charsData, charStatsData] = await Promise.all([api.getAdminCharacters(charactersPage, 50, characterSearchDebounced || undefined), api.getAdminCharacterStats()]);
+            setCharacters(charsData.characters);
+            setCharactersTotalPages(charsData.pagination.totalPages);
+            setCharacterStats(charStatsData);
+            break;
+          }
+
           case "pickems": {
             const [pickemsData, raidsData] = await Promise.all([api.getAdminPickems(), api.getRaids()]);
             setPickems(pickemsData.pickems);
@@ -269,18 +288,29 @@ export default function AdminPage() {
     };
 
     fetchData();
-  }, [activeTab, user?.isAdmin, usersPage, guildsPage, queuePage, queueFilter, guildSearchDebounced]);
+  }, [activeTab, user?.isAdmin, usersPage, guildsPage, charactersPage, queuePage, queueFilter, guildSearchDebounced, characterSearchDebounced]);
 
   // Debounce guild search input
   useEffect(() => {
     const timer = setTimeout(() => {
       setGuildSearchDebounced(guildSearch);
       if (guildSearch !== guildSearchDebounced) {
-        setGuildsPage(1); // Reset to first page when search changes
+        setGuildsPage(1);
       }
     }, 300);
     return () => clearTimeout(timer);
   }, [guildSearch]);
+
+  // Debounce character search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCharacterSearchDebounced(characterSearch);
+      if (characterSearch !== characterSearchDebounced) {
+        setCharactersPage(1);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [characterSearch]);
 
   // Auto-refresh system tab every 10 seconds
   useEffect(() => {
@@ -589,7 +619,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
-          {(["overview", "users", "guilds", "pickems", "system"] as TabType[]).map((tab) => (
+          {(["overview", "users", "guilds", "characters", "pickems", "system"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1078,6 +1108,116 @@ export default function AdminPage() {
                 <button
                   onClick={() => setGuildsPage((p) => Math.min(guildsTotalPages, p + 1))}
                   disabled={guildsPage === guildsTotalPages}
+                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                >
+                  {t("pagination.next")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Characters Tab */}
+        {!loading && activeTab === "characters" && (
+          <div>
+            {/* Character Stats */}
+            {characterStats && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("characters.total")}</h4>
+                  <p className="text-2xl font-bold text-white">{characterStats.total.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("characters.withRankings")}</h4>
+                  <p className="text-2xl font-bold text-green-400">{characterStats.withRankings.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("characters.recentlyActive")}</h4>
+                  <p className="text-2xl font-bold text-blue-400">{characterStats.recentlyActive.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Search + Refresh Rankings Button */}
+            <div className="flex items-center gap-3 mb-4">
+              <input
+                type="text"
+                placeholder={t("characters.searchPlaceholder")}
+                value={characterSearch}
+                onChange={(e) => setCharacterSearch(e.target.value)}
+                className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+              />
+              <button
+                onClick={async () => {
+                  setTriggerLoading("refreshCharacterRankings");
+                  try {
+                    const result = await triggerRefreshCharacterRankings();
+                    setTriggerMessage({
+                      type: result.success ? "success" : "error",
+                      text: result.message,
+                    });
+                  } catch (error) {
+                    setTriggerMessage({
+                      type: "error",
+                      text: error instanceof Error ? error.message : "Failed to trigger",
+                    });
+                  } finally {
+                    setTriggerLoading(null);
+                  }
+                }}
+                disabled={triggerLoading === "refreshCharacterRankings"}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {triggerLoading === "refreshCharacterRankings" ? "..." : t("characters.refreshRankings")}
+              </button>
+            </div>
+
+            {/* Characters Table */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-900">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.name")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.class")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.realm")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.region")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.lastSeen")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.rankings")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {characters.map((char) => (
+                    <tr key={char.id} className="hover:bg-gray-750">
+                      <td className="px-4 py-3 text-white font-medium">{char.name}</td>
+                      <td className="px-4 py-3 text-gray-300">{char.className}</td>
+                      <td className="px-4 py-3 text-gray-300">{char.realm}</td>
+                      <td className="px-4 py-3 text-gray-300 uppercase">{char.region}</td>
+                      <td className="px-4 py-3 text-gray-400 text-sm">{char.lastMythicSeenAt ? new Date(char.lastMythicSeenAt).toLocaleDateString() : "—"}</td>
+                      <td className="px-4 py-3">
+                        {char.rankingsAvailable === true && <span className="px-2 py-0.5 text-xs rounded-full bg-green-900/30 text-green-400">{t("characters.available")}</span>}
+                        {char.rankingsAvailable === false && <span className="px-2 py-0.5 text-xs rounded-full bg-red-900/30 text-red-400">{t("characters.unavailable")}</span>}
+                        {char.rankingsAvailable === null && <span className="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400">{t("characters.unknown")}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
+                <button
+                  onClick={() => setCharactersPage((p) => Math.max(1, p - 1))}
+                  disabled={charactersPage === 1}
+                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                >
+                  {t("pagination.previous")}
+                </button>
+                <span className="text-gray-400">
+                  {t("pagination.page")} {charactersPage} {t("pagination.of")} {charactersTotalPages}
+                </span>
+                <button
+                  onClick={() => setCharactersPage((p) => Math.min(charactersTotalPages, p + 1))}
+                  disabled={charactersPage === charactersTotalPages}
                   className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
                 >
                   {t("pagination.next")}

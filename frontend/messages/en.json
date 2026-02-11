@@ -279,6 +279,7 @@
       "overview": "Overview",
       "users": "Users",
       "guilds": "Guilds",
+      "characters": "Characters",
       "pickems": "Pickems",
       "analytics": "Analytics",
       "system": "System"
@@ -332,6 +333,24 @@
       "tierListEntries": "Tier List Entries",
       "confirmDelete": "Confirm Delete",
       "deleting": "Deleting..."
+    },
+    "characters": {
+      "total": "Total Characters",
+      "withRankings": "With Rankings",
+      "recentlyActive": "Active (14d)",
+      "name": "Name",
+      "class": "Class",
+      "realm": "Realm",
+      "region": "Region",
+      "lastSeen": "Last Mythic Seen",
+      "rankings": "Rankings",
+      "searchPlaceholder": "Search by name or realm...",
+      "refreshRankings": "Refresh Rankings",
+      "refreshRankingsRunning": "Rankings refresh already running",
+      "refreshRankingsStarted": "Character rankings refresh started",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "unknown": "Unknown"
     },
     "pickems": {
       "total": "Total Pickems",

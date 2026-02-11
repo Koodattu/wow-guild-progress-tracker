@@ -6,7 +6,9 @@ import Report from "../models/Report";
 import Fight from "../models/Fight";
 import Event from "../models/Event";
 import TierList from "../models/TierList";
+import Character from "../models/Character";
 import { RequestLog, HourlyStats } from "../models/Analytics";
+import { CLASSES } from "../config/classes";
 import pickemService from "../services/pickem.service";
 import rateLimitService from "../services/rate-limit.service";
 import backgroundGuildProcessor from "../services/background-guild-processor.service";
@@ -1753,6 +1755,89 @@ router.post("/trigger/rescan-characters", async (req: Request, res: Response) =>
   } catch (error) {
     logger.error("Error triggering character rescan:", error);
     res.status(500).json({ error: "Failed to trigger character rescan" });
+  }
+});
+
+// Trigger character rankings refresh (same as nightly 7 AM job)
+router.post("/trigger/refresh-character-rankings", async (req: Request, res: Response) => {
+  try {
+    const started = scheduler.triggerCharacterRankingsRefresh();
+    if (!started) {
+      res.json({ success: false, message: "Character rankings refresh is already running" });
+      return;
+    }
+    res.json({ success: true, message: "Character rankings refresh started in background" });
+  } catch (error) {
+    logger.error("Error triggering character rankings refresh:", error);
+    res.status(500).json({ error: "Failed to trigger character rankings refresh" });
+  }
+});
+
+// ============================================================
+// CHARACTERS
+// ============================================================
+
+// List characters with pagination and search
+router.get("/characters", async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+    if (search) {
+      query.$or = [{ name: { $regex: search, $options: "i" } }, { realm: { $regex: search, $options: "i" } }];
+    }
+
+    const [characters, total] = await Promise.all([Character.find(query).sort({ lastMythicSeenAt: -1, name: 1 }).skip(skip).limit(limit).lean(), Character.countDocuments(query)]);
+
+    // Build class name lookup
+    const classNameMap = new Map<number, string>();
+    for (const cls of CLASSES) {
+      classNameMap.set(cls.id, cls.name);
+    }
+
+    const formatted = characters.map((c) => ({
+      id: c._id.toString(),
+      name: c.name,
+      realm: c.realm,
+      region: c.region,
+      classID: c.classID,
+      className: classNameMap.get(c.classID) || `Unknown (${c.classID})`,
+      lastMythicSeenAt: c.lastMythicSeenAt,
+      rankingsAvailable: c.rankingsAvailable,
+    }));
+
+    res.json({
+      characters: formatted,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching characters:", error);
+    res.status(500).json({ error: "Failed to fetch characters" });
+  }
+});
+
+// Get character stats
+router.get("/characters/stats", async (req: Request, res: Response) => {
+  try {
+    const cutoffDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const [total, withRankings, recentlyActive] = await Promise.all([
+      Character.countDocuments(),
+      Character.countDocuments({ rankingsAvailable: true }),
+      Character.countDocuments({ lastMythicSeenAt: { $gte: cutoffDate } }),
+    ]);
+
+    res.json({ total, withRankings, recentlyActive });
+  } catch (error) {
+    logger.error("Error fetching character stats:", error);
+    res.status(500).json({ error: "Failed to fetch character stats" });
   }
 });
 

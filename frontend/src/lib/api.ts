@@ -34,6 +34,8 @@ import {
   AdminUserStats,
   AdminGuildStats,
   AdminOverview,
+  AdminCharactersResponse,
+  AdminCharacterStats,
   HomePageData,
   PickemSummary,
   PickemDetails,
@@ -901,9 +903,36 @@ export const api = {
     if (!response.ok) throw new Error("Failed to clear errors");
     return response.json();
   },
+
+  async getAdminCharacters(page = 1, limit = 50, search?: string): Promise<AdminCharactersResponse> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.append("search", search);
+    const response = await fetch(`${API_URL}/api/admin/characters?${params}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch characters");
+    return response.json();
+  },
+
+  async getAdminCharacterStats(): Promise<AdminCharacterStats> {
+    const response = await fetch(`${API_URL}/api/admin/characters/stats`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch character stats");
+    return response.json();
+  },
 };
 
 // ==================== Admin Trigger Functions ====================
+
+export async function triggerRefreshCharacterRankings(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/refresh-character-rankings`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger character rankings refresh");
+  return response.json();
+}
 
 export async function triggerCalculateAllStatistics(currentTierOnly: boolean = true): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/calculate-all-statistics`, {

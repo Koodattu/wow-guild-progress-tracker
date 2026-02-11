@@ -279,6 +279,7 @@
       "overview": "Yleiskatsaus",
       "users": "Käyttäjät",
       "guilds": "Killat",
+      "characters": "Hahmot",
       "pickems": "Veikkaukset",
       "analytics": "Analytiikka",
       "system": "Järjestelmä"
@@ -332,6 +333,24 @@
       "tierListEntries": "Tier-listakohteet",
       "confirmDelete": "Vahvista poisto",
       "deleting": "Poistetaan..."
+    },
+    "characters": {
+      "total": "Hahmoja yhteensä",
+      "withRankings": "Rankingeilla",
+      "recentlyActive": "Aktiivisia (14pv)",
+      "name": "Nimi",
+      "class": "Luokka",
+      "realm": "Realm",
+      "region": "Alue",
+      "lastSeen": "Viimeksi nähty Mythicissä",
+      "rankings": "Rankingi",
+      "searchPlaceholder": "Hae nimellä tai realmilla...",
+      "refreshRankings": "Päivitä rankingi",
+      "refreshRankingsRunning": "Rankingien päivitys on jo käynnissä",
+      "refreshRankingsStarted": "Rankingien päivitys aloitettu",
+      "available": "Saatavilla",
+      "unavailable": "Ei saatavilla",
+      "unknown": "Tuntematon"
     },
     "analytics": {
       "currentHour": "Nykyinen tunti",
