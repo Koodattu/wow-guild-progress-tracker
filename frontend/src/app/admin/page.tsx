@@ -19,10 +19,14 @@ import {
   triggerUpdateAllGuilds,
   triggerRefetchRecentReports,
   triggerUpdateGuildCrests,
+  triggerRescanDeathEvents,
+  triggerRescanCharacters,
   getAdminGuildDetail,
   recalculateGuildStats,
   updateGuildWorldRanks,
   queueGuildRescan,
+  queueGuildRescanDeaths,
+  queueGuildRescanCharacters,
   verifyGuildReports,
 } from "@/lib/api";
 import {
@@ -417,6 +421,42 @@ export default function AdminPage() {
     }
   };
 
+  // Handler for queueing guild death events rescan
+  const handleQueueRescanDeaths = async (guildId: string, guildName: string) => {
+    try {
+      await queueGuildRescanDeaths(guildId);
+      setTriggerMessage({ type: "success", text: `${guildName} queued for death events rescan` });
+      if (selectedGuild) {
+        const detail = await getAdminGuildDetail(guildId);
+        setSelectedGuild(detail);
+      }
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to queue death rescan",
+      });
+    }
+  };
+
+  // Handler for queueing guild character rescan
+  const handleQueueRescanCharacters = async (guildId: string, guildName: string) => {
+    try {
+      await queueGuildRescanCharacters(guildId);
+      setTriggerMessage({ type: "success", text: `${guildName} queued for character rescan` });
+      if (selectedGuild) {
+        const detail = await getAdminGuildDetail(guildId);
+        setSelectedGuild(detail);
+      }
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to queue character rescan",
+      });
+    }
+  };
+
   // Handler for recalculating guild stats
   const handleRecalculateStats = async (guildId: string, guildName: string) => {
     try {
@@ -772,6 +812,24 @@ export default function AdminPage() {
                       {triggerLoading === "guild-crests" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["guild-crests"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
+                    <button
+                      onClick={() => handleTrigger("rescan-deaths", triggerRescanDeathEvents)}
+                      disabled={triggerLoading === "rescan-deaths" || triggerCooldowns["rescan-deaths"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Rescan Death Events</span>
+                      {triggerLoading === "rescan-deaths" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rescan-deaths"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("rescan-characters", triggerRescanCharacters)}
+                      disabled={triggerLoading === "rescan-characters" || triggerCooldowns["rescan-characters"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Rescan Characters</span>
+                      {triggerLoading === "rescan-characters" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rescan-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -961,6 +1019,20 @@ export default function AdminPage() {
                             title="Queue for full rescan"
                           >
                             Rescan
+                          </button>
+                          <button
+                            onClick={() => handleQueueRescanDeaths(guild.id, guild.name)}
+                            className="px-2 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700"
+                            title="Rescan death events"
+                          >
+                            Deaths
+                          </button>
+                          <button
+                            onClick={() => handleQueueRescanCharacters(guild.id, guild.name)}
+                            className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
+                            title="Rescan characters"
+                          >
+                            Chars
                           </button>
                           <button
                             onClick={() => handleRecalculateStats(guild.id, guild.name)}
@@ -1923,6 +1995,15 @@ export default function AdminPage() {
                                     <div className="text-gray-400 text-sm">
                                       {item.guildRealm}-{item.guildRegion.toUpperCase()}
                                     </div>
+                                    {item.jobType && item.jobType !== "full_rescan" && (
+                                      <span
+                                        className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                          item.jobType === "rescan_deaths" ? "bg-teal-900 text-teal-300" : "bg-cyan-900 text-cyan-300"
+                                        }`}
+                                      >
+                                        {item.jobType === "rescan_deaths" ? "Deaths" : "Characters"}
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="px-4 py-3">
                                     <span
@@ -1991,6 +2072,15 @@ export default function AdminPage() {
                           <div className="text-gray-400 text-sm">
                             {item.guildRealm}-{item.guildRegion.toUpperCase()}
                           </div>
+                          {item.jobType && item.jobType !== "full_rescan" && (
+                            <span
+                              className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                item.jobType === "rescan_deaths" ? "bg-teal-900 text-teal-300" : "bg-cyan-900 text-cyan-300"
+                              }`}
+                            >
+                              {item.jobType === "rescan_deaths" ? "Deaths" : "Characters"}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -2293,6 +2383,18 @@ export default function AdminPage() {
                         </button>
                         <button onClick={() => handleQueueRescan(selectedGuild.id, selectedGuild.name)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                           Queue Full Rescan
+                        </button>
+                        <button
+                          onClick={() => handleQueueRescanDeaths(selectedGuild.id, selectedGuild.name)}
+                          className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700"
+                        >
+                          Rescan Deaths
+                        </button>
+                        <button
+                          onClick={() => handleQueueRescanCharacters(selectedGuild.id, selectedGuild.name)}
+                          className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                        >
+                          Rescan Characters
                         </button>
                         <button
                           onClick={() => handleRecalculateStats(selectedGuild.id, selectedGuild.name)}

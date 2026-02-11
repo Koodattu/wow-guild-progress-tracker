@@ -360,21 +360,22 @@ router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response)
       return res.status(404).json({ error: "Guild not found" });
     }
 
-    // Check if already in queue and processing
+    // Check if already in queue and processing with same job type
     const existingQueue = await GuildProcessingQueue.findOne({
       guildId: guild._id,
+      jobType: "full_rescan",
       status: { $in: ["pending", "in_progress"] },
     });
 
     if (existingQueue) {
       return res.status(400).json({
-        error: "Guild is already in the processing queue",
+        error: "Guild is already in the processing queue for full rescan",
         status: existingQueue.status,
       });
     }
 
     // Add to queue for full rescan
-    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5); // Priority 5 = higher than normal
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5, "full_rescan"); // Priority 5 = higher than normal
 
     res.json({
       success: true,
@@ -385,6 +386,80 @@ router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response)
   } catch (error) {
     logger.error("Error queueing guild for rescan:", error);
     res.status(500).json({ error: "Failed to queue guild for rescan" });
+  }
+});
+
+// Queue guild for death events rescan
+router.post("/guilds/:guildId/queue-rescan-deaths", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const existingQueue = await GuildProcessingQueue.findOne({
+      guildId: guild._id,
+      jobType: "rescan_deaths",
+      status: { $in: ["pending", "in_progress"] },
+    });
+
+    if (existingQueue) {
+      return res.status(400).json({
+        error: "Guild is already queued for death events rescan",
+        status: existingQueue.status,
+      });
+    }
+
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5, "rescan_deaths");
+
+    res.json({
+      success: true,
+      message: `Guild ${guild.name} queued for death events rescan`,
+      queueId: queueItem._id.toString(),
+      status: queueItem.status,
+    });
+  } catch (error) {
+    logger.error("Error queueing guild for death rescan:", error);
+    res.status(500).json({ error: "Failed to queue guild for death events rescan" });
+  }
+});
+
+// Queue guild for character rescan
+router.post("/guilds/:guildId/queue-rescan-characters", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const existingQueue = await GuildProcessingQueue.findOne({
+      guildId: guild._id,
+      jobType: "rescan_characters",
+      status: { $in: ["pending", "in_progress"] },
+    });
+
+    if (existingQueue) {
+      return res.status(400).json({
+        error: "Guild is already queued for character rescan",
+        status: existingQueue.status,
+      });
+    }
+
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5, "rescan_characters");
+
+    res.json({
+      success: true,
+      message: `Guild ${guild.name} queued for character rescan`,
+      queueId: queueItem._id.toString(),
+      status: queueItem.status,
+    });
+  } catch (error) {
+    logger.error("Error queueing guild for character rescan:", error);
+    res.status(500).json({ error: "Failed to queue guild for character rescan" });
   }
 });
 
@@ -1224,6 +1299,7 @@ router.get("/processing-queue/errors", async (req: Request, res: Response) => {
           guildName: 1,
           guildRealm: 1,
           guildRegion: 1,
+          jobType: 1,
           status: 1,
           errorType: 1,
           isPermanentError: 1,
@@ -1244,6 +1320,7 @@ router.get("/processing-queue/errors", async (req: Request, res: Response) => {
       guildName: item.guildName,
       guildRealm: item.guildRealm,
       guildRegion: item.guildRegion,
+      jobType: item.jobType || "full_rescan",
       status: item.status,
       errorType: item.errorType || "unknown",
       isPermanentError: item.isPermanentError || false,
@@ -1646,6 +1723,36 @@ router.post("/trigger/update-guild-crests", async (req: Request, res: Response) 
   } catch (error) {
     logger.error("Error triggering guild crests update:", error);
     res.status(500).json({ error: "Failed to trigger guild crests update" });
+  }
+});
+
+// Queue all guilds for death events rescan
+router.post("/trigger/rescan-death-events", async (req: Request, res: Response) => {
+  try {
+    const result = await guildService.queueAllGuildsForDeathRescan();
+    res.json({
+      success: true,
+      message: `Death events rescan queued: ${result.queued} guilds queued, ${result.skipped} skipped`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering death events rescan:", error);
+    res.status(500).json({ error: "Failed to trigger death events rescan" });
+  }
+});
+
+// Queue all guilds for character rescan
+router.post("/trigger/rescan-characters", async (req: Request, res: Response) => {
+  try {
+    const result = await guildService.queueAllGuildsForCharacterRescan();
+    res.json({
+      success: true,
+      message: `Character rescan queued: ${result.queued} guilds queued, ${result.skipped} skipped`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering character rescan:", error);
+    res.status(500).json({ error: "Failed to trigger character rescan" });
   }
 });
 

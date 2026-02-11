@@ -5,6 +5,8 @@ import mongoose, { Schema, Document } from "mongoose";
  */
 export type ProcessingStatus = "pending" | "in_progress" | "completed" | "failed" | "paused";
 
+export type JobType = "full_rescan" | "rescan_deaths" | "rescan_characters";
+
 /**
  * Interface for guild processing queue entry
  */
@@ -13,6 +15,7 @@ export interface IGuildProcessingQueue extends Document {
   guildName: string;
   guildRealm: string;
   guildRegion: string;
+  jobType: JobType;
 
   // Processing status
   status: ProcessingStatus;
@@ -76,6 +79,11 @@ const GuildProcessingQueueSchema = new Schema<IGuildProcessingQueue>(
       type: String,
       required: true,
     },
+    jobType: {
+      type: String,
+      enum: ["full_rescan", "rescan_deaths", "rescan_characters"],
+      required: true,
+    },
 
     // Processing status
     status: {
@@ -129,7 +137,7 @@ const GuildProcessingQueueSchema = new Schema<IGuildProcessingQueue>(
 GuildProcessingQueueSchema.index({ status: 1, priority: 1, createdAt: 1 });
 
 // Ensure one queue entry per guild
-GuildProcessingQueueSchema.index({ guildId: 1 }, { unique: true });
+GuildProcessingQueueSchema.index({ guildId: 1, jobType: 1 }, { unique: true });
 
 /**
  * Static method to get next item to process

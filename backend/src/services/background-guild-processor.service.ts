@@ -1,13 +1,14 @@
 import Guild, { IGuild } from "../models/Guild";
 import Report from "../models/Report";
 import Fight from "../models/Fight";
-import GuildProcessingQueue, { IGuildProcessingQueue, ProcessingStatus } from "../models/GuildProcessingQueue";
+import GuildProcessingQueue, { IGuildProcessingQueue, ProcessingStatus, JobType } from "../models/GuildProcessingQueue";
 import wclService from "./warcraftlogs.service";
 import rateLimitService from "./rate-limit.service";
 import guildService from "./guild.service";
 import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
-import { TRACKED_RAIDS } from "../config/guilds";
+import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
+import Character from "../models/Character";
 import Raid from "../models/Raid";
 import logger, { getGuildLogger } from "../utils/logger";
 import mongoose from "mongoose";
@@ -51,6 +52,7 @@ export interface QueueItemSummary {
   guildName: string;
   guildRealm: string;
   guildRegion: string;
+  jobType: JobType;
   status: ProcessingStatus;
   priority: number;
   progress: {
@@ -178,10 +180,21 @@ class BackgroundGuildProcessor {
 
       this.currentGuildQueue = queueItem;
 
-      logger.info(`[BackgroundProcessor] Processing guild: ${queueItem.guildName}-${queueItem.guildRealm} (ID: ${queueItem.guildId})`);
+      logger.info(`[BackgroundProcessor] Processing guild: ${queueItem.guildName}-${queueItem.guildRealm} (ID: ${queueItem.guildId}, job: ${queueItem.jobType})`);
 
-      // Process the guild
-      await this.processGuild(queueItem);
+      // Route to appropriate processing method based on job type
+      switch (queueItem.jobType) {
+        case "rescan_deaths":
+          await this.processGuildDeathRescan(queueItem);
+          break;
+        case "rescan_characters":
+          await this.processGuildCharacterRescan(queueItem);
+          break;
+        case "full_rescan":
+        default:
+          await this.processGuild(queueItem);
+          break;
+      }
 
       this.currentGuildQueue = null;
 
@@ -529,6 +542,209 @@ class BackgroundGuildProcessor {
   }
 
   /**
+   * Process a guild's death event rescan — fetch death events for all existing fights
+   * that have empty or no deaths array, grouped by report for efficiency.
+   */
+  private async processGuildDeathRescan(queueItem: IGuildProcessingQueue): Promise<void> {
+    const guildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
+
+    try {
+      const guild = await Guild.findById(queueItem.guildId);
+      if (!guild) {
+        await queueItem.markFailed("Guild not found in database", "unknown", true, "Guild not found");
+        return;
+      }
+
+      // Find all fights for this guild that have no death data
+      const fightsWithoutDeaths = await Fight.find({
+        guildId: guild._id,
+        $or: [{ deaths: { $exists: false } }, { deaths: { $size: 0 } }, { deaths: null }],
+      }).lean();
+
+      guildLog.info(`[DeathRescan] Found ${fightsWithoutDeaths.length} fights without death data`);
+
+      if (fightsWithoutDeaths.length === 0) {
+        await queueItem.markCompleted();
+        return;
+      }
+
+      // Group fights by reportCode
+      const fightsByReport = new Map<string, typeof fightsWithoutDeaths>();
+      for (const fight of fightsWithoutDeaths) {
+        if (!fightsByReport.has(fight.reportCode)) {
+          fightsByReport.set(fight.reportCode, []);
+        }
+        fightsByReport.get(fight.reportCode)!.push(fight);
+      }
+
+      const totalReports = fightsByReport.size;
+      await queueItem.updateProgress(0, 0, 0, totalReports);
+
+      let reportsProcessed = 0;
+      let fightsUpdated = 0;
+
+      for (const [reportCode, fights] of fightsByReport.entries()) {
+        // Check rate limit before each API call
+        if (!rateLimitService.canProceedBackground()) {
+          guildLog.info(`[DeathRescan] Rate limit threshold reached, pausing...`);
+          await queueItem.updateProgress(reportsProcessed, fightsUpdated, reportsProcessed);
+          await queueItem.pause();
+          await rateLimitService.waitForReset();
+          await queueItem.resume();
+          guildLog.info("[DeathRescan] Resuming after rate limit reset");
+        }
+
+        if (this.isPaused) {
+          guildLog.info(`[DeathRescan] Manually paused at report ${reportsProcessed}/${totalReports}`);
+          await queueItem.updateProgress(reportsProcessed, fightsUpdated, reportsProcessed);
+          await queueItem.pause();
+          return;
+        }
+
+        try {
+          const fightIds = fights.map((f) => f.fightId);
+          const deathData = await wclService.getDeathEventsForReport(reportCode, fightIds);
+
+          if (deathData.reportData?.report) {
+            const actors = deathData.reportData.report.masterData?.actors || [];
+            const fightInfos = fights.map((f) => ({
+              id: f.fightId,
+              startTime: f.fightStartTime ?? 0,
+            }));
+
+            const deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, fightInfos);
+
+            for (const fight of fights) {
+              const deaths = deathsByFight.get(fight.fightId) || [];
+              if (deaths.length > 0) {
+                await Fight.updateOne({ _id: fight._id }, { $set: { deaths } });
+                fightsUpdated++;
+              }
+            }
+          }
+
+          reportsProcessed++;
+          await queueItem.updateProgress(reportsProcessed, fightsUpdated, reportsProcessed, totalReports);
+
+          // Delay between API calls
+          await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          guildLog.error(`[DeathRescan] Failed to process report ${reportCode}: ${errorMessage}`);
+          // Continue with next report — non-fatal per-report error
+          reportsProcessed++;
+        }
+      }
+
+      await queueItem.markCompleted();
+      guildLog.info(`[DeathRescan] Completed: ${reportsProcessed} reports processed, ${fightsUpdated} fights updated`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      guildLog.error(`[DeathRescan] Fatal error: ${errorMessage}`);
+      const classifiedError = classifyError(errorMessage);
+      await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
+    }
+  }
+
+  /**
+   * Process a guild's character rescan — fetch characters for all Mythic kills
+   * in CURRENT_RAID_IDS and upsert them to the Character model.
+   */
+  private async processGuildCharacterRescan(queueItem: IGuildProcessingQueue): Promise<void> {
+    const guildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
+
+    try {
+      const guild = await Guild.findById(queueItem.guildId);
+      if (!guild) {
+        await queueItem.markFailed("Guild not found in database", "unknown", true, "Guild not found");
+        return;
+      }
+
+      // Find all Mythic kills for this guild in current raids
+      const mythicKills = await Fight.find({
+        guildId: guild._id,
+        difficulty: 5,
+        isKill: true,
+        zoneId: { $in: CURRENT_RAID_IDS },
+      }).lean();
+
+      guildLog.info(`[CharacterRescan] Found ${mythicKills.length} Mythic kills to process`);
+
+      if (mythicKills.length === 0) {
+        await queueItem.markCompleted();
+        return;
+      }
+
+      const totalFights = mythicKills.length;
+      await queueItem.updateProgress(0, 0, 0, totalFights);
+
+      let fightsProcessed = 0;
+      let totalCharactersSaved = 0;
+
+      for (const fight of mythicKills) {
+        // Check rate limit before each API call
+        if (!rateLimitService.canProceedBackground()) {
+          guildLog.info(`[CharacterRescan] Rate limit threshold reached, pausing...`);
+          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed);
+          await queueItem.pause();
+          await rateLimitService.waitForReset();
+          await queueItem.resume();
+          guildLog.info("[CharacterRescan] Resuming after rate limit reset");
+        }
+
+        if (this.isPaused) {
+          guildLog.info(`[CharacterRescan] Manually paused at fight ${fightsProcessed}/${totalFights}`);
+          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed);
+          await queueItem.pause();
+          return;
+        }
+
+        try {
+          const charData = await wclService.getFightCharacters(fight.reportCode, fight.fightId);
+          const rankedChars = charData?.reportData?.report?.rankedCharacters || [];
+
+          for (const char of rankedChars) {
+            await Character.findOneAndUpdate(
+              { wclCanonicalCharacterId: char.canonicalID },
+              {
+                name: char.name,
+                realm: char.server.slug,
+                region: char.server.region.slug,
+                classID: char.classID,
+                wclProfileHidden: char.hidden,
+                lastMythicSeenAt: new Date(),
+                rankingsAvailable: char.hidden === true ? false : null,
+                nextEligibleRefreshAt: new Date(),
+              },
+              { upsert: true, new: true },
+            );
+          }
+
+          totalCharactersSaved += rankedChars.length;
+          fightsProcessed++;
+          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed, totalFights);
+
+          // Delay between API calls
+          await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          guildLog.error(`[CharacterRescan] Failed for fight ${fight.fightId} in report ${fight.reportCode}: ${errorMessage}`);
+          // Continue with next fight — non-fatal per-fight error
+          fightsProcessed++;
+        }
+      }
+
+      await queueItem.markCompleted();
+      guildLog.info(`[CharacterRescan] Completed: ${fightsProcessed} fights processed, ${totalCharactersSaved} characters saved`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      guildLog.error(`[CharacterRescan] Fatal error: ${errorMessage}`);
+      const classifiedError = classifyError(errorMessage);
+      await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
+    }
+  }
+
+  /**
    * Get valid boss encounter IDs from tracked raids
    */
   private async getValidBossEncounterIds(): Promise<Set<number>> {
@@ -554,15 +770,15 @@ class BackgroundGuildProcessor {
   /**
    * Add a guild to the processing queue
    */
-  async queueGuild(guild: IGuild, priority: number = 10): Promise<IGuildProcessingQueue> {
-    // Don't queue guilds that are marked as not found on WarcraftLogs
-    if (guild.wclStatus === "not_found") {
+  async queueGuild(guild: IGuild, priority: number = 10, jobType: JobType = "full_rescan"): Promise<IGuildProcessingQueue> {
+    // Don't queue guilds that are marked as not found on WarcraftLogs (except for rescan jobs on existing data)
+    if (guild.wclStatus === "not_found" && jobType === "full_rescan") {
       logger.warn(`[BackgroundProcessor] Skipping guild ${guild.name}-${guild.realm}: marked as not found on WarcraftLogs`);
       throw new Error(`Guild ${guild.name}-${guild.realm} is marked as not found on WarcraftLogs and cannot be queued`);
     }
 
-    // Check if already in queue
-    const existing = await GuildProcessingQueue.findOne({ guildId: guild._id });
+    // Check if already in queue with the same job type
+    const existing = await GuildProcessingQueue.findOne({ guildId: guild._id, jobType });
 
     if (existing) {
       // If failed or completed, allow re-queue
@@ -580,11 +796,11 @@ class BackgroundGuildProcessor {
           percentComplete: 0,
         };
         await existing.save();
-        logger.info(`[BackgroundProcessor] Re-queued guild: ${guild.name}-${guild.realm}`);
+        logger.info(`[BackgroundProcessor] Re-queued guild: ${guild.name}-${guild.realm} (job: ${jobType})`);
         return existing;
       }
 
-      logger.info(`[BackgroundProcessor] Guild already in queue: ${guild.name}-${guild.realm} (status: ${existing.status})`);
+      logger.info(`[BackgroundProcessor] Guild already in queue: ${guild.name}-${guild.realm} (status: ${existing.status}, job: ${jobType})`);
       return existing;
     }
 
@@ -594,6 +810,7 @@ class BackgroundGuildProcessor {
       guildName: guild.name,
       guildRealm: guild.realm,
       guildRegion: guild.region,
+      jobType,
       priority,
       status: "pending",
       progress: {
@@ -608,7 +825,7 @@ class BackgroundGuildProcessor {
       maxRetries: 3,
     });
 
-    logger.info(`[BackgroundProcessor] Queued guild: ${guild.name}-${guild.realm} (priority: ${priority})`);
+    logger.info(`[BackgroundProcessor] Queued guild: ${guild.name}-${guild.realm} (priority: ${priority}, job: ${jobType})`);
     return queueItem;
   }
 
@@ -652,6 +869,7 @@ class BackgroundGuildProcessor {
         guildName: item.guildName,
         guildRealm: item.guildRealm,
         guildRegion: item.guildRegion,
+        jobType: item.jobType,
         status: item.status,
         priority: item.priority,
         progress: {
