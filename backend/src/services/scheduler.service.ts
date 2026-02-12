@@ -212,7 +212,7 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Refresh character rankings (at 2 AM Finnish time)
+    // NIGHTLY: Refresh character rankings (at 7 AM Finnish time)
     // Updates zone rankings and encounter rankings for eligible tracked characters
     cron.schedule(
       "0 7 * * *",
@@ -828,7 +828,7 @@ class UpdateScheduler {
     }
   }
 
-  // Refresh character rankings (at 2 AM Finnish time)
+  // Refresh character rankings (at 7 AM Finnish time)
   // Updates zone rankings and encounter rankings for eligible tracked characters
   private async refreshCharacterRankings(): Promise<void> {
     this.isUpdatingCharacterRankings = true;

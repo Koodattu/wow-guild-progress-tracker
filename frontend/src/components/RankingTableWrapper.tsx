@@ -468,6 +468,7 @@ export function RankingTableWrapper({
     useState<PatchPartitionOption | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const searchInitializedRef = useRef(false);
+  const searchDebounceRef = useRef<number | null>(null);
   const applyFiltersRef = useRef<(overrides?: Partial<RankingFilters>) => void>(
     () => undefined,
   );
@@ -504,14 +505,23 @@ export function RankingTableWrapper({
       return;
     }
 
-    const handle = window.setTimeout(() => {
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = window.setTimeout(() => {
       applyFiltersRef.current({
         characterName: searchValue.trim() || null,
         page: 1,
       });
     }, 300);
 
-    return () => window.clearTimeout(handle);
+    return () => {
+      if (searchDebounceRef.current) {
+        window.clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
+    };
   }, [searchValue]);
 
   const handleBossChange = (boss: Boss | null) => {
@@ -543,6 +553,10 @@ export function RankingTableWrapper({
   };
 
   const handlePageChange = (page: number) => {
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
     applyFilters({ page });
   };
 
