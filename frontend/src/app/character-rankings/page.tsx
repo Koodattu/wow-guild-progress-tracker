@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { normalizeSpecNameForApi } from "@/lib/utils";
+import { getPatchPartitionOptions } from "@/lib/patch-partitions";
 import type { Boss, CharacterRankingRow } from "@/types";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 
@@ -14,6 +15,7 @@ type Filters = {
   page?: number;
   limit?: number;
   partition?: number | null;
+  characterName?: string | null;
 };
 
 function buildQuery(filters: Filters) {
@@ -35,6 +37,9 @@ function buildQuery(filters: Filters) {
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
+  const [partitionOptions, setPartitionOptions] = useState(
+    getPatchPartitionOptions(),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -42,11 +47,11 @@ export default function CharacterRankingsPage() {
     totalItems: 0,
     totalPages: 0,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 25,
   });
 
   const [filters, setFilters] = useState<Filters>({
-    limit: 100,
+    limit: 25,
     page: 1,
   });
 
@@ -58,8 +63,13 @@ export default function CharacterRankingsPage() {
         const currentRaidId = homeData.raid?.id;
         if (!currentRaidId) return;
         const bossesData = await api.getBosses(currentRaidId);
+        const raidData = await api.getRaid(currentRaidId);
+        const partitionData = getPatchPartitionOptions(
+          raidData.partitions || [],
+        );
         if (!isActive) return;
         setBosses(bossesData);
+        setPartitionOptions(partitionData);
       } catch (error) {
         console.error("Error fetching bosses:", error);
       }
@@ -101,6 +111,7 @@ export default function CharacterRankingsPage() {
       <RankingTableWrapper
         data={rows}
         bosses={bosses}
+        partitionOptions={partitionOptions}
         loading={loading}
         error={error}
         pagination={pagination}

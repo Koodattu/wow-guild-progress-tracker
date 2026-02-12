@@ -14,6 +14,10 @@ export interface IRaid extends Document {
   slug: string;
   expansion: string;
   iconUrl?: string;
+  partitions?: {
+    id: number;
+    name: string;
+  }[];
   starts?: RegionDates;
   ends?: RegionDates;
   bosses: {
@@ -33,6 +37,12 @@ const RaidSchema: Schema = new Schema(
     slug: { type: String, required: true },
     expansion: { type: String, required: true },
     iconUrl: { type: String },
+    partitions: [
+      {
+        id: { type: Number, required: true },
+        name: { type: String, required: true },
+      },
+    ],
     starts: {
       us: { type: Date },
       eu: { type: Date },
@@ -58,7 +68,7 @@ const RaidSchema: Schema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 export default mongoose.model<IRaid>("Raid", RaidSchema);

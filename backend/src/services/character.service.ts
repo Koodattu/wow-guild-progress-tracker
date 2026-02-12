@@ -1,6 +1,7 @@
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import Character, { ICharacter } from "../models/Character";
 import Ranking from "../models/Ranking";
+import Raid from "../models/Raid";
 import logger from "../utils/logger";
 import { resolveRole } from "../utils/spec";
 import rateLimitService from "./rate-limit.service";
@@ -85,6 +86,10 @@ export type CharacterRankingRow = {
     realm: string;
     region: string;
     classID: number;
+    guild?: {
+      name: string;
+      realm: string;
+    } | null;
   };
   context: {
     zoneId: number;
@@ -94,6 +99,7 @@ export type CharacterRankingRow = {
     specName?: string;
     bestSpecName?: string;
     role?: "dps" | "healer" | "tank";
+    ilvl?: number;
   };
   encounter?: {
     id: number;
@@ -110,7 +116,6 @@ export type CharacterRankingRow = {
     medianPercent?: number;
     lockedIn?: boolean;
     totalKills?: number;
-    ilvl?: number;
   };
   updatedAt?: string;
 };
@@ -138,6 +143,18 @@ class CharacterService {
     const RATE_LIMIT_PAUSE_PERCENT = 90;
 
     try {
+      const raid = await Raid.findOne({ id: CURRENT_TIER_ID })
+        .select("partitions")
+        .lean();
+      const partition = (raid?.partitions || []).reduce(
+        (max: number, entry: any) =>
+          typeof entry?.id === "number" && entry.id > max ? entry.id : max,
+        -1,
+      );
+      logger.info(
+        `[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`,
+      );
+
       // Find eligible characters
       const cutoffDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
       const eligibleFilter: any = {
@@ -169,7 +186,9 @@ class CharacterService {
         }
 
         batchIndex += 1;
-        logger.info(`Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`);
+        logger.info(
+          `Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`,
+        );
 
         for (const char of eligibleChars) {
           if (processedCount >= MAX_WCL_REQUESTS_PER_RUN) {
@@ -210,7 +229,8 @@ class CharacterService {
                     difficulty: ${MYTHIC_DIFFICULTY},
                     metric: dps,
                     compare: Rankings,
-                    timeframe: Historical
+                    timeframe: Historical,
+                    partition: ${partition}
                   )
                 }
               }
@@ -226,17 +246,29 @@ class CharacterService {
 
             processedCount += 1;
 
-            const result = await wclService.query<IWarcraftLogsResponse>(query, variables);
+            const result = await wclService.query<IWarcraftLogsResponse>(
+              query,
+              variables,
+            );
 
             const character = result.characterData?.character;
-            if (!character || character.hidden || !character.zoneRankings || (character.zoneRankings as any).error) {
+            if (
+              !character ||
+              character.hidden ||
+              !character.zoneRankings ||
+              (character.zoneRankings as any).error
+            ) {
               await Character.findByIdAndUpdate(char._id, {
                 wclProfileHidden: character?.hidden || false,
                 rankingsAvailable: false,
-                nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 7 * 24 * 60 * 60 * 1000,
+                ),
               });
               await Ranking.deleteMany({ characterId: char._id });
-              logger.info(`No rankings available for ${char.name} (${char.realm})`);
+              logger.info(
+                `No rankings available for ${char.name} (${char.realm})`,
+              );
               await new Promise((resolve) => setTimeout(resolve, 100));
               continue;
             }
@@ -251,18 +283,35 @@ class CharacterService {
             }).lean();
 
             // Compute current totals from fresh WCL data
-            const freshPoints = (zoneRankings.allStars ?? []).reduce((sum, a) => sum + (a.points ?? 0), 0);
-            const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
+            const freshPoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.points ?? 0),
+              0,
+            );
+            const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.possiblePoints ?? 0),
+              0,
+            );
 
             // Compute stored totals from existing Ranking docs
-            const storedPoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
-            const storedPossiblePoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
+            const storedPoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.points ?? 0),
+              0,
+            );
+            const storedPossiblePoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
+              0,
+            );
 
-            const hasChanged = existingRankings.length === 0 || freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
+            const hasChanged =
+              existingRankings.length === 0 ||
+              freshPoints !== storedPoints ||
+              freshPossiblePoints !== storedPossiblePoints;
 
             if (!hasChanged) {
               await Character.findByIdAndUpdate(char._id, {
-                nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 12 * 60 * 60 * 1000,
+                ),
               });
               logger.info(`No changes for ${char.name} (${char.realm})`);
               await new Promise((resolve) => setTimeout(resolve, 100));
@@ -323,8 +372,14 @@ class CharacterService {
 
                   allStars: r.allStars
                     ? {
-                        points: typeof r.allStars.points === "number" ? r.allStars.points : 0,
-                        possiblePoints: typeof r.allStars.possiblePoints === "number" ? r.allStars.possiblePoints : 0,
+                        points:
+                          typeof r.allStars.points === "number"
+                            ? r.allStars.points
+                            : 0,
+                        possiblePoints:
+                          typeof r.allStars.possiblePoints === "number"
+                            ? r.allStars.possiblePoints
+                            : 0,
                       }
                     : { points: 0, possiblePoints: 0 },
 
@@ -342,7 +397,9 @@ class CharacterService {
         }
       }
 
-      logger.info(`Character ranking check completed: processed ${processedCount} characters`);
+      logger.info(
+        `Character ranking check completed: processed ${processedCount} characters`,
+      );
 
       logger.info("Character ranking check and update completed");
     } catch (error) {
@@ -359,15 +416,72 @@ class CharacterService {
     partition?: number; // If provided: filter by partition; if omitted: pick best per-boss across partitions
     limit?: number;
     page?: number;
+    characterName?: string;
   }): Promise<CharacterRankingsResponse> {
-    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1 } = options;
+    const {
+      zoneId,
+      encounterId,
+      classId,
+      specName,
+      role,
+      partition,
+      limit = 100,
+      page = 1,
+      characterName,
+    } = options;
 
     const MYTHIC_DIFFICULTY = 5;
     const normalizedSpecName = specName?.trim().toLowerCase();
-    const normalizedRole = role?.toLowerCase() as "dps" | "healer" | "tank" | undefined;
+    const normalizedRole = role?.toLowerCase() as
+      | "dps"
+      | "healer"
+      | "tank"
+      | undefined;
+    const normalizedCharacterName = characterName?.trim();
+    const escapeRegex = (input: string) =>
+      input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = normalizedCharacterName
+      ? new RegExp(escapeRegex(normalizedCharacterName), "i")
+      : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
+
+    const getGuildMapForRows = async (
+      rows: Array<{ characterId?: any }>,
+    ): Promise<Map<string, { name: string; realm: string } | null>> => {
+      const ids = rows
+        .map((row) => row.characterId)
+        .filter(Boolean)
+        .map((id) => String(id));
+      const uniqueIds = [...new Set(ids)];
+      if (uniqueIds.length === 0) {
+        return new Map();
+      }
+
+      const characters = await Character.find({ _id: { $in: uniqueIds } })
+        .select("_id guildName guildRealm")
+        .lean();
+
+      const guildMap = new Map<
+        string,
+        { name: string; realm: string } | null
+      >();
+      for (const character of characters) {
+        const guildName = character.guildName ?? null;
+        const guildRealm = character.guildRealm ?? null;
+        if (guildName && guildRealm) {
+          guildMap.set(String(character._id), {
+            name: guildName,
+            realm: guildRealm,
+          });
+        } else {
+          guildMap.set(String(character._id), null);
+        }
+      }
+
+      return guildMap;
+    };
 
     // Boss leaderboard (encounterId provided)
     if (encounterId !== undefined) {
@@ -380,18 +494,21 @@ class CharacterService {
       if (classId !== undefined) query.classID = classId;
       if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
       if (normalizedRole !== undefined) query.role = normalizedRole;
+      if (nameRegex) query.name = nameRegex;
 
       if (partition !== undefined) {
         const totalItems = await Ranking.countDocuments(query);
         const rows = await Ranking.find(query)
           .select(
-            "wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
+            "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
               "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
           )
           .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
           .skip(skip)
           .limit(safeLimit)
           .lean();
+
+        const guildMap = await getGuildMapForRows(rows);
 
         const data = rows.map((r: any) => ({
           character: {
@@ -400,6 +517,7 @@ class CharacterService {
             realm: r.realm,
             region: r.region,
             classID: r.classID,
+            guild: guildMap.get(String(r.characterId)) ?? null,
           },
           context: {
             zoneId,
@@ -424,7 +542,9 @@ class CharacterService {
             totalKills: r.totalKills,
             allStars: r.allStars,
           },
-          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+          updatedAt: r.updatedAt
+            ? new Date(r.updatedAt).toISOString()
+            : undefined,
         }));
 
         return {
@@ -439,7 +559,11 @@ class CharacterService {
       }
 
       // Partition ignored: return only the best row per character across partitions
-      const countAgg = await Ranking.aggregate([{ $match: query }, { $group: { _id: "$wclCanonicalCharacterId" } }, { $count: "total" }]);
+      const countAgg = await Ranking.aggregate([
+        { $match: query },
+        { $group: { _id: "$wclCanonicalCharacterId" } },
+        { $count: "total" },
+      ]);
 
       const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
@@ -456,6 +580,7 @@ class CharacterService {
         {
           $group: {
             _id: "$wclCanonicalCharacterId",
+            characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
             realm: { $first: "$realm" },
@@ -483,6 +608,8 @@ class CharacterService {
         { $limit: safeLimit },
       ]);
 
+      const guildMap = await getGuildMapForRows(agg);
+
       const data = agg.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -490,6 +617,7 @@ class CharacterService {
           realm: r.realm,
           region: r.region,
           classID: r.classID,
+          guild: guildMap.get(String(r.characterId)) ?? null,
         },
         context: {
           zoneId: r.zoneId,
@@ -514,7 +642,9 @@ class CharacterService {
           totalKills: r.totalKills,
           allStars: r.allStars,
         },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
+          : undefined,
       }));
 
       return {
@@ -534,8 +664,10 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchBase.classID = classId;
-    if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined)
+      matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
+    if (nameRegex) matchBase.name = nameRegex;
 
     // Partition-filtered view: only consider rows with partition = X
     if (partition !== undefined) {
@@ -560,6 +692,7 @@ class CharacterService {
         {
           $group: {
             _id: "$characterId",
+            characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
             realm: { $first: "$realm" },
@@ -578,6 +711,8 @@ class CharacterService {
         { $limit: safeLimit },
       ]);
 
+      const guildMap = await getGuildMapForRows(agg);
+
       const data = agg.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -585,6 +720,7 @@ class CharacterService {
           realm: r.realm,
           region: r.region,
           classID: r.classID,
+          guild: guildMap.get(String(r.characterId)) ?? null,
         },
         context: {
           zoneId,
@@ -604,7 +740,9 @@ class CharacterService {
           rankPercent: r.rankPercent,
           medianPercent: r.medianPercent,
         },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
+          : undefined,
       }));
 
       return {
@@ -624,8 +762,10 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchNoPartition.classID = classId;
-    if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined)
+      matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
+    if (nameRegex) matchNoPartition.name = nameRegex;
 
     // Count unique characters first
     const countAgg = await Ranking.aggregate([
@@ -655,6 +795,7 @@ class CharacterService {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             encounterId: "$encounter.id",
           },
+          characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
@@ -673,6 +814,7 @@ class CharacterService {
       {
         $group: {
           _id: "$_id.wclCanonicalCharacterId",
+          characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
@@ -692,6 +834,8 @@ class CharacterService {
       { $limit: safeLimit },
     ]);
 
+    const guildMap = await getGuildMapForRows(agg);
+
     const data = agg.map((r: any) => ({
       character: {
         wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -699,6 +843,7 @@ class CharacterService {
         realm: r.realm,
         region: r.region,
         classID: r.classID,
+        guild: guildMap.get(String(r.characterId)) ?? null,
       },
       context: {
         zoneId,

@@ -2,7 +2,8 @@
 
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
-import { use, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
 import {
@@ -11,16 +12,14 @@ import {
   getClassInfoById,
   getSpecIconUrl,
 } from "@/lib/utils";
-import {
-  getPatchPartitionOptions,
-  type PatchPartitionOption,
-} from "@/lib/patch-partitions";
+import { type PatchPartitionOption } from "@/lib/patch-partitions";
 import { Selector } from "./Selector";
 import { useTranslations } from "next-intl";
 
 interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
   bosses: Boss[];
+  partitionOptions?: PatchPartitionOption[];
   loading?: boolean;
   error?: string | null;
   pagination?: {
@@ -34,6 +33,7 @@ interface RankingTableWrapperProps {
     classId?: number | null;
     specName?: string | null;
     partition?: number | null;
+    characterName?: string | null;
     page?: number;
   }) => void;
 }
@@ -43,6 +43,7 @@ type RankingFilters = {
   classId?: number | null;
   specName?: string | null;
   partition?: number | null;
+  characterName?: string | null;
   page?: number;
 };
 
@@ -375,6 +376,14 @@ type BuildRankingColumnsOptions = {
   t: (key: string) => string;
 };
 
+function formatRealmSlug(realm: string) {
+  return realm
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function buildRankingColumns({
   selectedBoss,
   currentPage,
@@ -382,8 +391,9 @@ function buildRankingColumns({
   t,
 }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
+  const showIlvl = isShowingDamage;
 
-  return [
+  const columns: ColumnDef<CharacterRankingRow>[] = [
     {
       id: "rank",
       header: t("columnRank"),
@@ -395,48 +405,94 @@ function buildRankingColumns({
       id: "character",
       header: t("columnName"),
       width: "w-1/5",
-      accessor: (row: CharacterRankingRow) => (
-        <div className="flex gap-4 items-center">
-          <div style={{ width: "24px", height: "24px", position: "relative" }}>
-            <IconImage
-              iconFilename={
-                row.context.specName
-                  ? getSpecIconUrl(row.character.classID, row.context.specName)
-                  : getClassInfoById(row.character.classID)?.iconUrl
-              }
-              alt={row.character.name}
-              fill
-              style={{ objectFit: "cover" }}
-            />
+      accessor: (row: CharacterRankingRow) => {
+        const realm = row.character.realm;
+        const name = row.character.name;
+        const wclUrl = `https://www.warcraftlogs.com/character/eu/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`;
+
+        return (
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div
+                style={{ width: "24px", height: "24px", position: "relative" }}
+              >
+                <IconImage
+                  iconFilename={
+                    row.context.specName
+                      ? getSpecIconUrl(
+                          row.character.classID,
+                          row.context.specName,
+                        )
+                      : getClassInfoById(row.character.classID)?.iconUrl
+                  }
+                  alt={row.character.name}
+                  fill
+                  style={{ objectFit: "cover" }}
+                />
+              </div>
+              <span className="flex items-center gap-2">
+                {row.character.name}
+              </span>
+            </div>
+            <a
+              href={wclUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${row.character.name} on Warcraft Logs`}
+              className="inline-flex items-center opacity-80 transition-opacity hover:opacity-100"
+            >
+              <Image
+                src="/wcl-logo.png"
+                alt="Warcraft Logs"
+                width={18}
+                height={18}
+              />
+            </a>
           </div>
-          {row.character.name}
-        </div>
-      ),
+        );
+      },
     },
     {
+      id: "guild",
+      header: t("columnGuild"),
+      width: "w-1/5",
+      accessor: (row: CharacterRankingRow) => {
+        const guild = row.character.guild;
+        if (!guild?.name || !guild?.realm) return "—";
+        return `${guild.name} - ${formatRealmSlug(guild.realm)}`;
+      },
+    },
+  ];
+
+  if (showIlvl) {
+    columns.push({
       id: "ilvl",
       header: t("columnIlvl"),
       accessor: (row: CharacterRankingRow) =>
         row.context.ilvl ? row.context.ilvl.toFixed(0) : "—",
       width: "w-4",
+    });
+  }
+
+  columns.push({
+    id: "metric",
+    header: isShowingDamage ? t("columnDps") : t("columnScore"),
+    accessor: (row: CharacterRankingRow) => {
+      const value = isShowingDamage
+        ? row.stats.bestAmount?.toFixed(1)
+        : row.stats.allStars?.points?.toFixed(1);
+      if (!value) return "—";
+      return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     },
-    {
-      id: "metric",
-      header: isShowingDamage ? t("columnDps") : t("columnScore"),
-      accessor: (row: CharacterRankingRow) => {
-        const value = isShowingDamage
-          ? row.stats.bestAmount?.toFixed(1)
-          : row.stats.allStars?.points?.toFixed(1);
-        if (!value) return "—";
-        return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-      },
-    },
-  ];
+  });
+
+  return columns;
 }
 
 export function RankingTableWrapper({
   data,
   bosses,
+  partitionOptions = [],
   loading = false,
   error = null,
   pagination,
@@ -448,7 +504,12 @@ export function RankingTableWrapper({
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
   const [selectedPartition, setSelectedPartition] =
     useState<PatchPartitionOption | null>(null);
-  const partitionOptions = getPatchPartitionOptions();
+  const [searchValue, setSearchValue] = useState("");
+  const searchInitializedRef = useRef(false);
+  const searchDebounceRef = useRef<number | null>(null);
+  const applyFiltersRef = useRef<(overrides?: Partial<RankingFilters>) => void>(
+    () => undefined,
+  );
 
   const applyFilters = useCallback(
     (overrides: Partial<RankingFilters> = {}) => {
@@ -457,6 +518,7 @@ export function RankingTableWrapper({
         classId: selectedClass?.id ?? null,
         specName: selectedSpec,
         partition: selectedPartition?.value ?? null,
+        characterName: searchValue.trim() || null,
         page: 1,
         ...overrides,
       });
@@ -467,8 +529,38 @@ export function RankingTableWrapper({
       selectedClass?.id,
       selectedPartition?.value,
       selectedSpec,
+      searchValue,
     ],
   );
+
+  useEffect(() => {
+    applyFiltersRef.current = applyFilters;
+  }, [applyFilters]);
+
+  useEffect(() => {
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      return;
+    }
+
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = window.setTimeout(() => {
+      applyFiltersRef.current({
+        characterName: searchValue.trim() || null,
+        page: 1,
+      });
+    }, 300);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        window.clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
+    };
+  }, [searchValue]);
 
   const handleBossChange = (boss: Boss | null) => {
     setSelectedBoss(boss);
@@ -499,6 +591,10 @@ export function RankingTableWrapper({
   };
 
   const handlePageChange = (page: number) => {
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
     applyFilters({ page });
   };
 
@@ -566,6 +662,18 @@ export function RankingTableWrapper({
             onSpecSelect={handleSpecSelect}
             onClear={clearClassAndSpec}
           />
+
+          {/* Character Search */}
+          <div className="w-full max-w-xs">
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              maxLength={64}
+              placeholder={t("searchPlaceholder")}
+              className="w-full min-h-[40px] rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+            />
+          </div>
 
           {/* Patch Selector */}
           <Selector
