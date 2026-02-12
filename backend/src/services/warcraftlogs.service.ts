@@ -53,6 +53,8 @@ class WarcraftLogsService {
     }
 
     const data = (await response.json()) as WCLAuthResponse;
+
+    console.log(data);
     this.accessToken = data.access_token;
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min early
 
@@ -78,6 +80,22 @@ class WarcraftLogsService {
     if (rateLimitData) {
       rateLimitService.updateFromResponse(rateLimitData);
     }
+  }
+
+  getPrimaryGuildInfo(character: any): {
+    guildName: string | null;
+    guildRealm: string | null;
+  } {
+    const primaryGuild = character?.guilds?.[0];
+
+    if (!primaryGuild?.name || !primaryGuild?.server?.slug) {
+      return { guildName: null, guildRealm: null };
+    }
+
+    return {
+      guildName: primaryGuild.name,
+      guildRealm: primaryGuild.server.slug,
+    };
   }
 
   async query<T>(
@@ -599,6 +617,12 @@ class WarcraftLogsService {
               id
               name
             }
+            partitions {
+              id
+              name
+              compactName
+              default
+            }
           }
         }
       }
@@ -874,6 +898,7 @@ class WarcraftLogsService {
     const trackedGuilds =
       process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV_B;
 
+    /*
     // Filter rankedCharacters to only include those in tracked guilds
     if (result?.reportData?.report?.rankedCharacters) {
       result.reportData.report.rankedCharacters =
@@ -904,6 +929,7 @@ class WarcraftLogsService {
           });
         });
     }
+    */
     return result;
   }
 

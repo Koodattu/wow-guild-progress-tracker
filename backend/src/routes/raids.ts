@@ -12,7 +12,7 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     // Get only the tracked raids from the database, excluding unnecessary fields
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
-      .select("id name slug expansion iconUrl -_id")
+      .select("id name slug expansion iconUrl partitions -_id")
       .sort({ id: -1 });
     res.json(raids);
   } catch (error) {
@@ -74,12 +74,14 @@ router.get(
     (req) => {
       const raidId = parseInt(req.params.id);
       return cacheService.getTTLForRaid(raidId);
-    }
+    },
   ),
   async (req: Request, res: Response) => {
     try {
       const raidId = parseInt(req.params.id);
-      const raid = await Raid.findOne({ id: raidId }).select("starts ends -_id");
+      const raid = await Raid.findOne({ id: raidId }).select(
+        "starts ends -_id",
+      );
 
       if (!raid) {
         return res.status(404).json({ error: "Raid not found" });
@@ -94,7 +96,7 @@ router.get(
       logger.error("Error fetching raid dates:", error);
       res.status(500).json({ error: "Failed to fetch raid dates" });
     }
-  }
+  },
 );
 
 export default router;

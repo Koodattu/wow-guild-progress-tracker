@@ -1,6 +1,7 @@
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import Character, { ICharacter } from "../models/Character";
 import Ranking from "../models/Ranking";
+import Raid from "../models/Raid";
 import logger from "../utils/logger";
 import { resolveRole } from "../utils/spec";
 import rateLimitService from "./rate-limit.service";
@@ -138,6 +139,18 @@ class CharacterService {
     const RATE_LIMIT_PAUSE_PERCENT = 90;
 
     try {
+      const raid = await Raid.findOne({ id: CURRENT_TIER_ID })
+        .select("partitions")
+        .lean();
+      const partition = (raid?.partitions || []).reduce(
+        (max: number, entry: any) =>
+          typeof entry?.id === "number" && entry.id > max ? entry.id : max,
+        -1,
+      );
+      logger.info(
+        `[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`,
+      );
+
       // Find eligible characters
       const cutoffDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
       const eligibleFilter: any = {
@@ -169,7 +182,9 @@ class CharacterService {
         }
 
         batchIndex += 1;
-        logger.info(`Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`);
+        logger.info(
+          `Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`,
+        );
 
         for (const char of eligibleChars) {
           if (processedCount >= MAX_WCL_REQUESTS_PER_RUN) {
@@ -210,7 +225,8 @@ class CharacterService {
                     difficulty: ${MYTHIC_DIFFICULTY},
                     metric: dps,
                     compare: Rankings,
-                    timeframe: Historical
+                    timeframe: Historical,
+                    partition: ${partition}
                   )
                 }
               }
@@ -226,17 +242,29 @@ class CharacterService {
 
             processedCount += 1;
 
-            const result = await wclService.query<IWarcraftLogsResponse>(query, variables);
+            const result = await wclService.query<IWarcraftLogsResponse>(
+              query,
+              variables,
+            );
 
             const character = result.characterData?.character;
-            if (!character || character.hidden || !character.zoneRankings || (character.zoneRankings as any).error) {
+            if (
+              !character ||
+              character.hidden ||
+              !character.zoneRankings ||
+              (character.zoneRankings as any).error
+            ) {
               await Character.findByIdAndUpdate(char._id, {
                 wclProfileHidden: character?.hidden || false,
                 rankingsAvailable: false,
-                nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 7 * 24 * 60 * 60 * 1000,
+                ),
               });
               await Ranking.deleteMany({ characterId: char._id });
-              logger.info(`No rankings available for ${char.name} (${char.realm})`);
+              logger.info(
+                `No rankings available for ${char.name} (${char.realm})`,
+              );
               await new Promise((resolve) => setTimeout(resolve, 100));
               continue;
             }
@@ -251,18 +279,35 @@ class CharacterService {
             }).lean();
 
             // Compute current totals from fresh WCL data
-            const freshPoints = (zoneRankings.allStars ?? []).reduce((sum, a) => sum + (a.points ?? 0), 0);
-            const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
+            const freshPoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.points ?? 0),
+              0,
+            );
+            const freshPossiblePoints = (zoneRankings.allStars ?? []).reduce(
+              (sum, a) => sum + (a.possiblePoints ?? 0),
+              0,
+            );
 
             // Compute stored totals from existing Ranking docs
-            const storedPoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
-            const storedPossiblePoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
+            const storedPoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.points ?? 0),
+              0,
+            );
+            const storedPossiblePoints = existingRankings.reduce(
+              (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
+              0,
+            );
 
-            const hasChanged = existingRankings.length === 0 || freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
+            const hasChanged =
+              existingRankings.length === 0 ||
+              freshPoints !== storedPoints ||
+              freshPossiblePoints !== storedPossiblePoints;
 
             if (!hasChanged) {
               await Character.findByIdAndUpdate(char._id, {
-                nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+                nextEligibleRefreshAt: new Date(
+                  Date.now() + 12 * 60 * 60 * 1000,
+                ),
               });
               logger.info(`No changes for ${char.name} (${char.realm})`);
               await new Promise((resolve) => setTimeout(resolve, 100));
@@ -323,8 +368,14 @@ class CharacterService {
 
                   allStars: r.allStars
                     ? {
-                        points: typeof r.allStars.points === "number" ? r.allStars.points : 0,
-                        possiblePoints: typeof r.allStars.possiblePoints === "number" ? r.allStars.possiblePoints : 0,
+                        points:
+                          typeof r.allStars.points === "number"
+                            ? r.allStars.points
+                            : 0,
+                        possiblePoints:
+                          typeof r.allStars.possiblePoints === "number"
+                            ? r.allStars.possiblePoints
+                            : 0,
                       }
                     : { points: 0, possiblePoints: 0 },
 
@@ -342,7 +393,9 @@ class CharacterService {
         }
       }
 
-      logger.info(`Character ranking check completed: processed ${processedCount} characters`);
+      logger.info(
+        `Character ranking check completed: processed ${processedCount} characters`,
+      );
 
       logger.info("Character ranking check and update completed");
     } catch (error) {
@@ -360,11 +413,24 @@ class CharacterService {
     limit?: number;
     page?: number;
   }): Promise<CharacterRankingsResponse> {
-    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1 } = options;
+    const {
+      zoneId,
+      encounterId,
+      classId,
+      specName,
+      role,
+      partition,
+      limit = 100,
+      page = 1,
+    } = options;
 
     const MYTHIC_DIFFICULTY = 5;
     const normalizedSpecName = specName?.trim().toLowerCase();
-    const normalizedRole = role?.toLowerCase() as "dps" | "healer" | "tank" | undefined;
+    const normalizedRole = role?.toLowerCase() as
+      | "dps"
+      | "healer"
+      | "tank"
+      | undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
@@ -424,7 +490,9 @@ class CharacterService {
             totalKills: r.totalKills,
             allStars: r.allStars,
           },
-          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+          updatedAt: r.updatedAt
+            ? new Date(r.updatedAt).toISOString()
+            : undefined,
         }));
 
         return {
@@ -439,7 +507,11 @@ class CharacterService {
       }
 
       // Partition ignored: return only the best row per character across partitions
-      const countAgg = await Ranking.aggregate([{ $match: query }, { $group: { _id: "$wclCanonicalCharacterId" } }, { $count: "total" }]);
+      const countAgg = await Ranking.aggregate([
+        { $match: query },
+        { $group: { _id: "$wclCanonicalCharacterId" } },
+        { $count: "total" },
+      ]);
 
       const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
@@ -514,7 +586,9 @@ class CharacterService {
           totalKills: r.totalKills,
           allStars: r.allStars,
         },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
+          : undefined,
       }));
 
       return {
@@ -534,7 +608,8 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchBase.classID = classId;
-    if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined)
+      matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
 
     // Partition-filtered view: only consider rows with partition = X
@@ -604,7 +679,9 @@ class CharacterService {
           rankPercent: r.rankPercent,
           medianPercent: r.medianPercent,
         },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+        updatedAt: r.updatedAt
+          ? new Date(r.updatedAt).toISOString()
+          : undefined,
       }));
 
       return {
@@ -624,7 +701,8 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchNoPartition.classID = classId;
-    if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined)
+      matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
 
     // Count unique characters first

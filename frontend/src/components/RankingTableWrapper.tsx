@@ -11,16 +11,14 @@ import {
   getClassInfoById,
   getSpecIconUrl,
 } from "@/lib/utils";
-import {
-  getPatchPartitionOptions,
-  type PatchPartitionOption,
-} from "@/lib/patch-partitions";
+import { type PatchPartitionOption } from "@/lib/patch-partitions";
 import { Selector } from "./Selector";
 import { useTranslations } from "next-intl";
 
 interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
   bosses: Boss[];
+  partitionOptions?: PatchPartitionOption[];
   loading?: boolean;
   error?: string | null;
   pagination?: {
@@ -437,6 +435,7 @@ function buildRankingColumns({
 export function RankingTableWrapper({
   data,
   bosses,
+  partitionOptions = [],
   loading = false,
   error = null,
   pagination,
@@ -448,7 +447,6 @@ export function RankingTableWrapper({
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
   const [selectedPartition, setSelectedPartition] =
     useState<PatchPartitionOption | null>(null);
-  const partitionOptions = getPatchPartitionOptions();
 
   const applyFilters = useCallback(
     (overrides: Partial<RankingFilters> = {}) => {

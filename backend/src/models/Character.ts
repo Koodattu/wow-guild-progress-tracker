@@ -6,6 +6,9 @@ export interface ICharacter extends Document {
   realm: string;
   region: string;
   classID: number;
+  guildId?: number;
+  guildName?: string;
+  guildRealm?: string;
   wclProfileHidden: boolean;
 
   lastMythicSeenAt: Date;
@@ -23,6 +26,9 @@ const CharacterSchema: Schema = new Schema(
     realm: { type: String, required: true },
     region: { type: String, required: true },
     classID: { type: Number, required: true },
+    guildId: { type: Number, required: false, default: null },
+    guildName: { type: String, required: false, default: null },
+    guildRealm: { type: String, required: false, default: null },
     wclProfileHidden: { type: Boolean, required: true, default: false },
 
     lastMythicSeenAt: { type: Date, required: true },

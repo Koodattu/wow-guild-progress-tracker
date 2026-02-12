@@ -279,6 +279,14 @@ export interface RaidInfo {
   slug: string;
   expansion: string;
   iconUrl?: string;
+  partitions?: RaidPartition[];
+}
+
+export interface RaidPartition {
+  id: number;
+  name: string;
+  compactName: string;
+  default: boolean;
 }
 
 // Full raid info with bosses and dates - for backward compatibility
@@ -966,9 +974,20 @@ export interface RaidAnalyticsListItem {
 // RATE LIMIT & PROCESSING QUEUE TYPES
 // ============================================================
 
-export type ProcessingStatus = "pending" | "in_progress" | "completed" | "failed" | "paused";
+export type ProcessingStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "paused";
 
-export type ErrorType = "guild_not_found" | "rate_limited" | "network_error" | "api_error" | "database_error" | "unknown";
+export type ErrorType =
+  | "guild_not_found"
+  | "rate_limited"
+  | "network_error"
+  | "api_error"
+  | "database_error"
+  | "unknown";
 
 export interface RateLimitStatus {
   pointsUsed: number;

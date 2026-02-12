@@ -3,21 +3,19 @@ export type PatchPartitionOption = {
   value: number;
 };
 
-type PatchPartitionSource = {
-  version: string;
-  partition: number;
+export type PatchPartitionSource = {
+  id: number;
+  name: string;
+  compactName: string;
 };
 
-const PATCH_PARTITIONS: PatchPartitionSource[] = [
-  { version: "11.2", partition: 1 },
-  { version: "11.2.5", partition: 2 },
-];
-
 export function getPatchPartitionOptions(
-  source: PatchPartitionSource[] = PATCH_PARTITIONS,
+  source: PatchPartitionSource[] = [],
 ): PatchPartitionOption[] {
-  return source.map((patch) => ({
-    label: patch.version,
-    value: patch.partition,
-  }));
+  return [...source]
+    .sort((a, b) => b.id - a.id)
+    .map((patch) => ({
+      label: patch.compactName || patch.name,
+      value: patch.id,
+    }));
 }
