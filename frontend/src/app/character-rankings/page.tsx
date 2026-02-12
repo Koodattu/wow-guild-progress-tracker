@@ -15,6 +15,7 @@ type Filters = {
   page?: number;
   limit?: number;
   partition?: number | null;
+  characterName?: string | null;
 };
 
 function buildQuery(filters: Filters) {
@@ -46,11 +47,11 @@ export default function CharacterRankingsPage() {
     totalItems: 0,
     totalPages: 0,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 25,
   });
 
   const [filters, setFilters] = useState<Filters>({
-    limit: 100,
+    limit: 25,
     page: 1,
   });
 

@@ -12,7 +12,7 @@ export function getPatchPartitionOptions(
   source: PatchPartitionSource[] = [],
 ): PatchPartitionOption[] {
   return [...source]
-    .sort((a, b) => b.id - a.id)
+    .sort((a, b) => a.id - b.id)
     .map((patch) => ({
       label: patch.name,
       value: patch.id,

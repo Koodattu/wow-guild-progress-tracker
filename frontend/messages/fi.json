@@ -47,8 +47,10 @@
     "page": "Sivu",
     "of": "/",
     "total": "yhteensä",
+    "first": "Ensimmäinen",
     "previous": "Edellinen",
-    "next": "Seuraava"
+    "next": "Seuraava",
+    "last": "Viimeinen"
   },
   "guildTable": {
     "rank": "Sija",
@@ -505,6 +507,7 @@
     "placeholderAllBosses": "Kaikki pomot",
     "placeholderAllPatches": "Kaikki päivitykset",
     "allClasses": "Kaikki luokat",
+    "searchPlaceholder": "Hae hahmoa",
     "columnRank": "Sija",
     "columnName": "Nimi",
     "columnGuild": "Kilta",

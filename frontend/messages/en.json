@@ -47,8 +47,10 @@
     "page": "Page",
     "of": "of",
     "total": "total",
+    "first": "First",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "last": "Last"
   },
   "guildTable": {
     "rank": "Rank",
@@ -505,6 +507,7 @@
     "placeholderAllBosses": "All bosses",
     "placeholderAllPatches": "All patches",
     "allClasses": "All classes",
+    "searchPlaceholder": "Search character",
     "columnRank": "Rank",
     "columnName": "Name",
     "columnGuild": "Guild",

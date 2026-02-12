@@ -54,7 +54,6 @@ class WarcraftLogsService {
 
     const data = (await response.json()) as WCLAuthResponse;
 
-    console.log(data);
     this.accessToken = data.access_token;
     this.tokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min early
 

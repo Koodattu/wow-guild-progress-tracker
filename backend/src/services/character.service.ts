@@ -416,6 +416,7 @@ class CharacterService {
     partition?: number; // If provided: filter by partition; if omitted: pick best per-boss across partitions
     limit?: number;
     page?: number;
+    characterName?: string;
   }): Promise<CharacterRankingsResponse> {
     const {
       zoneId,
@@ -426,6 +427,7 @@ class CharacterService {
       partition,
       limit = 100,
       page = 1,
+      characterName,
     } = options;
 
     const MYTHIC_DIFFICULTY = 5;
@@ -435,6 +437,12 @@ class CharacterService {
       | "healer"
       | "tank"
       | undefined;
+    const normalizedCharacterName = characterName?.trim();
+    const escapeRegex = (input: string) =>
+      input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = normalizedCharacterName
+      ? new RegExp(escapeRegex(normalizedCharacterName), "i")
+      : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
@@ -486,6 +494,7 @@ class CharacterService {
       if (classId !== undefined) query.classID = classId;
       if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
       if (normalizedRole !== undefined) query.role = normalizedRole;
+      if (nameRegex) query.name = nameRegex;
 
       if (partition !== undefined) {
         const totalItems = await Ranking.countDocuments(query);
@@ -658,6 +667,7 @@ class CharacterService {
     if (normalizedSpecName !== undefined)
       matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
+    if (nameRegex) matchBase.name = nameRegex;
 
     // Partition-filtered view: only consider rows with partition = X
     if (partition !== undefined) {
@@ -755,6 +765,7 @@ class CharacterService {
     if (normalizedSpecName !== undefined)
       matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
+    if (nameRegex) matchNoPartition.name = nameRegex;
 
     // Count unique characters first
     const countAgg = await Ranking.aggregate([

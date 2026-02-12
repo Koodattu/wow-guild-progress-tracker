@@ -30,6 +30,7 @@ router.get("/", async (req: Request, res: Response) => {
     const page = parseNumberQuery(req.query.page);
     const limit = parseNumberQuery(req.query.limit);
     const partition = parseNumberQuery(req.query.partition);
+    const characterName = parseStringQuery(req.query.characterName);
 
     const specNameRaw = parseStringQuery(req.query.specName);
     const specName = specNameRaw?.toLowerCase();
@@ -58,6 +59,9 @@ router.get("/", async (req: Request, res: Response) => {
     if (role !== undefined && !ALLOWED_ROLES.has(role)) {
       return res.status(400).json({ error: "Invalid role" });
     }
+    if (characterName !== undefined && characterName.length > 64) {
+      return res.status(400).json({ error: "Invalid characterName" });
+    }
 
     const rankings = await characterService.getCharacterRankings({
       zoneId,
@@ -68,6 +72,7 @@ router.get("/", async (req: Request, res: Response) => {
       partition,
       page,
       limit,
+      characterName,
     });
 
     res.json(rankings);
