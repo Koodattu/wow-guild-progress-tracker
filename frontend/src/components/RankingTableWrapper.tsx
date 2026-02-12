@@ -3,6 +3,7 @@
 import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
 import {
@@ -375,6 +376,14 @@ type BuildRankingColumnsOptions = {
   t: (key: string) => string;
 };
 
+function formatRealmSlug(realm: string) {
+  return realm
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function buildRankingColumns({
   selectedBoss,
   currentPage,
@@ -396,23 +405,52 @@ function buildRankingColumns({
       id: "character",
       header: t("columnName"),
       width: "w-1/5",
-      accessor: (row: CharacterRankingRow) => (
-        <div className="flex gap-4 items-center">
-          <div style={{ width: "24px", height: "24px", position: "relative" }}>
-            <IconImage
-              iconFilename={
-                row.context.specName
-                  ? getSpecIconUrl(row.character.classID, row.context.specName)
-                  : getClassInfoById(row.character.classID)?.iconUrl
-              }
-              alt={row.character.name}
-              fill
-              style={{ objectFit: "cover" }}
-            />
+      accessor: (row: CharacterRankingRow) => {
+        const realm = row.character.realm;
+        const name = row.character.name;
+        const wclUrl = `https://www.warcraftlogs.com/character/eu/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`;
+
+        return (
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div
+                style={{ width: "24px", height: "24px", position: "relative" }}
+              >
+                <IconImage
+                  iconFilename={
+                    row.context.specName
+                      ? getSpecIconUrl(
+                          row.character.classID,
+                          row.context.specName,
+                        )
+                      : getClassInfoById(row.character.classID)?.iconUrl
+                  }
+                  alt={row.character.name}
+                  fill
+                  style={{ objectFit: "cover" }}
+                />
+              </div>
+              <span className="flex items-center gap-2">
+                {row.character.name}
+              </span>
+            </div>
+            <a
+              href={wclUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${row.character.name} on Warcraft Logs`}
+              className="inline-flex items-center opacity-80 transition-opacity hover:opacity-100"
+            >
+              <Image
+                src="/wcl-logo.png"
+                alt="Warcraft Logs"
+                width={18}
+                height={18}
+              />
+            </a>
           </div>
-          {row.character.name}
-        </div>
-      ),
+        );
+      },
     },
     {
       id: "guild",
@@ -421,7 +459,7 @@ function buildRankingColumns({
       accessor: (row: CharacterRankingRow) => {
         const guild = row.character.guild;
         if (!guild?.name || !guild?.realm) return "—";
-        return `${guild.name}-${guild.realm}`;
+        return `${guild.name} - ${formatRealmSlug(guild.realm)}`;
       },
     },
   ];
