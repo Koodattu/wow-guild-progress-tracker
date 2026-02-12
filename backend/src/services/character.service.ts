@@ -86,6 +86,10 @@ export type CharacterRankingRow = {
     realm: string;
     region: string;
     classID: number;
+    guild?: {
+      name: string;
+      realm: string;
+    } | null;
   };
   context: {
     zoneId: number;
@@ -95,6 +99,7 @@ export type CharacterRankingRow = {
     specName?: string;
     bestSpecName?: string;
     role?: "dps" | "healer" | "tank";
+    ilvl?: number;
   };
   encounter?: {
     id: number;
@@ -111,7 +116,6 @@ export type CharacterRankingRow = {
     medianPercent?: number;
     lockedIn?: boolean;
     totalKills?: number;
-    ilvl?: number;
   };
   updatedAt?: string;
 };
@@ -435,6 +439,42 @@ class CharacterService {
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
 
+    const getGuildMapForRows = async (
+      rows: Array<{ characterId?: any }>,
+    ): Promise<Map<string, { name: string; realm: string } | null>> => {
+      const ids = rows
+        .map((row) => row.characterId)
+        .filter(Boolean)
+        .map((id) => String(id));
+      const uniqueIds = [...new Set(ids)];
+      if (uniqueIds.length === 0) {
+        return new Map();
+      }
+
+      const characters = await Character.find({ _id: { $in: uniqueIds } })
+        .select("_id guildName guildRealm")
+        .lean();
+
+      const guildMap = new Map<
+        string,
+        { name: string; realm: string } | null
+      >();
+      for (const character of characters) {
+        const guildName = character.guildName ?? null;
+        const guildRealm = character.guildRealm ?? null;
+        if (guildName && guildRealm) {
+          guildMap.set(String(character._id), {
+            name: guildName,
+            realm: guildRealm,
+          });
+        } else {
+          guildMap.set(String(character._id), null);
+        }
+      }
+
+      return guildMap;
+    };
+
     // Boss leaderboard (encounterId provided)
     if (encounterId !== undefined) {
       const query: any = {
@@ -451,13 +491,15 @@ class CharacterService {
         const totalItems = await Ranking.countDocuments(query);
         const rows = await Ranking.find(query)
           .select(
-            "wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
+            "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
               "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
           )
           .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
           .skip(skip)
           .limit(safeLimit)
           .lean();
+
+        const guildMap = await getGuildMapForRows(rows);
 
         const data = rows.map((r: any) => ({
           character: {
@@ -466,6 +508,7 @@ class CharacterService {
             realm: r.realm,
             region: r.region,
             classID: r.classID,
+            guild: guildMap.get(String(r.characterId)) ?? null,
           },
           context: {
             zoneId,
@@ -528,6 +571,7 @@ class CharacterService {
         {
           $group: {
             _id: "$wclCanonicalCharacterId",
+            characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
             realm: { $first: "$realm" },
@@ -555,6 +599,8 @@ class CharacterService {
         { $limit: safeLimit },
       ]);
 
+      const guildMap = await getGuildMapForRows(agg);
+
       const data = agg.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -562,6 +608,7 @@ class CharacterService {
           realm: r.realm,
           region: r.region,
           classID: r.classID,
+          guild: guildMap.get(String(r.characterId)) ?? null,
         },
         context: {
           zoneId: r.zoneId,
@@ -635,6 +682,7 @@ class CharacterService {
         {
           $group: {
             _id: "$characterId",
+            characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
             realm: { $first: "$realm" },
@@ -653,6 +701,8 @@ class CharacterService {
         { $limit: safeLimit },
       ]);
 
+      const guildMap = await getGuildMapForRows(agg);
+
       const data = agg.map((r: any) => ({
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -660,6 +710,7 @@ class CharacterService {
           realm: r.realm,
           region: r.region,
           classID: r.classID,
+          guild: guildMap.get(String(r.characterId)) ?? null,
         },
         context: {
           zoneId,
@@ -733,6 +784,7 @@ class CharacterService {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             encounterId: "$encounter.id",
           },
+          characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
@@ -751,6 +803,7 @@ class CharacterService {
       {
         $group: {
           _id: "$_id.wclCanonicalCharacterId",
+          characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
           realm: { $first: "$realm" },
@@ -770,6 +823,8 @@ class CharacterService {
       { $limit: safeLimit },
     ]);
 
+    const guildMap = await getGuildMapForRows(agg);
+
     const data = agg.map((r: any) => ({
       character: {
         wclCanonicalCharacterId: r.wclCanonicalCharacterId,
@@ -777,6 +832,7 @@ class CharacterService {
         realm: r.realm,
         region: r.region,
         classID: r.classID,
+        guild: guildMap.get(String(r.characterId)) ?? null,
       },
       context: {
         zoneId,

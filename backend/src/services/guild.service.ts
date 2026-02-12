@@ -44,8 +44,6 @@ class GuildService {
         const partitions = zoneData.partitions.map((partition: any) => ({
           id: partition.id,
           name: partition.name,
-          compactName: partition.compactName,
-          default: partition.default ?? false,
         }));
 
         await Raid.updateOne({ id: raidId }, { $set: { partitions } });
@@ -170,8 +168,6 @@ class GuildService {
               (partition: any) => ({
                 id: partition.id,
                 name: partition.name,
-                compactName: partition.compactName,
-                default: partition.default ?? false,
               }),
             );
 
@@ -253,8 +249,6 @@ class GuildService {
               partitions: (zoneData.partitions || []).map((partition: any) => ({
                 id: partition.id,
                 name: partition.name,
-                compactName: partition.compactName,
-                default: partition.default ?? false,
               })),
             };
 

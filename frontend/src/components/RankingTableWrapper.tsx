@@ -380,8 +380,9 @@ function buildRankingColumns({
   t,
 }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
+  const showIlvl = isShowingDamage;
 
-  return [
+  const columns: ColumnDef<CharacterRankingRow>[] = [
     {
       id: "rank",
       header: t("columnRank"),
@@ -412,24 +413,40 @@ function buildRankingColumns({
       ),
     },
     {
+      id: "guild",
+      header: t("columnGuild"),
+      width: "w-1/5",
+      accessor: (row: CharacterRankingRow) => {
+        const guild = row.character.guild;
+        if (!guild?.name || !guild?.realm) return "—";
+        return `${guild.name}-${guild.realm}`;
+      },
+    },
+  ];
+
+  if (showIlvl) {
+    columns.push({
       id: "ilvl",
       header: t("columnIlvl"),
       accessor: (row: CharacterRankingRow) =>
         row.context.ilvl ? row.context.ilvl.toFixed(0) : "—",
       width: "w-4",
+    });
+  }
+
+  columns.push({
+    id: "metric",
+    header: isShowingDamage ? t("columnDps") : t("columnScore"),
+    accessor: (row: CharacterRankingRow) => {
+      const value = isShowingDamage
+        ? row.stats.bestAmount?.toFixed(1)
+        : row.stats.allStars?.points?.toFixed(1);
+      if (!value) return "—";
+      return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     },
-    {
-      id: "metric",
-      header: isShowingDamage ? t("columnDps") : t("columnScore"),
-      accessor: (row: CharacterRankingRow) => {
-        const value = isShowingDamage
-          ? row.stats.bestAmount?.toFixed(1)
-          : row.stats.allStars?.points?.toFixed(1);
-        if (!value) return "—";
-        return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-      },
-    },
-  ];
+  });
+
+  return columns;
 }
 
 export function RankingTableWrapper({

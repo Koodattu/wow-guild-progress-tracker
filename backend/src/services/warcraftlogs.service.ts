@@ -620,8 +620,6 @@ class WarcraftLogsService {
             partitions {
               id
               name
-              compactName
-              default
             }
           }
         }

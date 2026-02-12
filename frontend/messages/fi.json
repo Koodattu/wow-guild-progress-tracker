@@ -507,6 +507,7 @@
     "allClasses": "Kaikki luokat",
     "columnRank": "Sija",
     "columnName": "Nimi",
+    "columnGuild": "Kilta",
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
     "columnScore": "Pisteet"

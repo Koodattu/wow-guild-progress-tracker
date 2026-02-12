@@ -17,8 +17,6 @@ export interface IRaid extends Document {
   partitions?: {
     id: number;
     name: string;
-    compactName: string;
-    default: boolean;
   }[];
   starts?: RegionDates;
   ends?: RegionDates;
@@ -43,8 +41,6 @@ const RaidSchema: Schema = new Schema(
       {
         id: { type: Number, required: true },
         name: { type: String, required: true },
-        compactName: { type: String, required: true },
-        default: { type: Boolean, required: true, default: false },
       },
     ],
     starts: {

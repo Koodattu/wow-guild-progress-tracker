@@ -6,7 +6,6 @@ export type PatchPartitionOption = {
 export type PatchPartitionSource = {
   id: number;
   name: string;
-  compactName: string;
 };
 
 export function getPatchPartitionOptions(
@@ -15,7 +14,7 @@ export function getPatchPartitionOptions(
   return [...source]
     .sort((a, b) => b.id - a.id)
     .map((patch) => ({
-      label: patch.compactName || patch.name,
+      label: patch.name,
       value: patch.id,
     }));
 }

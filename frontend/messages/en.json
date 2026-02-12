@@ -507,6 +507,7 @@
     "allClasses": "All classes",
     "columnRank": "Rank",
     "columnName": "Name",
+    "columnGuild": "Guild",
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
     "columnScore": "Score"

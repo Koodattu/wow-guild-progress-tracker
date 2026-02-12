@@ -285,8 +285,6 @@ export interface RaidInfo {
 export interface RaidPartition {
   id: number;
   name: string;
-  compactName: string;
-  default: boolean;
 }
 
 // Full raid info with bosses and dates - for backward compatibility
@@ -822,6 +820,10 @@ export type CharacterRankingRow = {
     realm: string;
     region: string;
     classID: number;
+    guild?: {
+      name: string;
+      realm: string;
+    } | null;
   };
   context: {
     zoneId: number;
