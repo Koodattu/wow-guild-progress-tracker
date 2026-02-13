@@ -1,7 +1,10 @@
 import { ROLE_BY_CLASS_AND_SPEC, Role } from "../config/specs";
 
 export function slugifySpecName(specName: string): string {
-  return specName.trim().toLowerCase().replace(/\s+/g, "-");
+  return specName
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
 }
 
 export function resolveRole(classID: number, specName: string): Role {

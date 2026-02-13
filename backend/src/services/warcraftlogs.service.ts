@@ -895,7 +895,6 @@ class WarcraftLogsService {
     const trackedGuilds =
       process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV_B;
 
-    /*
     // Filter rankedCharacters to only include those in tracked guilds
     if (result?.reportData?.report?.rankedCharacters) {
       result.reportData.report.rankedCharacters =
@@ -926,7 +925,7 @@ class WarcraftLogsService {
           });
         });
     }
-    */
+
     return result;
   }
 

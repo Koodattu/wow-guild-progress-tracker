@@ -598,8 +598,9 @@ class CharacterService {
       if (nameRegex) query.name = nameRegex;
 
       if (partition !== undefined) {
-        const totalItems = await Ranking.countDocuments(query);
-        const rows = await Ranking.find(query)
+        const filteredQuery = { ...query, bestAmount: { $ne: 0 } };
+        const totalItems = await Ranking.countDocuments(filteredQuery);
+        const rows = await Ranking.find(filteredQuery)
           .select(
             "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
               "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
@@ -648,10 +649,7 @@ class CharacterService {
             : undefined,
         }));
 
-        // Filter out rows where bestAmount is 0 or allStars.points is 0
-        const filteredData = data.filter(
-          (d) => d.score.value !== 0 && d.stats.allStars?.points !== 0,
-        );
+        const filteredData = data;
 
         return {
           data: filteredData,
@@ -667,7 +665,21 @@ class CharacterService {
       // Partition ignored: return only the best row per character across partitions
       const countAgg = await Ranking.aggregate([
         { $match: query },
-        { $group: { _id: "$wclCanonicalCharacterId" } },
+        {
+          $sort: {
+            bestAmount: -1,
+            rankPercent: -1,
+            totalKills: -1,
+            partition: -1,
+          },
+        },
+        {
+          $group: {
+            _id: "$wclCanonicalCharacterId",
+            bestAmount: { $first: "$bestAmount" },
+          },
+        },
+        { $match: { bestAmount: { $ne: 0 } } },
         { $count: "total" },
       ]);
 
@@ -709,6 +721,7 @@ class CharacterService {
             updatedAt: { $first: "$updatedAt" },
           },
         },
+        { $match: { bestAmount: { $ne: 0 } } },
         { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, name: 1 } },
         { $skip: skip },
         { $limit: safeLimit },
@@ -753,10 +766,7 @@ class CharacterService {
           : undefined,
       }));
 
-      // Filter out rows where bestAmount is 0 or allStars.points is 0
-      const filteredData = data.filter(
-        (d) => d.score.value !== 0 && d.stats.allStars?.points !== 0,
-      );
+      const filteredData = data;
 
       return {
         data: filteredData,
@@ -787,36 +797,64 @@ class CharacterService {
       // Count total unique characters
       const countAgg = await Ranking.aggregate([
         { $match: matchBase },
+        { $sort: { "allStars.points": -1 } },
         {
           $group: {
-            _id: "$characterId",
+            _id: { characterId: "$characterId", encounterId: "$encounter.id" },
+            points: { $first: "$allStars.points" },
           },
         },
+        {
+          $group: {
+            _id: "$_id.characterId",
+            points: { $sum: "$points" },
+          },
+        },
+        { $match: { points: { $gt: 0 } } },
         { $count: "total" },
       ]);
 
       const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-      // Group by character and sum allStars across bosses
+      // Group by character and sum allStars across bosses, picking best per encounter
       const agg = await Ranking.aggregate([
         { $match: matchBase },
+        { $sort: { "allStars.points": -1 } },
         {
           $group: {
-            _id: "$characterId",
+            _id: { characterId: "$characterId", encounterId: "$encounter.id" },
             characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
             realm: { $first: "$realm" },
             region: { $first: "$region" },
             classID: { $first: "$classID" },
-            points: { $sum: "$allStars.points" },
-            possiblePoints: { $sum: "$allStars.possiblePoints" },
+            points: { $first: "$allStars.points" },
+            possiblePoints: { $first: "$allStars.possiblePoints" },
+            ilvl: { $first: "$ilvl" },
+            rankPercent: { $first: "$rankPercent" },
+            medianPercent: { $first: "$medianPercent" },
+            updatedAt: { $first: "$updatedAt" },
+          },
+        },
+        {
+          $group: {
+            _id: "$_id.characterId",
+            characterId: { $first: "$characterId" },
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            name: { $first: "$name" },
+            realm: { $first: "$realm" },
+            region: { $first: "$region" },
+            classID: { $first: "$classID" },
+            points: { $sum: "$points" },
+            possiblePoints: { $sum: "$possiblePoints" },
             ilvl: { $first: "$ilvl" },
             rankPercent: { $max: "$rankPercent" },
             medianPercent: { $max: "$medianPercent" },
             updatedAt: { $max: "$updatedAt" },
           },
         },
+        { $match: { points: { $gt: 0 } } },
         { $sort: { points: -1, possiblePoints: -1, name: 1 } },
         { $skip: skip },
         { $limit: safeLimit },
@@ -856,10 +894,7 @@ class CharacterService {
           : undefined,
       }));
 
-      // Filter out rows where bestAmount is 0 or allStars.points is 0
-      const filteredData = data.filter(
-        (d) => d.score.value !== 0 && d.stats.allStars?.points !== 0,
-      );
+      const filteredData = data;
 
       return {
         data: filteredData,
@@ -889,8 +924,10 @@ class CharacterService {
       {
         $group: {
           _id: "$wclCanonicalCharacterId",
+          points: { $sum: "$allStars.points" },
         },
       },
+      { $match: { points: { $gt: 0 } } },
       { $count: "total" },
     ]);
 
@@ -944,6 +981,7 @@ class CharacterService {
           updatedAt: { $max: "$updatedAt" },
         },
       },
+      { $match: { points: { $gt: 0 } } },
 
       { $sort: { points: -1, possiblePoints: -1, name: 1 } },
       { $skip: skip },
@@ -981,10 +1019,7 @@ class CharacterService {
       updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
     }));
 
-    // Filter out rows where bestAmount is 0 or allStars.points is 0
-    const filteredData = data.filter(
-      (d) => d.score.value !== 0 && d.stats.allStars?.points !== 0,
-    );
+    const filteredData = data;
 
     return {
       data: filteredData,

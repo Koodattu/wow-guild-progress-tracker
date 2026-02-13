@@ -178,8 +178,7 @@ export function formatSpecName(specName: string): string {
 }
 
 export function normalizeSpecNameForApi(specName: string): string {
-  if (specName === "beast-mastery") return "beastmastery";
-  return specName;
+  return specName.replace(/-/g, "");
 }
 
 // Format guild name with parent guild if applicable
