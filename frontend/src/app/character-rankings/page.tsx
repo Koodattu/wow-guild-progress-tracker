@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { normalizeSpecNameForApi } from "@/lib/utils";
 import { getPatchPartitionOptions } from "@/lib/patch-partitions";
 import type { Boss, CharacterRankingRow } from "@/types";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
@@ -19,14 +18,8 @@ type Filters = {
 };
 
 function buildQuery(filters: Filters) {
-  const normalizedFilters = {
-    ...filters,
-    specName: filters.specName
-      ? normalizeSpecNameForApi(filters.specName)
-      : filters.specName,
-  };
   const sp = new URLSearchParams();
-  Object.entries(normalizedFilters).forEach(([k, v]) => {
+  Object.entries(filters).forEach(([k, v]) => {
     if (v === undefined || v === null || v === "") return;
     sp.set(k, String(v));
   });
@@ -47,11 +40,11 @@ export default function CharacterRankingsPage() {
     totalItems: 0,
     totalPages: 0,
     currentPage: 1,
-    pageSize: 25,
+    pageSize: 100,
   });
 
   const [filters, setFilters] = useState<Filters>({
-    limit: 25,
+    limit: 100,
     page: 1,
   });
 
