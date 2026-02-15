@@ -485,7 +485,9 @@ class CharacterService {
 
               hasAnySpecRankings = true;
 
-              // Check if rankings have changed by comparing with stored Ranking docs
+              // Check if rankings have changed by comparing with stored Ranking docs.
+              // Compare both allStars totals AND per-boss bestAmount/rankPercent/totalKills
+              // so that bosses excluded from allStars scoring are still detected as changed.
               const existingRankings = await Ranking.find({
                 characterId: char._id,
                 zoneId: CURRENT_TIER_ID,
@@ -499,7 +501,19 @@ class CharacterService {
               const storedPoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
               const storedPossiblePoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
 
-              const hasChanged = existingRankings.length === 0 || freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
+              const allStarsChanged = freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
+
+              // Build a fingerprint of per-boss data so non-allStars bosses are also detected
+              const freshBossFingerprint = rankingsEntries
+                .map((r) => `${r.encounter.id}:${r.bestAmount ?? 0}:${r.rankPercent ?? 0}:${r.totalKills ?? 0}`)
+                .sort()
+                .join("|");
+              const storedBossFingerprint = existingRankings
+                .map((r: any) => `${r.encounter?.id}:${r.bestAmount ?? 0}:${r.rankPercent ?? 0}:${r.totalKills ?? 0}`)
+                .sort()
+                .join("|");
+
+              const hasChanged = existingRankings.length === 0 || allStarsChanged || freshBossFingerprint !== storedBossFingerprint;
 
               if (!hasChanged) {
                 logger.debug(`[CharacterRankings] No changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
