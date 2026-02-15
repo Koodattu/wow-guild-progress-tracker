@@ -139,22 +139,14 @@ class CharacterService {
     const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
     const MYTHIC_DIFFICULTY = 5;
     const BATCH_SIZE = 200;
-    const MAX_WCL_REQUESTS_PER_RUN = 10000;
+    const MAX_WCL_REQUESTS_PER_RUN = 20000;
     // Pause when 90% of WCL hourly budget is consumed, leaving 10% for live/other operations
     const RATE_LIMIT_PAUSE_PERCENT = 90;
 
     try {
-      const raid = await Raid.findOne({ id: CURRENT_TIER_ID })
-        .select("partitions")
-        .lean();
-      const partition = (raid?.partitions || []).reduce(
-        (max: number, entry: any) =>
-          typeof entry?.id === "number" && entry.id > max ? entry.id : max,
-        -1,
-      );
-      logger.info(
-        `[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`,
-      );
+      const raid = await Raid.findOne({ id: CURRENT_TIER_ID }).select("partitions").lean();
+      const partition = (raid?.partitions || []).reduce((max: number, entry: any) => (typeof entry?.id === "number" && entry.id > max ? entry.id : max), -1);
+      logger.info(`[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`);
 
       // Find eligible characters
       const cutoffDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -165,8 +157,14 @@ class CharacterService {
         nextEligibleRefreshAt: { $lte: new Date() },
       };
 
+      // Count total eligible characters for progress tracking
+      const totalEligibleCount = await Character.countDocuments(eligibleFilter);
+      logger.info(`[CharacterRankings] Found ${totalEligibleCount} eligible characters to process`);
+
       let processedCount = 0;
       let batchIndex = 0;
+      const processedCharacterIds = new Set<string>();
+      let charactersProcessedThisRun = 0;
 
       while (processedCount < MAX_WCL_REQUESTS_PER_RUN) {
         const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
@@ -183,25 +181,38 @@ class CharacterService {
         ]);
 
         if (eligibleChars.length === 0) {
+          logger.info(`[CharacterRankings] No more characters found in batch, stopping`);
           break;
         }
 
         batchIndex += 1;
         logger.info(
-          `Processing batch ${batchIndex}: ${eligibleChars.length} eligible characters (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN})`,
+          `[CharacterRankings] Processing batch ${batchIndex}: ${eligibleChars.length} characters fetched (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN} requests, ${charactersProcessedThisRun}/${totalEligibleCount} characters)`,
         );
 
+        let newCharactersInBatch = 0;
         for (const char of eligibleChars) {
+          // Skip if we've already processed this character in this run
+          const charId = String(char._id);
+          if (processedCharacterIds.has(charId)) {
+            logger.debug(`[CharacterRankings] Skipping already processed character ${char.name} (${char.realm})`);
+            continue;
+          }
+
           if (processedCount >= MAX_WCL_REQUESTS_PER_RUN) {
+            logger.info(`[CharacterRankings] Reached request limit (${MAX_WCL_REQUESTS_PER_RUN}), stopping`);
             break;
           }
+
+          processedCharacterIds.add(charId);
+          charactersProcessedThisRun += 1;
+          newCharactersInBatch += 1;
+          logger.info(`[CharacterRankings] Processing character ${charactersProcessedThisRun}/${totalEligibleCount}: ${char.name} (${char.realm})`);
 
           const classSpecMap = ROLE_BY_CLASS_AND_SPEC[char.classID] ?? {};
           const specSlugs = Object.keys(classSpecMap);
           if (specSlugs.length === 0) {
-            logger.warn(
-              `No spec mappings found for classID ${char.classID} (${char.name}, ${char.realm})`,
-            );
+            logger.warn(`[CharacterRankings] No spec mappings found for classID ${char.classID} (${char.name}, ${char.realm})`);
             await Character.findByIdAndUpdate(char._id, {
               nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
             });
@@ -274,24 +285,17 @@ class CharacterService {
 
               processedCount += 1;
 
-              const result = await wclService.query<IWarcraftLogsResponse>(
-                query,
-                variables,
-              );
+              const result = await wclService.query<IWarcraftLogsResponse>(query, variables);
 
               const character = result.characterData?.character;
               if (!character || character.hidden) {
                 await Character.findByIdAndUpdate(char._id, {
                   wclProfileHidden: character?.hidden || false,
                   rankingsAvailable: false,
-                  nextEligibleRefreshAt: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ),
+                  nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 });
                 await Ranking.deleteMany({ characterId: char._id });
-                logger.info(
-                  `No rankings available for ${char.name} (${char.realm})`,
-                );
+                logger.info(`[CharacterRankings]No rankings available for ${char.name} (${char.realm})`);
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 characterUnavailable = true;
                 break;
@@ -306,24 +310,16 @@ class CharacterService {
                   partition,
                   specName: specSlug,
                 });
-                logger.info(
-                  `No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`,
-                );
+                logger.info(`[CharacterRankings] No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 continue;
               }
 
               const allStarsEntries = zoneRankings.allStars ?? [];
               const hasAllStarsSpecField = allStarsEntries.some((a) => a.spec);
-              const filteredAllStars = hasAllStarsSpecField
-                ? allStarsEntries.filter(
-                    (a) => slugifySpecName(a.spec) === specSlug,
-                  )
-                : allStarsEntries;
+              const filteredAllStars = hasAllStarsSpecField ? allStarsEntries.filter((a) => slugifySpecName(a.spec) === specSlug) : allStarsEntries;
 
-              const hasRankingSpecField = zoneRankings.rankings.some(
-                (r) => r.spec,
-              );
+              const hasRankingSpecField = zoneRankings.rankings.some((r) => r.spec);
               const filteredRankings = hasRankingSpecField
                 ? zoneRankings.rankings.filter((r) => {
                     if (!r.spec) return false;
@@ -331,10 +327,7 @@ class CharacterService {
                   })
                 : zoneRankings.rankings;
 
-              if (
-                filteredAllStars.length === 0 &&
-                filteredRankings.length === 0
-              ) {
+              if (filteredAllStars.length === 0 && filteredRankings.length === 0) {
                 await Ranking.deleteMany({
                   characterId: char._id,
                   zoneId: CURRENT_TIER_ID,
@@ -342,9 +335,7 @@ class CharacterService {
                   partition: zoneRankings.partition,
                   specName: specSlug,
                 });
-                logger.info(
-                  `No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`,
-                );
+                logger.info(`[CharacterRankings] No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 continue;
               }
@@ -361,53 +352,31 @@ class CharacterService {
               }).lean();
 
               // Compute current totals from fresh WCL data
-              const freshPoints = filteredAllStars.reduce(
-                (sum, a) => sum + (a.points ?? 0),
-                0,
-              );
-              const freshPossiblePoints = filteredAllStars.reduce(
-                (sum, a) => sum + (a.possiblePoints ?? 0),
-                0,
-              );
+              const freshPoints = filteredAllStars.reduce((sum, a) => sum + (a.points ?? 0), 0);
+              const freshPossiblePoints = filteredAllStars.reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
 
               // Compute stored totals from existing Ranking docs
-              const storedPoints = existingRankings.reduce(
-                (sum, r: any) => sum + (r.allStars?.points ?? 0),
-                0,
-              );
-              const storedPossiblePoints = existingRankings.reduce(
-                (sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0),
-                0,
-              );
+              const storedPoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
+              const storedPossiblePoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
 
-              const hasChanged =
-                existingRankings.length === 0 ||
-                freshPoints !== storedPoints ||
-                freshPossiblePoints !== storedPossiblePoints;
+              const hasChanged = existingRankings.length === 0 || freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
 
               if (!hasChanged) {
-                logger.info(
-                  `No changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`,
-                );
+                logger.info(`[CharacterRankings] No changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 continue;
               }
 
               // Upsert rankings
               for (const r of filteredRankings) {
-                const rankingSpecSlug = r.spec
-                  ? slugifySpecName(r.spec)
-                  : specSlug;
+                const rankingSpecSlug = r.spec ? slugifySpecName(r.spec) : specSlug;
                 if (hasRankingSpecField && rankingSpecSlug !== specSlug) {
                   continue;
                 }
 
                 const role = resolveRole(char.classID, rankingSpecSlug);
-                const normalizedBestSpecName = r.bestSpec
-                  ? slugifySpecName(r.bestSpec)
-                  : rankingSpecSlug;
-                const rankingPartition =
-                  r.allStars?.partition ?? zoneRankings.partition ?? partition;
+                const normalizedBestSpecName = r.bestSpec ? slugifySpecName(r.bestSpec) : rankingSpecSlug;
+                const rankingPartition = r.allStars?.partition ?? zoneRankings.partition ?? partition;
 
                 await Ranking.findOneAndUpdate(
                   {
@@ -449,14 +418,8 @@ class CharacterService {
 
                     allStars: r.allStars
                       ? {
-                          points:
-                            typeof r.allStars.points === "number"
-                              ? r.allStars.points
-                              : 0,
-                          possiblePoints:
-                            typeof r.allStars.possiblePoints === "number"
-                              ? r.allStars.possiblePoints
-                              : 0,
+                          points: typeof r.allStars.points === "number" ? r.allStars.points : 0,
+                          possiblePoints: typeof r.allStars.possiblePoints === "number" ? r.allStars.possiblePoints : 0,
                         }
                       : { points: 0, possiblePoints: 0 },
 
@@ -466,15 +429,10 @@ class CharacterService {
                 );
               }
 
-              logger.info(
-                `Updated rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`,
-              );
+              logger.info(`[CharacterRankings] Updated rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
               await new Promise((resolve) => setTimeout(resolve, 100));
             } catch (error) {
-              logger.error(
-                `Error checking rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]:`,
-                error,
-              );
+              logger.error(`[CharacterRankings] Error checking rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]:`, error);
             }
           }
 
@@ -490,21 +448,29 @@ class CharacterService {
           } else {
             await Character.findByIdAndUpdate(char._id, {
               rankingsAvailable: false,
-              nextEligibleRefreshAt: new Date(
-                Date.now() + 7 * 24 * 60 * 60 * 1000,
-              ),
+              nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             });
           }
         }
+
+        // Break if we didn't process any new characters in this batch (all were duplicates)
+        if (newCharactersInBatch === 0) {
+          logger.info(`[CharacterRankings] All characters in batch were already processed, stopping`);
+          break;
+        }
+
+        // Break if we've processed all eligible characters
+        if (charactersProcessedThisRun >= totalEligibleCount) {
+          logger.info(`[CharacterRankings] Processed all ${totalEligibleCount} eligible characters, stopping`);
+          break;
+        }
       }
 
-      logger.info(
-        `Character ranking check completed: processed ${processedCount} rankings`,
-      );
+      logger.info(`[CharacterRankings] Character ranking check completed: processed ${processedCount} API requests for ${charactersProcessedThisRun} characters`);
 
-      logger.info("Character ranking check and update completed");
+      logger.info("[CharacterRankings] Character ranking check and update completed");
     } catch (error) {
-      logger.error("Error in character ranking check:", error);
+      logger.error("[CharacterRankings] Error in character ranking check:", error);
     }
   }
 
@@ -519,38 +485,19 @@ class CharacterService {
     page?: number;
     characterName?: string;
   }): Promise<CharacterRankingsResponse> {
-    const {
-      zoneId,
-      encounterId,
-      classId,
-      specName,
-      role,
-      partition,
-      limit = 100,
-      page = 1,
-      characterName,
-    } = options;
+    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1, characterName } = options;
 
     const MYTHIC_DIFFICULTY = 5;
     const normalizedSpecName = specName?.trim().toLowerCase();
-    const normalizedRole = role?.toLowerCase() as
-      | "dps"
-      | "healer"
-      | "tank"
-      | undefined;
+    const normalizedRole = role?.toLowerCase() as "dps" | "healer" | "tank" | undefined;
     const normalizedCharacterName = characterName?.trim();
-    const escapeRegex = (input: string) =>
-      input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const nameRegex = normalizedCharacterName
-      ? new RegExp(escapeRegex(normalizedCharacterName), "i")
-      : undefined;
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
 
-    const getGuildMapForRows = async (
-      rows: Array<{ characterId?: any }>,
-    ): Promise<Map<string, { name: string; realm: string } | null>> => {
+    const getGuildMapForRows = async (rows: Array<{ characterId?: any }>): Promise<Map<string, { name: string; realm: string } | null>> => {
       const ids = rows
         .map((row) => row.characterId)
         .filter(Boolean)
@@ -564,10 +511,7 @@ class CharacterService {
         .select("_id guildName guildRealm")
         .lean();
 
-      const guildMap = new Map<
-        string,
-        { name: string; realm: string } | null
-      >();
+      const guildMap = new Map<string, { name: string; realm: string } | null>();
       for (const character of characters) {
         const guildName = character.guildName ?? null;
         const guildRealm = character.guildRealm ?? null;
@@ -644,9 +588,7 @@ class CharacterService {
             totalKills: r.totalKills,
             allStars: r.allStars,
           },
-          updatedAt: r.updatedAt
-            ? new Date(r.updatedAt).toISOString()
-            : undefined,
+          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
         }));
 
         const filteredData = data;
@@ -761,9 +703,7 @@ class CharacterService {
           totalKills: r.totalKills,
           allStars: r.allStars,
         },
-        updatedAt: r.updatedAt
-          ? new Date(r.updatedAt).toISOString()
-          : undefined,
+        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
       }));
 
       const filteredData = data;
@@ -785,8 +725,7 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchBase.classID = classId;
-    if (normalizedSpecName !== undefined)
-      matchBase.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
     if (nameRegex) matchBase.name = nameRegex;
 
@@ -889,9 +828,7 @@ class CharacterService {
           rankPercent: r.rankPercent,
           medianPercent: r.medianPercent,
         },
-        updatedAt: r.updatedAt
-          ? new Date(r.updatedAt).toISOString()
-          : undefined,
+        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
       }));
 
       const filteredData = data;
@@ -913,8 +850,7 @@ class CharacterService {
       difficulty: MYTHIC_DIFFICULTY,
     };
     if (classId !== undefined) matchNoPartition.classID = classId;
-    if (normalizedSpecName !== undefined)
-      matchNoPartition.specName = normalizedSpecName;
+    if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
     if (nameRegex) matchNoPartition.name = nameRegex;
 
