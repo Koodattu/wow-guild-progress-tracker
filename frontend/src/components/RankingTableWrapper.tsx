@@ -27,6 +27,7 @@ interface RankingTableWrapperProps {
     encounterId?: number;
     classId?: number | null;
     specName?: string | null;
+    role?: "dps" | "healer" | "tank" | null;
     partition?: number | null;
     characterName?: string | null;
     page?: number;
@@ -37,6 +38,7 @@ type RankingFilters = {
   encounterId?: number;
   classId?: number | null;
   specName?: string | null;
+  role?: "dps" | "healer" | "tank" | null;
   partition?: number | null;
   characterName?: string | null;
   page?: number;
@@ -448,6 +450,43 @@ function MobileBossScores({ row, bosses, selectedSpec }: { row: CharacterRanking
   );
 }
 
+const ROLE_OPTIONS = [
+  { value: "dps" as const, label: "DPS", icon: "/icons/roleicon_damage.png" },
+  { value: "healer" as const, label: "Healer", icon: "/icons/roleicon_healer.png" },
+  { value: "tank" as const, label: "Tank", icon: "/icons/roleicon_tank.png" },
+];
+
+type RoleSelectorProps = {
+  selectedRole: "dps" | "healer" | "tank" | null;
+  allRolesLabel: string;
+  onChange: (role: "dps" | "healer" | "tank" | null) => void;
+};
+
+function RoleSelector({ selectedRole, allRolesLabel, onChange }: RoleSelectorProps) {
+  const activeOption = ROLE_OPTIONS.find((o) => o.value === selectedRole) ?? null;
+
+  return (
+    <Selector
+      items={ROLE_OPTIONS}
+      selectedItem={activeOption}
+      onChange={(opt) => onChange(opt?.value ?? null)}
+      placeholder={allRolesLabel}
+      renderButton={(opt) => (
+        <div className="flex items-center gap-2">
+          <Image src={opt!.icon} alt={opt!.label} width={22} height={22} />
+          {opt!.label}
+        </div>
+      )}
+      renderOption={(opt) => (
+        <>
+          <Image src={opt.icon} alt={opt.label} width={22} height={22} />
+          {opt.label}
+        </>
+      )}
+    />
+  );
+}
+
 export function RankingTableWrapper({ data, bosses, partitionOptions = [], loading = false, error = null, pagination, onFiltersChange }: RankingTableWrapperProps) {
   const t = useTranslations("characterRankingsPage");
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
@@ -455,6 +494,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
   const [selectedPartition, setSelectedPartition] = useState<PatchPartitionOption | null>(null);
   const [searchValue, setSearchValue] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"dps" | "healer" | "tank" | null>(null);
   const searchInitializedRef = useRef(false);
   const searchDebounceRef = useRef<number | null>(null);
   const applyFiltersRef = useRef<(overrides?: Partial<RankingFilters>) => void>(() => undefined);
@@ -465,13 +505,14 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
         encounterId: selectedBoss?.id,
         classId: selectedClass?.id ?? null,
         specName: selectedSpec,
+        role: selectedRole,
         partition: selectedPartition?.value ?? null,
         characterName: searchValue.trim() || null,
         page: 1,
         ...overrides,
       });
     },
-    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedSpec, searchValue],
+    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedRole, selectedSpec, searchValue],
   );
 
   useEffect(() => {
@@ -531,6 +572,11 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
     applyFilters({ partition: partition?.value ?? null, page: 1 });
   };
 
+  const handleRoleChange = (role: "dps" | "healer" | "tank" | null) => {
+    setSelectedRole(role);
+    applyFilters({ role, page: 1 });
+  };
+
   const handlePageChange = (page: number) => {
     if (searchDebounceRef.current) {
       window.clearTimeout(searchDebounceRef.current);
@@ -559,7 +605,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       {error ? <div className="rounded-md border border-red-500/40 bg-red-950/30 px-4 py-3 text-red-200">{error}</div> : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
           {/* Boss Selector */}
           <Selector
             items={bosses}
@@ -589,6 +635,9 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
             onSpecSelect={handleSpecSelect}
             onClear={clearClassAndSpec}
           />
+
+          {/* Role Selector */}
+          <RoleSelector selectedRole={selectedRole} allRolesLabel={t("allRoles")} onChange={handleRoleChange} />
 
           {/* Character Search */}
           <div className="w-full">

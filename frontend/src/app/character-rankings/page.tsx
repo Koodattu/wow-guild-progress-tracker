@@ -10,7 +10,7 @@ type Filters = {
   encounterId?: number;
   classId?: number | null;
   specName?: string | null;
-  role?: "dps" | "healer" | "tank";
+  role?: "dps" | "healer" | "tank" | null;
   page?: number;
   limit?: number;
   partition?: number | null;
@@ -30,9 +30,7 @@ function buildQuery(filters: Filters) {
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
-  const [partitionOptions, setPartitionOptions] = useState(
-    getPatchPartitionOptions(),
-  );
+  const [partitionOptions, setPartitionOptions] = useState(getPatchPartitionOptions());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -57,9 +55,7 @@ export default function CharacterRankingsPage() {
         if (!currentRaidId) return;
         const bossesData = await api.getBosses(currentRaidId);
         const raidData = await api.getRaid(currentRaidId);
-        const partitionData = getPatchPartitionOptions(
-          raidData.partitions || [],
-        );
+        const partitionData = getPatchPartitionOptions(raidData.partitions || []);
         if (!isActive) return;
         setBosses(bossesData);
         setPartitionOptions(partitionData);
