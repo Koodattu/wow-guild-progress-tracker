@@ -857,6 +857,7 @@ export type CharacterRankingRow = {
     encounterId: number;
     points: number;
     rankPercent: number;
+    specName?: string;
   }>;
 };
 
@@ -879,6 +880,8 @@ export type ColumnDef<T> = {
   width?: string;
   /** When true the column shrinks to its content width and never wraps. */
   shrink?: boolean;
+  /** Horizontal alignment of cell content. Defaults to "left". */
+  align?: "left" | "center" | "right";
   sortable?: boolean;
 };
 

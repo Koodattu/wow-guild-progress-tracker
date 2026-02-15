@@ -35,7 +35,7 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
                 {columns.map((column, colIndex) => (
                   <th
                     key={column.id}
-                    className={`py-3 px-4 text-left font-semibold text-gray-200 ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""}`}
+                    className={`py-3 px-4 text-center font-semibold text-gray-200 ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""}`}
                     style={column.shrink ? { width: "1%", whiteSpace: "nowrap" } : undefined}
                   >
                     {column.header}
@@ -82,7 +82,7 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
               {columns.map((column, colIndex) => (
                 <th
                   key={column.id}
-                  className={`py-3 px-4 text-left font-semibold text-gray-200 ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""}`}
+                  className={`py-3 px-4 text-center font-semibold text-gray-200 ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""}`}
                   style={column.shrink ? { width: "1%", whiteSpace: "nowrap" } : undefined}
                 >
                   {column.header}
@@ -104,15 +104,13 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
                   <tr key={index} className={`border-b border-gray-700 transition-colors hover:bg-gray-800 ${index % 2 === 0 ? "bg-gray-950" : "bg-gray-900"}`}>
                     {columns.map((column, colIndex) => {
                       const isRankColumn = column.id === "rank";
-                      const isMetricColumn = column.id === "metric";
                       const rankStyle = isRankColumn ? getRankColor(actualRank, totalItems) : {};
+                      const alignClass = column.align === "right" ? "text-right" : column.align === "left" ? "text-left" : "text-center";
 
                       return (
                         <td
                           key={column.id}
-                          className={`py-3 px-4 font-bold ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""} ${
-                            isRankColumn ? "font-bold text-right" : ""
-                          } ${isMetricColumn ? "font-bold" : ""}`}
+                          className={`py-3 px-4 font-bold ${alignClass} ${colIndex !== columns.length - 1 ? "border-r border-gray-700" : ""} ${column.width || ""}`}
                           style={column.shrink ? { ...rankStyle, width: "1%", whiteSpace: "nowrap" } : rankStyle}
                         >
                           {column.accessor ? column.accessor(row, index) : null}

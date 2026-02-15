@@ -296,6 +296,7 @@ type BuildRankingColumnsOptions = {
   bosses: Boss[];
   currentPage: number;
   pageSize: number;
+  selectedSpec: string | null;
   t: (key: string) => string;
 };
 
@@ -307,7 +308,7 @@ function formatRealmSlug(realm: string) {
     .join(" ");
 }
 
-function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
 
@@ -322,6 +323,7 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, t }:
       id: "character",
       header: t("columnName"),
       shrink: true,
+      align: "left",
       accessor: (row: CharacterRankingRow) => {
         const realm = row.character.realm;
         const name = row.character.name;
@@ -391,16 +393,23 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, t }:
       columns.push({
         id: `boss-${boss.id}`,
         header: (
-          <span title={boss.name}>
+          <div className="flex justify-center" title={boss.name}>
             <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={24} height={24} className="rounded" />
-          </span>
+          </div>
         ),
         shrink: true,
         accessor: (row: CharacterRankingRow) => {
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
           if (!bossScore || !bossScore.rankPercent) return <span className="text-gray-600">—</span>;
           const pct = Math.round(bossScore.rankPercent);
-          return <span style={{ color: getParseColor(pct), fontWeight: 700 }}>{pct}</span>;
+          const showSpecIcon = !selectedSpec && bossScore.specName;
+          const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
+          return (
+            <span className="inline-flex items-center gap-1" style={{ color: getParseColor(pct), fontWeight: 700 }}>
+              {pct}
+              {specIcon ? <IconImage iconFilename={specIcon} alt={bossScore.specName!} width={16} height={16} style={{ objectFit: "cover" }} /> : null}
+            </span>
+          );
         },
       });
     }
@@ -508,9 +517,10 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       bosses,
       currentPage,
       pageSize,
+      selectedSpec,
       t,
     });
-  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, t]);
+  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, t]);
 
   const title = selectedBoss ? `${t("titleForBoss")} ${selectedBoss.name}` : t("titleAllStars");
 
