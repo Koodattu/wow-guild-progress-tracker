@@ -50,10 +50,7 @@ router.get("/", async (req: Request, res: Response) => {
     if (limit !== undefined && (!Number.isFinite(limit) || limit < 1)) {
       return res.status(400).json({ error: "Invalid limit" });
     }
-    if (
-      partition !== undefined &&
-      (!Number.isFinite(partition) || partition < 1)
-    ) {
+    if (partition !== undefined && (!Number.isFinite(partition) || partition < 1)) {
       return res.status(400).json({ error: "Invalid partition" });
     }
     if (role !== undefined && !ALLOWED_ROLES.has(role)) {
@@ -77,7 +74,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.json(rankings);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch character rankings" });
+    res.status(500).json({ error: `Failed to fetch character rankings: ${error instanceof Error ? error.message : "Unknown error"}` });
   }
 });
 

@@ -814,6 +814,7 @@ export interface UpdatePickemInput {
 }
 
 export type CharacterRankingRow = {
+  rank: number;
   character: {
     wclCanonicalCharacterId: number;
     name: string;

@@ -108,6 +108,7 @@ function toSpecAlias(specSlug: string): string {
 }
 
 export type CharacterRankingRow = {
+  rank: number;
   character: {
     wclCanonicalCharacterId: number;
     name: string;
@@ -152,6 +153,7 @@ export type CharacterRankingsResponse = {
   data: CharacterRankingRow[];
   pagination: {
     totalItems: number;
+    totalRankedItems: number;
     totalPages: number;
     currentPage: number;
     pageSize: number;
@@ -679,24 +681,51 @@ class CharacterService {
       if (classId !== undefined) query.classID = classId;
       if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
       if (normalizedRole !== undefined) query.role = normalizedRole;
-      if (nameRegex) query.name = nameRegex;
 
       if (partition !== undefined) {
         const filteredQuery = { ...query, bestAmount: { $ne: 0 } };
-        const totalItems = await Ranking.countDocuments(filteredQuery);
-        const rows = await Ranking.find(filteredQuery)
-          .select(
-            "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
-              "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
-          )
-          .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
-          .skip(skip)
-          .limit(safeLimit)
-          .lean();
+        const totalRankedItems = await Ranking.countDocuments(filteredQuery);
+
+        let rows: any[];
+        let totalItems: number;
+
+        if (nameRegex) {
+          const result = await Ranking.aggregate([
+            { $match: filteredQuery },
+            { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
+            {
+              $setWindowFields: {
+                sortBy: { bestAmount: -1 },
+                output: { rank: { $denseRank: {} } },
+              },
+            },
+            { $match: { name: nameRegex } },
+            {
+              $facet: {
+                data: [{ $skip: skip }, { $limit: safeLimit }],
+                count: [{ $count: "total" }],
+              },
+            },
+          ]);
+          rows = result[0]?.data ?? [];
+          totalItems = result[0]?.count?.[0]?.total ?? 0;
+        } else {
+          totalItems = totalRankedItems;
+          rows = await Ranking.find(filteredQuery)
+            .select(
+              "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
+                "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
+            )
+            .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
+            .skip(skip)
+            .limit(safeLimit)
+            .lean();
+        }
 
         const guildMap = await getGuildMapForRows(rows);
 
-        const data = rows.map((r: any) => ({
+        const data = rows.map((r: any, i: number) => ({
+          rank: r.rank ?? skip + i + 1,
           character: {
             wclCanonicalCharacterId: r.wclCanonicalCharacterId,
             name: r.name,
@@ -731,12 +760,11 @@ class CharacterService {
           updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
         }));
 
-        const filteredData = data;
-
         return {
-          data: filteredData,
+          data,
           pagination: {
             totalItems,
+            totalRankedItems,
             totalPages: Math.ceil(totalItems / safeLimit),
             currentPage: Math.max(page, 1),
             pageSize: safeLimit,
@@ -765,9 +793,9 @@ class CharacterService {
         { $count: "total" },
       ]);
 
-      const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
+      const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-      const agg = await Ranking.aggregate([
+      const pipeline: any[] = [
         { $match: query },
         {
           $sort: {
@@ -805,13 +833,45 @@ class CharacterService {
         },
         { $match: { bestAmount: { $ne: 0 } } },
         { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, name: 1 } },
-        { $skip: skip },
-        { $limit: safeLimit },
-      ]);
+      ];
+
+      let totalItems: number;
+
+      if (nameRegex) {
+        pipeline.push(
+          {
+            $setWindowFields: {
+              sortBy: { bestAmount: -1 },
+              output: { rank: { $denseRank: {} } },
+            },
+          },
+          { $match: { name: nameRegex } },
+          {
+            $facet: {
+              data: [{ $skip: skip }, { $limit: safeLimit }],
+              count: [{ $count: "total" }],
+            },
+          },
+        );
+      } else {
+        pipeline.push({ $skip: skip }, { $limit: safeLimit });
+      }
+
+      const aggResult = await Ranking.aggregate(pipeline);
+
+      let agg: any[];
+      if (nameRegex) {
+        agg = aggResult[0]?.data ?? [];
+        totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
+      } else {
+        agg = aggResult;
+        totalItems = totalRankedItems;
+      }
 
       const guildMap = await getGuildMapForRows(agg);
 
-      const data = agg.map((r: any) => ({
+      const data = agg.map((r: any, i: number) => ({
+        rank: r.rank ?? skip + i + 1,
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -846,12 +906,11 @@ class CharacterService {
         updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
       }));
 
-      const filteredData = data;
-
       return {
-        data: filteredData,
+        data,
         pagination: {
           totalItems,
+          totalRankedItems,
           totalPages: Math.ceil(totalItems / safeLimit),
           currentPage: Math.max(page, 1),
           pageSize: safeLimit,
@@ -867,7 +926,6 @@ class CharacterService {
     if (classId !== undefined) matchBase.classID = classId;
     if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
-    if (nameRegex) matchBase.name = nameRegex;
 
     // Partition-filtered view: only consider rows with partition = X
     if (partition !== undefined) {
@@ -893,10 +951,10 @@ class CharacterService {
         { $count: "total" },
       ]);
 
-      const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
+      const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
       // Group by character and sum allStars across bosses, picking best per encounter
-      const agg = await Ranking.aggregate([
+      const pipeline: any[] = [
         { $match: matchBase },
         { $sort: { "allStars.points": -1 } },
         {
@@ -937,13 +995,45 @@ class CharacterService {
         },
         { $match: { points: { $gt: 0 } } },
         { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-        { $skip: skip },
-        { $limit: safeLimit },
-      ]);
+      ];
+
+      let totalItems: number;
+
+      if (nameRegex) {
+        pipeline.push(
+          {
+            $setWindowFields: {
+              sortBy: { points: -1 },
+              output: { rank: { $denseRank: {} } },
+            },
+          },
+          { $match: { name: nameRegex } },
+          {
+            $facet: {
+              data: [{ $skip: skip }, { $limit: safeLimit }],
+              count: [{ $count: "total" }],
+            },
+          },
+        );
+      } else {
+        pipeline.push({ $skip: skip }, { $limit: safeLimit });
+      }
+
+      const aggResult = await Ranking.aggregate(pipeline);
+
+      let agg: any[];
+      if (nameRegex) {
+        agg = aggResult[0]?.data ?? [];
+        totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
+      } else {
+        agg = aggResult;
+        totalItems = totalRankedItems;
+      }
 
       const guildMap = await getGuildMapForRows(agg);
 
-      const data = agg.map((r: any) => ({
+      const data = agg.map((r: any, i: number) => ({
+        rank: r.rank ?? skip + i + 1,
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -974,12 +1064,11 @@ class CharacterService {
         bossScores: r.bossScores ?? [],
       }));
 
-      const filteredData = data;
-
       return {
-        data: filteredData,
+        data,
         pagination: {
           totalItems,
+          totalRankedItems,
           totalPages: Math.ceil(totalItems / safeLimit),
           currentPage: Math.max(page, 1),
           pageSize: safeLimit,
@@ -995,7 +1084,6 @@ class CharacterService {
     if (classId !== undefined) matchNoPartition.classID = classId;
     if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
-    if (nameRegex) matchNoPartition.name = nameRegex;
 
     // Count unique characters first
     const countAgg = await Ranking.aggregate([
@@ -1010,11 +1098,11 @@ class CharacterService {
       { $count: "total" },
     ]);
 
-    const totalItems = countAgg.length > 0 ? countAgg[0].total : 0;
+    const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
     // For each character+encounter combo, pick the BEST row across partitions (max allStars.points)
     // Then group by character and sum the best per-boss values
-    const agg = await Ranking.aggregate([
+    const pipeline: any[] = [
       { $match: matchNoPartition },
 
       // Sort by allStars.points descending to pick the best partition per encounter
@@ -1065,13 +1153,45 @@ class CharacterService {
       { $match: { points: { $gt: 0 } } },
 
       { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-      { $skip: skip },
-      { $limit: safeLimit },
-    ]);
+    ];
+
+    let totalItems: number;
+
+    if (nameRegex) {
+      pipeline.push(
+        {
+          $setWindowFields: {
+            sortBy: { points: -1 },
+            output: { rank: { $denseRank: {} } },
+          },
+        },
+        { $match: { name: nameRegex } },
+        {
+          $facet: {
+            data: [{ $skip: skip }, { $limit: safeLimit }],
+            count: [{ $count: "total" }],
+          },
+        },
+      );
+    } else {
+      pipeline.push({ $skip: skip }, { $limit: safeLimit });
+    }
+
+    const aggResult = await Ranking.aggregate(pipeline);
+
+    let agg: any[];
+    if (nameRegex) {
+      agg = aggResult[0]?.data ?? [];
+      totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
+    } else {
+      agg = aggResult;
+      totalItems = totalRankedItems;
+    }
 
     const guildMap = await getGuildMapForRows(agg);
 
-    const data = agg.map((r: any) => ({
+    const data = agg.map((r: any, i: number) => ({
+      rank: r.rank ?? skip + i + 1,
       character: {
         wclCanonicalCharacterId: r.wclCanonicalCharacterId,
         name: r.name,
@@ -1101,12 +1221,11 @@ class CharacterService {
       bossScores: r.bossScores ?? [],
     }));
 
-    const filteredData = data;
-
     return {
-      data: filteredData,
+      data,
       pagination: {
         totalItems,
+        totalRankedItems,
         totalPages: Math.ceil(totalItems / safeLimit),
         currentPage: Math.max(page, 1),
         pageSize: safeLimit,

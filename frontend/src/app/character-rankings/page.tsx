@@ -36,6 +36,7 @@ export default function CharacterRankingsPage() {
   const requestIdRef = useRef(0);
   const [pagination, setPagination] = useState({
     totalItems: 0,
+    totalRankedItems: 0,
     totalPages: 0,
     currentPage: 1,
     pageSize: 100,

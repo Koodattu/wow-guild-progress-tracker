@@ -19,6 +19,7 @@ interface RankingTableWrapperProps {
   error?: string | null;
   pagination?: {
     totalItems: number;
+    totalRankedItems?: number;
     totalPages: number;
     currentPage: number;
     pageSize: number;
@@ -318,7 +319,7 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
     {
       id: "rank",
       header: t("columnRank"),
-      accessor: (_row: CharacterRankingRow, index: number) => (currentPage - 1) * pageSize + index + 1,
+      accessor: (row: CharacterRankingRow) => row.rank,
       shrink: true,
     },
     {
@@ -669,6 +670,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
         loading={loading}
         pagination={pagination}
         onPageChange={handlePageChange}
+        getRank={(row: CharacterRankingRow) => row.rank}
         expandedContent={!selectedBoss && bosses.length > 0 ? (row: CharacterRankingRow) => <MobileBossScores row={row} bosses={bosses} selectedSpec={selectedSpec} /> : undefined}
       />
     </div>

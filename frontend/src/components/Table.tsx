@@ -12,11 +12,14 @@ interface TableProps<T> {
   skeletonRowCount?: number;
   pagination?: {
     totalItems: number;
+    totalRankedItems?: number;
     totalPages: number;
     currentPage: number;
     pageSize: number;
   };
   onPageChange?: (page: number) => void;
+  /** Extract the server-provided rank from a row. When provided, used for rank coloring instead of positional index. */
+  getRank?: (row: T, index: number) => number;
   /** When provided, rows become expandable on mobile. A chevron column is added (visible only below md). */
   expandedContent?: (row: T, index: number) => ReactNode;
 }
@@ -37,7 +40,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export function Table<T>({ columns, data, loading = false, skeletonRowCount, pagination, onPageChange, expandedContent }: TableProps<T>) {
+export function Table<T>({ columns, data, loading = false, skeletonRowCount, pagination, onPageChange, getRank, expandedContent }: TableProps<T>) {
   const t = useTranslations("table");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const currentPage = pagination?.currentPage ?? 1;
@@ -138,7 +141,8 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
               </tr>
             ) : (
               data.map((row, index) => {
-                const actualRank = (currentPage - 1) * (pagination?.pageSize ?? 50) + index + 1;
+                const actualRank = getRank ? getRank(row, index) : (currentPage - 1) * (pagination?.pageSize ?? 50) + index + 1;
+                const rankColorTotal = pagination?.totalRankedItems ?? totalItems;
                 const isExpanded = expandedRows.has(index);
                 const rowBg = index % 2 === 0 ? "bg-gray-950" : "bg-gray-900";
 
@@ -150,7 +154,7 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
                     >
                       {columns.map((column, colIndex) => {
                         const isRankColumn = column.id === "rank";
-                        const rankStyle = isRankColumn ? getRankColor(actualRank, totalItems) : {};
+                        const rankStyle = isRankColumn ? getRankColor(actualRank, rankColorTotal) : {};
                         const alignClass = column.align === "right" ? "text-right" : column.align === "left" ? "text-left" : "text-center";
 
                         return (
