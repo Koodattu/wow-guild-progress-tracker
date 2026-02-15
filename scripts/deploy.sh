@@ -100,6 +100,13 @@ deploy() {
 
     cd "$PROJECT_DIR"
 
+    # Check if we're on main branch
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$CURRENT_BRANCH" != "main" ]; then
+        log "Not on main branch (current: $CURRENT_BRANCH). Skipping deployment."
+        exit 0
+    fi
+
     # Fetch latest changes
     log "Fetching latest changes..."
     git fetch "$REPO_URL" main 2>&1 || { error "Failed to fetch"; exit 1; }

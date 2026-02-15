@@ -791,6 +791,7 @@ class CharacterService {
             rankPercent: { $max: "$rankPercent" },
             medianPercent: { $max: "$medianPercent" },
             updatedAt: { $max: "$updatedAt" },
+            bossScores: { $push: { encounterId: "$_id.encounterId", points: "$points", rankPercent: "$rankPercent" } },
           },
         },
         { $match: { points: { $gt: 0 } } },
@@ -829,6 +830,7 @@ class CharacterService {
           medianPercent: r.medianPercent,
         },
         updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+        bossScores: r.bossScores ?? [],
       }));
 
       const filteredData = data;
@@ -915,6 +917,7 @@ class CharacterService {
           rankPercent: { $max: "$rankPercent" },
           medianPercent: { $max: "$medianPercent" },
           updatedAt: { $max: "$updatedAt" },
+          bossScores: { $push: { encounterId: "$_id.encounterId", points: "$points", rankPercent: "$rankPercent" } },
         },
       },
       { $match: { points: { $gt: 0 } } },
@@ -953,6 +956,7 @@ class CharacterService {
         medianPercent: r.medianPercent,
       },
       updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
+      bossScores: r.bossScores ?? [],
     }));
 
     const filteredData = data;

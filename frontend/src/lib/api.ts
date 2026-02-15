@@ -67,6 +67,9 @@ import {
   CreateGuildResponse,
   DeleteGuildPreviewResponse,
   DeleteGuildResponse,
+  UpdateGuildInput,
+  UpdateGuildResponse,
+  DeleteCharacterResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -620,6 +623,40 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to delete guild");
+    }
+    return response.json();
+  },
+
+  async updateAdminGuild(
+    guildId: string,
+    input: UpdateGuildInput,
+  ): Promise<UpdateGuildResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to update guild");
+    }
+    return response.json();
+  },
+
+  async deleteAdminCharacter(
+    characterId: string,
+  ): Promise<DeleteCharacterResponse> {
+    const response = await fetch(
+      `${API_URL}/api/admin/characters/${characterId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete character");
     }
     return response.json();
   },

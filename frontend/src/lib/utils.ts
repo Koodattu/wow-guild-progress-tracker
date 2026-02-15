@@ -14,16 +14,11 @@ export function formatTime(seconds: number): string {
 }
 
 // Get the full icon URL from filename
-export function getIconUrl(
-  iconFilename: string | undefined,
-): string | undefined {
+export function getIconUrl(iconFilename: string | undefined): string | undefined {
   if (!iconFilename) return undefined;
 
   // If it's already a full URL (for backwards compatibility), return as-is
-  if (
-    iconFilename.startsWith("http://") ||
-    iconFilename.startsWith("https://")
-  ) {
+  if (iconFilename.startsWith("http://") || iconFilename.startsWith("https://")) {
     return iconFilename;
   }
 
@@ -139,10 +134,7 @@ export function getWorldRankColor(color: string | undefined): string {
   }
 }
 
-export function getRankColor(
-  rank: number,
-  totalItems: number,
-): { color: string } {
+export function getRankColor(rank: number, totalItems: number): { color: string } {
   if (rank === 1) {
     return { color: "var(--rank-gold)" }; // Gold for first place
   }
@@ -161,6 +153,17 @@ export function getRankColor(
   if (rank <= top75Percent) return { color: "var(--rank-green)" }; // Top 75%
   return { color: "var(--rank-gray)" }; // Rest
 }
+
+/** WarcraftLogs-style parse color based on percentile (0–100). */
+export function getParseColor(percent: number): string {
+  if (percent >= 99) return "var(--rank-gold)"; // Gold parse
+  if (percent >= 95) return "var(--rank-pink)"; // Pink parse
+  if (percent >= 75) return "var(--rank-orange)"; // Orange parse
+  if (percent >= 50) return "var(--rank-purple)"; // Purple parse
+  if (percent >= 25) return "var(--rank-blue)"; // Blue parse
+  return "var(--rank-gray)"; // Gray parse
+}
+
 // Get Tailwind color class for leaderboard rank (1-5 orange, 6-20 purple, 21-50 blue, rest green)
 export function getLeaderboardRankColor(rank: number): string {
   if (rank <= 5) return "text-orange-500"; // Legendary
@@ -172,9 +175,7 @@ export function getLeaderboardRankColor(rank: number): string {
 export function formatSpecName(specName: string): string {
   const normalized = specName.replace(/-/g, " ").trim();
   if (!normalized) return "";
-  return normalized
-    .toLowerCase()
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+  return normalized.toLowerCase().replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 export function normalizeSpecNameForApi(specName: string): string {
@@ -184,11 +185,7 @@ export function normalizeSpecNameForApi(specName: string): string {
 // Format guild name with parent guild if applicable
 // Format: parent_guild (guild_name) - server_name
 // Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)
-export function formatGuildName(
-  guildName: string,
-  realm: string,
-  parentGuild?: string,
-): string {
+export function formatGuildName(guildName: string, realm: string, parentGuild?: string): string {
   if (parentGuild) {
     return `${parentGuild} (${guildName}) - ${realm}`;
   }
@@ -203,14 +200,8 @@ export function getGuildProfileUrl(realm: string, name: string): string {
 }
 
 // Generate Raider.IO guild URL
-export function getRaiderIOGuildUrl(
-  region: string,
-  realm: string,
-  guildName: string,
-): string {
-  const encodedRealm = encodeURIComponent(
-    realm.toLowerCase().replace(/\s+/g, "-"),
-  );
+export function getRaiderIOGuildUrl(region: string, realm: string, guildName: string): string {
+  const encodedRealm = encodeURIComponent(realm.toLowerCase().replace(/\s+/g, "-"));
   const encodedGuildName = encodeURIComponent(guildName);
   return `https://raider.io/guilds/${region.toLowerCase()}/${encodedRealm}/${encodedGuildName}`;
 }
@@ -422,9 +413,7 @@ export function getClassInfoById(classId: number): {
   iconUrl: string;
 } {
   const classInfo = CLASSES.find((c) => c.id === classId);
-  return classInfo
-    ? { name: classInfo.name, iconUrl: classInfo.iconUrl + ".jpg" }
-    : { name: "Unknown", iconUrl: "classicon_unknown.jpg" };
+  return classInfo ? { name: classInfo.name, iconUrl: classInfo.iconUrl + ".jpg" } : { name: "Unknown", iconUrl: "classicon_unknown.jpg" };
 }
 
 export function getClassById(classId: number): ClassInfo | undefined {
@@ -435,17 +424,11 @@ export function getAllClasses(): ClassInfo[] {
   return CLASSES;
 }
 
-export function getSpecIconUrl(
-  classId: number,
-  specName: string,
-): string | undefined {
+export function getSpecIconUrl(classId: number, specName: string): string | undefined {
   const classInfo = getClassInfoById(classId);
   if (!classInfo) return undefined;
 
   const normalizedSpecName = normalizeSpecNameForApi(specName);
-  const specIconFilename = classInfo.iconUrl.replace(
-    ".jpg",
-    `_${normalizedSpecName}.jpg`,
-  );
+  const specIconFilename = classInfo.iconUrl.replace(".jpg", `_${normalizedSpecName}.jpg`);
   return specIconFilename;
 }

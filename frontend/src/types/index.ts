@@ -853,6 +853,11 @@ export type CharacterRankingRow = {
     totalKills?: number;
   };
   updatedAt?: string;
+  bossScores?: Array<{
+    encounterId: number;
+    points: number;
+    rankPercent: number;
+  }>;
 };
 
 export type Spec = {
@@ -869,9 +874,11 @@ export type ClassInfo = {
 
 export type ColumnDef<T> = {
   id: string;
-  header: string;
+  header: ReactNode;
   accessor?: (row: T, index: number) => ReactNode;
-  width?: string; // e.g., "w-1/6"
+  width?: string;
+  /** When true the column shrinks to its content width and never wraps. */
+  shrink?: boolean;
   sortable?: boolean;
 };
 
@@ -976,20 +983,9 @@ export interface RaidAnalyticsListItem {
 // RATE LIMIT & PROCESSING QUEUE TYPES
 // ============================================================
 
-export type ProcessingStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "failed"
-  | "paused";
+export type ProcessingStatus = "pending" | "in_progress" | "completed" | "failed" | "paused";
 
-export type ErrorType =
-  | "guild_not_found"
-  | "rate_limited"
-  | "network_error"
-  | "api_error"
-  | "database_error"
-  | "unknown";
+export type ErrorType = "guild_not_found" | "rate_limited" | "network_error" | "api_error" | "database_error" | "unknown";
 
 export interface RateLimitStatus {
   pointsUsed: number;
@@ -1125,6 +1121,7 @@ export interface AdminGuildDetail {
   faction?: string;
   warcraftlogsId?: number;
   parentGuild?: string;
+  streamers?: Array<{ channelName: string; isLive?: boolean; isPlayingWoW?: boolean }>;
   isCurrentlyRaiding: boolean;
   activityStatus?: "active" | "inactive";
   lastFetched?: string;
@@ -1237,5 +1234,40 @@ export interface DeleteGuildResponse {
     events: number;
     queueItems: number;
     tierListEntriesModified: number;
+  };
+}
+
+// Update Guild Input
+export interface UpdateGuildInput {
+  parent_guild?: string | null;
+  streamers?: string[];
+  activityStatus?: "active" | "inactive";
+}
+
+// Update Guild Response
+export interface UpdateGuildResponse {
+  success: boolean;
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+    region: string;
+    parent_guild?: string;
+    streamers?: Array<{ channelName: string }>;
+    activityStatus?: "active" | "inactive";
+  };
+}
+
+// Delete Character Response
+export interface DeleteCharacterResponse {
+  success: boolean;
+  message: string;
+  deleted: {
+    character: {
+      id: string;
+      name: string;
+      realm: string;
+    };
+    rankings: number;
   };
 }

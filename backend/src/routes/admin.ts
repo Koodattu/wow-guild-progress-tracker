@@ -7,6 +7,7 @@ import Fight from "../models/Fight";
 import Event from "../models/Event";
 import TierList from "../models/TierList";
 import Character from "../models/Character";
+import Ranking from "../models/Ranking";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import { CLASSES } from "../config/classes";
 import pickemService from "../services/pickem.service";
@@ -263,6 +264,7 @@ router.get("/guilds/:guildId", async (req: Request, res: Response) => {
       faction: guild.faction,
       warcraftlogsId: guild.warcraftlogsId,
       parentGuild: guild.parent_guild,
+      streamers: guild.streamers || [],
       isCurrentlyRaiding: guild.isCurrentlyRaiding,
       activityStatus: guild.activityStatus,
       lastFetched: guild.lastFetched,
@@ -703,6 +705,70 @@ router.delete("/guilds/:guildId", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error deleting guild:", error);
     res.status(500).json({ error: "Failed to delete guild" });
+  }
+});
+
+// Update a guild
+router.put("/guilds/:guildId", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+    const { parent_guild, streamers, activityStatus } = req.body;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Validate and apply optional fields
+    if (parent_guild !== undefined) {
+      if (parent_guild !== null && typeof parent_guild !== "string") {
+        return res.status(400).json({ error: "Parent guild must be a string or null" });
+      }
+      guild.parent_guild = parent_guild?.trim() || undefined;
+    }
+
+    if (streamers !== undefined) {
+      if (!Array.isArray(streamers)) {
+        return res.status(400).json({ error: "Streamers must be an array of channel names" });
+      }
+      if (!streamers.every((s: unknown) => typeof s === "string")) {
+        return res.status(400).json({ error: "All streamer entries must be strings" });
+      }
+      guild.streamers = streamers.map((channelName: string) => ({
+        channelName: channelName.trim().toLowerCase(),
+        isLive: false,
+        isPlayingWoW: false,
+        gameName: undefined,
+        lastChecked: undefined,
+      }));
+    }
+
+    if (activityStatus !== undefined) {
+      if (!['active', 'inactive'].includes(activityStatus)) {
+        return res.status(400).json({ error: "Activity status must be 'active' or 'inactive'" });
+      }
+      guild.activityStatus = activityStatus;
+    }
+
+    await guild.save();
+
+    logger.info(`Admin updated guild: ${guild.name}-${guild.realm} (ID: ${guildId})`);
+
+    res.json({
+      success: true,
+      guild: {
+        id: guild._id.toString(),
+        name: guild.name,
+        realm: guild.realm,
+        region: guild.region,
+        parent_guild: guild.parent_guild,
+        streamers: guild.streamers,
+        activityStatus: guild.activityStatus,
+      },
+    });
+  } catch (error) {
+    logger.error("Error updating guild:", error);
+    res.status(500).json({ error: "Failed to update guild" });
   }
 });
 
@@ -1838,6 +1904,41 @@ router.get("/characters/stats", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error fetching character stats:", error);
     res.status(500).json({ error: "Failed to fetch character stats" });
+  }
+});
+
+// Delete a character and its rankings
+router.delete("/characters/:characterId", async (req: Request, res: Response) => {
+  try {
+    const { characterId } = req.params;
+
+    const character = await Character.findById(characterId);
+    if (!character) {
+      return res.status(404).json({ error: "Character not found" });
+    }
+
+    const characterName = character.name;
+    const characterRealm = character.realm;
+
+    const rankingResult = await Ranking.deleteMany({ characterId: character._id });
+    await Character.deleteOne({ _id: character._id });
+
+    logger.info(
+      `Admin deleted character: ${characterName}-${characterRealm} (ID: ${characterId}). ` +
+        `Removed: ${rankingResult.deletedCount} rankings`,
+    );
+
+    res.json({
+      success: true,
+      message: `Character ${characterName}-${characterRealm} and associated data deleted`,
+      deleted: {
+        character: { id: characterId, name: characterName, realm: characterRealm },
+        rankings: rankingResult.deletedCount,
+      },
+    });
+  } catch (error) {
+    logger.error("Error deleting character:", error);
+    res.status(500).json({ error: "Failed to delete character" });
   }
 });
 

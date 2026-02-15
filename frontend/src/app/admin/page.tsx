@@ -92,6 +92,7 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Overview data
@@ -163,6 +164,16 @@ export default function AdminPage() {
   });
   const [addGuildLoading, setAddGuildLoading] = useState(false);
 
+  // Edit Guild modal
+  const [showEditGuildModal, setShowEditGuildModal] = useState(false);
+  const [editGuildForm, setEditGuildForm] = useState({
+    parent_guild: "",
+    streamers: "",
+    activityStatus: "active" as "active" | "inactive",
+  });
+  const [editGuildLoading, setEditGuildLoading] = useState(false);
+  const [editGuildTarget, setEditGuildTarget] = useState<{ id: string; name: string } | null>(null);
+
   // Delete Guild modal
   const [showDeleteGuildModal, setShowDeleteGuildModal] = useState(false);
   const [deleteGuildPreview, setDeleteGuildPreview] = useState<DeleteGuildPreviewResponse | null>(null);
@@ -215,7 +226,11 @@ export default function AdminPage() {
     if (!user?.isAdmin) return;
 
     const fetchData = async () => {
-      setLoading(true);
+      const isInitialLoad = !overview && !users.length && !guilds.length && !characters.length && !pickems.length && !rateLimitStatus;
+      if (isInitialLoad) {
+        setLoading(true);
+      }
+      setTableLoading(true);
       setError(null);
 
       try {
@@ -284,6 +299,7 @@ export default function AdminPage() {
         setError("Failed to load data");
       } finally {
         setLoading(false);
+        setTableLoading(false);
       }
     };
 
@@ -293,10 +309,12 @@ export default function AdminPage() {
   // Debounce guild search input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setGuildSearchDebounced(guildSearch);
-      if (guildSearch !== guildSearchDebounced) {
-        setGuildsPage(1);
-      }
+      setGuildSearchDebounced((prev) => {
+        if (prev !== guildSearch) {
+          setGuildsPage(1);
+        }
+        return guildSearch;
+      });
     }, 300);
     return () => clearTimeout(timer);
   }, [guildSearch]);
@@ -304,10 +322,12 @@ export default function AdminPage() {
   // Debounce character search input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setCharacterSearchDebounced(characterSearch);
-      if (characterSearch !== characterSearchDebounced) {
-        setCharactersPage(1);
-      }
+      setCharacterSearchDebounced((prev) => {
+        if (prev !== characterSearch) {
+          setCharactersPage(1);
+        }
+        return characterSearch;
+      });
     }, 300);
     return () => clearTimeout(timer);
   }, [characterSearch]);
@@ -547,6 +567,54 @@ export default function AdminPage() {
     }
   };
 
+  // Handler for opening edit guild modal
+  const handleEditGuildClick = () => {
+    if (!selectedGuild) return;
+    setEditGuildTarget({ id: selectedGuild.id, name: selectedGuild.name });
+    setEditGuildForm({
+      parent_guild: selectedGuild.parentGuild || "",
+      streamers: selectedGuild.streamers?.map((s: { channelName: string }) => s.channelName).join(", ") || "",
+      activityStatus: selectedGuild.activityStatus || "active",
+    });
+    setShowEditGuildModal(true);
+  };
+
+  // Handler for saving guild edits
+  const handleSaveGuildEdit = async () => {
+    if (!editGuildTarget) return;
+
+    setEditGuildLoading(true);
+    try {
+      await api.updateAdminGuild(editGuildTarget.id, {
+        parent_guild: editGuildForm.parent_guild.trim() || null,
+        streamers: editGuildForm.streamers.trim()
+          ? editGuildForm.streamers.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        activityStatus: editGuildForm.activityStatus,
+      });
+      setTriggerMessage({ type: "success", text: `Guild ${editGuildTarget.name} updated` });
+      setTimeout(() => setTriggerMessage(null), 5000);
+
+      // Refresh guild detail if open
+      const detail = await getAdminGuildDetail(editGuildTarget.id);
+      setSelectedGuild(detail);
+
+      // Refresh guilds list
+      const guildsData = await api.getAdminGuilds(guildsPage, 20, guildSearchDebounced || undefined);
+      setGuilds(guildsData.guilds);
+      setGuildsTotalPages(guildsData.pagination.totalPages);
+
+      setShowEditGuildModal(false);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to update guild",
+      });
+    } finally {
+      setEditGuildLoading(false);
+    }
+  };
+
   // Handler for clicking delete on a guild - fetches preview
   const handleDeleteGuildClick = async (guildId: string, guildName: string) => {
     setDeleteGuildLoading(true);
@@ -596,6 +664,34 @@ export default function AdminPage() {
       });
     } finally {
       setDeleteGuildLoading(false);
+    }
+  };
+
+  // Handler for deleting a character
+  const handleDeleteCharacterClick = async (characterId: string, characterName: string, characterRealm: string) => {
+    if (!confirm(`Delete character ${characterName}-${characterRealm} and all associated rankings?`)) return;
+
+    setTableLoading(true);
+    try {
+      const result = await api.deleteAdminCharacter(characterId);
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+
+      // Refresh characters list
+      const [charsData, charStatsData] = await Promise.all([
+        api.getAdminCharacters(charactersPage, 50, characterSearchDebounced || undefined),
+        api.getAdminCharacterStats(),
+      ]);
+      setCharacters(charsData.characters);
+      setCharactersTotalPages(charsData.pagination.totalPages);
+      setCharacterStats(charStatsData);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to delete character",
+      });
+    } finally {
+      setTableLoading(false);
     }
   };
 
@@ -994,7 +1090,13 @@ export default function AdminPage() {
             </div>
 
             {/* Guilds Table */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
+            <div className="relative">
+              {tableLoading && (
+                <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center z-10 rounded-lg">
+                  <div className="text-amber-400">Loading...</div>
+                </div>
+              )}
+              <div className="bg-gray-800 rounded-lg overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-900">
                   <tr>
@@ -1114,6 +1216,7 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+            </div>
           </div>
         )}
 
@@ -1173,7 +1276,13 @@ export default function AdminPage() {
             </div>
 
             {/* Characters Table */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
+            <div className="relative">
+              {tableLoading && (
+                <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center z-10 rounded-lg">
+                  <div className="text-amber-400">Loading...</div>
+                </div>
+              )}
+              <div className="bg-gray-800 rounded-lg overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-900">
                   <tr>
@@ -1183,6 +1292,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.region")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.lastSeen")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.rankings")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
@@ -1197,6 +1307,15 @@ export default function AdminPage() {
                         {char.rankingsAvailable === true && <span className="px-2 py-0.5 text-xs rounded-full bg-green-900/30 text-green-400">{t("characters.available")}</span>}
                         {char.rankingsAvailable === false && <span className="px-2 py-0.5 text-xs rounded-full bg-red-900/30 text-red-400">{t("characters.unavailable")}</span>}
                         {char.rankingsAvailable === null && <span className="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400">{t("characters.unknown")}</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleDeleteCharacterClick(char.id, char.name, char.realm)}
+                          className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                          title="Delete character and rankings"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1223,6 +1342,7 @@ export default function AdminPage() {
                   {t("pagination.next")}
                 </button>
               </div>
+            </div>
             </div>
           </div>
         )}
@@ -2543,6 +2663,12 @@ export default function AdminPage() {
                           Recalculate Stats
                         </button>
                         <button
+                          onClick={handleEditGuildClick}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                        >
+                          Edit Guild
+                        </button>
+                        <button
                           onClick={() => handleDeleteGuildClick(selectedGuild.id, selectedGuild.name)}
                           className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                           disabled={deleteGuildLoading}
@@ -2687,6 +2813,79 @@ export default function AdminPage() {
                       setAddGuildForm({ name: "", realm: "", region: "eu", parent_guild: "", streamers: "" });
                     }}
                     className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Guild Modal */}
+        {showEditGuildModal && editGuildTarget && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-white mb-4">Edit Guild: {editGuildTarget.name}</h3>
+
+              <div className="space-y-4">
+                {/* Parent Guild */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Parent Guild</label>
+                  <input
+                    type="text"
+                    value={editGuildForm.parent_guild}
+                    onChange={(e) => setEditGuildForm({ ...editGuildForm, parent_guild: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="Main guild name if this is a sub-team"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">For sub-teams/splits, enter the main guild name</p>
+                </div>
+
+                {/* Streamers */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Streamers</label>
+                  <input
+                    type="text"
+                    value={editGuildForm.streamers}
+                    onChange={(e) => setEditGuildForm({ ...editGuildForm, streamers: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="streamer1, streamer2, streamer3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Comma-separated Twitch channel names</p>
+                </div>
+
+                {/* Activity Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Activity Status</label>
+                  <select
+                    value={editGuildForm.activityStatus}
+                    onChange={(e) => setEditGuildForm({ ...editGuildForm, activityStatus: e.target.value as "active" | "inactive" })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleSaveGuildEdit}
+                    disabled={editGuildLoading}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {editGuildLoading ? "Saving..." : "Save Changes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditGuildModal(false);
+                      setEditGuildTarget(null);
+                    }}
+                    disabled={editGuildLoading}
+                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
