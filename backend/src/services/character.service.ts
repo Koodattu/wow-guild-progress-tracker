@@ -306,6 +306,7 @@ class CharacterService {
       while (processedCount < MAX_WCL_REQUESTS_PER_RUN) {
         const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
         const batchSize = Math.min(BATCH_SIZE, remaining);
+
         const eligibleChars = await Character.aggregate([
           { $match: eligibleFilter },
           {
