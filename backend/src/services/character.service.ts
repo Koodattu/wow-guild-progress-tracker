@@ -72,13 +72,39 @@ interface IWarcraftLogsCharacter {
       name: string;
     };
   };
-  zoneRankings: IWarcraftLogsZoneRankings | null;
+  // When using aliased queries, zoneRankings fields appear as dynamic keys (e.g. "holyRankings", "shadowRankings")
+  [aliasedRankings: string]: IWarcraftLogsZoneRankings | null | unknown;
 }
 
 interface IWarcraftLogsResponse {
   characterData: {
     character: IWarcraftLogsCharacter | null;
   };
+}
+
+/**
+ * Convert a spec slug ("beast-mastery") to WCL PascalCase spec name ("BeastMastery").
+ * WCL expects specName with first letter uppercase and hyphens removed.
+ */
+function toWclSpecName(specSlug: string): string {
+  return specSlug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
+}
+
+/**
+ * Convert a spec slug ("beast-mastery") to a valid GraphQL alias ("beastMasteryRankings").
+ */
+function toSpecAlias(specSlug: string): string {
+  const parts = specSlug.split("-");
+  const camel =
+    parts[0] +
+    parts
+      .slice(1)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join("");
+  return `${camel}Rankings`;
 }
 
 export type CharacterRankingRow = {
@@ -355,32 +381,27 @@ class CharacterService {
             continue;
           }
 
-          let hasAnySpecRankings = false;
-          let characterUnavailable = false;
+          // Check rate limit before WCL API call — wait for reset if near threshold
+          if (rateLimitService.getPercentUsed() >= RATE_LIMIT_PAUSE_PERCENT) {
+            const resetMs = rateLimitService.getTimeUntilReset();
+            logger.info(
+              `[CharacterRankings] Rate limit at ${rateLimitService.getPercentUsed().toFixed(1)}%, pausing for ${Math.ceil(resetMs / 1000)}s until reset (processed ${processedCount} so far)`,
+            );
+            await rateLimitService.waitForReset();
+            logger.info(`[CharacterRankings] Rate limit reset, resuming`);
+          }
 
-          for (const specSlug of specSlugs) {
-            // WCL expects specName with first letter uppercase and hyphens removed (e.g. "BeastMastery" not "beast-mastery")
-            const wclSpecSlug = specSlug
-              .split("-")
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join("");
-            if (processedCount >= MAX_WCL_REQUESTS_PER_RUN) {
-              break;
-            }
+          try {
+            // Build a single query with aliased zoneRankings per spec.
+            // Each alias fetches rankings for one spec, avoiding N+1 API calls.
+            const specAliasFields = specSlugs.map((slug) => {
+              const wclName = toWclSpecName(slug);
+              const alias = toSpecAlias(slug);
+              return `${alias}: zoneRankings(zoneID: $zoneID, difficulty: ${MYTHIC_DIFFICULTY}, metric: dps, compare: Rankings, timeframe: Historical, partition: ${partition}, specName: "${wclName}")`;
+            });
 
-            // Check rate limit before each WCL API call — wait for reset if near threshold
-            if (rateLimitService.getPercentUsed() >= RATE_LIMIT_PAUSE_PERCENT) {
-              const resetMs = rateLimitService.getTimeUntilReset();
-              logger.info(
-                `[CharacterRankings] Rate limit at ${rateLimitService.getPercentUsed().toFixed(1)}%, pausing for ${Math.ceil(resetMs / 1000)}s until reset (processed ${processedCount} so far)`,
-              );
-              await rateLimitService.waitForReset();
-              logger.info(`[CharacterRankings] Rate limit reset, resuming`);
-            }
-
-            try {
-              const query = `
-              query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!, $specName: String!) {
+            const query = `
+              query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!) {
                 rateLimitData {
                   limitPerHour
                   pointsSpentThisHour
@@ -397,47 +418,43 @@ class CharacterService {
                     name
                     classID
                     hidden
-                    zoneRankings(
-                      zoneID: $zoneID,
-                      difficulty: ${MYTHIC_DIFFICULTY},
-                      metric: dps,
-                      compare: Rankings,
-                      timeframe: Historical,
-                      partition: ${partition},
-                      specName: $specName
-                    )
+                    ${specAliasFields.join("\n                    ")}
                   }
                 }
               }
             `;
 
-              const variables = {
-                characterName: char.name,
-                serverSlug: char.realm.toLowerCase().replace(/\s+/g, "-"),
-                serverRegion: char.region.toLowerCase(),
-                zoneID: CURRENT_TIER_ID,
-                specName: wclSpecSlug,
-              };
+            const variables = {
+              characterName: char.name,
+              serverSlug: char.realm.toLowerCase().replace(/\s+/g, "-"),
+              serverRegion: char.region.toLowerCase(),
+              zoneID: CURRENT_TIER_ID,
+            };
 
-              processedCount += 1;
+            processedCount += 1;
 
-              const result = await wclService.query<IWarcraftLogsResponse>(query, variables);
+            const result = await wclService.query<IWarcraftLogsResponse>(query, variables);
 
-              const character = result.characterData?.character;
-              if (!character || character.hidden) {
-                await Character.findByIdAndUpdate(char._id, {
-                  wclProfileHidden: character?.hidden || false,
-                  rankingsAvailable: false,
-                  nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                });
-                await Ranking.deleteMany({ characterId: char._id });
-                logger.info(`[CharacterRankings]No rankings available for ${char.name} (${char.realm})`);
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                characterUnavailable = true;
-                break;
-              }
+            const character = result.characterData?.character;
+            if (!character || character.hidden) {
+              await Character.findByIdAndUpdate(char._id, {
+                wclProfileHidden: character?.hidden || false,
+                rankingsAvailable: false,
+                nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+              });
+              await Ranking.deleteMany({ characterId: char._id });
+              logger.info(`[CharacterRankings] No rankings available for ${char.name} (${char.realm}) — hidden or missing`);
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
 
-              const zoneRankings = character.zoneRankings;
+            let hasAnySpecRankings = false;
+
+            // Process each spec's aliased zoneRankings from the single response
+            for (const specSlug of specSlugs) {
+              const alias = toSpecAlias(specSlug);
+              const zoneRankings = (character as Record<string, unknown>)[alias] as IWarcraftLogsZoneRankings | null;
+
               if (!zoneRankings || (zoneRankings as any).error) {
                 await Ranking.deleteMany({
                   characterId: char._id,
@@ -446,24 +463,15 @@ class CharacterService {
                   partition,
                   specName: specSlug,
                 });
-                logger.info(`[CharacterRankings] No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
-                await new Promise((resolve) => setTimeout(resolve, 100));
+                logger.debug(`[CharacterRankings] No rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 continue;
               }
 
+              // Data is already filtered to this spec by WCL — use directly
               const allStarsEntries = zoneRankings.allStars ?? [];
-              const hasAllStarsSpecField = allStarsEntries.some((a) => a.spec);
-              const filteredAllStars = hasAllStarsSpecField ? allStarsEntries.filter((a) => slugifySpecName(a.spec) === specSlug) : allStarsEntries;
+              const rankingsEntries = zoneRankings.rankings ?? [];
 
-              const hasRankingSpecField = zoneRankings.rankings.some((r) => r.spec);
-              const filteredRankings = hasRankingSpecField
-                ? zoneRankings.rankings.filter((r) => {
-                    if (!r.spec) return false;
-                    return slugifySpecName(r.spec) === specSlug;
-                  })
-                : zoneRankings.rankings;
-
-              if (filteredAllStars.length === 0 && filteredRankings.length === 0) {
+              if (allStarsEntries.length === 0 && rankingsEntries.length === 0) {
                 await Ranking.deleteMany({
                   characterId: char._id,
                   zoneId: CURRENT_TIER_ID,
@@ -471,8 +479,7 @@ class CharacterService {
                   partition: zoneRankings.partition,
                   specName: specSlug,
                 });
-                logger.info(`[CharacterRankings] No rankings available for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
-                await new Promise((resolve) => setTimeout(resolve, 100));
+                logger.debug(`[CharacterRankings] No rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 continue;
               }
 
@@ -487,29 +494,21 @@ class CharacterService {
                 specName: specSlug,
               }).lean();
 
-              // Compute current totals from fresh WCL data
-              const freshPoints = filteredAllStars.reduce((sum, a) => sum + (a.points ?? 0), 0);
-              const freshPossiblePoints = filteredAllStars.reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
-
-              // Compute stored totals from existing Ranking docs
+              const freshPoints = allStarsEntries.reduce((sum, a) => sum + (a.points ?? 0), 0);
+              const freshPossiblePoints = allStarsEntries.reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
               const storedPoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
               const storedPossiblePoints = existingRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
 
               const hasChanged = existingRankings.length === 0 || freshPoints !== storedPoints || freshPossiblePoints !== storedPossiblePoints;
 
               if (!hasChanged) {
-                logger.info(`[CharacterRankings] No changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
-                await new Promise((resolve) => setTimeout(resolve, 100));
+                logger.debug(`[CharacterRankings] No changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 continue;
               }
 
-              // Upsert rankings
-              for (const r of filteredRankings) {
+              // Upsert rankings for this spec
+              for (const r of rankingsEntries) {
                 const rankingSpecSlug = r.spec ? slugifySpecName(r.spec) : specSlug;
-                if (hasRankingSpecField && rankingSpecSlug !== specSlug) {
-                  continue;
-                }
-
                 const role = resolveRole(char.classID, rankingSpecSlug);
                 const normalizedBestSpecName = r.bestSpec ? slugifySpecName(r.bestSpec) : rankingSpecSlug;
                 const rankingPartition = r.allStars?.partition ?? zoneRankings.partition ?? partition;
@@ -566,26 +565,23 @@ class CharacterService {
               }
 
               logger.info(`[CharacterRankings] Updated rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
-              await new Promise((resolve) => setTimeout(resolve, 100));
-            } catch (error) {
-              logger.error(`[CharacterRankings] Error checking rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]:`, error);
             }
-          }
 
-          if (characterUnavailable) {
-            continue;
-          }
+            if (hasAnySpecRankings) {
+              await Character.findByIdAndUpdate(char._id, {
+                rankingsAvailable: true,
+                nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+              });
+            } else {
+              await Character.findByIdAndUpdate(char._id, {
+                rankingsAvailable: false,
+                nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+              });
+            }
 
-          if (hasAnySpecRankings) {
-            await Character.findByIdAndUpdate(char._id, {
-              rankingsAvailable: true,
-              nextEligibleRefreshAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
-            });
-          } else {
-            await Character.findByIdAndUpdate(char._id, {
-              rankingsAvailable: false,
-              nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            });
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          } catch (error) {
+            logger.error(`[CharacterRankings] Error checking rankings for ${char.name} (${char.realm}):`, error);
           }
         }
 
