@@ -38,6 +38,10 @@ export default function Footer() {
           {t("madeWith")}{" "}
           <a href="https://www.twitch.tv/vaarattu" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Vaarattu
+          </a>{" "}
+          {t("and")}{" "}
+          <a href="https://github.com/Joeliciousb" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+            Joel
           </a>
           . {t("sendFeedback")}.
         </p>

@@ -282,7 +282,7 @@ class CharacterService {
 
     try {
       const raid = await Raid.findOne({ id: CURRENT_TIER_ID }).select("partitions").lean();
-      const partition = 2; //(raid?.partitions || []).reduce((max: number, entry: any) => (typeof entry?.id === "number" && entry.id > max ? entry.id : max), -1);
+      const partition = (raid?.partitions || []).reduce((max: number, entry: any) => (typeof entry?.id === "number" && entry.id > max ? entry.id : max), -1);
       logger.info(`[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`);
 
       // Find eligible characters
@@ -295,8 +295,7 @@ class CharacterService {
       };
 
       // Count total eligible characters for progress tracking
-      //const totalEligibleCount = await Character.countDocuments(eligibleFilter);
-      const totalEligibleCount = await Character.countDocuments({});
+      const totalEligibleCount = await Character.countDocuments(eligibleFilter);
       logger.info(`[CharacterRankings] Found ${totalEligibleCount} eligible characters to process`);
 
       let processedCount = 0;
@@ -308,7 +307,7 @@ class CharacterService {
         const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
         const batchSize = Math.min(BATCH_SIZE, remaining);
         const eligibleChars = await Character.aggregate([
-          //{ $match: eligibleFilter },
+          { $match: eligibleFilter },
           {
             $sort: {
               lastMythicSeenAt: -1,

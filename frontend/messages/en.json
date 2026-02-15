@@ -36,6 +36,7 @@
   },
   "footer": {
     "madeWith": "Made with <3 by",
+    "and": "and",
     "sendFeedback": "Send feedback",
     "termsOfService": "Terms of Service",
     "privacyPolicy": "Privacy Policy"
