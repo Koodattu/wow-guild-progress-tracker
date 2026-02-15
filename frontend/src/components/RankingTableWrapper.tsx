@@ -269,7 +269,7 @@ function ClassSpecSelector({ selectedClass, selectedSpec, allClassesLabel, onCla
   }, [menu, onClear]);
 
   return (
-    <div className="relative w-full max-w-xs" onMouseEnter={menu.cancelClose} onMouseLeave={menu.scheduleClose}>
+    <div className="relative w-full" onMouseEnter={menu.cancelClose} onMouseLeave={menu.scheduleClose}>
       <ClassSpecButton selectedClass={selectedClass} selectedSpec={selectedSpec} allClassesLabel={allClassesLabel} onToggle={menu.toggleMenu} />
 
       {menu.isOpen ? (
@@ -373,6 +373,7 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
       header: t("columnIlvl"),
       accessor: (row: CharacterRankingRow) => (row.context.ilvl ? row.context.ilvl.toFixed(0) : "—"),
       shrink: true,
+      mobileHidden: true,
     });
   }
 
@@ -398,6 +399,7 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
           </div>
         ),
         shrink: true,
+        mobileHidden: true,
         accessor: (row: CharacterRankingRow) => {
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
           if (!bossScore || !bossScore.rankPercent) return <span className="text-gray-600">—</span>;
@@ -416,6 +418,34 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
   }
 
   return columns;
+}
+
+function MobileBossScores({ row, bosses, selectedSpec }: { row: CharacterRankingRow; bosses: Boss[]; selectedSpec: string | null }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {bosses.map((boss) => {
+        const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
+        const pct = bossScore?.rankPercent ? Math.round(bossScore.rankPercent) : null;
+        const showSpecIcon = !selectedSpec && bossScore?.specName;
+        const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
+
+        return (
+          <div key={boss.id} className="flex items-center gap-2 rounded bg-gray-800/50 px-2 py-1.5">
+            <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={20} height={20} className="rounded shrink-0" />
+            <span className="truncate text-xs text-gray-400">{boss.name}</span>
+            {pct !== null ? (
+              <span className="ml-auto inline-flex items-center gap-1 font-bold text-xs" style={{ color: getParseColor(pct) }}>
+                {pct}
+                {specIcon ? <IconImage iconFilename={specIcon} alt={bossScore!.specName!} width={14} height={14} style={{ objectFit: "cover" }} /> : null}
+              </span>
+            ) : (
+              <span className="ml-auto text-gray-600 text-xs">—</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function RankingTableWrapper({ data, bosses, partitionOptions = [], loading = false, error = null, pagination, onFiltersChange }: RankingTableWrapperProps) {
@@ -529,7 +559,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       {error ? <div className="rounded-md border border-red-500/40 bg-red-950/30 px-4 py-3 text-red-200">{error}</div> : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
-        <div className="flex gap-4 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
           {/* Boss Selector */}
           <Selector
             items={bosses}
@@ -561,7 +591,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
           />
 
           {/* Character Search */}
-          <div className="w-full max-w-xs">
+          <div className="w-full">
             <input
               type="text"
               value={searchValue}
@@ -584,7 +614,14 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
         </div>
       </div>
 
-      <Table columns={columns} data={data} loading={loading} pagination={pagination} onPageChange={handlePageChange} />
+      <Table
+        columns={columns}
+        data={data}
+        loading={loading}
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        expandedContent={!selectedBoss && bosses.length > 0 ? (row: CharacterRankingRow) => <MobileBossScores row={row} bosses={bosses} selectedSpec={selectedSpec} /> : undefined}
+      />
     </div>
   );
 }

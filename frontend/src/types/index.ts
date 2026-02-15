@@ -883,6 +883,8 @@ export type ColumnDef<T> = {
   /** Horizontal alignment of cell content. Defaults to "left". */
   align?: "left" | "center" | "right";
   sortable?: boolean;
+  /** When true the column is hidden on mobile (below md breakpoint). */
+  mobileHidden?: boolean;
 };
 
 // ============================================================================
