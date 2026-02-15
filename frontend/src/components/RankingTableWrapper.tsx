@@ -391,11 +391,11 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, t }:
       columns.push({
         id: `boss-${boss.id}`,
         header: (
-          <div className="flex items-center gap-1.5">
-            <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={20} height={20} className="rounded" />
-            <span>{boss.name}</span>
-          </div>
+          <span title={boss.name}>
+            <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={24} height={24} className="rounded" />
+          </span>
         ),
+        shrink: true,
         accessor: (row: CharacterRankingRow) => {
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
           if (!bossScore || !bossScore.rankPercent) return <span className="text-gray-600">—</span>;

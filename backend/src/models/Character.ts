@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IGuildHistoryEntry {
+  guildName: string;
+  guildRealm: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+}
+
 export interface ICharacter extends Document {
   wclCanonicalCharacterId: number;
   name: string;
@@ -8,6 +15,8 @@ export interface ICharacter extends Document {
   classID: number;
   guildName?: string;
   guildRealm?: string;
+  guildUpdatedAt?: Date;
+  guildHistory: IGuildHistoryEntry[];
   wclProfileHidden: boolean;
 
   lastMythicSeenAt: Date;
@@ -18,6 +27,16 @@ export interface ICharacter extends Document {
   updatedAt: Date;
 }
 
+const GuildHistoryEntrySchema: Schema = new Schema(
+  {
+    guildName: { type: String, required: true },
+    guildRealm: { type: String, required: true },
+    firstSeenAt: { type: Date, required: true },
+    lastSeenAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const CharacterSchema: Schema = new Schema(
   {
     wclCanonicalCharacterId: { type: Number, required: true, unique: true },
@@ -27,6 +46,8 @@ const CharacterSchema: Schema = new Schema(
     classID: { type: Number, required: true },
     guildName: { type: String, required: false, default: null },
     guildRealm: { type: String, required: false, default: null },
+    guildUpdatedAt: { type: Date, required: false, default: null },
+    guildHistory: { type: [GuildHistoryEntrySchema], default: [] },
     wclProfileHidden: { type: Boolean, required: true, default: false },
 
     lastMythicSeenAt: { type: Date, required: true },

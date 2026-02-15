@@ -7,6 +7,7 @@ import logger from "../utils/logger";
 import { resolveRole, slugifySpecName } from "../utils/spec";
 import rateLimitService from "./rate-limit.service";
 import wclService from "./warcraftlogs.service";
+import mongoose from "mongoose";
 
 interface IWarcraftLogsAllStars {
   partition: number;
@@ -132,6 +133,142 @@ export type CharacterRankingsResponse = {
 };
 
 class CharacterService {
+  /**
+   * Upsert a character from WCL report data with guild history tracking.
+   *
+   * For new characters: creates the document with current guild and initial history entry.
+   * For existing characters: updates core fields, then handles guild change detection
+   * and history tracking in a separate atomic step.
+   */
+  async upsertCharacterFromReport(params: {
+    canonicalID: number;
+    name: string;
+    serverSlug: string;
+    serverRegion: string;
+    classID: number;
+    hidden: boolean;
+    guildName: string | null;
+    guildRealm: string | null;
+  }): Promise<void> {
+    const now = new Date();
+    const { canonicalID, name, serverSlug, serverRegion, classID, hidden, guildName, guildRealm } = params;
+
+    const initialGuildHistory = guildName && guildRealm ? [{ guildName, guildRealm, firstSeenAt: now, lastSeenAt: now }] : [];
+
+    // Atomic upsert: core fields always updated via $set,
+    // guild fields set only on insert via $setOnInsert (existing chars handled separately)
+    const character = await Character.findOneAndUpdate(
+      { wclCanonicalCharacterId: canonicalID },
+      {
+        $set: {
+          name,
+          realm: serverSlug,
+          region: serverRegion,
+          classID,
+          wclProfileHidden: hidden,
+          lastMythicSeenAt: now,
+          rankingsAvailable: hidden === true ? false : null,
+          nextEligibleRefreshAt: now,
+        },
+        $setOnInsert: {
+          wclCanonicalCharacterId: canonicalID,
+          guildName,
+          guildRealm,
+          guildUpdatedAt: now,
+          guildHistory: initialGuildHistory,
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    if (!character) return;
+
+    // For newly-inserted documents, $setOnInsert already set guild fields — skip further work.
+    // Detect insert: guildHistory was set by $setOnInsert, so if it exists and updatedAt ≈ now,
+    // we assume this was an insert. A safer check: if guildUpdatedAt equals now (same ms).
+    // However, existing pre-migration characters won't have guildHistory at all.
+    // To keep it simple and idempotent, always run the guild update — it's a no-op if nothing changed.
+    await this.updateCharacterGuild(character._id as mongoose.Types.ObjectId, character.guildName ?? null, character.guildRealm ?? null, guildName, guildRealm, now);
+  }
+
+  /**
+   * Atomically update a character's current guild and guild history.
+   *
+   * - If guild changed: update guildName/guildRealm/guildUpdatedAt
+   * - If guild exists in history: update lastSeenAt on existing entry
+   * - If guild is new to history: push a new entry
+   * - If guild was removed (null): clear current guild fields
+   */
+  private async updateCharacterGuild(
+    characterId: mongoose.Types.ObjectId,
+    currentGuildName: string | null,
+    currentGuildRealm: string | null,
+    newGuildName: string | null,
+    newGuildRealm: string | null,
+    seenAt: Date,
+  ): Promise<void> {
+    const guildChanged = currentGuildName !== newGuildName || currentGuildRealm !== newGuildRealm;
+
+    // Case 1: No guild data from WCL
+    if (!newGuildName || !newGuildRealm) {
+      if (guildChanged && currentGuildName) {
+        await Character.updateOne(
+          { _id: characterId },
+          {
+            $set: {
+              guildName: null,
+              guildRealm: null,
+              guildUpdatedAt: seenAt,
+            },
+          },
+        );
+      }
+      return;
+    }
+
+    // Case 2: We have guild data — determine what to update
+    const setFields: Record<string, unknown> = {};
+    if (guildChanged) {
+      setFields.guildName = newGuildName;
+      setFields.guildRealm = newGuildRealm;
+      setFields.guildUpdatedAt = seenAt;
+    }
+
+    // Try to update an existing guild history entry (atomic positional update)
+    const historyUpdate = await Character.updateOne(
+      {
+        _id: characterId,
+        guildHistory: {
+          $elemMatch: { guildName: newGuildName, guildRealm: newGuildRealm },
+        },
+      },
+      {
+        $set: {
+          ...setFields,
+          "guildHistory.$.lastSeenAt": seenAt,
+        },
+      },
+    );
+
+    // If matchedCount === 0, the guild wasn't in history — add it
+    if (historyUpdate.matchedCount === 0) {
+      await Character.updateOne(
+        { _id: characterId },
+        {
+          $set: setFields,
+          $push: {
+            guildHistory: {
+              guildName: newGuildName,
+              guildRealm: newGuildRealm,
+              firstSeenAt: seenAt,
+              lastSeenAt: seenAt,
+            },
+          },
+        },
+      );
+    }
+  }
+
   // Check and update character rankings (nightly job)
   async checkAndRefreshCharacterRankings(): Promise<void> {
     logger.info("Starting character ranking check and update...");
@@ -145,7 +282,7 @@ class CharacterService {
 
     try {
       const raid = await Raid.findOne({ id: CURRENT_TIER_ID }).select("partitions").lean();
-      const partition = (raid?.partitions || []).reduce((max: number, entry: any) => (typeof entry?.id === "number" && entry.id > max ? entry.id : max), -1);
+      const partition = 2; //(raid?.partitions || []).reduce((max: number, entry: any) => (typeof entry?.id === "number" && entry.id > max ? entry.id : max), -1);
       logger.info(`[CharacterRankings] Using partition ${partition} for zone ${CURRENT_TIER_ID}`);
 
       // Find eligible characters
@@ -158,7 +295,8 @@ class CharacterService {
       };
 
       // Count total eligible characters for progress tracking
-      const totalEligibleCount = await Character.countDocuments(eligibleFilter);
+      //const totalEligibleCount = await Character.countDocuments(eligibleFilter);
+      const totalEligibleCount = await Character.countDocuments({});
       logger.info(`[CharacterRankings] Found ${totalEligibleCount} eligible characters to process`);
 
       let processedCount = 0;
@@ -170,7 +308,7 @@ class CharacterService {
         const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
         const batchSize = Math.min(BATCH_SIZE, remaining);
         const eligibleChars = await Character.aggregate([
-          { $match: eligibleFilter },
+          //{ $match: eligibleFilter },
           {
             $sort: {
               lastMythicSeenAt: -1,
@@ -190,7 +328,6 @@ class CharacterService {
           `[CharacterRankings] Processing batch ${batchIndex}: ${eligibleChars.length} characters fetched (processed ${processedCount}/${MAX_WCL_REQUESTS_PER_RUN} requests, ${charactersProcessedThisRun}/${totalEligibleCount} characters)`,
         );
 
-        let newCharactersInBatch = 0;
         for (const char of eligibleChars) {
           // Skip if we've already processed this character in this run
           const charId = String(char._id);
@@ -206,7 +343,6 @@ class CharacterService {
 
           processedCharacterIds.add(charId);
           charactersProcessedThisRun += 1;
-          newCharactersInBatch += 1;
           logger.info(`[CharacterRankings] Processing character ${charactersProcessedThisRun}/${totalEligibleCount}: ${char.name} (${char.realm})`);
 
           const classSpecMap = ROLE_BY_CLASS_AND_SPEC[char.classID] ?? {};
@@ -451,12 +587,6 @@ class CharacterService {
               nextEligibleRefreshAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             });
           }
-        }
-
-        // Break if we didn't process any new characters in this batch (all were duplicates)
-        if (newCharactersInBatch === 0) {
-          logger.info(`[CharacterRankings] All characters in batch were already processed, stopping`);
-          break;
         }
 
         // Break if we've processed all eligible characters
