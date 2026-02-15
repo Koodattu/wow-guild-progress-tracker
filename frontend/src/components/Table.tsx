@@ -20,6 +20,8 @@ interface TableProps<T> {
   onPageChange?: (page: number) => void;
   /** Extract the server-provided rank from a row. When provided, used for rank coloring instead of positional index. */
   getRank?: (row: T, index: number) => number;
+  /** Index of the row to highlight (e.g. after a jump-to-character search). -1 or undefined means no highlight. */
+  highlightIndex?: number;
   /** When provided, rows become expandable on mobile. A chevron column is added (visible only below md). */
   expandedContent?: (row: T, index: number) => ReactNode;
 }
@@ -40,7 +42,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export function Table<T>({ columns, data, loading = false, skeletonRowCount, pagination, onPageChange, getRank, expandedContent }: TableProps<T>) {
+export function Table<T>({ columns, data, loading = false, skeletonRowCount, pagination, onPageChange, getRank, highlightIndex, expandedContent }: TableProps<T>) {
   const t = useTranslations("table");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const currentPage = pagination?.currentPage ?? 1;
@@ -144,7 +146,8 @@ export function Table<T>({ columns, data, loading = false, skeletonRowCount, pag
                 const actualRank = getRank ? getRank(row, index) : (currentPage - 1) * (pagination?.pageSize ?? 50) + index + 1;
                 const rankColorTotal = pagination?.totalRankedItems ?? totalItems;
                 const isExpanded = expandedRows.has(index);
-                const rowBg = index % 2 === 0 ? "bg-gray-950" : "bg-gray-900";
+                const isHighlighted = highlightIndex !== undefined && highlightIndex >= 0 && index === highlightIndex;
+                const rowBg = isHighlighted ? "bg-yellow-900/40 ring-1 ring-inset ring-yellow-500/50" : index % 2 === 0 ? "bg-gray-950" : "bg-gray-900";
 
                 return (
                   <Fragment key={index}>

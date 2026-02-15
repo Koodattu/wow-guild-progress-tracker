@@ -750,6 +750,10 @@ export const api = {
       currentPage: number;
       pageSize: number;
     };
+    jumpTo?: {
+      rank: number;
+      wclCanonicalCharacterId: number;
+    };
   }> {
     const response = await fetch(`${API_URL}/api/character-rankings${queryString}`);
     if (!response.ok) {

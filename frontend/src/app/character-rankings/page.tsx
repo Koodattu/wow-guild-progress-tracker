@@ -41,6 +41,7 @@ export default function CharacterRankingsPage() {
     currentPage: 1,
     pageSize: 100,
   });
+  const [jumpTo, setJumpTo] = useState<{ rank: number; wclCanonicalCharacterId: number } | null>(null);
 
   const [filters, setFilters] = useState<Filters>({
     limit: 100,
@@ -83,6 +84,7 @@ export default function CharacterRankingsPage() {
         if (!isActive || requestId !== requestIdRef.current) return;
         setRows(response.data);
         setPagination(response.pagination);
+        setJumpTo(response.jumpTo ?? null);
       } catch (e) {
         if (!isActive || requestId !== requestIdRef.current) return;
         setError(e instanceof Error ? e.message : "Failed");
@@ -105,6 +107,7 @@ export default function CharacterRankingsPage() {
         loading={loading}
         error={error}
         pagination={pagination}
+        jumpTo={jumpTo}
         onFiltersChange={(newFilters) => {
           setFilters((prev) => ({ ...prev, ...newFilters }));
         }}

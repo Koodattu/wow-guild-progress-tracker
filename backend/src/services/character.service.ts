@@ -158,6 +158,10 @@ export type CharacterRankingsResponse = {
     currentPage: number;
     pageSize: number;
   };
+  jumpTo?: {
+    rank: number;
+    wclCanonicalCharacterId: number;
+  };
 };
 
 class CharacterService {
@@ -622,7 +626,7 @@ class CharacterService {
     classId?: number;
     specName?: string;
     role?: "dps" | "healer" | "tank";
-    partition?: number; // If provided: filter by partition; if omitted: pick best per-boss across partitions
+    partition?: number;
     limit?: number;
     page?: number;
     characterName?: string;
@@ -634,10 +638,10 @@ class CharacterService {
     const normalizedRole = role?.toLowerCase() as "dps" | "healer" | "tank" | undefined;
     const normalizedCharacterName = characterName?.trim();
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const nameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
+    const exactNameRegex = normalizedCharacterName ? new RegExp(`^${escapeRegex(normalizedCharacterName)}$`, "i") : undefined;
+    const partialNameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
-    const skip = (Math.max(page, 1) - 1) * safeLimit;
 
     const getGuildMapForRows = async (rows: Array<{ characterId?: any }>): Promise<Map<string, { name: string; realm: string } | null>> => {
       const ids = rows
@@ -670,62 +674,85 @@ class CharacterService {
       return guildMap;
     };
 
-    // Boss leaderboard (encounterId provided)
+    // ── Boss leaderboard (encounterId provided) ──────────────────────
     if (encounterId !== undefined) {
-      const query: any = {
+      const baseQuery: any = {
         zoneId,
         "encounter.id": encounterId,
         difficulty: MYTHIC_DIFFICULTY,
       };
-      if (partition !== undefined) query.partition = partition;
-      if (classId !== undefined) query.classID = classId;
-      if (normalizedSpecName !== undefined) query.specName = normalizedSpecName;
-      if (normalizedRole !== undefined) query.role = normalizedRole;
+      if (partition !== undefined) baseQuery.partition = partition;
+      if (classId !== undefined) baseQuery.classID = classId;
+      if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
+      if (normalizedRole !== undefined) baseQuery.role = normalizedRole;
 
+      // ── Path 1: Boss + specific partition (find-based) ──
       if (partition !== undefined) {
-        const filteredQuery = { ...query, bestAmount: { $ne: 0 } };
-        const totalRankedItems = await Ranking.countDocuments(filteredQuery);
+        const leaderboardQuery = { ...baseQuery, bestAmount: { $ne: 0 } };
+        const totalRankedItems = await Ranking.countDocuments(leaderboardQuery);
 
-        let rows: any[];
+        let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
+        let effectiveSkip: number;
+        let effectivePage: number;
         let totalItems: number;
+        let activeQuery: any;
 
-        if (nameRegex) {
-          const result = await Ranking.aggregate([
-            { $match: filteredQuery },
-            { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
-            {
-              $setWindowFields: {
-                sortBy: { bestAmount: -1 },
-                output: { rank: { $denseRank: {} } },
-              },
-            },
-            { $match: { name: nameRegex } },
-            {
-              $facet: {
-                data: [{ $skip: skip }, { $limit: safeLimit }],
-                count: [{ $count: "total" }],
-              },
-            },
-          ]);
-          rows = result[0]?.data ?? [];
-          totalItems = result[0]?.count?.[0]?.total ?? 0;
-        } else {
-          totalItems = totalRankedItems;
-          rows = await Ranking.find(filteredQuery)
-            .select(
-              "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
-                "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
-            )
-            .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
-            .skip(skip)
-            .limit(safeLimit)
+        if (exactNameRegex) {
+          // Try exact match for "jump to" behavior
+          const exactMatch = await Ranking.findOne({ ...leaderboardQuery, name: exactNameRegex })
+            .select("wclCanonicalCharacterId bestAmount rankPercent totalKills")
+            .sort({ bestAmount: -1 })
             .lean();
+
+          if (exactMatch) {
+            // Count characters with a strictly higher score
+            const higherCount = await Ranking.countDocuments({
+              ...leaderboardQuery,
+              $or: [
+                { bestAmount: { $gt: exactMatch.bestAmount } },
+                { bestAmount: exactMatch.bestAmount, rankPercent: { $gt: exactMatch.rankPercent } },
+                { bestAmount: exactMatch.bestAmount, rankPercent: exactMatch.rankPercent, totalKills: { $gt: exactMatch.totalKills } },
+              ],
+            });
+            const rank = higherCount + 1;
+            effectivePage = Math.ceil(rank / safeLimit) || 1;
+            effectiveSkip = (effectivePage - 1) * safeLimit;
+            totalItems = totalRankedItems;
+            activeQuery = leaderboardQuery;
+            jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
+          } else if (partialNameRegex) {
+            // No exact match → partial filter fallback
+            activeQuery = { ...leaderboardQuery, name: partialNameRegex };
+            totalItems = await Ranking.countDocuments(activeQuery);
+            effectivePage = Math.max(page, 1);
+            effectiveSkip = (effectivePage - 1) * safeLimit;
+          } else {
+            activeQuery = leaderboardQuery;
+            totalItems = totalRankedItems;
+            effectivePage = Math.max(page, 1);
+            effectiveSkip = (effectivePage - 1) * safeLimit;
+          }
+        } else {
+          activeQuery = leaderboardQuery;
+          totalItems = totalRankedItems;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
         }
+
+        const rows = await Ranking.find(activeQuery)
+          .select(
+            "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
+              "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
+          )
+          .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
+          .skip(effectiveSkip)
+          .limit(safeLimit)
+          .lean();
 
         const guildMap = await getGuildMapForRows(rows);
 
         const data = rows.map((r: any, i: number) => ({
-          rank: r.rank ?? skip + i + 1,
+          rank: effectiveSkip + i + 1,
           character: {
             wclCanonicalCharacterId: r.wclCanonicalCharacterId,
             name: r.name,
@@ -766,45 +793,78 @@ class CharacterService {
             totalItems,
             totalRankedItems,
             totalPages: Math.ceil(totalItems / safeLimit),
-            currentPage: Math.max(page, 1),
+            currentPage: effectivePage,
             pageSize: safeLimit,
           },
+          jumpTo,
         };
       }
 
-      // Partition ignored: return only the best row per character across partitions
+      // ── Path 2: Boss + all partitions (aggregation, best per char) ──
       const countAgg = await Ranking.aggregate([
-        { $match: query },
-        {
-          $sort: {
-            bestAmount: -1,
-            rankPercent: -1,
-            totalKills: -1,
-            partition: -1,
-          },
-        },
-        {
-          $group: {
-            _id: "$wclCanonicalCharacterId",
-            bestAmount: { $first: "$bestAmount" },
-          },
-        },
+        { $match: baseQuery },
+        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
+        { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
         { $match: { bestAmount: { $ne: 0 } } },
         { $count: "total" },
       ]);
-
       const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-      const pipeline: any[] = [
-        { $match: query },
-        {
-          $sort: {
-            bestAmount: -1,
-            rankPercent: -1,
-            totalKills: -1,
-            partition: -1,
-          },
-        },
+      let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
+      let effectiveSkip: number;
+      let effectivePage: number;
+      let totalItems: number;
+      let matchQuery: any = baseQuery;
+
+      if (exactNameRegex) {
+        // Find the character's best score across partitions for this boss
+        const [charBest] = await Ranking.aggregate([
+          { $match: { ...baseQuery, name: exactNameRegex } },
+          { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
+          { $limit: 1 },
+          { $project: { wclCanonicalCharacterId: 1, bestAmount: 1 } },
+        ]);
+
+        if (charBest) {
+          // Count unique characters with a higher best score
+          const [rankCount] = await Ranking.aggregate([
+            { $match: baseQuery },
+            { $sort: { bestAmount: -1, partition: -1 } },
+            { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
+            { $match: { bestAmount: { $gt: charBest.bestAmount, $ne: 0 } } },
+            { $count: "total" },
+          ]);
+          const rank = (rankCount?.total ?? 0) + 1;
+          effectivePage = Math.ceil(rank / safeLimit) || 1;
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+          totalItems = totalRankedItems;
+          jumpTo = { rank, wclCanonicalCharacterId: charBest.wclCanonicalCharacterId };
+        } else if (partialNameRegex) {
+          matchQuery = { ...baseQuery, name: partialNameRegex };
+          const [filteredCount] = await Ranking.aggregate([
+            { $match: matchQuery },
+            { $sort: { bestAmount: -1, partition: -1 } },
+            { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
+            { $match: { bestAmount: { $ne: 0 } } },
+            { $count: "total" },
+          ]);
+          totalItems = filteredCount?.total ?? 0;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+        } else {
+          totalItems = totalRankedItems;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+        }
+      } else {
+        totalItems = totalRankedItems;
+        effectivePage = Math.max(page, 1);
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+      }
+
+      const agg = await Ranking.aggregate([
+        { $match: matchQuery },
+        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
         {
           $group: {
             _id: "$wclCanonicalCharacterId",
@@ -833,45 +893,14 @@ class CharacterService {
         },
         { $match: { bestAmount: { $ne: 0 } } },
         { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, name: 1 } },
-      ];
-
-      let totalItems: number;
-
-      if (nameRegex) {
-        pipeline.push(
-          {
-            $setWindowFields: {
-              sortBy: { bestAmount: -1 },
-              output: { rank: { $denseRank: {} } },
-            },
-          },
-          { $match: { name: nameRegex } },
-          {
-            $facet: {
-              data: [{ $skip: skip }, { $limit: safeLimit }],
-              count: [{ $count: "total" }],
-            },
-          },
-        );
-      } else {
-        pipeline.push({ $skip: skip }, { $limit: safeLimit });
-      }
-
-      const aggResult = await Ranking.aggregate(pipeline);
-
-      let agg: any[];
-      if (nameRegex) {
-        agg = aggResult[0]?.data ?? [];
-        totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
-      } else {
-        agg = aggResult;
-        totalItems = totalRankedItems;
-      }
+        { $skip: effectiveSkip },
+        { $limit: safeLimit },
+      ]);
 
       const guildMap = await getGuildMapForRows(agg);
 
       const data = agg.map((r: any, i: number) => ({
-        rank: r.rank ?? skip + i + 1,
+        rank: effectiveSkip + i + 1,
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -912,13 +941,56 @@ class CharacterService {
           totalItems,
           totalRankedItems,
           totalPages: Math.ceil(totalItems / safeLimit),
-          currentPage: Math.max(page, 1),
+          currentPage: effectivePage,
           pageSize: safeLimit,
         },
+        jumpTo,
       };
     }
 
-    // All-boss allStars leaderboard
+    // ── AllStars leaderboard (no encounterId) ────────────────────────
+
+    // Helper: compute a single character's total allStars points
+    const computeCharacterAllStarsPoints = async (matchFilter: any, characterIdentifier: { characterId?: any; wclCanonicalCharacterId?: any }): Promise<number> => {
+      const charMatch: any = { ...matchFilter };
+      if (characterIdentifier.characterId) charMatch.characterId = characterIdentifier.characterId;
+      else if (characterIdentifier.wclCanonicalCharacterId) charMatch.wclCanonicalCharacterId = characterIdentifier.wclCanonicalCharacterId;
+
+      const [result] = await Ranking.aggregate([
+        { $match: charMatch },
+        { $sort: { "allStars.points": -1 } },
+        { $group: { _id: "$encounter.id", points: { $first: "$allStars.points" } } },
+        { $group: { _id: null, totalPoints: { $sum: "$points" } } },
+      ]);
+      return result?.totalPoints ?? 0;
+    };
+
+    // Helper: count characters with higher total allStars points (partition-specific)
+    const countHigherAllStarsWithPartition = async (matchFilter: any, targetPoints: number): Promise<number> => {
+      const [result] = await Ranking.aggregate([
+        { $match: matchFilter },
+        { $sort: { "allStars.points": -1 } },
+        { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
+        { $group: { _id: "$_id.characterId", totalPoints: { $sum: "$points" } } },
+        { $match: { totalPoints: { $gt: targetPoints } } },
+        { $count: "total" },
+      ]);
+      return result?.total ?? 0;
+    };
+
+    // Helper: count characters with higher total allStars points (no partition, best across partitions)
+    const countHigherAllStarsNoPartition = async (matchFilter: any, targetPoints: number): Promise<number> => {
+      const [result] = await Ranking.aggregate([
+        { $match: matchFilter },
+        { $sort: { "allStars.points": -1, partition: -1 } },
+        { $group: { _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
+        { $group: { _id: "$_id.wclCanonicalCharacterId", totalPoints: { $sum: "$points" } } },
+        { $match: { totalPoints: { $gt: targetPoints } } },
+        { $count: "total" },
+      ]);
+      return result?.total ?? 0;
+    };
+
     const matchBase: any = {
       zoneId,
       difficulty: MYTHIC_DIFFICULTY,
@@ -927,35 +999,72 @@ class CharacterService {
     if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchBase.role = normalizedRole;
 
-    // Partition-filtered view: only consider rows with partition = X
+    // ── Path 3: AllStars + specific partition ─────────────────────────
     if (partition !== undefined) {
       matchBase.partition = partition;
 
-      // Count total unique characters
       const countAgg = await Ranking.aggregate([
         { $match: matchBase },
         { $sort: { "allStars.points": -1 } },
-        {
-          $group: {
-            _id: { characterId: "$characterId", encounterId: "$encounter.id" },
-            points: { $first: "$allStars.points" },
-          },
-        },
-        {
-          $group: {
-            _id: "$_id.characterId",
-            points: { $sum: "$points" },
-          },
-        },
+        { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
+        { $group: { _id: "$_id.characterId", points: { $sum: "$points" } } },
         { $match: { points: { $gt: 0 } } },
         { $count: "total" },
       ]);
-
       const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-      // Group by character and sum allStars across bosses, picking best per encounter
-      const pipeline: any[] = [
-        { $match: matchBase },
+      let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
+      let effectiveSkip: number;
+      let effectivePage: number;
+      let totalItems: number;
+      let matchForData: any = matchBase;
+
+      if (exactNameRegex) {
+        const exactMatch = await Ranking.findOne({ ...matchBase, name: exactNameRegex })
+          .select("characterId wclCanonicalCharacterId")
+          .lean();
+
+        if (exactMatch) {
+          const charPoints = await computeCharacterAllStarsPoints(matchBase, { characterId: exactMatch.characterId });
+          if (charPoints > 0) {
+            const higherCount = await countHigherAllStarsWithPartition(matchBase, charPoints);
+            const rank = higherCount + 1;
+            effectivePage = Math.ceil(rank / safeLimit) || 1;
+            effectiveSkip = (effectivePage - 1) * safeLimit;
+            totalItems = totalRankedItems;
+            jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
+          } else {
+            // Character has 0 points, not on leaderboard
+            totalItems = totalRankedItems;
+            effectivePage = Math.max(page, 1);
+            effectiveSkip = (effectivePage - 1) * safeLimit;
+          }
+        } else if (partialNameRegex) {
+          matchForData = { ...matchBase, name: partialNameRegex };
+          const [filteredCount] = await Ranking.aggregate([
+            { $match: matchForData },
+            { $sort: { "allStars.points": -1 } },
+            { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
+            { $group: { _id: "$_id.characterId", points: { $sum: "$points" } } },
+            { $match: { points: { $gt: 0 } } },
+            { $count: "total" },
+          ]);
+          totalItems = filteredCount?.total ?? 0;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+        } else {
+          totalItems = totalRankedItems;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+        }
+      } else {
+        totalItems = totalRankedItems;
+        effectivePage = Math.max(page, 1);
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+      }
+
+      const agg = await Ranking.aggregate([
+        { $match: matchForData },
         { $sort: { "allStars.points": -1 } },
         {
           $group: {
@@ -995,45 +1104,14 @@ class CharacterService {
         },
         { $match: { points: { $gt: 0 } } },
         { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-      ];
-
-      let totalItems: number;
-
-      if (nameRegex) {
-        pipeline.push(
-          {
-            $setWindowFields: {
-              sortBy: { points: -1 },
-              output: { rank: { $denseRank: {} } },
-            },
-          },
-          { $match: { name: nameRegex } },
-          {
-            $facet: {
-              data: [{ $skip: skip }, { $limit: safeLimit }],
-              count: [{ $count: "total" }],
-            },
-          },
-        );
-      } else {
-        pipeline.push({ $skip: skip }, { $limit: safeLimit });
-      }
-
-      const aggResult = await Ranking.aggregate(pipeline);
-
-      let agg: any[];
-      if (nameRegex) {
-        agg = aggResult[0]?.data ?? [];
-        totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
-      } else {
-        agg = aggResult;
-        totalItems = totalRankedItems;
-      }
+        { $skip: effectiveSkip },
+        { $limit: safeLimit },
+      ]);
 
       const guildMap = await getGuildMapForRows(agg);
 
       const data = agg.map((r: any, i: number) => ({
-        rank: r.rank ?? skip + i + 1,
+        rank: effectiveSkip + i + 1,
         character: {
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -1070,13 +1148,14 @@ class CharacterService {
           totalItems,
           totalRankedItems,
           totalPages: Math.ceil(totalItems / safeLimit),
-          currentPage: Math.max(page, 1),
+          currentPage: effectivePage,
           pageSize: safeLimit,
         },
+        jumpTo,
       };
     }
 
-    // Partition ignored: for each boss, pick BEST result across partitions, then sum per character
+    // ── Path 4: AllStars + no partition (best across partitions) ──────
     const matchNoPartition: any = {
       zoneId,
       difficulty: MYTHIC_DIFFICULTY,
@@ -1085,36 +1164,67 @@ class CharacterService {
     if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
     if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
 
-    // Count unique characters first
     const countAgg = await Ranking.aggregate([
       { $match: matchNoPartition },
-      {
-        $group: {
-          _id: "$wclCanonicalCharacterId",
-          points: { $sum: "$allStars.points" },
-        },
-      },
+      { $group: { _id: "$wclCanonicalCharacterId", points: { $sum: "$allStars.points" } } },
       { $match: { points: { $gt: 0 } } },
       { $count: "total" },
     ]);
-
     const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
 
-    // For each character+encounter combo, pick the BEST row across partitions (max allStars.points)
-    // Then group by character and sum the best per-boss values
-    const pipeline: any[] = [
-      { $match: matchNoPartition },
+    let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
+    let effectiveSkip: number;
+    let effectivePage: number;
+    let totalItems: number;
+    let matchForData: any = matchNoPartition;
 
-      // Sort by allStars.points descending to pick the best partition per encounter
+    if (exactNameRegex) {
+      const exactMatch = await Ranking.findOne({ ...matchNoPartition, name: exactNameRegex })
+        .select("characterId wclCanonicalCharacterId")
+        .lean();
+
+      if (exactMatch) {
+        const charPoints = await computeCharacterAllStarsPoints(matchNoPartition, { wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId });
+        if (charPoints > 0) {
+          const higherCount = await countHigherAllStarsNoPartition(matchNoPartition, charPoints);
+          const rank = higherCount + 1;
+          effectivePage = Math.ceil(rank / safeLimit) || 1;
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+          totalItems = totalRankedItems;
+          jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
+        } else {
+          totalItems = totalRankedItems;
+          effectivePage = Math.max(page, 1);
+          effectiveSkip = (effectivePage - 1) * safeLimit;
+        }
+      } else if (partialNameRegex) {
+        matchForData = { ...matchNoPartition, name: partialNameRegex };
+        const [filteredCount] = await Ranking.aggregate([
+          { $match: matchForData },
+          { $group: { _id: "$wclCanonicalCharacterId", points: { $sum: "$allStars.points" } } },
+          { $match: { points: { $gt: 0 } } },
+          { $count: "total" },
+        ]);
+        totalItems = filteredCount?.total ?? 0;
+        effectivePage = Math.max(page, 1);
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+      } else {
+        totalItems = totalRankedItems;
+        effectivePage = Math.max(page, 1);
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+      }
+    } else {
+      totalItems = totalRankedItems;
+      effectivePage = Math.max(page, 1);
+      effectiveSkip = (effectivePage - 1) * safeLimit;
+    }
+
+    const agg = await Ranking.aggregate([
+      { $match: matchForData },
       { $sort: { "allStars.points": -1, partition: -1 } },
-
-      // Group by character + encounter, pick first (best) from each group
       {
         $group: {
-          _id: {
-            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
-            encounterId: "$encounter.id",
-          },
+          _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" },
           characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$name" },
@@ -1130,8 +1240,6 @@ class CharacterService {
           updatedAt: { $first: "$updatedAt" },
         },
       },
-
-      // Now group by character and sum the best per-boss points/possiblePoints
       {
         $group: {
           _id: "$_id.wclCanonicalCharacterId",
@@ -1151,47 +1259,15 @@ class CharacterService {
         },
       },
       { $match: { points: { $gt: 0 } } },
-
       { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-    ];
-
-    let totalItems: number;
-
-    if (nameRegex) {
-      pipeline.push(
-        {
-          $setWindowFields: {
-            sortBy: { points: -1 },
-            output: { rank: { $denseRank: {} } },
-          },
-        },
-        { $match: { name: nameRegex } },
-        {
-          $facet: {
-            data: [{ $skip: skip }, { $limit: safeLimit }],
-            count: [{ $count: "total" }],
-          },
-        },
-      );
-    } else {
-      pipeline.push({ $skip: skip }, { $limit: safeLimit });
-    }
-
-    const aggResult = await Ranking.aggregate(pipeline);
-
-    let agg: any[];
-    if (nameRegex) {
-      agg = aggResult[0]?.data ?? [];
-      totalItems = aggResult[0]?.count?.[0]?.total ?? 0;
-    } else {
-      agg = aggResult;
-      totalItems = totalRankedItems;
-    }
+      { $skip: effectiveSkip },
+      { $limit: safeLimit },
+    ]);
 
     const guildMap = await getGuildMapForRows(agg);
 
     const data = agg.map((r: any, i: number) => ({
-      rank: r.rank ?? skip + i + 1,
+      rank: effectiveSkip + i + 1,
       character: {
         wclCanonicalCharacterId: r.wclCanonicalCharacterId,
         name: r.name,
@@ -1227,9 +1303,10 @@ class CharacterService {
         totalItems,
         totalRankedItems,
         totalPages: Math.ceil(totalItems / safeLimit),
-        currentPage: Math.max(page, 1),
+        currentPage: effectivePage,
         pageSize: safeLimit,
       },
+      jumpTo,
     };
   }
 }
