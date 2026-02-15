@@ -156,12 +156,13 @@ export function getRankColor(rank: number, totalItems: number): { color: string 
 
 /** WarcraftLogs-style parse color based on percentile (0–100). */
 export function getParseColor(percent: number): string {
-  if (percent >= 99) return "var(--rank-gold)"; // Gold parse
-  if (percent >= 95) return "var(--rank-pink)"; // Pink parse
-  if (percent >= 75) return "var(--rank-orange)"; // Orange parse
-  if (percent >= 50) return "var(--rank-purple)"; // Purple parse
-  if (percent >= 25) return "var(--rank-blue)"; // Blue parse
-  return "var(--rank-gray)"; // Gray parse
+  if (percent >= 100) return "var(--rank-gold)"; // Gold — Rank 1
+  if (percent >= 99) return "var(--rank-pink)"; // Pink — Top 1%
+  if (percent >= 95) return "var(--rank-orange)"; // Orange — Legendary
+  if (percent >= 75) return "var(--rank-purple)"; // Purple — Epic
+  if (percent >= 50) return "var(--rank-blue)"; // Blue — Rare
+  if (percent >= 25) return "var(--rank-green)"; // Green — Uncommon
+  return "var(--rank-gray)"; // Grey — Common
 }
 
 // Get Tailwind color class for leaderboard rank (1-5 orange, 6-20 purple, 21-50 blue, rest green)
