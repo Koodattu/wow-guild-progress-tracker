@@ -31,6 +31,7 @@ router.get("/", async (req: Request, res: Response) => {
     const limit = parseNumberQuery(req.query.limit);
     const partition = parseNumberQuery(req.query.partition);
     const characterName = parseStringQuery(req.query.characterName);
+    const guildName = parseStringQuery(req.query.guildName);
 
     const specNameRaw = parseStringQuery(req.query.specName);
     const specName = specNameRaw?.toLowerCase();
@@ -59,6 +60,9 @@ router.get("/", async (req: Request, res: Response) => {
     if (characterName !== undefined && characterName.length > 64) {
       return res.status(400).json({ error: "Invalid characterName" });
     }
+    if (guildName !== undefined && guildName.length > 64) {
+      return res.status(400).json({ error: "Invalid guildName" });
+    }
 
     const rankings = await characterService.getCharacterRankings({
       zoneId,
@@ -70,6 +74,7 @@ router.get("/", async (req: Request, res: Response) => {
       page,
       limit,
       characterName,
+      guildName,
     });
 
     res.json(rankings);

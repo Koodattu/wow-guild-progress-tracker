@@ -35,6 +35,7 @@ interface RankingTableWrapperProps {
     role?: "dps" | "healer" | "tank" | null;
     partition?: number | null;
     characterName?: string | null;
+    guildName?: string | null;
     page?: number;
   }) => void;
 }
@@ -46,6 +47,7 @@ type RankingFilters = {
   role?: "dps" | "healer" | "tank" | null;
   partition?: number | null;
   characterName?: string | null;
+  guildName?: string | null;
   page?: number;
 };
 
@@ -501,10 +503,13 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
   const [selectedPartition, setSelectedPartition] = useState<PatchPartitionOption | null>(null);
   const [searchValue, setSearchValue] = useState("");
+  const [guildSearchValue, setGuildSearchValue] = useState("");
   const [selectedRole, setSelectedRole] = useState<"dps" | "healer" | "tank" | null>(null);
   const [highlightedCharacterId, setHighlightedCharacterId] = useState<number | null>(null);
   const searchInitializedRef = useRef(false);
+  const guildSearchInitializedRef = useRef(false);
   const searchDebounceRef = useRef<number | null>(null);
+  const guildSearchDebounceRef = useRef<number | null>(null);
   const jumpClearRef = useRef(false);
   const applyFiltersRef = useRef<(overrides?: Partial<RankingFilters>) => void>(() => undefined);
 
@@ -534,11 +539,12 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
         role: selectedRole,
         partition: selectedPartition?.value ?? null,
         characterName: searchValue.trim() || null,
+        guildName: guildSearchValue.trim() || null,
         page: 1,
         ...overrides,
       });
     },
-    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedRole, selectedSpec, searchValue],
+    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedRole, selectedSpec, searchValue, guildSearchValue],
   );
 
   useEffect(() => {
@@ -575,6 +581,32 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       }
     };
   }, [searchValue]);
+
+  // Guild name search debounce
+  useEffect(() => {
+    if (!guildSearchInitializedRef.current) {
+      guildSearchInitializedRef.current = true;
+      return;
+    }
+
+    if (guildSearchDebounceRef.current) {
+      window.clearTimeout(guildSearchDebounceRef.current);
+    }
+
+    guildSearchDebounceRef.current = window.setTimeout(() => {
+      applyFiltersRef.current({
+        guildName: guildSearchValue.trim() || null,
+        page: 1,
+      });
+    }, 300);
+
+    return () => {
+      if (guildSearchDebounceRef.current) {
+        window.clearTimeout(guildSearchDebounceRef.current);
+        guildSearchDebounceRef.current = null;
+      }
+    };
+  }, [guildSearchValue]);
 
   const handleBossChange = (boss: Boss | null) => {
     setSelectedBoss(boss);
@@ -614,6 +646,10 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       window.clearTimeout(searchDebounceRef.current);
       searchDebounceRef.current = null;
     }
+    if (guildSearchDebounceRef.current) {
+      window.clearTimeout(guildSearchDebounceRef.current);
+      guildSearchDebounceRef.current = null;
+    }
     clearHighlight();
     applyFilters({ page });
   };
@@ -644,7 +680,31 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       {error ? <div className="rounded-md border border-red-500/40 bg-red-950/30 px-4 py-3 text-red-200">{error}</div> : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 w-full">
+          {/* Character Search */}
+          <div className="w-full">
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              maxLength={64}
+              placeholder={t("searchPlaceholder")}
+              className="w-full min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+            />
+          </div>
+
+          {/* Guild Search */}
+          <div className="w-full">
+            <input
+              type="text"
+              value={guildSearchValue}
+              onChange={(event) => setGuildSearchValue(event.target.value)}
+              maxLength={64}
+              placeholder={t("searchGuildPlaceholder")}
+              className="w-full min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+            />
+          </div>
+
           {/* Boss Selector */}
           <Selector
             items={bosses}
@@ -677,18 +737,6 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
 
           {/* Role Selector */}
           <RoleSelector selectedRole={selectedRole} allRolesLabel={t("allRoles")} onChange={handleRoleChange} />
-
-          {/* Character Search */}
-          <div className="w-full">
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-              maxLength={64}
-              placeholder={t("searchPlaceholder")}
-              className="w-full min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
-            />
-          </div>
 
           {/* Patch Selector */}
           <Selector

@@ -510,6 +510,7 @@
     "allClasses": "All classes",
     "allRoles": "All roles",
     "searchPlaceholder": "Search character",
+    "searchGuildPlaceholder": "Search guild",
     "columnRank": "Rank",
     "columnName": "Name",
     "columnGuild": "Guild",

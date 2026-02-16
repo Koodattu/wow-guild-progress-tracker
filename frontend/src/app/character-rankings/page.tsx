@@ -15,6 +15,7 @@ type Filters = {
   limit?: number;
   partition?: number | null;
   characterName?: string | null;
+  guildName?: string | null;
 };
 
 function buildQuery(filters: Filters) {

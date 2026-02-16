@@ -510,6 +510,7 @@
     "allClasses": "Kaikki luokat",
     "allRoles": "Kaikki roolit",
     "searchPlaceholder": "Hae hahmoa",
+    "searchGuildPlaceholder": "Hae kiltaa",
     "columnRank": "Sija",
     "columnName": "Nimi",
     "columnGuild": "Kilta",

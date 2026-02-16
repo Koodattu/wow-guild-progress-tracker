@@ -1010,16 +1010,19 @@ class CharacterService {
     limit?: number;
     page?: number;
     characterName?: string;
+    guildName?: string;
   }): Promise<CharacterRankingsResponse> {
-    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1, characterName } = options;
+    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1, characterName, guildName } = options;
 
     const MYTHIC_DIFFICULTY = 5;
     const normalizedSpecName = specName?.trim().toLowerCase();
     const normalizedRole = role?.toLowerCase() as "dps" | "healer" | "tank" | undefined;
     const normalizedCharacterName = characterName?.trim();
+    const normalizedGuildName = guildName?.trim();
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const exactNameRegex = normalizedCharacterName ? new RegExp(`^${escapeRegex(normalizedCharacterName)}$`, "i") : undefined;
     const partialNameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
+    const partialGuildNameRegex = normalizedGuildName ? new RegExp(escapeRegex(normalizedGuildName), "i") : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
 
@@ -1079,6 +1082,19 @@ class CharacterService {
       totalItems = totalRankedItems;
       effectivePage = Math.max(page, 1);
       effectiveSkip = (effectivePage - 1) * safeLimit;
+    }
+
+    // ── Guild name filter (narrows displayed rows, ranks stay global) ─
+    if (partialGuildNameRegex) {
+      fetchQuery.guildName = partialGuildNameRegex;
+      totalItems = await CharacterLeaderboard.countDocuments(fetchQuery);
+      needsGlobalRanks = true;
+      // Invalidate jump-to when guild filter is active (page set changed)
+      if (jumpTo) {
+        jumpTo = undefined;
+        effectivePage = Math.max(page, 1);
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+      }
     }
 
     // ── Fetch the page ───────────────────────────────────────────────
