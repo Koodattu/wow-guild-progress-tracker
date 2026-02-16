@@ -17,6 +17,7 @@ import GuildProcessingQueue, { ProcessingStatus } from "../models/GuildProcessin
 import logger from "../utils/logger";
 import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
+import characterService from "../services/character.service";
 import wclService from "../services/warcraftlogs.service";
 import blizzardService from "../services/blizzard.service";
 
@@ -744,7 +745,7 @@ router.put("/guilds/:guildId", async (req: Request, res: Response) => {
     }
 
     if (activityStatus !== undefined) {
-      if (!['active', 'inactive'].includes(activityStatus)) {
+      if (!["active", "inactive"].includes(activityStatus)) {
         return res.status(400).json({ error: "Activity status must be 'active' or 'inactive'" });
       }
       guild.activityStatus = activityStatus;
@@ -1839,6 +1840,19 @@ router.post("/trigger/refresh-character-rankings", async (req: Request, res: Res
   }
 });
 
+// Rebuild the materialized leaderboard collection (fast, no WCL API calls)
+router.get("/trigger/rebuild-leaderboard", async (req: Request, res: Response) => {
+  try {
+    const startTime = Date.now();
+    await characterService.buildCharacterLeaderboards();
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    res.json({ success: true, message: `Leaderboard rebuilt in ${duration}s` });
+  } catch (error) {
+    logger.error("Error rebuilding leaderboard:", error);
+    res.status(500).json({ error: "Failed to rebuild leaderboard" });
+  }
+});
+
 // ============================================================
 // CHARACTERS
 // ============================================================
@@ -1923,10 +1937,7 @@ router.delete("/characters/:characterId", async (req: Request, res: Response) =>
     const rankingResult = await Ranking.deleteMany({ characterId: character._id });
     await Character.deleteOne({ _id: character._id });
 
-    logger.info(
-      `Admin deleted character: ${characterName}-${characterRealm} (ID: ${characterId}). ` +
-        `Removed: ${rankingResult.deletedCount} rankings`,
-    );
+    logger.info(`Admin deleted character: ${characterName}-${characterRealm} (ID: ${characterId}). ` + `Removed: ${rankingResult.deletedCount} rankings`);
 
     res.json({
       success: true,

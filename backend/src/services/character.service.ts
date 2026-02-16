@@ -1,6 +1,7 @@
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
 import Character from "../models/Character";
+import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import Ranking from "../models/Ranking";
 import Raid from "../models/Raid";
 import logger from "../utils/logger";
@@ -620,6 +621,385 @@ class CharacterService {
     }
   }
 
+  /**
+   * Rebuild the materialized CharacterLeaderboard collection from Ranking data.
+   * Creates one document per character per leaderboard view.
+   * Should be called after nightly rankings refresh completes.
+   */
+  async buildCharacterLeaderboards(): Promise<void> {
+    const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
+    const MYTHIC_DIFFICULTY = 5;
+    const startTime = Date.now();
+
+    logger.info("[Leaderboard] Starting leaderboard build...");
+
+    try {
+      // Discover distinct encounters and partitions in the current tier
+      const encounterIds: number[] = await Ranking.distinct("encounter.id", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
+      const partitions: number[] = await Ranking.distinct("partition", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
+
+      logger.info(`[Leaderboard] Found ${encounterIds.length} encounters, ${partitions.length} partitions`);
+
+      // Build global guild map once (characterId → guild info)
+      const allCharacterIds = await Ranking.distinct("characterId", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
+      const characters = await Character.find({ _id: { $in: allCharacterIds } })
+        .select("_id guildName guildRealm")
+        .lean();
+      const guildMap = new Map<string, { name: string; realm: string } | null>();
+      for (const c of characters) {
+        const gn = c.guildName ?? null;
+        const gr = c.guildRealm ?? null;
+        guildMap.set(String(c._id), gn && gr ? { name: gn, realm: gr } : null);
+      }
+
+      const entries: any[] = [];
+
+      // ── Boss leaderboards (per encounter × per partition) ──────────
+      for (const encId of encounterIds) {
+        for (const part of partitions) {
+          // Group by wclCanonicalCharacterId to keep only the best spec per character
+          const rows = await Ranking.aggregate([
+            {
+              $match: {
+                zoneId: CURRENT_TIER_ID,
+                difficulty: MYTHIC_DIFFICULTY,
+                partition: part,
+                "encounter.id": encId,
+                bestAmount: { $ne: 0 },
+              },
+            },
+            { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
+            {
+              $group: {
+                _id: "$wclCanonicalCharacterId",
+                characterId: { $first: "$characterId" },
+                wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+                name: { $first: "$name" },
+                realm: { $first: "$realm" },
+                region: { $first: "$region" },
+                classID: { $first: "$classID" },
+                specName: { $first: "$specName" },
+                bestSpecName: { $first: "$bestSpecName" },
+                role: { $first: "$role" },
+                ilvl: { $first: "$ilvl" },
+                bestAmount: { $first: "$bestAmount" },
+                encounterName: { $first: "$encounter.name" },
+                rankPercent: { $first: "$rankPercent" },
+                medianPercent: { $first: "$medianPercent" },
+                lockedIn: { $first: "$lockedIn" },
+                totalKills: { $first: "$totalKills" },
+                updatedAt: { $first: "$updatedAt" },
+              },
+            },
+          ]);
+
+          for (const r of rows) {
+            const guild = guildMap.get(String(r.characterId));
+            entries.push({
+              zoneId: CURRENT_TIER_ID,
+              difficulty: MYTHIC_DIFFICULTY,
+              type: "boss",
+              encounterId: encId,
+              partition: part,
+              characterId: r.characterId,
+              wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+              name: r.name,
+              realm: r.realm,
+              region: r.region,
+              classID: r.classID,
+              specName: r.specName,
+              bestSpecName: r.bestSpecName,
+              role: r.role,
+              ilvl: r.ilvl ?? 0,
+              score: r.bestAmount,
+              encounterName: r.encounterName,
+              rankPercent: r.rankPercent,
+              medianPercent: r.medianPercent,
+              lockedIn: r.lockedIn,
+              totalKills: r.totalKills,
+              bestAmount: r.bestAmount,
+              allStarsPoints: 0,
+              allStarsPossiblePoints: 0,
+              bossScores: [],
+              guildName: guild?.name ?? null,
+              guildRealm: guild?.realm ?? null,
+              sourcePartition: part,
+              updatedAt: r.updatedAt ?? new Date(),
+            });
+          }
+        }
+
+        // Boss + all partitions (best per character across partitions)
+        const bestPerChar = await Ranking.aggregate([
+          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, "encounter.id": encId } },
+          { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
+          {
+            $group: {
+              _id: "$wclCanonicalCharacterId",
+              characterId: { $first: "$characterId" },
+              wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+              name: { $first: "$name" },
+              realm: { $first: "$realm" },
+              region: { $first: "$region" },
+              classID: { $first: "$classID" },
+              specName: { $first: "$specName" },
+              bestSpecName: { $first: "$bestSpecName" },
+              role: { $first: "$role" },
+              ilvl: { $first: "$ilvl" },
+              bestAmount: { $first: "$bestAmount" },
+              encounterName: { $first: "$encounter.name" },
+              rankPercent: { $first: "$rankPercent" },
+              medianPercent: { $first: "$medianPercent" },
+              lockedIn: { $first: "$lockedIn" },
+              totalKills: { $first: "$totalKills" },
+              partition: { $first: "$partition" },
+              updatedAt: { $first: "$updatedAt" },
+            },
+          },
+          { $match: { bestAmount: { $ne: 0 } } },
+        ]);
+
+        for (const r of bestPerChar) {
+          const guild = guildMap.get(String(r.characterId));
+          entries.push({
+            zoneId: CURRENT_TIER_ID,
+            difficulty: MYTHIC_DIFFICULTY,
+            type: "boss",
+            encounterId: encId,
+            partition: null,
+            characterId: r.characterId,
+            wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+            name: r.name,
+            realm: r.realm,
+            region: r.region,
+            classID: r.classID,
+            specName: r.specName,
+            bestSpecName: r.bestSpecName,
+            role: r.role,
+            ilvl: r.ilvl ?? 0,
+            score: r.bestAmount,
+            encounterName: r.encounterName,
+            rankPercent: r.rankPercent,
+            medianPercent: r.medianPercent,
+            lockedIn: r.lockedIn,
+            totalKills: r.totalKills,
+            bestAmount: r.bestAmount,
+            allStarsPoints: 0,
+            allStarsPossiblePoints: 0,
+            bossScores: [],
+            guildName: guild?.name ?? null,
+            guildRealm: guild?.realm ?? null,
+            sourcePartition: r.partition,
+            updatedAt: r.updatedAt ?? new Date(),
+          });
+        }
+      }
+
+      // ── AllStars leaderboards (per partition) ──────────────────────
+      for (const part of partitions) {
+        const allStarsAgg = await Ranking.aggregate([
+          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, partition: part } },
+          { $sort: { "allStars.points": -1 } },
+          {
+            $group: {
+              _id: { characterId: "$characterId", encounterId: "$encounter.id" },
+              characterId: { $first: "$characterId" },
+              wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+              name: { $first: "$name" },
+              realm: { $first: "$realm" },
+              region: { $first: "$region" },
+              classID: { $first: "$classID" },
+              specName: { $first: "$specName" },
+              role: { $first: "$role" },
+              points: { $first: "$allStars.points" },
+              possiblePoints: { $first: "$allStars.possiblePoints" },
+              ilvl: { $first: "$ilvl" },
+              rankPercent: { $first: "$rankPercent" },
+              medianPercent: { $first: "$medianPercent" },
+              updatedAt: { $first: "$updatedAt" },
+            },
+          },
+          {
+            $group: {
+              _id: "$_id.characterId",
+              characterId: { $first: "$characterId" },
+              wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+              name: { $first: "$name" },
+              realm: { $first: "$realm" },
+              region: { $first: "$region" },
+              classID: { $first: "$classID" },
+              specName: { $first: "$specName" },
+              role: { $first: "$role" },
+              points: { $sum: "$points" },
+              possiblePoints: { $sum: "$possiblePoints" },
+              ilvl: { $first: "$ilvl" },
+              rankPercent: { $max: "$rankPercent" },
+              medianPercent: { $max: "$medianPercent" },
+              updatedAt: { $max: "$updatedAt" },
+              bossScores: {
+                $push: {
+                  encounterId: "$_id.encounterId",
+                  points: "$points",
+                  rankPercent: "$rankPercent",
+                  specName: "$specName",
+                },
+              },
+            },
+          },
+          { $match: { points: { $gt: 0 } } },
+        ]);
+
+        for (const r of allStarsAgg) {
+          const guild = guildMap.get(String(r.characterId));
+          entries.push({
+            zoneId: CURRENT_TIER_ID,
+            difficulty: MYTHIC_DIFFICULTY,
+            type: "allstars",
+            encounterId: null,
+            partition: part,
+            characterId: r.characterId,
+            wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+            name: r.name,
+            realm: r.realm,
+            region: r.region,
+            classID: r.classID,
+            specName: r.specName,
+            bestSpecName: "",
+            role: r.role,
+            ilvl: r.ilvl ?? 0,
+            score: r.points,
+            encounterName: "",
+            rankPercent: r.rankPercent,
+            medianPercent: r.medianPercent,
+            lockedIn: false,
+            totalKills: 0,
+            bestAmount: 0,
+            allStarsPoints: r.points,
+            allStarsPossiblePoints: r.possiblePoints,
+            bossScores: r.bossScores ?? [],
+            guildName: guild?.name ?? null,
+            guildRealm: guild?.realm ?? null,
+            sourcePartition: part,
+            updatedAt: r.updatedAt ?? new Date(),
+          });
+        }
+      }
+
+      // ── AllStars + all partitions (best per boss across partitions) ─
+      const allStarsAllPartitions = await Ranking.aggregate([
+        { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY } },
+        { $sort: { "allStars.points": -1, partition: -1 } },
+        {
+          $group: {
+            _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" },
+            characterId: { $first: "$characterId" },
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            name: { $first: "$name" },
+            realm: { $first: "$realm" },
+            region: { $first: "$region" },
+            classID: { $first: "$classID" },
+            specName: { $first: "$specName" },
+            role: { $first: "$role" },
+            points: { $first: "$allStars.points" },
+            possiblePoints: { $first: "$allStars.possiblePoints" },
+            ilvl: { $first: "$ilvl" },
+            rankPercent: { $first: "$rankPercent" },
+            medianPercent: { $first: "$medianPercent" },
+            updatedAt: { $first: "$updatedAt" },
+          },
+        },
+        {
+          $group: {
+            _id: "$_id.wclCanonicalCharacterId",
+            characterId: { $first: "$characterId" },
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            name: { $first: "$name" },
+            realm: { $first: "$realm" },
+            region: { $first: "$region" },
+            classID: { $first: "$classID" },
+            specName: { $first: "$specName" },
+            role: { $first: "$role" },
+            points: { $sum: "$points" },
+            possiblePoints: { $sum: "$possiblePoints" },
+            ilvl: { $first: "$ilvl" },
+            rankPercent: { $max: "$rankPercent" },
+            medianPercent: { $max: "$medianPercent" },
+            updatedAt: { $max: "$updatedAt" },
+            bossScores: {
+              $push: {
+                encounterId: "$_id.encounterId",
+                points: "$points",
+                rankPercent: "$rankPercent",
+                specName: "$specName",
+              },
+            },
+          },
+        },
+        { $match: { points: { $gt: 0 } } },
+      ]);
+
+      for (const r of allStarsAllPartitions) {
+        const guild = guildMap.get(String(r.characterId));
+        entries.push({
+          zoneId: CURRENT_TIER_ID,
+          difficulty: MYTHIC_DIFFICULTY,
+          type: "allstars",
+          encounterId: null,
+          partition: null,
+          characterId: r.characterId,
+          wclCanonicalCharacterId: r.wclCanonicalCharacterId,
+          name: r.name,
+          realm: r.realm,
+          region: r.region,
+          classID: r.classID,
+          specName: r.specName,
+          bestSpecName: "",
+          role: r.role,
+          ilvl: r.ilvl ?? 0,
+          score: r.points,
+          encounterName: "",
+          rankPercent: r.rankPercent,
+          medianPercent: r.medianPercent,
+          lockedIn: false,
+          totalKills: 0,
+          bestAmount: 0,
+          allStarsPoints: r.points,
+          allStarsPossiblePoints: r.possiblePoints,
+          bossScores: r.bossScores ?? [],
+          guildName: guild?.name ?? null,
+          guildRealm: guild?.realm ?? null,
+          sourcePartition: 0,
+          updatedAt: r.updatedAt ?? new Date(),
+        });
+      }
+
+      // ── Atomic swap: drop old data, insert new ─────────────────────
+      logger.info(`[Leaderboard] Inserting ${entries.length} leaderboard entries...`);
+      await CharacterLeaderboard.deleteMany({ zoneId: CURRENT_TIER_ID });
+
+      if (entries.length > 0) {
+        // Insert in batches of 5000 to avoid memory pressure
+        const BATCH = 5000;
+        for (let i = 0; i < entries.length; i += BATCH) {
+          await CharacterLeaderboard.insertMany(entries.slice(i, i + BATCH), { ordered: false });
+        }
+      }
+
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      logger.info(`[Leaderboard] Build completed: ${entries.length} entries in ${duration}s`);
+    } catch (error) {
+      logger.error("[Leaderboard] Build failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Query the materialized leaderboard for character rankings.
+   *
+   * All operations are simple indexed find/count — no aggregation needed at query time.
+   * Ranks are either positional (for unfiltered views) or computed via fast countDocuments
+   * (for name-filtered views where we need global rank).
+   */
   async getCharacterRankings(options: {
     zoneId: number;
     encounterId?: number;
@@ -643,571 +1023,53 @@ class CharacterService {
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
 
-    const getGuildMapForRows = async (rows: Array<{ characterId?: any }>): Promise<Map<string, { name: string; realm: string } | null>> => {
-      const ids = rows
-        .map((row) => row.characterId)
-        .filter(Boolean)
-        .map((id) => String(id));
-      const uniqueIds = [...new Set(ids)];
-      if (uniqueIds.length === 0) {
-        return new Map();
-      }
-
-      const characters = await Character.find({ _id: { $in: uniqueIds } })
-        .select("_id guildName guildRealm")
-        .lean();
-
-      const guildMap = new Map<string, { name: string; realm: string } | null>();
-      for (const character of characters) {
-        const guildName = character.guildName ?? null;
-        const guildRealm = character.guildRealm ?? null;
-        if (guildName && guildRealm) {
-          guildMap.set(String(character._id), {
-            name: guildName,
-            realm: guildRealm,
-          });
-        } else {
-          guildMap.set(String(character._id), null);
-        }
-      }
-
-      return guildMap;
-    };
-
-    // ── Boss leaderboard (encounterId provided) ──────────────────────
-    if (encounterId !== undefined) {
-      const baseQuery: any = {
-        zoneId,
-        "encounter.id": encounterId,
-        difficulty: MYTHIC_DIFFICULTY,
-      };
-      if (partition !== undefined) baseQuery.partition = partition;
-      if (classId !== undefined) baseQuery.classID = classId;
-      if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
-      if (normalizedRole !== undefined) baseQuery.role = normalizedRole;
-
-      // ── Path 1: Boss + specific partition (find-based) ──
-      if (partition !== undefined) {
-        const leaderboardQuery = { ...baseQuery, bestAmount: { $ne: 0 } };
-        const totalRankedItems = await Ranking.countDocuments(leaderboardQuery);
-
-        let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
-        let effectiveSkip: number;
-        let effectivePage: number;
-        let totalItems: number;
-        let activeQuery: any;
-
-        if (exactNameRegex) {
-          // Try exact match for "jump to" behavior
-          const exactMatch = await Ranking.findOne({ ...leaderboardQuery, name: exactNameRegex })
-            .select("wclCanonicalCharacterId bestAmount rankPercent totalKills")
-            .sort({ bestAmount: -1 })
-            .lean();
-
-          if (exactMatch) {
-            // Count characters with a strictly higher score
-            const higherCount = await Ranking.countDocuments({
-              ...leaderboardQuery,
-              $or: [
-                { bestAmount: { $gt: exactMatch.bestAmount } },
-                { bestAmount: exactMatch.bestAmount, rankPercent: { $gt: exactMatch.rankPercent } },
-                { bestAmount: exactMatch.bestAmount, rankPercent: exactMatch.rankPercent, totalKills: { $gt: exactMatch.totalKills } },
-              ],
-            });
-            const rank = higherCount + 1;
-            effectivePage = Math.ceil(rank / safeLimit) || 1;
-            effectiveSkip = (effectivePage - 1) * safeLimit;
-            totalItems = totalRankedItems;
-            activeQuery = leaderboardQuery;
-            jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
-          } else if (partialNameRegex) {
-            // No exact match → partial filter fallback
-            activeQuery = { ...leaderboardQuery, name: partialNameRegex };
-            totalItems = await Ranking.countDocuments(activeQuery);
-            effectivePage = Math.max(page, 1);
-            effectiveSkip = (effectivePage - 1) * safeLimit;
-          } else {
-            activeQuery = leaderboardQuery;
-            totalItems = totalRankedItems;
-            effectivePage = Math.max(page, 1);
-            effectiveSkip = (effectivePage - 1) * safeLimit;
-          }
-        } else {
-          activeQuery = leaderboardQuery;
-          totalItems = totalRankedItems;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        }
-
-        const rows = await Ranking.find(activeQuery)
-          .select(
-            "characterId wclCanonicalCharacterId name realm region classID zoneId difficulty encounter specName bestSpecName role " +
-              "rankPercent medianPercent lockedIn totalKills bestAmount allStars ilvl partition updatedAt",
-          )
-          .sort({ bestAmount: -1, rankPercent: -1, totalKills: -1 })
-          .skip(effectiveSkip)
-          .limit(safeLimit)
-          .lean();
-
-        const guildMap = await getGuildMapForRows(rows);
-
-        const data = rows.map((r: any, i: number) => ({
-          rank: effectiveSkip + i + 1,
-          character: {
-            wclCanonicalCharacterId: r.wclCanonicalCharacterId,
-            name: r.name,
-            realm: r.realm,
-            region: r.region,
-            classID: r.classID,
-            guild: guildMap.get(String(r.characterId)) ?? null,
-          },
-          context: {
-            zoneId,
-            difficulty: r.difficulty,
-            partition: r.partition,
-            encounterId: encounterId ?? null,
-            specName: r.specName,
-            bestSpecName: r.bestSpecName,
-            role: r.role,
-            ilvl: r.ilvl,
-          },
-          encounter: {
-            id: r.encounter.id,
-            name: r.encounter.name,
-          },
-          score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
-          stats: {
-            bestAmount: r.bestAmount ?? 0,
-            rankPercent: r.rankPercent,
-            medianPercent: r.medianPercent,
-            lockedIn: r.lockedIn,
-            totalKills: r.totalKills,
-            allStars: r.allStars,
-          },
-          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
-        }));
-
-        return {
-          data,
-          pagination: {
-            totalItems,
-            totalRankedItems,
-            totalPages: Math.ceil(totalItems / safeLimit),
-            currentPage: effectivePage,
-            pageSize: safeLimit,
-          },
-          jumpTo,
-        };
-      }
-
-      // ── Path 2: Boss + all partitions (aggregation, best per char) ──
-      const countAgg = await Ranking.aggregate([
-        { $match: baseQuery },
-        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
-        { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
-        { $match: { bestAmount: { $ne: 0 } } },
-        { $count: "total" },
-      ]);
-      const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
-
-      let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
-      let effectiveSkip: number;
-      let effectivePage: number;
-      let totalItems: number;
-      let matchQuery: any = baseQuery;
-
-      if (exactNameRegex) {
-        // Find the character's best score across partitions for this boss
-        const [charBest] = await Ranking.aggregate([
-          { $match: { ...baseQuery, name: exactNameRegex } },
-          { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
-          { $limit: 1 },
-          { $project: { wclCanonicalCharacterId: 1, bestAmount: 1 } },
-        ]);
-
-        if (charBest) {
-          // Count unique characters with a higher best score
-          const [rankCount] = await Ranking.aggregate([
-            { $match: baseQuery },
-            { $sort: { bestAmount: -1, partition: -1 } },
-            { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
-            { $match: { bestAmount: { $gt: charBest.bestAmount, $ne: 0 } } },
-            { $count: "total" },
-          ]);
-          const rank = (rankCount?.total ?? 0) + 1;
-          effectivePage = Math.ceil(rank / safeLimit) || 1;
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-          totalItems = totalRankedItems;
-          jumpTo = { rank, wclCanonicalCharacterId: charBest.wclCanonicalCharacterId };
-        } else if (partialNameRegex) {
-          matchQuery = { ...baseQuery, name: partialNameRegex };
-          const [filteredCount] = await Ranking.aggregate([
-            { $match: matchQuery },
-            { $sort: { bestAmount: -1, partition: -1 } },
-            { $group: { _id: "$wclCanonicalCharacterId", bestAmount: { $first: "$bestAmount" } } },
-            { $match: { bestAmount: { $ne: 0 } } },
-            { $count: "total" },
-          ]);
-          totalItems = filteredCount?.total ?? 0;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        } else {
-          totalItems = totalRankedItems;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        }
-      } else {
-        totalItems = totalRankedItems;
-        effectivePage = Math.max(page, 1);
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-      }
-
-      const agg = await Ranking.aggregate([
-        { $match: matchQuery },
-        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
-        {
-          $group: {
-            _id: "$wclCanonicalCharacterId",
-            characterId: { $first: "$characterId" },
-            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-            name: { $first: "$name" },
-            realm: { $first: "$realm" },
-            region: { $first: "$region" },
-            classID: { $first: "$classID" },
-            zoneId: { $first: "$zoneId" },
-            difficulty: { $first: "$difficulty" },
-            encounter: { $first: "$encounter" },
-            specName: { $first: "$specName" },
-            bestSpecName: { $first: "$bestSpecName" },
-            role: { $first: "$role" },
-            rankPercent: { $first: "$rankPercent" },
-            medianPercent: { $first: "$medianPercent" },
-            lockedIn: { $first: "$lockedIn" },
-            totalKills: { $first: "$totalKills" },
-            bestAmount: { $first: "$bestAmount" },
-            allStars: { $first: "$allStars" },
-            ilvl: { $first: "$ilvl" },
-            partition: { $first: "$partition" },
-            updatedAt: { $first: "$updatedAt" },
-          },
-        },
-        { $match: { bestAmount: { $ne: 0 } } },
-        { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, name: 1 } },
-        { $skip: effectiveSkip },
-        { $limit: safeLimit },
-      ]);
-
-      const guildMap = await getGuildMapForRows(agg);
-
-      const data = agg.map((r: any, i: number) => ({
-        rank: effectiveSkip + i + 1,
-        character: {
-          wclCanonicalCharacterId: r.wclCanonicalCharacterId,
-          name: r.name,
-          realm: r.realm,
-          region: r.region,
-          classID: r.classID,
-          guild: guildMap.get(String(r.characterId)) ?? null,
-        },
-        context: {
-          zoneId: r.zoneId,
-          difficulty: r.difficulty,
-          partition: r.partition,
-          encounterId: encounterId ?? null,
-          specName: r.specName,
-          bestSpecName: r.bestSpecName,
-          role: r.role,
-          ilvl: r.ilvl,
-        },
-        encounter: {
-          id: r.encounter.id,
-          name: r.encounter.name,
-        },
-        score: { type: "bestAmount" as const, value: r.bestAmount ?? 0 },
-        stats: {
-          bestAmount: r.bestAmount ?? 0,
-          rankPercent: r.rankPercent,
-          medianPercent: r.medianPercent,
-          lockedIn: r.lockedIn,
-          totalKills: r.totalKills,
-          allStars: r.allStars,
-        },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
-      }));
-
-      return {
-        data,
-        pagination: {
-          totalItems,
-          totalRankedItems,
-          totalPages: Math.ceil(totalItems / safeLimit),
-          currentPage: effectivePage,
-          pageSize: safeLimit,
-        },
-        jumpTo,
-      };
-    }
-
-    // ── AllStars leaderboard (no encounterId) ────────────────────────
-
-    // Helper: compute a single character's total allStars points
-    const computeCharacterAllStarsPoints = async (matchFilter: any, characterIdentifier: { characterId?: any; wclCanonicalCharacterId?: any }): Promise<number> => {
-      const charMatch: any = { ...matchFilter };
-      if (characterIdentifier.characterId) charMatch.characterId = characterIdentifier.characterId;
-      else if (characterIdentifier.wclCanonicalCharacterId) charMatch.wclCanonicalCharacterId = characterIdentifier.wclCanonicalCharacterId;
-
-      const [result] = await Ranking.aggregate([
-        { $match: charMatch },
-        { $sort: { "allStars.points": -1 } },
-        { $group: { _id: "$encounter.id", points: { $first: "$allStars.points" } } },
-        { $group: { _id: null, totalPoints: { $sum: "$points" } } },
-      ]);
-      return result?.totalPoints ?? 0;
-    };
-
-    // Helper: count characters with higher total allStars points (partition-specific)
-    const countHigherAllStarsWithPartition = async (matchFilter: any, targetPoints: number): Promise<number> => {
-      const [result] = await Ranking.aggregate([
-        { $match: matchFilter },
-        { $sort: { "allStars.points": -1 } },
-        { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
-        { $group: { _id: "$_id.characterId", totalPoints: { $sum: "$points" } } },
-        { $match: { totalPoints: { $gt: targetPoints } } },
-        { $count: "total" },
-      ]);
-      return result?.total ?? 0;
-    };
-
-    // Helper: count characters with higher total allStars points (no partition, best across partitions)
-    const countHigherAllStarsNoPartition = async (matchFilter: any, targetPoints: number): Promise<number> => {
-      const [result] = await Ranking.aggregate([
-        { $match: matchFilter },
-        { $sort: { "allStars.points": -1, partition: -1 } },
-        { $group: { _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
-        { $group: { _id: "$_id.wclCanonicalCharacterId", totalPoints: { $sum: "$points" } } },
-        { $match: { totalPoints: { $gt: targetPoints } } },
-        { $count: "total" },
-      ]);
-      return result?.total ?? 0;
-    };
-
-    const matchBase: any = {
+    // ── Base query identifies the leaderboard view ───────────────────
+    const baseQuery: any = {
       zoneId,
       difficulty: MYTHIC_DIFFICULTY,
+      type: encounterId !== undefined ? "boss" : "allstars",
+      encounterId: encounterId ?? null,
+      partition: partition ?? null,
     };
-    if (classId !== undefined) matchBase.classID = classId;
-    if (normalizedSpecName !== undefined) matchBase.specName = normalizedSpecName;
-    if (normalizedRole !== undefined) matchBase.role = normalizedRole;
 
-    // ── Path 3: AllStars + specific partition ─────────────────────────
-    if (partition !== undefined) {
-      matchBase.partition = partition;
+    // ── Optional filters ─────────────────────────────────────────────
+    if (classId !== undefined) baseQuery.classID = classId;
+    if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
+    if (normalizedRole !== undefined) baseQuery.role = normalizedRole;
 
-      const countAgg = await Ranking.aggregate([
-        { $match: matchBase },
-        { $sort: { "allStars.points": -1 } },
-        { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
-        { $group: { _id: "$_id.characterId", points: { $sum: "$points" } } },
-        { $match: { points: { $gt: 0 } } },
-        { $count: "total" },
-      ]);
-      const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
-
-      let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
-      let effectiveSkip: number;
-      let effectivePage: number;
-      let totalItems: number;
-      let matchForData: any = matchBase;
-
-      if (exactNameRegex) {
-        const exactMatch = await Ranking.findOne({ ...matchBase, name: exactNameRegex })
-          .select("characterId wclCanonicalCharacterId")
-          .lean();
-
-        if (exactMatch) {
-          const charPoints = await computeCharacterAllStarsPoints(matchBase, { characterId: exactMatch.characterId });
-          if (charPoints > 0) {
-            const higherCount = await countHigherAllStarsWithPartition(matchBase, charPoints);
-            const rank = higherCount + 1;
-            effectivePage = Math.ceil(rank / safeLimit) || 1;
-            effectiveSkip = (effectivePage - 1) * safeLimit;
-            totalItems = totalRankedItems;
-            jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
-          } else {
-            // Character has 0 points, not on leaderboard
-            totalItems = totalRankedItems;
-            effectivePage = Math.max(page, 1);
-            effectiveSkip = (effectivePage - 1) * safeLimit;
-          }
-        } else if (partialNameRegex) {
-          matchForData = { ...matchBase, name: partialNameRegex };
-          const [filteredCount] = await Ranking.aggregate([
-            { $match: matchForData },
-            { $sort: { "allStars.points": -1 } },
-            { $group: { _id: { characterId: "$characterId", encounterId: "$encounter.id" }, points: { $first: "$allStars.points" } } },
-            { $group: { _id: "$_id.characterId", points: { $sum: "$points" } } },
-            { $match: { points: { $gt: 0 } } },
-            { $count: "total" },
-          ]);
-          totalItems = filteredCount?.total ?? 0;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        } else {
-          totalItems = totalRankedItems;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        }
-      } else {
-        totalItems = totalRankedItems;
-        effectivePage = Math.max(page, 1);
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-      }
-
-      const agg = await Ranking.aggregate([
-        { $match: matchForData },
-        { $sort: { "allStars.points": -1 } },
-        {
-          $group: {
-            _id: { characterId: "$characterId", encounterId: "$encounter.id" },
-            characterId: { $first: "$characterId" },
-            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-            name: { $first: "$name" },
-            realm: { $first: "$realm" },
-            region: { $first: "$region" },
-            classID: { $first: "$classID" },
-            specName: { $first: "$specName" },
-            points: { $first: "$allStars.points" },
-            possiblePoints: { $first: "$allStars.possiblePoints" },
-            ilvl: { $first: "$ilvl" },
-            rankPercent: { $first: "$rankPercent" },
-            medianPercent: { $first: "$medianPercent" },
-            updatedAt: { $first: "$updatedAt" },
-          },
-        },
-        {
-          $group: {
-            _id: "$_id.characterId",
-            characterId: { $first: "$characterId" },
-            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-            name: { $first: "$name" },
-            realm: { $first: "$realm" },
-            region: { $first: "$region" },
-            classID: { $first: "$classID" },
-            points: { $sum: "$points" },
-            possiblePoints: { $sum: "$possiblePoints" },
-            ilvl: { $first: "$ilvl" },
-            rankPercent: { $max: "$rankPercent" },
-            medianPercent: { $max: "$medianPercent" },
-            updatedAt: { $max: "$updatedAt" },
-            bossScores: { $push: { encounterId: "$_id.encounterId", points: "$points", rankPercent: "$rankPercent", specName: "$specName" } },
-          },
-        },
-        { $match: { points: { $gt: 0 } } },
-        { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-        { $skip: effectiveSkip },
-        { $limit: safeLimit },
-      ]);
-
-      const guildMap = await getGuildMapForRows(agg);
-
-      const data = agg.map((r: any, i: number) => ({
-        rank: effectiveSkip + i + 1,
-        character: {
-          wclCanonicalCharacterId: r.wclCanonicalCharacterId,
-          name: r.name,
-          realm: r.realm,
-          region: r.region,
-          classID: r.classID,
-          guild: guildMap.get(String(r.characterId)) ?? null,
-        },
-        context: {
-          zoneId,
-          difficulty: MYTHIC_DIFFICULTY,
-          partition,
-          encounterId: null,
-          specName: normalizedSpecName,
-          role: normalizedRole,
-          ilvl: r.ilvl,
-        },
-        score: { type: "allStars" as const, value: r.points ?? 0 },
-        stats: {
-          allStars: {
-            points: r.points ?? 0,
-            possiblePoints: r.possiblePoints ?? 0,
-          },
-          rankPercent: r.rankPercent,
-          medianPercent: r.medianPercent,
-        },
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
-        bossScores: r.bossScores ?? [],
-      }));
-
-      return {
-        data,
-        pagination: {
-          totalItems,
-          totalRankedItems,
-          totalPages: Math.ceil(totalItems / safeLimit),
-          currentPage: effectivePage,
-          pageSize: safeLimit,
-        },
-        jumpTo,
-      };
-    }
-
-    // ── Path 4: AllStars + no partition (best across partitions) ──────
-    const matchNoPartition: any = {
-      zoneId,
-      difficulty: MYTHIC_DIFFICULTY,
-    };
-    if (classId !== undefined) matchNoPartition.classID = classId;
-    if (normalizedSpecName !== undefined) matchNoPartition.specName = normalizedSpecName;
-    if (normalizedRole !== undefined) matchNoPartition.role = normalizedRole;
-
-    const countAgg = await Ranking.aggregate([
-      { $match: matchNoPartition },
-      { $group: { _id: "$wclCanonicalCharacterId", points: { $sum: "$allStars.points" } } },
-      { $match: { points: { $gt: 0 } } },
-      { $count: "total" },
-    ]);
-    const totalRankedItems = countAgg.length > 0 ? countAgg[0].total : 0;
+    // Total ranked items (before any name filter)
+    const totalRankedItems = await CharacterLeaderboard.countDocuments(baseQuery);
 
     let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
     let effectiveSkip: number;
     let effectivePage: number;
     let totalItems: number;
-    let matchForData: any = matchNoPartition;
+    let fetchQuery: any = { ...baseQuery };
+    let needsGlobalRanks = false;
 
     if (exactNameRegex) {
-      const exactMatch = await Ranking.findOne({ ...matchNoPartition, name: exactNameRegex })
-        .select("characterId wclCanonicalCharacterId")
+      // Try exact match → jump to character's page
+      const exactMatch = await CharacterLeaderboard.findOne({ ...baseQuery, name: exactNameRegex })
+        .select("score wclCanonicalCharacterId")
         .lean();
 
       if (exactMatch) {
-        const charPoints = await computeCharacterAllStarsPoints(matchNoPartition, { wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId });
-        if (charPoints > 0) {
-          const higherCount = await countHigherAllStarsNoPartition(matchNoPartition, charPoints);
-          const rank = higherCount + 1;
-          effectivePage = Math.ceil(rank / safeLimit) || 1;
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-          totalItems = totalRankedItems;
-          jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
-        } else {
-          totalItems = totalRankedItems;
-          effectivePage = Math.max(page, 1);
-          effectiveSkip = (effectivePage - 1) * safeLimit;
-        }
+        const higherCount = await CharacterLeaderboard.countDocuments({
+          ...baseQuery,
+          score: { $gt: exactMatch.score },
+        });
+        const rank = higherCount + 1;
+        effectivePage = Math.ceil(rank / safeLimit) || 1;
+        effectiveSkip = (effectivePage - 1) * safeLimit;
+        totalItems = totalRankedItems;
+        jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
       } else if (partialNameRegex) {
-        matchForData = { ...matchNoPartition, name: partialNameRegex };
-        const [filteredCount] = await Ranking.aggregate([
-          { $match: matchForData },
-          { $group: { _id: "$wclCanonicalCharacterId", points: { $sum: "$allStars.points" } } },
-          { $match: { points: { $gt: 0 } } },
-          { $count: "total" },
-        ]);
-        totalItems = filteredCount?.total ?? 0;
+        // No exact match → fall back to partial name filter
+        fetchQuery = { ...baseQuery, name: partialNameRegex };
+        totalItems = await CharacterLeaderboard.countDocuments(fetchQuery);
         effectivePage = Math.max(page, 1);
         effectiveSkip = (effectivePage - 1) * safeLimit;
+        needsGlobalRanks = true;
       } else {
         totalItems = totalRankedItems;
         effectivePage = Math.max(page, 1);
@@ -1219,83 +1081,89 @@ class CharacterService {
       effectiveSkip = (effectivePage - 1) * safeLimit;
     }
 
-    const agg = await Ranking.aggregate([
-      { $match: matchForData },
-      { $sort: { "allStars.points": -1, partition: -1 } },
-      {
-        $group: {
-          _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" },
-          characterId: { $first: "$characterId" },
-          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-          name: { $first: "$name" },
-          realm: { $first: "$realm" },
-          region: { $first: "$region" },
-          classID: { $first: "$classID" },
-          specName: { $first: "$specName" },
-          points: { $first: "$allStars.points" },
-          possiblePoints: { $first: "$allStars.possiblePoints" },
-          ilvl: { $first: "$ilvl" },
-          rankPercent: { $first: "$rankPercent" },
-          medianPercent: { $first: "$medianPercent" },
-          updatedAt: { $first: "$updatedAt" },
-        },
-      },
-      {
-        $group: {
-          _id: "$_id.wclCanonicalCharacterId",
-          characterId: { $first: "$characterId" },
-          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-          name: { $first: "$name" },
-          realm: { $first: "$realm" },
-          region: { $first: "$region" },
-          classID: { $first: "$classID" },
-          points: { $sum: "$points" },
-          possiblePoints: { $sum: "$possiblePoints" },
-          ilvl: { $first: "$ilvl" },
-          rankPercent: { $max: "$rankPercent" },
-          medianPercent: { $max: "$medianPercent" },
-          updatedAt: { $max: "$updatedAt" },
-          bossScores: { $push: { encounterId: "$_id.encounterId", points: "$points", rankPercent: "$rankPercent", specName: "$specName" } },
-        },
-      },
-      { $match: { points: { $gt: 0 } } },
-      { $sort: { points: -1, possiblePoints: -1, name: 1 } },
-      { $skip: effectiveSkip },
-      { $limit: safeLimit },
-    ]);
+    // ── Fetch the page ───────────────────────────────────────────────
+    const entries = await CharacterLeaderboard.find(fetchQuery).sort({ score: -1, name: 1 }).skip(effectiveSkip).limit(safeLimit).lean();
 
-    const guildMap = await getGuildMapForRows(agg);
+    // ── Compute ranks ────────────────────────────────────────────────
+    // When name-filtered, positional ranks are wrong (they'd show position within
+    // filtered results). Instead, compute each row's global rank via indexed count.
+    let ranks: number[];
+    if (needsGlobalRanks && entries.length > 0) {
+      ranks = await Promise.all(
+        entries.map(async (e) => {
+          const count = await CharacterLeaderboard.countDocuments({
+            ...baseQuery,
+            score: { $gt: e.score },
+          });
+          return count + 1;
+        }),
+      );
+    } else {
+      ranks = entries.map((_, i) => effectiveSkip + i + 1);
+    }
 
-    const data = agg.map((r: any, i: number) => ({
-      rank: effectiveSkip + i + 1,
-      character: {
-        wclCanonicalCharacterId: r.wclCanonicalCharacterId,
-        name: r.name,
-        realm: r.realm,
-        region: r.region,
-        classID: r.classID,
-        guild: guildMap.get(String(r.characterId)) ?? null,
-      },
-      context: {
-        zoneId,
-        difficulty: MYTHIC_DIFFICULTY,
-        encounterId: null,
-        specName: normalizedSpecName,
-        role: normalizedRole,
-        ilvl: r.ilvl,
-      },
-      score: { type: "allStars" as const, value: r.points ?? 0 },
-      stats: {
-        allStars: {
-          points: r.points ?? 0,
-          possiblePoints: r.possiblePoints ?? 0,
+    // ── Map to response format ───────────────────────────────────────
+    const isBossType = encounterId !== undefined;
+
+    const data: CharacterRankingRow[] = entries.map((e: any, i: number) => {
+      const guild = e.guildName && e.guildRealm ? { name: e.guildName, realm: e.guildRealm } : null;
+
+      const row: CharacterRankingRow = {
+        rank: ranks[i],
+        character: {
+          wclCanonicalCharacterId: e.wclCanonicalCharacterId,
+          name: e.name,
+          realm: e.realm,
+          region: e.region,
+          classID: e.classID,
+          guild,
         },
-        rankPercent: r.rankPercent,
-        medianPercent: r.medianPercent,
-      },
-      updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : undefined,
-      bossScores: r.bossScores ?? [],
-    }));
+        context: {
+          zoneId: e.zoneId,
+          difficulty: e.difficulty,
+          partition: e.sourcePartition || e.partition,
+          encounterId: e.encounterId,
+          specName: e.specName,
+          bestSpecName: e.bestSpecName || undefined,
+          role: e.role,
+          ilvl: e.ilvl,
+        },
+        score: {
+          type: isBossType ? "bestAmount" : "allStars",
+          value: e.score,
+        },
+        stats: isBossType
+          ? {
+              bestAmount: e.bestAmount,
+              rankPercent: e.rankPercent,
+              medianPercent: e.medianPercent,
+              lockedIn: e.lockedIn,
+              totalKills: e.totalKills,
+            }
+          : {
+              allStars: {
+                points: e.allStarsPoints,
+                possiblePoints: e.allStarsPossiblePoints,
+              },
+              rankPercent: e.rankPercent,
+              medianPercent: e.medianPercent,
+            },
+        updatedAt: e.updatedAt ? new Date(e.updatedAt).toISOString() : undefined,
+      };
+
+      if (isBossType) {
+        row.encounter = {
+          id: e.encounterId,
+          name: e.encounterName,
+        };
+      }
+
+      if (!isBossType && e.bossScores?.length > 0) {
+        (row as any).bossScores = e.bossScores;
+      }
+
+      return row;
+    });
 
     return {
       data,

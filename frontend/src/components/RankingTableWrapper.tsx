@@ -335,18 +335,20 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
         const realm = row.character.realm;
         const name = row.character.name;
         const wclUrl = `https://www.warcraftlogs.com/character/eu/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`;
+        const classIcon = getClassInfoById(row.character.classID)?.iconUrl;
+        const specIcon = isShowingDamage && row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : null;
 
         return (
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div style={{ width: "24px", height: "24px", position: "relative" }}>
-                <IconImage
-                  iconFilename={row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : getClassInfoById(row.character.classID)?.iconUrl}
-                  alt={row.character.name}
-                  fill
-                  style={{ objectFit: "cover" }}
-                />
+                <IconImage iconFilename={classIcon} alt={row.character.name} fill style={{ objectFit: "cover" }} />
               </div>
+              {specIcon && (
+                <div style={{ width: "18px", height: "18px", position: "relative" }}>
+                  <IconImage iconFilename={specIcon} alt={row.context.specName!} fill style={{ objectFit: "cover" }} />
+                </div>
+              )}
               <span className="flex items-center gap-2">{row.character.name}</span>
             </div>
             <a
