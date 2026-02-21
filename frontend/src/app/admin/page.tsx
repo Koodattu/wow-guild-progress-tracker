@@ -40,6 +40,7 @@ import {
   AdminPickemStats,
   ScoringConfig,
   StreakConfig,
+  PrizeConfig,
   RaidInfo,
   PickemType,
   RateLimitStatus,
@@ -220,6 +221,12 @@ export default function AdminPage() {
       minLength: 2,
       bonusPerGuild: 3,
     } as StreakConfig,
+    prizeConfig: {
+      enabled: false,
+      goldPool: 0,
+      distribution: [] as { place: number; percentage: number }[],
+      description: "",
+    },
   });
 
   // RWF Finalization state
@@ -1418,6 +1425,12 @@ export default function AdminPage() {
                       minLength: 2,
                       bonusPerGuild: 3,
                     },
+                    prizeConfig: {
+                      enabled: false,
+                      goldPool: 0,
+                      distribution: [] as { place: number; percentage: number }[],
+                      description: "",
+                    },
                   });
                   setShowPickemForm(true);
                 }}
@@ -1448,6 +1461,7 @@ export default function AdminPage() {
                             active: pickemForm.active,
                             scoringConfig: pickemForm.scoringConfig,
                             streakConfig: pickemForm.streakConfig,
+                            prizeConfig: pickemForm.prizeConfig,
                           });
                         } else {
                           await api.createAdminPickem({
@@ -1670,6 +1684,147 @@ export default function AdminPage() {
                           />
                         </div>
                       </div>
+                    </div>
+
+                    {/* Prize Pool Configuration */}
+                    <div className="border-t border-gray-700 pt-4">
+                      <h4 className="text-sm font-semibold text-gray-300 mb-3">Prize Pool Configuration</h4>
+
+                      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pickemForm.prizeConfig.enabled}
+                          onChange={(e) =>
+                            setPickemForm((prev) => ({
+                              ...prev,
+                              prizeConfig: { ...prev.prizeConfig, enabled: e.target.checked },
+                            }))
+                          }
+                          className="w-4 h-4 rounded bg-gray-700 border-gray-600"
+                        />
+                        <span className="text-sm text-gray-300">Enable Gold Prizes</span>
+                      </label>
+
+                      {pickemForm.prizeConfig.enabled && (
+                        <div className="space-y-3 pl-6">
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Total Gold Pool</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={0}
+                                value={pickemForm.prizeConfig.goldPool}
+                                onChange={(e) =>
+                                  setPickemForm((prev) => ({
+                                    ...prev,
+                                    prizeConfig: { ...prev.prizeConfig, goldPool: parseInt(e.target.value) || 0 },
+                                  }))
+                                }
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm pr-12"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-yellow-500 font-medium">gold</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Description (optional)</label>
+                            <textarea
+                              value={pickemForm.prizeConfig.description}
+                              onChange={(e) =>
+                                setPickemForm((prev) => ({
+                                  ...prev,
+                                  prizeConfig: { ...prev.prizeConfig, description: e.target.value },
+                                }))
+                              }
+                              placeholder="e.g., Prizes paid out after race ends"
+                              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm resize-none"
+                              rows={2}
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-xs text-gray-400">Prize Distribution</label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPickemForm((prev) => ({
+                                    ...prev,
+                                    prizeConfig: {
+                                      ...prev.prizeConfig,
+                                      distribution: [...prev.prizeConfig.distribution, { place: prev.prizeConfig.distribution.length + 1, percentage: 0 }],
+                                    },
+                                  }))
+                                }
+                                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                              >
+                                + Add Tier
+                              </button>
+                            </div>
+
+                            {pickemForm.prizeConfig.distribution.length > 0 ? (
+                              <div className="space-y-2">
+                                {pickemForm.prizeConfig.distribution.map((entry, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 w-8 shrink-0">#{entry.place}</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={entry.percentage}
+                                      onChange={(e) =>
+                                        setPickemForm((prev) => ({
+                                          ...prev,
+                                          prizeConfig: {
+                                            ...prev.prizeConfig,
+                                            distribution: prev.prizeConfig.distribution.map((d, i) => (i === idx ? { ...d, percentage: parseInt(e.target.value) || 0 } : d)),
+                                          },
+                                        }))
+                                      }
+                                      className="w-20 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                    />
+                                    <span className="text-xs text-gray-500">%</span>
+                                    {pickemForm.prizeConfig.goldPool > 0 && (
+                                      <span className="text-xs text-yellow-500">({Math.round((pickemForm.prizeConfig.goldPool * entry.percentage) / 100).toLocaleString()}g)</span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPickemForm((prev) => ({
+                                          ...prev,
+                                          prizeConfig: {
+                                            ...prev.prizeConfig,
+                                            distribution: prev.prizeConfig.distribution.filter((_, i) => i !== idx).map((d, i) => ({ ...d, place: i + 1 })),
+                                          },
+                                        }))
+                                      }
+                                      className="text-gray-500 hover:text-red-400 transition-colors ml-auto"
+                                    >
+                                      <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                                {(() => {
+                                  const total = pickemForm.prizeConfig.distribution.reduce((sum, d) => sum + d.percentage, 0);
+                                  return (
+                                    <p className={`text-xs mt-1 ${total === 100 ? "text-green-400" : "text-amber-400"}`}>
+                                      Total: {total}% {total !== 100 && "(should be 100%)"}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-500">No prize tiers defined. Add tiers to split the gold pool.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Form Actions */}
@@ -1907,6 +2062,12 @@ export default function AdminPage() {
                                   active: pickem.active,
                                   scoringConfig: pickem.scoringConfig,
                                   streakConfig: pickem.streakConfig,
+                                  prizeConfig: pickem.prizeConfig || {
+                                    enabled: false,
+                                    goldPool: 0,
+                                    distribution: [],
+                                    description: "",
+                                  },
                                 });
                                 setShowPickemForm(true);
                               }}

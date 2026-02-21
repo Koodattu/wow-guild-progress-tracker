@@ -45,6 +45,20 @@ async function getUserFromSession(req: Request) {
   return discordService.getUserFromSession(userId);
 }
 
+// Rate limit: max 10 prediction submissions per minute per session
+const PREDICT_RATE_LIMIT = new Map<string, { count: number; resetAt: number }>();
+
+function checkPredictRateLimit(sessionId: string): boolean {
+  const now = Date.now();
+  const entry = PREDICT_RATE_LIMIT.get(sessionId);
+  if (!entry || now > entry.resetAt) {
+    PREDICT_RATE_LIMIT.set(sessionId, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= 10;
+}
+
 // Get all available pickems with their status
 router.get(
   "/",
@@ -73,6 +87,7 @@ router.get(
         finalizedAt: p.finalizedAt ?? null,
         scoringConfig: p.scoringConfig,
         streakConfig: p.streakConfig,
+        prizeConfig: p.prizeConfig,
       }));
 
       res.json(result);
@@ -180,6 +195,18 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
       getPickemLeaderboard(pickemId, guildRankings, pickem),
     );
 
+    // Hide prediction details while voting is open to prevent copying strategies
+    const sanitizedLeaderboard = isVotingOpen
+      ? leaderboard.map((entry: any) => ({
+          ...entry,
+          predictions: entry.predictions.map((p: any) => ({
+            ...p,
+            guildName: "Hidden",
+            realm: "",
+          })),
+        }))
+      : leaderboard;
+
     res.json({
       id: pickem.pickemId,
       name: pickem.name,
@@ -196,9 +223,10 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
       finalizedAt: pickem.finalizedAt ?? null,
       scoringConfig: pickem.scoringConfig,
       streakConfig: pickem.streakConfig,
+      prizeConfig: pickem.prizeConfig,
       guildRankings,
       userPredictions,
-      leaderboard,
+      leaderboard: sanitizedLeaderboard,
     });
   } catch (error) {
     logger.error("Error fetching pickem details:", error);
@@ -211,6 +239,12 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
   try {
     const { pickemId } = req.params;
     const { predictions } = req.body as { predictions: IPickemPrediction[] };
+
+    // Rate limit prediction submissions
+    const sessionId = req.session?.id || req.ip || "unknown";
+    if (!checkPredictRateLimit(sessionId)) {
+      return res.status(429).json({ error: "Too many requests. Please wait a moment before trying again." });
+    }
 
     // Validate user is logged in
     const user = await getUserFromSession(req);
@@ -237,6 +271,21 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Must provide exactly ${guildCount} predictions` });
     }
 
+    // Sanitize and validate string inputs
+    for (const pred of predictions) {
+      if (typeof pred.guildName !== "string" || typeof pred.realm !== "string") {
+        return res.status(400).json({ error: "Invalid prediction data types" });
+      }
+      pred.guildName = pred.guildName.trim();
+      pred.realm = pred.realm.trim();
+      if (pred.guildName.length === 0 || pred.guildName.length > 100) {
+        return res.status(400).json({ error: "Invalid guild name length" });
+      }
+      if (pred.realm.length === 0 || pred.realm.length > 100) {
+        return res.status(400).json({ error: "Invalid realm name length" });
+      }
+    }
+
     // Validate each prediction has required fields and positions are valid
     const positions = new Set<number>();
     for (const pred of predictions) {
@@ -252,6 +301,16 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
       positions.add(pred.position);
     }
 
+    // Validate no duplicate guilds
+    const guildKeys = new Set<string>();
+    for (const pred of predictions) {
+      const key = `${pred.guildName}-${pred.realm}`;
+      if (guildKeys.has(key)) {
+        return res.status(400).json({ error: "Each guild must be unique in your predictions" });
+      }
+      guildKeys.add(key);
+    }
+
     // Validate guilds based on pickem type
     if (pickemType === "rwf") {
       // For RWF pickems, validate against PICK_EM_RWF_GUILDS
@@ -265,10 +324,12 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
         }
       }
     } else {
-      // For regular pickems, validate guilds exist in database
+      // Batch validate all guilds in a single query
+      const guildQueries = predictions.map((p) => ({ name: p.guildName, realm: p.realm }));
+      const foundGuilds = await Guild.find({ $or: guildQueries }, { name: 1, realm: 1 }).lean();
+      const foundGuildSet = new Set(foundGuilds.map((g) => `${g.name}-${g.realm}`));
       for (const pred of predictions) {
-        const guild = await Guild.findOne({ name: pred.guildName, realm: pred.realm });
-        if (!guild) {
+        if (!foundGuildSet.has(`${pred.guildName}-${pred.realm}`)) {
           return res.status(400).json({ error: `Guild "${pred.guildName}" on "${pred.realm}" not found` });
         }
       }
@@ -295,6 +356,9 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
     }
 
     await user.save();
+
+    // Invalidate leaderboard cache so new prediction shows up
+    pickemComputationCache.delete(`leaderboard:${pickemId}`);
 
     res.json({
       success: true,

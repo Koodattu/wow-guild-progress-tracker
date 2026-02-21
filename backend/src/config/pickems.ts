@@ -3,7 +3,7 @@
  * This file contains the default/seed data for pickems that will be synced to the database
  */
 
-import { IScoringConfig, IStreakConfig, DEFAULT_SCORING_CONFIG, DEFAULT_STREAK_CONFIG, PickemType } from "../models/Pickem";
+import { IScoringConfig, IStreakConfig, IPrizeConfig, DEFAULT_SCORING_CONFIG, DEFAULT_STREAK_CONFIG, DEFAULT_PRIZE_CONFIG, PickemType } from "../models/Pickem";
 
 // Seed data for pickems - these will be synced to DB on startup
 export interface PickemSeedData {
@@ -17,6 +17,7 @@ export interface PickemSeedData {
   active: boolean;
   scoringConfig?: IScoringConfig;
   streakConfig?: IStreakConfig;
+  prizeConfig?: IPrizeConfig;
 }
 
 // Seed pickems - these are the initial pickems to create in the database

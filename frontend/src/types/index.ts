@@ -675,6 +675,18 @@ export interface StreakConfig {
   bonusPerGuild: number;
 }
 
+export interface PrizeDistribution {
+  place: number;
+  percentage: number;
+}
+
+export interface PrizeConfig {
+  enabled: boolean;
+  goldPool: number;
+  distribution: PrizeDistribution[];
+  description: string;
+}
+
 export interface PickemSummary {
   id: string;
   name: string;
@@ -687,6 +699,7 @@ export interface PickemSummary {
   hasEnded: boolean;
   scoringConfig?: ScoringConfig;
   streakConfig?: StreakConfig;
+  prizeConfig?: PrizeConfig;
   finalized: boolean;
   finalRankings: string[];
   finalizedAt: string | null;
@@ -743,6 +756,7 @@ export interface PickemDetails {
   hasEnded: boolean;
   scoringConfig?: ScoringConfig;
   streakConfig?: StreakConfig;
+  prizeConfig?: PrizeConfig;
   finalized: boolean;
   finalRankings: string[];
   finalizedAt: string | null;
@@ -769,6 +783,7 @@ export interface AdminPickem {
   active: boolean;
   scoringConfig: ScoringConfig;
   streakConfig: StreakConfig;
+  prizeConfig: PrizeConfig;
   finalized: boolean;
   finalRankings: string[];
   finalizedAt: string | null;
@@ -799,6 +814,7 @@ export interface CreatePickemInput {
   active?: boolean;
   scoringConfig?: Partial<ScoringConfig>;
   streakConfig?: Partial<StreakConfig>;
+  prizeConfig?: Partial<PrizeConfig>;
 }
 
 export interface UpdatePickemInput {
@@ -811,6 +827,7 @@ export interface UpdatePickemInput {
   active?: boolean;
   scoringConfig?: Partial<ScoringConfig>;
   streakConfig?: Partial<StreakConfig>;
+  prizeConfig?: Partial<PrizeConfig>;
 }
 
 export type CharacterRankingRow = {

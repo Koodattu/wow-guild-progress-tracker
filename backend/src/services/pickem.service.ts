@@ -1,4 +1,4 @@
-import Pickem, { IPickem, IScoringConfig, IStreakConfig, DEFAULT_SCORING_CONFIG, DEFAULT_STREAK_CONFIG, PickemType } from "../models/Pickem";
+import Pickem, { IPickem, IScoringConfig, IStreakConfig, IPrizeConfig, DEFAULT_SCORING_CONFIG, DEFAULT_STREAK_CONFIG, DEFAULT_PRIZE_CONFIG, PickemType } from "../models/Pickem";
 import { PICKEM_SEED_DATA } from "../config/pickems";
 import { PICK_EM_RWF_GUILDS } from "../config/guilds";
 import logger from "../utils/logger";
@@ -30,6 +30,7 @@ class PickemService {
             active: seedData.active,
             scoringConfig: seedData.scoringConfig || DEFAULT_SCORING_CONFIG,
             streakConfig: seedData.streakConfig || DEFAULT_STREAK_CONFIG,
+            prizeConfig: seedData.prizeConfig || DEFAULT_PRIZE_CONFIG,
           });
           logger.info(`Created pickem: ${seedData.pickemId}`);
         } else {
@@ -78,6 +79,7 @@ class PickemService {
     active?: boolean;
     scoringConfig?: Partial<IScoringConfig>;
     streakConfig?: Partial<IStreakConfig>;
+    prizeConfig?: Partial<IPrizeConfig>;
   }): Promise<IPickem> {
     const type = data.type || "regular";
     const guildCount = data.guildCount ?? (type === "rwf" ? 5 : 10);
@@ -93,6 +95,7 @@ class PickemService {
       active: data.active ?? true,
       scoringConfig: { ...DEFAULT_SCORING_CONFIG, ...data.scoringConfig },
       streakConfig: { ...DEFAULT_STREAK_CONFIG, ...data.streakConfig },
+      prizeConfig: { ...DEFAULT_PRIZE_CONFIG, ...data.prizeConfig },
     });
 
     return pickem.toObject();
@@ -113,6 +116,7 @@ class PickemService {
       active?: boolean;
       scoringConfig?: Partial<IScoringConfig>;
       streakConfig?: Partial<IStreakConfig>;
+      prizeConfig?: Partial<IPrizeConfig>;
     },
   ): Promise<IPickem | null> {
     const pickem = await Pickem.findOne({ pickemId });
@@ -137,6 +141,13 @@ class PickemService {
       pickem.streakConfig = {
         ...pickem.streakConfig,
         ...data.streakConfig,
+      };
+    }
+
+    if (data.prizeConfig) {
+      pickem.prizeConfig = {
+        ...pickem.prizeConfig,
+        ...data.prizeConfig,
       };
     }
 

@@ -1071,7 +1071,7 @@ router.get("/pickems/:pickemId", async (req: Request, res: Response) => {
 // Create a new pickem
 router.post("/pickems", async (req: Request, res: Response) => {
   try {
-    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig, type, guildCount } = req.body;
+    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig, prizeConfig, type, guildCount } = req.body;
 
     // Determine pickem type (default to 'regular' for backwards compatibility)
     const pickemType = type === "rwf" ? "rwf" : "regular";
@@ -1109,8 +1109,8 @@ router.post("/pickems", async (req: Request, res: Response) => {
 
     // Validate guildCount if provided
     const finalGuildCount = guildCount ?? (pickemType === "rwf" ? 5 : 10);
-    if (typeof finalGuildCount !== "number" || finalGuildCount < 1 || finalGuildCount > 20) {
-      return res.status(400).json({ error: "guildCount must be a number between 1 and 20" });
+    if (typeof finalGuildCount !== "number" || finalGuildCount < 1 || finalGuildCount > 25) {
+      return res.status(400).json({ error: "guildCount must be a number between 1 and 25" });
     }
 
     const pickem = await pickemService.createPickem({
@@ -1122,6 +1122,7 @@ router.post("/pickems", async (req: Request, res: Response) => {
       active: active ?? true,
       scoringConfig,
       streakConfig,
+      prizeConfig,
       type: pickemType,
       guildCount: finalGuildCount,
     });
@@ -1162,8 +1163,8 @@ router.put("/pickems/:pickemId", async (req: Request, res: Response) => {
 
     // Validate guildCount if provided
     if (updates.guildCount !== undefined) {
-      if (typeof updates.guildCount !== "number" || updates.guildCount < 1 || updates.guildCount > 20) {
-        return res.status(400).json({ error: "guildCount must be a number between 1 and 20" });
+      if (typeof updates.guildCount !== "number" || updates.guildCount < 1 || updates.guildCount > 25) {
+        return res.status(400).json({ error: "guildCount must be a number between 1 and 25" });
       }
     }
 

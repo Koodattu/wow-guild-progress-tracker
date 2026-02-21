@@ -168,4 +168,7 @@ const UserSchema = new Schema<IUser>(
 // Index for fast lookup by Discord ID
 UserSchema.index({ "discord.id": 1 }, { unique: true });
 
+// Index for efficient pickem leaderboard queries
+UserSchema.index({ "pickems.pickemId": 1 });
+
 export default mongoose.model<IUser>("User", UserSchema);

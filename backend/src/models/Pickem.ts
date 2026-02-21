@@ -17,6 +17,14 @@ export interface IStreakConfig {
   bonusPerGuild: number; // Bonus points per guild in streak (e.g., 2 extra per guild)
 }
 
+// Prize configuration for a pickem
+export interface IPrizeConfig {
+  enabled: boolean;
+  goldPool: number;
+  distribution: { place: number; percentage: number }[];
+  description: string;
+}
+
 // Pickem type: regular (Finnish guilds from DB) or rwf (Race to World First guilds from config)
 export type PickemType = "regular" | "rwf";
 
@@ -32,6 +40,7 @@ export interface IPickem extends Document {
   active: boolean; // Whether this pickem is visible/active
   scoringConfig: IScoringConfig; // Point configuration
   streakConfig: IStreakConfig; // Streak bonus configuration
+  prizeConfig: IPrizeConfig; // Prize pool configuration
   // RWF-specific finalization fields
   finalized: boolean; // Whether this RWF pickem has been finalized with results
   finalRankings: string[]; // Final guild rankings (in order, index 0 = 1st place) - only for RWF
@@ -57,6 +66,13 @@ export const DEFAULT_STREAK_CONFIG: IStreakConfig = {
   bonusPerGuild: 2,
 };
 
+export const DEFAULT_PRIZE_CONFIG: IPrizeConfig = {
+  enabled: false,
+  goldPool: 0,
+  distribution: [],
+  description: "",
+};
+
 const ScoringConfigSchema = new Schema<IScoringConfig>(
   {
     exactMatch: { type: Number, required: true, default: 10 },
@@ -74,6 +90,24 @@ const StreakConfigSchema = new Schema<IStreakConfig>(
     enabled: { type: Boolean, required: true, default: true },
     minStreak: { type: Number, required: true, default: 2 },
     bonusPerGuild: { type: Number, required: true, default: 2 },
+  },
+  { _id: false },
+);
+
+const PrizeDistributionSchema = new Schema(
+  {
+    place: { type: Number, required: true, min: 1 },
+    percentage: { type: Number, required: true, min: 0, max: 100 },
+  },
+  { _id: false },
+);
+
+const PrizeConfigSchema = new Schema<IPrizeConfig>(
+  {
+    enabled: { type: Boolean, required: true, default: false },
+    goldPool: { type: Number, required: true, default: 0, min: 0 },
+    distribution: { type: [PrizeDistributionSchema], required: true, default: [] },
+    description: { type: String, required: false, default: "" },
   },
   { _id: false },
 );
@@ -96,6 +130,7 @@ const PickemSchema = new Schema<IPickem>(
     active: { type: Boolean, required: true, default: true },
     scoringConfig: { type: ScoringConfigSchema, required: true, default: () => DEFAULT_SCORING_CONFIG },
     streakConfig: { type: StreakConfigSchema, required: true, default: () => DEFAULT_STREAK_CONFIG },
+    prizeConfig: { type: PrizeConfigSchema, required: true, default: () => DEFAULT_PRIZE_CONFIG },
     // RWF-specific finalization fields
     finalized: { type: Boolean, required: true, default: false },
     finalRankings: { type: [String], required: false, default: [] },
