@@ -62,9 +62,9 @@ import {
 
 type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system";
 
-// Sortable item for finalization ranking
-function SortableRankingItem({ id, rank }: { id: string; rank: number }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+// Sortable item for finalization ranking with remove button
+function SortableRankingItem({ id, rank, onRemove }: { id: string; rank: number; onRemove?: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -72,15 +72,32 @@ function SortableRankingItem({ id, rank }: { id: string; rank: number }) {
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="flex items-center gap-3 p-3 bg-gray-700 rounded-lg cursor-grab active:cursor-grabbing border border-gray-600 hover:border-gray-500"
-    >
-      <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold">{rank}</span>
-      <span className="text-white font-medium">{id}</span>
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-2 bg-gray-700 rounded-lg border border-gray-600 hover:border-gray-500">
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white p-1"
+        aria-label="Drag to reorder"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+        </svg>
+      </button>
+      <span className="w-7 h-7 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold text-sm">{rank}</span>
+      <span className="text-white font-medium text-sm flex-1 truncate">{id}</span>
+      {onRemove && (
+        <button type="button" onClick={() => onRemove(id)} className="text-gray-400 hover:text-red-400 p-1 transition-colors" aria-label="Remove guild">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fillRule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -209,6 +226,8 @@ export default function AdminPage() {
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [finalizingPickem, setFinalizingPickem] = useState<AdminPickem | null>(null);
   const [finalizationRankings, setFinalizationRankings] = useState<string[]>([]);
+  const [allRwfGuilds, setAllRwfGuilds] = useState<string[]>([]);
+  const [finalizeSearch, setFinalizeSearch] = useState("");
   const [isFinalizingLoading, setIsFinalizingLoading] = useState(false);
 
   // DnD sensors for finalization modal
@@ -588,7 +607,10 @@ export default function AdminPage() {
       await api.updateAdminGuild(editGuildTarget.id, {
         parent_guild: editGuildForm.parent_guild.trim() || null,
         streamers: editGuildForm.streamers.trim()
-          ? editGuildForm.streamers.split(",").map((s) => s.trim()).filter(Boolean)
+          ? editGuildForm.streamers
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
           : [],
         activityStatus: editGuildForm.activityStatus,
       });
@@ -678,10 +700,7 @@ export default function AdminPage() {
       setTimeout(() => setTriggerMessage(null), 5000);
 
       // Refresh characters list
-      const [charsData, charStatsData] = await Promise.all([
-        api.getAdminCharacters(charactersPage, 50, characterSearchDebounced || undefined),
-        api.getAdminCharacterStats(),
-      ]);
+      const [charsData, charStatsData] = await Promise.all([api.getAdminCharacters(charactersPage, 50, characterSearchDebounced || undefined), api.getAdminCharacterStats()]);
       setCharacters(charsData.characters);
       setCharactersTotalPages(charsData.pagination.totalPages);
       setCharacterStats(charStatsData);
@@ -1097,125 +1116,125 @@ export default function AdminPage() {
                 </div>
               )}
               <div className="bg-gray-800 rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-900">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.name")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.realm")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.faction")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">WCL Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.status")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.lastFetched")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {guilds.map((guild) => (
-                    <tr key={guild.id} className="hover:bg-gray-750 cursor-pointer" onClick={() => handleGuildClick(guild.id)}>
-                      <td className="px-4 py-3 text-white">
-                        {guild.name}
-                        {guild.parentGuild && <span className="text-gray-500 text-sm ml-2">({guild.parentGuild})</span>}
-                      </td>
-                      <td className="px-4 py-3 text-gray-300">{guild.realm}</td>
-                      <td className="px-4 py-3">
-                        <span className={`${guild.faction === "Horde" ? "text-red-400" : "text-blue-400"}`}>{guild.faction || "-"}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
-                            guild.wclStatus === "active"
-                              ? "bg-green-900 text-green-300"
-                              : guild.wclStatus === "not_found"
-                                ? "bg-red-900 text-red-300"
-                                : guild.wclStatus === "unclaimed"
-                                  ? "bg-amber-900 text-amber-300"
-                                  : "bg-gray-700 text-gray-300"
-                          }`}
-                        >
-                          {(guild.wclStatus || "unknown").replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {guild.isCurrentlyRaiding ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-900/50 text-green-400">{t("guilds.raiding")}</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-700 text-gray-400">{t("guilds.idle")}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-400 text-sm">{guild.lastFetched ? formatDate(guild.lastFetched) : "-"}</td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleQueueRescan(guild.id, guild.name)}
-                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                            title="Queue for full rescan"
-                          >
-                            Rescan
-                          </button>
-                          <button
-                            onClick={() => handleQueueRescanDeaths(guild.id, guild.name)}
-                            className="px-2 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700"
-                            title="Rescan death events"
-                          >
-                            Deaths
-                          </button>
-                          <button
-                            onClick={() => handleQueueRescanCharacters(guild.id, guild.name)}
-                            className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
-                            title="Rescan characters"
-                          >
-                            Chars
-                          </button>
-                          <button
-                            onClick={() => handleRecalculateStats(guild.id, guild.name)}
-                            className="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
-                            title="Recalculate statistics"
-                          >
-                            Stats
-                          </button>
-                          <button
-                            onClick={() => handleUpdateGuildWorldRanks(guild.id, guild.name)}
-                            className="px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700"
-                            title="Update world rankings for all raids"
-                          >
-                            Ranks
-                          </button>
-                          <button
-                            onClick={() => handleDeleteGuildClick(guild.id, guild.name)}
-                            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                            title="Delete guild"
-                            disabled={deleteGuildLoading && guildToDelete?.id === guild.id}
-                          >
-                            {deleteGuildLoading && guildToDelete?.id === guild.id ? "..." : "Delete"}
-                          </button>
-                        </div>
-                      </td>
+                <table className="w-full">
+                  <thead className="bg-gray-900">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.name")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.realm")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.faction")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">WCL Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.status")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("guilds.lastFetched")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {guilds.map((guild) => (
+                      <tr key={guild.id} className="hover:bg-gray-750 cursor-pointer" onClick={() => handleGuildClick(guild.id)}>
+                        <td className="px-4 py-3 text-white">
+                          {guild.name}
+                          {guild.parentGuild && <span className="text-gray-500 text-sm ml-2">({guild.parentGuild})</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">{guild.realm}</td>
+                        <td className="px-4 py-3">
+                          <span className={`${guild.faction === "Horde" ? "text-red-400" : "text-blue-400"}`}>{guild.faction || "-"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              guild.wclStatus === "active"
+                                ? "bg-green-900 text-green-300"
+                                : guild.wclStatus === "not_found"
+                                  ? "bg-red-900 text-red-300"
+                                  : guild.wclStatus === "unclaimed"
+                                    ? "bg-amber-900 text-amber-300"
+                                    : "bg-gray-700 text-gray-300"
+                            }`}
+                          >
+                            {(guild.wclStatus || "unknown").replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {guild.isCurrentlyRaiding ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-900/50 text-green-400">{t("guilds.raiding")}</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-700 text-gray-400">{t("guilds.idle")}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{guild.lastFetched ? formatDate(guild.lastFetched) : "-"}</td>
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleQueueRescan(guild.id, guild.name)}
+                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                              title="Queue for full rescan"
+                            >
+                              Rescan
+                            </button>
+                            <button
+                              onClick={() => handleQueueRescanDeaths(guild.id, guild.name)}
+                              className="px-2 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700"
+                              title="Rescan death events"
+                            >
+                              Deaths
+                            </button>
+                            <button
+                              onClick={() => handleQueueRescanCharacters(guild.id, guild.name)}
+                              className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
+                              title="Rescan characters"
+                            >
+                              Chars
+                            </button>
+                            <button
+                              onClick={() => handleRecalculateStats(guild.id, guild.name)}
+                              className="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                              title="Recalculate statistics"
+                            >
+                              Stats
+                            </button>
+                            <button
+                              onClick={() => handleUpdateGuildWorldRanks(guild.id, guild.name)}
+                              className="px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700"
+                              title="Update world rankings for all raids"
+                            >
+                              Ranks
+                            </button>
+                            <button
+                              onClick={() => handleDeleteGuildClick(guild.id, guild.name)}
+                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                              title="Delete guild"
+                              disabled={deleteGuildLoading && guildToDelete?.id === guild.id}
+                            >
+                              {deleteGuildLoading && guildToDelete?.id === guild.id ? "..." : "Delete"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-              {/* Pagination */}
-              <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
-                <button
-                  onClick={() => setGuildsPage((p) => Math.max(1, p - 1))}
-                  disabled={guildsPage === 1}
-                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
-                >
-                  {t("pagination.previous")}
-                </button>
-                <span className="text-gray-400">
-                  {t("pagination.page")} {guildsPage} {t("pagination.of")} {guildsTotalPages}
-                </span>
-                <button
-                  onClick={() => setGuildsPage((p) => Math.min(guildsTotalPages, p + 1))}
-                  disabled={guildsPage === guildsTotalPages}
-                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
-                >
-                  {t("pagination.next")}
-                </button>
+                {/* Pagination */}
+                <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
+                  <button
+                    onClick={() => setGuildsPage((p) => Math.max(1, p - 1))}
+                    disabled={guildsPage === 1}
+                    className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                  >
+                    {t("pagination.previous")}
+                  </button>
+                  <span className="text-gray-400">
+                    {t("pagination.page")} {guildsPage} {t("pagination.of")} {guildsTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setGuildsPage((p) => Math.min(guildsTotalPages, p + 1))}
+                    disabled={guildsPage === guildsTotalPages}
+                    className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                  >
+                    {t("pagination.next")}
+                  </button>
+                </div>
               </div>
-            </div>
             </div>
           </div>
         )}
@@ -1283,66 +1302,66 @@ export default function AdminPage() {
                 </div>
               )}
               <div className="bg-gray-800 rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-900">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.name")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.class")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.realm")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.region")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.lastSeen")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.rankings")}</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {characters.map((char) => (
-                    <tr key={char.id} className="hover:bg-gray-750">
-                      <td className="px-4 py-3 text-white font-medium">{char.name}</td>
-                      <td className="px-4 py-3 text-gray-300">{char.className}</td>
-                      <td className="px-4 py-3 text-gray-300">{char.realm}</td>
-                      <td className="px-4 py-3 text-gray-300 uppercase">{char.region}</td>
-                      <td className="px-4 py-3 text-gray-400 text-sm">{char.lastMythicSeenAt ? new Date(char.lastMythicSeenAt).toLocaleDateString() : "—"}</td>
-                      <td className="px-4 py-3">
-                        {char.rankingsAvailable === true && <span className="px-2 py-0.5 text-xs rounded-full bg-green-900/30 text-green-400">{t("characters.available")}</span>}
-                        {char.rankingsAvailable === false && <span className="px-2 py-0.5 text-xs rounded-full bg-red-900/30 text-red-400">{t("characters.unavailable")}</span>}
-                        {char.rankingsAvailable === null && <span className="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400">{t("characters.unknown")}</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleDeleteCharacterClick(char.id, char.name, char.realm)}
-                          className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                          title="Delete character and rankings"
-                        >
-                          Delete
-                        </button>
-                      </td>
+                <table className="w-full">
+                  <thead className="bg-gray-900">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.name")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.class")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.realm")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.region")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.lastSeen")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("characters.rankings")}</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {characters.map((char) => (
+                      <tr key={char.id} className="hover:bg-gray-750">
+                        <td className="px-4 py-3 text-white font-medium">{char.name}</td>
+                        <td className="px-4 py-3 text-gray-300">{char.className}</td>
+                        <td className="px-4 py-3 text-gray-300">{char.realm}</td>
+                        <td className="px-4 py-3 text-gray-300 uppercase">{char.region}</td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{char.lastMythicSeenAt ? new Date(char.lastMythicSeenAt).toLocaleDateString() : "—"}</td>
+                        <td className="px-4 py-3">
+                          {char.rankingsAvailable === true && <span className="px-2 py-0.5 text-xs rounded-full bg-green-900/30 text-green-400">{t("characters.available")}</span>}
+                          {char.rankingsAvailable === false && <span className="px-2 py-0.5 text-xs rounded-full bg-red-900/30 text-red-400">{t("characters.unavailable")}</span>}
+                          {char.rankingsAvailable === null && <span className="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-400">{t("characters.unknown")}</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleDeleteCharacterClick(char.id, char.name, char.realm)}
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                            title="Delete character and rankings"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-              {/* Pagination */}
-              <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
-                <button
-                  onClick={() => setCharactersPage((p) => Math.max(1, p - 1))}
-                  disabled={charactersPage === 1}
-                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
-                >
-                  {t("pagination.previous")}
-                </button>
-                <span className="text-gray-400">
-                  {t("pagination.page")} {charactersPage} {t("pagination.of")} {charactersTotalPages}
-                </span>
-                <button
-                  onClick={() => setCharactersPage((p) => Math.min(charactersTotalPages, p + 1))}
-                  disabled={charactersPage === charactersTotalPages}
-                  className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
-                >
-                  {t("pagination.next")}
-                </button>
+                {/* Pagination */}
+                <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
+                  <button
+                    onClick={() => setCharactersPage((p) => Math.max(1, p - 1))}
+                    disabled={charactersPage === 1}
+                    className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                  >
+                    {t("pagination.previous")}
+                  </button>
+                  <span className="text-gray-400">
+                    {t("pagination.page")} {charactersPage} {t("pagination.of")} {charactersTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setCharactersPage((p) => Math.min(charactersTotalPages, p + 1))}
+                    disabled={charactersPage === charactersTotalPages}
+                    className="px-3 py-1 bg-gray-700 text-white rounded disabled:opacity-50"
+                  >
+                    {t("pagination.next")}
+                  </button>
+                </div>
               </div>
-            </div>
             </div>
           </div>
         )}
@@ -1507,7 +1526,7 @@ export default function AdminPage() {
                         onChange={(e) => setPickemForm({ ...pickemForm, guildCount: parseInt(e.target.value) || (pickemForm.type === "rwf" ? 5 : 10) })}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
                         min="1"
-                        max={pickemForm.type === "rwf" ? 5 : 10}
+                        max={pickemForm.type === "rwf" ? 25 : 10}
                       />
                       <p className="text-xs text-gray-500 mt-1">{t("pickems.form.guildCountHelp")}</p>
                     </div>
@@ -1667,72 +1686,146 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* RWF Finalization Modal */}
-            {showFinalizeModal && finalizingPickem && (
-              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-                <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                  <h3 className="text-xl font-bold text-white mb-4">{t("pickems.finalize.title", { name: finalizingPickem.name })}</h3>
-                  <p className="text-gray-400 mb-4">{t("pickems.finalize.description")}</p>
+            {/* RWF Finalization Modal - search, add, reorder, remove guilds */}
+            {showFinalizeModal &&
+              finalizingPickem &&
+              (() => {
+                const requiredCount = finalizingPickem.guildCount || 10;
+                const availableGuilds = allRwfGuilds.filter((g) => !finalizationRankings.includes(g));
+                const filteredAvailable = finalizeSearch ? availableGuilds.filter((g) => g.toLowerCase().includes(finalizeSearch.toLowerCase())) : availableGuilds;
 
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event: DragEndEvent) => {
-                      const { active, over } = event;
-                      if (over && active.id !== over.id) {
-                        setFinalizationRankings((items) => {
-                          const oldIndex = items.indexOf(active.id as string);
-                          const newIndex = items.indexOf(over.id as string);
-                          return arrayMove(items, oldIndex, newIndex);
-                        });
-                      }
-                    }}
-                  >
-                    <SortableContext items={finalizationRankings} strategy={verticalListSortingStrategy}>
-                      <div className="space-y-2 mb-6">
-                        {finalizationRankings.map((guild, index) => (
-                          <SortableRankingItem key={guild} id={guild} rank={index + 1} />
-                        ))}
+                return (
+                  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[90vh] flex flex-col">
+                      <h3 className="text-xl font-bold text-white mb-2">{t("pickems.finalize.title", { name: finalizingPickem.name })}</h3>
+                      <p className="text-gray-400 mb-4 text-sm">
+                        {t("pickems.finalize.description")} Select {requiredCount} guilds in finishing order.
+                      </p>
+
+                      {/* Progress indicator */}
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className={`text-sm font-medium ${finalizationRankings.length === requiredCount ? "text-emerald-400" : "text-amber-400"}`}>
+                          {finalizationRankings.length} / {requiredCount} guilds selected
+                        </span>
+                        {finalizationRankings.length === requiredCount && (
+                          <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                              fillRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        )}
                       </div>
-                    </SortableContext>
-                  </DndContext>
 
-                  <div className="flex gap-3">
-                    <button
-                      onClick={async () => {
-                        setIsFinalizingLoading(true);
-                        try {
-                          await api.finalizeRwfPickem(finalizingPickem.pickemId, finalizationRankings);
-                          const pickemsData = await api.getAdminPickems();
-                          setPickems(pickemsData.pickems);
-                          setPickemStats(pickemsData.stats);
-                          setShowFinalizeModal(false);
-                          setFinalizingPickem(null);
-                        } catch (err) {
-                          console.error("Failed to finalize pickem:", err);
-                          alert(err instanceof Error ? err.message : "Failed to finalize pickem");
-                        } finally {
-                          setIsFinalizingLoading(false);
-                        }
-                      }}
-                      disabled={isFinalizingLoading}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                    >
-                      {isFinalizingLoading ? t("pickems.finalize.loading") : t("pickems.finalize.confirm")}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowFinalizeModal(false);
-                        setFinalizingPickem(null);
-                      }}
-                      className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
-                    >
-                      {t("pickems.finalize.cancel")}
-                    </button>
+                      {/* Current rankings - draggable + removable */}
+                      <div className="flex-1 overflow-y-auto min-h-0 mb-4">
+                        {finalizationRankings.length > 0 ? (
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={(event: DragEndEvent) => {
+                              const { active, over } = event;
+                              if (over && active.id !== over.id) {
+                                setFinalizationRankings((items) => {
+                                  const oldIndex = items.indexOf(active.id as string);
+                                  const newIndex = items.indexOf(over.id as string);
+                                  return arrayMove(items, oldIndex, newIndex);
+                                });
+                              }
+                            }}
+                          >
+                            <SortableContext items={finalizationRankings} strategy={verticalListSortingStrategy}>
+                              <div className="space-y-1.5">
+                                {finalizationRankings.map((guild, index) => (
+                                  <SortableRankingItem key={guild} id={guild} rank={index + 1} onRemove={(id) => setFinalizationRankings((prev) => prev.filter((g) => g !== id))} />
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        ) : (
+                          <p className="text-gray-500 text-sm py-4 text-center">No guilds added yet. Search and add guilds below.</p>
+                        )}
+                      </div>
+
+                      {/* Search and add guilds */}
+                      {finalizationRankings.length < requiredCount && (
+                        <div className="mb-4">
+                          <input
+                            type="text"
+                            value={finalizeSearch}
+                            onChange={(e) => setFinalizeSearch(e.target.value)}
+                            placeholder="Search guilds to add..."
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-2"
+                          />
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {filteredAvailable.slice(0, 20).map((guild) => (
+                              <button
+                                key={guild}
+                                type="button"
+                                onClick={() => {
+                                  if (finalizationRankings.length < requiredCount) {
+                                    setFinalizationRankings((prev) => [...prev, guild]);
+                                    setFinalizeSearch("");
+                                  }
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-600 rounded transition-colors flex items-center gap-2"
+                              >
+                                <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                {guild}
+                              </button>
+                            ))}
+                            {filteredAvailable.length === 0 && <p className="text-gray-500 text-xs py-1 px-3">No matching guilds available</p>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex gap-3 pt-2 border-t border-gray-700">
+                        <button
+                          onClick={async () => {
+                            if (finalizationRankings.length !== requiredCount) {
+                              alert(`Please select exactly ${requiredCount} guilds. Currently selected: ${finalizationRankings.length}`);
+                              return;
+                            }
+                            setIsFinalizingLoading(true);
+                            try {
+                              await api.finalizeRwfPickem(finalizingPickem.pickemId, finalizationRankings);
+                              const pickemsData = await api.getAdminPickems();
+                              setPickems(pickemsData.pickems);
+                              setPickemStats(pickemsData.stats);
+                              setShowFinalizeModal(false);
+                              setFinalizingPickem(null);
+                              setFinalizeSearch("");
+                            } catch (err) {
+                              console.error("Failed to finalize pickem:", err);
+                              alert(err instanceof Error ? err.message : "Failed to finalize pickem");
+                            } finally {
+                              setIsFinalizingLoading(false);
+                            }
+                          }}
+                          disabled={isFinalizingLoading || finalizationRankings.length !== requiredCount}
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isFinalizingLoading ? t("pickems.finalize.loading") : t("pickems.finalize.confirm")}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowFinalizeModal(false);
+                            setFinalizingPickem(null);
+                            setFinalizeSearch("");
+                          }}
+                          className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+                        >
+                          {t("pickems.finalize.cancel")}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                );
+              })()}
 
             {/* Pickems Table */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">
@@ -1857,11 +1950,13 @@ export default function AdminPage() {
                             {pickem.type === "rwf" && !pickem.finalized && (
                               <button
                                 onClick={async () => {
-                                  // Fetch RWF guilds to populate the ranking order
+                                  // Fetch RWF guilds to populate the available guilds
                                   try {
                                     const rwfGuilds = await api.getPickemsRwfGuilds();
                                     setFinalizingPickem(pickem);
-                                    setFinalizationRankings(rwfGuilds.map((g) => g.name));
+                                    setAllRwfGuilds(rwfGuilds.map((g) => g.name));
+                                    setFinalizationRankings([]); // Start empty, admin picks guilds
+                                    setFinalizeSearch("");
                                     setShowFinalizeModal(true);
                                   } catch (err) {
                                     console.error("Failed to get RWF guilds:", err);
@@ -2662,10 +2757,7 @@ export default function AdminPage() {
                         >
                           Recalculate Stats
                         </button>
-                        <button
-                          onClick={handleEditGuildClick}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                        >
+                        <button onClick={handleEditGuildClick} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
                           Edit Guild
                         </button>
                         <button

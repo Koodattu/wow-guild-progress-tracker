@@ -83,7 +83,7 @@ const DiscordAccountSchema = new Schema<IDiscordAccount>(
     refreshToken: { type: String, required: true },
     tokenExpiresAt: { type: Date, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const TwitchAccountSchema = new Schema<ITwitchAccount>(
@@ -97,7 +97,7 @@ const TwitchAccountSchema = new Schema<ITwitchAccount>(
     tokenExpiresAt: { type: Date, required: true },
     connectedAt: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const WoWCharacterSchema = new Schema<IWoWCharacter>(
@@ -116,7 +116,7 @@ const WoWCharacterSchema = new Schema<IWoWCharacter>(
     selected: { type: Boolean, default: false },
     inactive: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const BattleNetAccountSchema = new Schema<IBattleNetAccount>(
@@ -130,16 +130,16 @@ const BattleNetAccountSchema = new Schema<IBattleNetAccount>(
     characters: { type: [WoWCharacterSchema], default: [] },
     lastCharacterSync: { type: Date, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const PickemPredictionSchema = new Schema<IPickemPrediction>(
   {
     guildName: { type: String, required: true },
     realm: { type: String, required: true },
-    position: { type: Number, required: true, min: 1, max: 10 },
+    position: { type: Number, required: true, min: 1, max: 25 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const PickemEntrySchema = new Schema<IPickemEntry>(
@@ -149,7 +149,7 @@ const PickemEntrySchema = new Schema<IPickemEntry>(
     submittedAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const UserSchema = new Schema<IUser>(
@@ -162,7 +162,7 @@ const UserSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index for fast lookup by Discord ID

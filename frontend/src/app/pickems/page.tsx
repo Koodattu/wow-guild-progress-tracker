@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { api } from "@/lib/api";
@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/context/AuthContext";
 import { PickemSummary, PickemDetails, PickemPrediction, SimpleGuild, LeaderboardEntry, GuildRanking } from "@/types";
 import { Combobox } from "@headlessui/react";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -65,7 +65,7 @@ function GuildAutocomplete({
       <div className="relative w-full">
         <Combobox.Input
           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
-          displayValue={(guild: SimpleGuild | null) => (guild ? `${guild.name} - ${guild.realm}` : "")}
+          displayValue={(guild: SimpleGuild | null) => (guild ? (guild.realm !== "RWF" ? `${guild.name} - ${guild.realm}` : guild.name) : "")}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
         />
@@ -97,7 +97,7 @@ function GuildAutocomplete({
                 {({ focus, selected }) => (
                   <div className={`px-3 py-2 text-white ${focus ? "bg-gray-700" : ""} ${selected ? "font-semibold" : ""}`}>
                     <span className="font-medium">{guild.name}</span>
-                    <span className="text-gray-400 ml-2">- {guild.realm}</span>
+                    {guild.realm !== "RWF" && <span className="text-gray-400 ml-2">- {guild.realm}</span>}
                   </div>
                 )}
               </Combobox.Option>
@@ -114,42 +114,6 @@ interface SortableItemData {
   id: string;
   position: number;
   prediction: PickemPrediction | null;
-}
-
-// Simple sortable RWF guild item (no autocomplete, just drag to reorder)
-function SortableRwfGuildItem({ id, rank, disabled, isDragging: parentIsDragging }: { id: string; rank: number; disabled: boolean; isDragging?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-    disabled,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: isDragging ? "none" : transition,
-    zIndex: isDragging ? 1000 : undefined,
-    position: isDragging ? "relative" : undefined,
-    willChange: "transform",
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style as React.CSSProperties}
-      {...attributes}
-      {...listeners}
-      className={`flex items-center gap-3 p-3 bg-gray-800 rounded-lg border ${isDragging ? "" : "transition-all"} ${
-        isDragging ? "border-blue-500 shadow-2xl bg-gray-750 cursor-grabbing" : "border-gray-700 hover:border-gray-600"
-      } ${!disabled ? "cursor-grab hover:bg-gray-750" : "opacity-60"}`}
-    >
-      <span className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-white font-bold text-sm shrink-0">{rank}</span>
-      <span className="text-white font-medium flex-1">{id}</span>
-      {!disabled && (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
-        </svg>
-      )}
-    </div>
-  );
 }
 
 function SortablePredictionItem({
@@ -172,7 +136,6 @@ function SortablePredictionItem({
     disabled: disabled || !data.prediction,
   });
 
-  // Apply high z-index if dragging or dropping
   const isDropping = droppingIndex === data.position - 1;
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -190,12 +153,10 @@ function SortablePredictionItem({
         isDragging ? "border-blue-500 shadow-2xl bg-gray-750" : "border-gray-700 hover:border-gray-600"
       } ${!disabled && data.prediction ? "hover:bg-gray-750" : ""}`}
     >
-      {/* Position badge */}
       <div className="flex items-center pl-3 py-2">
         <span className="w-8 h-8 flex items-center justify-center bg-gray-700 rounded-full text-white font-bold text-sm shrink-0">{data.position}</span>
       </div>
 
-      {/* Autocomplete input - separate from drag handle */}
       <div className="flex-1 py-2 min-w-0">
         <GuildAutocomplete
           value={
@@ -208,13 +169,12 @@ function SortablePredictionItem({
           }
           onChange={(guild) => onChange(data.position, guild)}
           guilds={guilds}
-          placeholder="Select a guild"
+          placeholder="Search and select a guild..."
           disabled={disabled}
           excludeGuilds={excludeGuilds}
         />
       </div>
 
-      {/* Separate drag handle */}
       {!disabled && data.prediction && (
         <div className="flex items-center">
           <button
@@ -351,22 +311,18 @@ export default function PickemsPage() {
   const [guilds, setGuilds] = useState<SimpleGuild[]>([]);
   const [rwfGuilds, setRwfGuilds] = useState<SimpleGuild[]>([]);
   const [predictions, setPredictions] = useState<(PickemPrediction | null)[]>([]);
-  // RWF-specific: ordered list of guild names for simple drag-and-drop
-  const [rwfRankings, setRwfRankings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
-  // Dropping state: index of the item being dropped, or null
   const [droppingIndex, setDroppingIndex] = useState<number | null>(null);
 
-  // Configure dnd-kit sensors for both mouse and keyboard
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Requires 8px of movement to start drag
+        distance: 8,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -384,7 +340,6 @@ export default function PickemsPage() {
         setGuilds(guildsData);
         setRwfGuilds(rwfGuildsData);
 
-        // Auto-select first pickem if available
         if (pickemsData.length > 0) {
           setSelectedPickemId(pickemsData[0].id);
         }
@@ -411,33 +366,17 @@ export default function PickemsPage() {
 
         const guildCount = details.guildCount || 10;
 
-        // For RWF pickems, use simple ordered rankings
-        if (details.type === "rwf") {
-          // Initialize from user's existing predictions or default order
-          if (details.userPredictions && details.userPredictions.length > 0) {
-            // Sort by position and extract guild names
-            const sorted = [...details.userPredictions].sort((a, b) => a.position - b.position);
-            setRwfRankings(sorted.map((p) => p.guildName));
-          } else {
-            // Default order from RWF guilds
-            const rwfGuildsData = await api.getPickemsRwfGuilds();
-            setRwfRankings(rwfGuildsData.slice(0, guildCount).map((g) => g.name));
-          }
-          setPredictions([]);
+        // Both RWF and regular pickems use the same prediction format
+        if (details.userPredictions && details.userPredictions.length > 0) {
+          const newPredictions: (PickemPrediction | null)[] = Array(guildCount).fill(null);
+          details.userPredictions.forEach((p) => {
+            if (p.position >= 1 && p.position <= guildCount) {
+              newPredictions[p.position - 1] = p;
+            }
+          });
+          setPredictions(newPredictions);
         } else {
-          // Regular pickems: Initialize predictions from user's existing predictions
-          if (details.userPredictions) {
-            const newPredictions: (PickemPrediction | null)[] = Array(guildCount).fill(null);
-            details.userPredictions.forEach((p) => {
-              if (p.position >= 1 && p.position <= guildCount) {
-                newPredictions[p.position - 1] = p;
-              }
-            });
-            setPredictions(newPredictions);
-          } else {
-            setPredictions(Array(guildCount).fill(null));
-          }
-          setRwfRankings([]);
+          setPredictions(Array(guildCount).fill(null));
         }
       } catch (err) {
         setError("Failed to load pickem details");
@@ -450,7 +389,7 @@ export default function PickemsPage() {
     fetchDetails();
   }, [selectedPickemId]);
 
-  // Handle prediction change
+  // Handle prediction change (unified for both regular and RWF)
   const handlePredictionChange = useCallback((position: number, guild: { guildName: string; realm: string } | null) => {
     setPredictions((prev) => {
       const newPredictions = [...prev];
@@ -468,7 +407,7 @@ export default function PickemsPage() {
     setSuccessMessage(null);
   }, []);
 
-  // Handle drag end with dnd-kit, and set dropping state
+  // Handle drag end with dnd-kit
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -479,15 +418,11 @@ export default function PickemsPage() {
 
         if (oldIndex === -1 || newIndex === -1) return prev;
 
-        // Set dropping state to the new index
         setDroppingIndex(newIndex);
-
-        // Clear dropping state after a short delay (e.g., 150ms)
         setTimeout(() => setDroppingIndex(null), 150);
 
         const newPredictions = arrayMove(prev, oldIndex, newIndex);
 
-        // Update positions after reordering
         return newPredictions.map((pred, idx) => {
           if (pred) {
             return { ...pred, position: idx + 1 };
@@ -499,68 +434,35 @@ export default function PickemsPage() {
     }
   };
 
-  // Handle RWF drag end - simpler, just reorder the guild names
-  const handleRwfDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      setRwfRankings((items) => {
-        const oldIndex = items.indexOf(active.id as string);
-        const newIndex = items.indexOf(over.id as string);
-        return arrayMove(items, oldIndex, newIndex);
-      });
-      setSuccessMessage(null);
-    }
-  };
-
-  // Submit predictions
+  // Submit predictions (unified for both regular and RWF)
   const handleSubmit = async () => {
     if (!selectedPickemId || !pickemDetails) return;
 
     const guildCount = pickemDetails.guildCount || 10;
+    const filledPredictions = predictions.filter((p): p is PickemPrediction => p !== null);
 
-    let predictionsToSubmit: PickemPrediction[];
+    if (filledPredictions.length !== guildCount) {
+      setError(t("fillAllPositions", { count: guildCount }));
+      return;
+    }
 
-    // Handle RWF pickems differently
-    if (pickemDetails.type === "rwf") {
-      // Convert rwfRankings to predictions format
-      if (rwfRankings.length !== guildCount) {
-        setError(t("fillAllPositions", { count: guildCount }));
+    // Check for duplicates
+    const guildKeys = new Set<string>();
+    for (const pred of filledPredictions) {
+      const key = `${pred.guildName}-${pred.realm}`;
+      if (guildKeys.has(key)) {
+        setError(`Duplicate guild: ${pred.guildName}`);
         return;
       }
-      predictionsToSubmit = rwfRankings.map((guildName, idx) => ({
-        guildName,
-        realm: "RWF",
-        position: idx + 1,
-      }));
-    } else {
-      // Regular pickems: Validate all positions are filled
-      const filledPredictions = predictions.filter((p): p is PickemPrediction => p !== null);
-      if (filledPredictions.length !== guildCount) {
-        setError(t("fillAllPositions", { count: guildCount }));
-        return;
-      }
-
-      // Check for duplicates
-      const guildKeys = new Set<string>();
-      for (const pred of filledPredictions) {
-        const key = `${pred.guildName}-${pred.realm}`;
-        if (guildKeys.has(key)) {
-          setError(`Duplicate guild: ${pred.guildName} - ${pred.realm}`);
-          return;
-        }
-        guildKeys.add(key);
-      }
-      predictionsToSubmit = filledPredictions;
+      guildKeys.add(key);
     }
 
     try {
       setSubmitting(true);
       setError(null);
-      const result = await api.submitPickemPredictions(selectedPickemId, predictionsToSubmit);
+      const result = await api.submitPickemPredictions(selectedPickemId, filledPredictions);
       setSuccessMessage(result.message);
 
-      // Refresh details to get updated leaderboard
       const details = await api.getPickemDetails(selectedPickemId);
       setPickemDetails(details);
     } catch (err) {
@@ -570,7 +472,6 @@ export default function PickemsPage() {
     }
   };
 
-  // Calculate time remaining
   const getTimeRemaining = (endDate: string) => {
     const end = new Date(endDate);
     const now = new Date();
@@ -587,7 +488,7 @@ export default function PickemsPage() {
     return `${minutes}m remaining`;
   };
 
-  // Memoize sorted guilds for performance - use RWF guilds for RWF pickems
+  // Use RWF guilds for RWF pickems, regular guilds otherwise
   const sortedGuilds = useMemo(() => {
     const selectedPickem = pickems.find((p) => p.id === selectedPickemId);
     const isRwf = selectedPickem?.type === "rwf";
@@ -595,13 +496,27 @@ export default function PickemsPage() {
     return [...guildList].sort((a, b) => a.name.localeCompare(b.name));
   }, [guilds, rwfGuilds, pickems, selectedPickemId]);
 
-  // Get list of already selected guilds to exclude from dropdowns
   const getExcludedGuilds = useCallback(
     (currentPosition: number) => {
       return predictions.filter((p, idx) => p !== null && idx !== currentPosition - 1).map((p) => ({ guildName: p!.guildName, realm: p!.realm }));
     },
     [predictions],
   );
+
+  // Get scoring config from the current pickem (or defaults)
+  const scoringConfig = useMemo(() => {
+    return pickemDetails?.scoringConfig ?? {
+      exactMatch: 10,
+      offByOne: 8,
+      offByTwo: 6,
+      offByThree: 4,
+      offByFour: 2,
+      offByFiveOrMore: 0,
+    };
+  }, [pickemDetails]);
+
+  // Whether this is an unfinalized RWF pickem (scores should show as pending)
+  const isUnfinalizedRwf = pickemDetails?.type === "rwf" && !pickemDetails?.finalized;
 
   if (loading) {
     return (
@@ -637,7 +552,6 @@ export default function PickemsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Prediction Form */}
           <div className="space-y-6">
-            {/* Prediction Form */}
             <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
               <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
 
@@ -659,45 +573,32 @@ export default function PickemsPage() {
                 </div>
               )}
 
-              {/* RWF Pickems: Simple drag-and-drop ranking */}
-              {pickemDetails.type === "rwf" ? (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRwfDragEnd}>
-                  <SortableContext items={rwfRankings} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {rwfRankings.map((guildName, index) => (
-                        <SortableRwfGuildItem key={guildName} id={guildName} rank={index + 1} disabled={!user || !pickemDetails.isVotingOpen} />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                /* Regular Pickems: Autocomplete with drag-and-drop */
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2">
-                      {Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => {
-                        const position = i + 1;
-                        const itemData: SortableItemData = {
-                          id: `prediction-${i}`,
-                          position,
-                          prediction: predictions[i],
-                        };
-                        return (
-                          <SortablePredictionItem
-                            key={`prediction-${i}`}
-                            data={itemData}
-                            guilds={sortedGuilds}
-                            disabled={!user || !pickemDetails.isVotingOpen}
-                            excludeGuilds={getExcludedGuilds(position)}
-                            onChange={handlePredictionChange}
-                            droppingIndex={droppingIndex}
-                          />
-                        );
-                      })}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              )}
+              {/* Unified prediction UI: autocomplete + drag-and-drop for both regular and RWF */}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => {
+                      const position = i + 1;
+                      const itemData: SortableItemData = {
+                        id: `prediction-${i}`,
+                        position,
+                        prediction: predictions[i],
+                      };
+                      return (
+                        <SortablePredictionItem
+                          key={`prediction-${i}`}
+                          data={itemData}
+                          guilds={sortedGuilds}
+                          disabled={!user || !pickemDetails.isVotingOpen}
+                          excludeGuilds={getExcludedGuilds(position)}
+                          onChange={handlePredictionChange}
+                          droppingIndex={droppingIndex}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
 
               {user && pickemDetails.isVotingOpen && (
                 <button
@@ -717,7 +618,7 @@ export default function PickemsPage() {
               )}
             </div>
 
-            {/* Scoring Info - Collapsible */}
+            {/* Scoring Info - uses dynamic values from pickem config */}
             <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
               <button
                 onClick={() => setShowScoringInfo(!showScoringInfo)}
@@ -730,27 +631,39 @@ export default function PickemsPage() {
               </button>
               {showScoringInfo && (
                 <div className="px-4 pb-4 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
+                  {scoringConfig.exactMatch > 0 && (
+                    <p>
+                      • <strong className="text-green-400">{scoringConfig.exactMatch} points:</strong> Exact position match
+                    </p>
+                  )}
+                  {scoringConfig.offByOne > 0 && (
+                    <p>
+                      • <strong className="text-yellow-400">{scoringConfig.offByOne} points:</strong> Within ±1 position
+                    </p>
+                  )}
+                  {scoringConfig.offByTwo > 0 && (
+                    <p>
+                      • <strong className="text-orange-400">{scoringConfig.offByTwo} points:</strong> Within ±2 positions
+                    </p>
+                  )}
+                  {scoringConfig.offByThree > 0 && (
+                    <p>
+                      • <strong className="text-orange-500">{scoringConfig.offByThree} points:</strong> Within ±3 positions
+                    </p>
+                  )}
+                  {scoringConfig.offByFour > 0 && (
+                    <p>
+                      • <strong className="text-red-400">{scoringConfig.offByFour} points:</strong> Within ±4 positions
+                    </p>
+                  )}
                   <p>
-                    • <strong className="text-green-400">10 points:</strong> Exact position match
+                    • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} points:</strong> More than 4 positions off or not in top {pickemDetails?.guildCount || 10}
                   </p>
-                  <p>
-                    • <strong className="text-yellow-400">6 points:</strong> Within ±1 position
-                  </p>
-                  <p>
-                    • <strong className="text-orange-400">4 points:</strong> Within ±2 positions
-                  </p>
-                  <p>
-                    • <strong className="text-orange-500">3 points:</strong> Within ±3 positions
-                  </p>
-                  <p>
-                    • <strong className="text-red-400">2 points:</strong> Within ±4 positions
-                  </p>
-                  <p>
-                    • <strong className="text-red-500">1 point:</strong> Within ±5 positions
-                  </p>
-                  <p>
-                    • <strong className="text-gray-500">0 points:</strong> More than 5 positions off or not in top 10
-                  </p>
+                  {isUnfinalizedRwf && (
+                    <p className="mt-2 text-purple-400 font-medium">
+                      RWF scores are calculated when the race ends and admin finalizes the results.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -796,6 +709,25 @@ export default function PickemsPage() {
               </div>
             )}
 
+            {/* RWF Status Banner - show for RWF pickems */}
+            {pickemDetails.type === "rwf" && (
+              <div className={`rounded-lg p-4 border ${pickemDetails.finalized ? "bg-emerald-900/20 border-emerald-700/50" : "bg-purple-900/20 border-purple-700/50"}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${pickemDetails.finalized ? "bg-emerald-400" : "bg-purple-400 animate-pulse"}`} />
+                  <div>
+                    <h4 className={`font-semibold ${pickemDetails.finalized ? "text-emerald-300" : "text-purple-300"}`}>
+                      {pickemDetails.finalized ? "Race Finished — Results Finalized" : "Race in Progress"}
+                    </h4>
+                    <p className="text-sm text-gray-400 mt-0.5">
+                      {pickemDetails.finalized
+                        ? "Final rankings have been set. Scores are calculated."
+                        : "Scores will be calculated when the race ends and results are finalized by an admin."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Leaderboard */}
             <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
               <h3 className="text-lg font-semibold text-white mb-4">{t("leaderboard")}</h3>
@@ -807,25 +739,31 @@ export default function PickemsPage() {
                     <div
                       key={entry.username}
                       className={`rounded-lg ${
-                        index === 0
-                          ? "bg-yellow-900/30 border border-yellow-700/50"
-                          : index === 1
-                            ? "bg-gray-700/50 border border-gray-600/50"
-                            : index === 2
-                              ? "bg-orange-900/30 border border-orange-700/50"
-                              : "bg-gray-700/30"
+                        isUnfinalizedRwf
+                          ? "bg-gray-700/30"
+                          : index === 0
+                            ? "bg-yellow-900/30 border border-yellow-700/50"
+                            : index === 1
+                              ? "bg-gray-700/50 border border-gray-600/50"
+                              : index === 2
+                                ? "bg-orange-900/30 border border-orange-700/50"
+                                : "bg-gray-700/30"
                       }`}
                     >
                       <details className="group">
                         <summary className="p-3 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
                           <div className="flex items-center gap-2 md:gap-3">
-                            <span className="text-base md:text-lg font-bold text-gray-400 w-5 md:w-6 shrink-0">{index + 1}</span>
+                            <span className="text-base md:text-lg font-bold text-gray-400 w-5 md:w-6 shrink-0">
+                              {isUnfinalizedRwf ? "—" : index + 1}
+                            </span>
                             <img src={entry.avatarUrl} alt={entry.username} className="w-7 h-7 md:w-8 md:h-8 rounded-full shrink-0" />
                             <div className="flex-1 min-w-0 flex items-center gap-2">
                               <span className="text-white font-medium truncate text-sm md:text-base">{entry.username}</span>
                               <span className="text-xs text-gray-500 group-open:text-blue-400 transition-colors hidden sm:inline">{t("showPredictions")}</span>
                             </div>
-                            <span className="text-lg md:text-xl font-bold text-blue-400 shrink-0">{entry.totalPoints}</span>
+                            <span className={`text-lg md:text-xl font-bold shrink-0 ${isUnfinalizedRwf ? "text-gray-500" : "text-blue-400"}`}>
+                              {isUnfinalizedRwf ? "—" : entry.totalPoints}
+                            </span>
                           </div>
                         </summary>
                         <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs border-t border-gray-700/50 mt-2">
@@ -833,7 +771,7 @@ export default function PickemsPage() {
                             <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-1 min-w-0">
                               <span className="text-gray-500 shrink-0">#{pred.predictedRank}:</span>
                               <span className="truncate flex-1">{pred.guildName}</span>
-                              <PointsBadge points={pred.points} />
+                              {!isUnfinalizedRwf && <PointsBadge points={pred.points} />}
                             </div>
                           ))}
                         </div>

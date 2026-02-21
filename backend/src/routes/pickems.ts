@@ -5,9 +5,38 @@ import { calculatePickemPoints, calculateStreakBonus, IPickem } from "../models/
 import discordService from "../services/discord.service";
 import pickemService from "../services/pickem.service";
 import { PICK_EM_RWF_GUILDS } from "../config/guilds";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 import logger from "../utils/logger";
 
 const router = Router();
+
+// In-memory cache for expensive pickem computations (guild rankings & leaderboard)
+interface PickemCacheEntry {
+  guildRankings: { data: any[]; expiresAt: number } | null;
+  leaderboard: { data: any[]; expiresAt: number } | null;
+}
+const pickemComputationCache = new Map<string, PickemCacheEntry>();
+const RANKINGS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const LEADERBOARD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedOrCompute<T>(
+  cache: Map<string, PickemCacheEntry>,
+  key: string,
+  field: "guildRankings" | "leaderboard",
+  ttl: number,
+  compute: () => Promise<T>,
+): Promise<T> {
+  const entry = cache.get(key);
+  if (entry && entry[field] && entry[field]!.expiresAt > Date.now()) {
+    return entry[field]!.data as T;
+  }
+  const data = await compute();
+  if (!cache.has(key)) {
+    cache.set(key, { guildRankings: null, leaderboard: null });
+  }
+  cache.get(key)![field] = { data: data as any, expiresAt: Date.now() + ttl };
+  return data;
+}
 
 // Helper to get user from session (updated for express-session)
 async function getUserFromSession(req: Request) {
@@ -17,58 +46,79 @@ async function getUserFromSession(req: Request) {
 }
 
 // Get all available pickems with their status
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const now = new Date();
-    const pickems = await pickemService.getActivePickems();
+router.get(
+  "/",
+  cacheMiddleware(
+    (req) => "pickems:list",
+    () => 2 * 60 * 1000,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const pickems = await pickemService.getActivePickems();
 
-    const result = pickems.map((p) => ({
-      id: p.pickemId,
-      name: p.name,
-      type: p.type || "regular",
-      raidIds: p.raidIds,
-      guildCount: p.guildCount || (p.type === "rwf" ? 5 : 10),
-      votingStart: p.votingStart,
-      votingEnd: p.votingEnd,
-      isVotingOpen: now >= new Date(p.votingStart) && now <= new Date(p.votingEnd),
-      hasEnded: now > new Date(p.votingEnd),
-      // RWF finalization status
-      finalized: p.finalized ?? false,
-      finalRankings: p.finalRankings ?? [],
-      finalizedAt: p.finalizedAt ?? null,
-      scoringConfig: p.scoringConfig,
-      streakConfig: p.streakConfig,
-    }));
+      const result = pickems.map((p) => ({
+        id: p.pickemId,
+        name: p.name,
+        type: p.type || "regular",
+        raidIds: p.raidIds,
+        guildCount: p.guildCount || (p.type === "rwf" ? 5 : 10),
+        votingStart: p.votingStart,
+        votingEnd: p.votingEnd,
+        isVotingOpen: now >= new Date(p.votingStart) && now <= new Date(p.votingEnd),
+        hasEnded: now > new Date(p.votingEnd),
+        // RWF finalization status
+        finalized: p.finalized ?? false,
+        finalRankings: p.finalRankings ?? [],
+        finalizedAt: p.finalizedAt ?? null,
+        scoringConfig: p.scoringConfig,
+        streakConfig: p.streakConfig,
+      }));
 
-    res.json(result);
-  } catch (error) {
-    logger.error("Error fetching pickems:", error);
-    res.status(500).json({ error: "Failed to fetch pickems" });
-  }
-});
+      res.json(result);
+    } catch (error) {
+      logger.error("Error fetching pickems:", error);
+      res.status(500).json({ error: "Failed to fetch pickems" });
+    }
+  },
+);
 
 // Get simple guild list for autocomplete (just name and realm) - for regular pickems
-router.get("/guilds", async (req: Request, res: Response) => {
-  try {
-    const guilds = await Guild.find({}, { name: 1, realm: 1, _id: 0 }).lean();
-    res.json(guilds);
-  } catch (error) {
-    logger.error("Error fetching guilds for pickems:", error);
-    res.status(500).json({ error: "Failed to fetch guilds" });
-  }
-});
+router.get(
+  "/guilds",
+  cacheMiddleware(
+    (req) => "pickems:guilds",
+    () => 30 * 60 * 1000,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const guilds = await Guild.find({}, { name: 1, realm: 1, _id: 0 }).lean();
+      res.json(guilds);
+    } catch (error) {
+      logger.error("Error fetching guilds for pickems:", error);
+      res.status(500).json({ error: "Failed to fetch guilds" });
+    }
+  },
+);
 
 // Get RWF guild list for autocomplete - for RWF pickems (Race to World First)
-router.get("/guilds/rwf", async (req: Request, res: Response) => {
-  try {
-    // Return RWF guilds as simple objects with name only (no realm for RWF guilds)
-    const guilds = PICK_EM_RWF_GUILDS.map((name) => ({ name, realm: "RWF" }));
-    res.json(guilds);
-  } catch (error) {
-    logger.error("Error fetching RWF guilds for pickems:", error);
-    res.status(500).json({ error: "Failed to fetch RWF guilds" });
-  }
-});
+router.get(
+  "/guilds/rwf",
+  cacheMiddleware(
+    (req) => "pickems:guilds:rwf",
+    () => 60 * 60 * 1000,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      // Return RWF guilds as simple objects with name only (no realm for RWF guilds)
+      const guilds = PICK_EM_RWF_GUILDS.map((name) => ({ name, realm: "RWF" }));
+      res.json(guilds);
+    } catch (error) {
+      logger.error("Error fetching RWF guilds for pickems:", error);
+      res.status(500).json({ error: "Failed to fetch RWF guilds" });
+    }
+  },
+);
 
 // Get a specific pickem with leaderboard and user's predictions
 router.get("/:pickemId", async (req: Request, res: Response) => {
@@ -109,8 +159,10 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
         }));
       }
     } else {
-      // For regular pickems, get rankings from guild progress
-      guildRankings = await getGuildRankingsForPickem(pickem.raidIds);
+      // For regular pickems, get rankings from guild progress (cached for 5 min)
+      guildRankings = await getCachedOrCompute(pickemComputationCache, `rankings:${pickemId}`, "guildRankings", RANKINGS_CACHE_TTL, () =>
+        getGuildRankingsForPickem(pickem.raidIds),
+      );
     }
 
     // Get user's predictions if logged in
@@ -123,8 +175,10 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
       }
     }
 
-    // Get leaderboard (all users' scores for this pickem)
-    const leaderboard = await getPickemLeaderboard(pickemId, guildRankings, pickem);
+    // Get leaderboard (all users' scores for this pickem, cached for 5 min)
+    const leaderboard = await getCachedOrCompute(pickemComputationCache, `leaderboard:${pickemId}`, "leaderboard", LEADERBOARD_CACHE_TTL, () =>
+      getPickemLeaderboard(pickemId, guildRankings, pickem),
+    );
 
     res.json({
       id: pickem.pickemId,
@@ -343,6 +397,9 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
     actualRankMap.set(`${g.name}-${g.realm}`, g.rank);
   });
 
+  // For unfinalized RWF pickems, don't calculate scores - everyone gets 0
+  const isUnfinalizedRwf = pickem.type === "rwf" && !pickem.finalized;
+
   // Calculate scores for each user
   const leaderboard: {
     username: string;
@@ -378,7 +435,7 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
       const actualRank = actualRankMap.get(key) ?? null;
 
       // Only award points if guild is in top 50 (has a rank)
-      const points = actualRank !== null ? calculatePickemPoints(pred.position, actualRank, pickem.scoringConfig) : 0;
+      const points = actualRank !== null && !isUnfinalizedRwf ? calculatePickemPoints(pred.position, actualRank, pickem.scoringConfig) : 0;
       positionPoints += points;
 
       predictionResults.push({
@@ -390,8 +447,8 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
       });
     }
 
-    // Calculate streak bonus
-    const { totalBonus: streakBonus, streaks } = calculateStreakBonus(predictionResults, pickem.streakConfig);
+    // Calculate streak bonus (skip for unfinalized RWF)
+    const { totalBonus: streakBonus, streaks } = isUnfinalizedRwf ? { totalBonus: 0, streaks: [] } : calculateStreakBonus(predictionResults, pickem.streakConfig);
 
     // Sort predictions by predicted rank
     predictionResults.sort((a, b) => a.predictedRank - b.predictedRank);
