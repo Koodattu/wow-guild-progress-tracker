@@ -210,7 +210,7 @@ function PrizePoolBanner({ prizeConfig }: { prizeConfig: PrizeConfig }) {
   const medals = ["🥇", "🥈", "🥉"];
 
   return (
-    <div className="bg-gradient-to-r from-amber-900/30 via-yellow-900/20 to-amber-900/30 rounded-lg p-4 border border-amber-700/40">
+    <div className="bg-linear-to-r from-amber-900/30 via-yellow-900/20 to-amber-900/30 rounded-lg p-4 border border-amber-700/40">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">🏆</span>
         <span className="text-amber-300 font-bold text-base">Prize Pool: {prizeConfig.goldPool.toLocaleString()} gold</span>
@@ -437,7 +437,7 @@ function PickemCard({ pickem, getTimeRemaining, onClick }: { pickem: PickemSumma
 
       {/* Prize section */}
       {prizeEnabled && pickem.prizeConfig && (
-        <div className="px-5 py-3 bg-gradient-to-r from-amber-900/20 to-yellow-900/10 border-t border-amber-800/30">
+        <div className="px-5 py-3 bg-linear-to-r from-amber-900/20 to-yellow-900/10 border-t border-amber-800/30">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-sm">🏆</span>
             <span className="text-amber-300 font-semibold text-sm">{pickem.prizeConfig.goldPool.toLocaleString()} gold</span>
