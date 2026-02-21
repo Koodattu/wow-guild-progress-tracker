@@ -61,7 +61,7 @@ function GuildAutocomplete({
   }, [value, guilds]);
 
   return (
-    <Combobox value={comboboxValue} onChange={handleChange} disabled={disabled}>
+    <Combobox value={comboboxValue} onChange={handleChange} disabled={disabled} immediate>
       <div className="relative w-full">
         <Combobox.Input
           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed pr-8"
@@ -372,7 +372,7 @@ function PickemCard({ pickem, getTimeRemaining, onClick }: { pickem: PickemSumma
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left bg-gray-800 rounded-xl border transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 group overflow-hidden ${
+      className={`w-full text-left cursor-pointer bg-gray-800 rounded-xl border transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 group overflow-hidden ${
         isActive ? "border-emerald-700/60 hover:border-emerald-600/80" : "border-gray-700 hover:border-gray-600"
       }`}
     >
@@ -757,7 +757,7 @@ export default function PickemsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 pb-8">
+    <div className="max-w-[1600px] mx-auto px-4 py-4 pb-8">
       {/* Pickem Selector */}
       <div className="mb-6">
         <PickemSelector pickems={pickems} selectedId={selectedPickemId} onSelect={setSelectedPickemId} getTimeRemaining={getTimeRemaining} />
@@ -771,191 +771,212 @@ export default function PickemsPage() {
           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : pickemDetails ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column: Prediction Form */}
-          <div className="space-y-6">
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
-              <h3 className="text-lg font-semibold text-white mb-4">{t("yourPredictions")}</h3>
-
-              {!user && !authLoading && (
-                <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-700 rounded-md">
-                  <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
-                </div>
-              )}
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
-                  <p className="text-red-300 text-sm">{error}</p>
-                </div>
-              )}
-
-              {successMessage && (
-                <div className="mb-4 p-3 bg-green-900/50 border border-green-700 rounded-md">
-                  <p className="text-green-300 text-sm">{successMessage}</p>
-                </div>
-              )}
-
-              {/* Unified prediction UI: autocomplete + drag-and-drop for both regular and RWF */}
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-2">
-                    {Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => {
-                      const position = i + 1;
-                      const itemData: SortableItemData = {
-                        id: `prediction-${i}`,
-                        position,
-                        prediction: predictions[i],
-                      };
-                      return (
-                        <SortablePredictionItem
-                          key={`prediction-${i}`}
-                          data={itemData}
-                          guilds={sortedGuilds}
-                          disabled={!user || !pickemDetails.isVotingOpen}
-                          excludeGuilds={getExcludedGuilds(position)}
-                          onChange={handlePredictionChange}
-                          droppingIndex={droppingIndex}
-                        />
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
-
-              {user && pickemDetails.isVotingOpen && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+        <div className="space-y-4">
+          {/* Top Banners - RWF status and/or Prize Pool as wide banners */}
+          {(pickemDetails.type === "rwf" || detailPrizeEnabled) && (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* RWF Status Banner */}
+              {pickemDetails.type === "rwf" && (
+                <div
+                  className={`flex-1 rounded-lg px-4 py-3 border flex items-center gap-3 ${pickemDetails.finalized ? "bg-emerald-900/20 border-emerald-700/50" : "bg-purple-900/20 border-purple-700/50"}`}
                 >
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {t("submitting")}
-                    </span>
-                  ) : (
-                    t("submitPredictions")
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Scoring Info - uses dynamic values from pickem config */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-              <button
-                onClick={() => setShowScoringInfo(!showScoringInfo)}
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
-              >
-                <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showScoringInfo && (
-                <div className="px-4 pb-4 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
-                  {scoringConfig.exactMatch > 0 && (
-                    <p>
-                      • <strong className="text-green-400">{scoringConfig.exactMatch} points:</strong> Exact position match
-                    </p>
-                  )}
-                  {scoringConfig.offByOne > 0 && (
-                    <p>
-                      • <strong className="text-yellow-400">{scoringConfig.offByOne} points:</strong> Within ±1 position
-                    </p>
-                  )}
-                  {scoringConfig.offByTwo > 0 && (
-                    <p>
-                      • <strong className="text-orange-400">{scoringConfig.offByTwo} points:</strong> Within ±2 positions
-                    </p>
-                  )}
-                  {scoringConfig.offByThree > 0 && (
-                    <p>
-                      • <strong className="text-orange-500">{scoringConfig.offByThree} points:</strong> Within ±3 positions
-                    </p>
-                  )}
-                  {scoringConfig.offByFour > 0 && (
-                    <p>
-                      • <strong className="text-red-400">{scoringConfig.offByFour} points:</strong> Within ±4 positions
-                    </p>
-                  )}
-                  <p>
-                    • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} points:</strong> More than 4 positions off or not in top {pickemDetails?.guildCount || 10}
-                  </p>
-                  {isUnfinalizedRwf && <p className="mt-2 text-purple-400 font-medium">RWF scores are calculated when the race ends and admin finalizes the results.</p>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column: Current Rankings & Leaderboard */}
-          <div className="space-y-6">
-            {/* Current Guild Rankings - Only show for regular pickems */}
-            {pickemDetails.type !== "rwf" && (
-              <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
-                <h3 className="text-lg font-semibold text-white mb-4">{t("currentRankings")}</h3>
-                <div className="overflow-x-auto -mx-4 md:mx-0">
-                  <div className="inline-block min-w-full align-middle">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-400 border-b border-gray-700">
-                          <th className="text-left py-2 px-2 md:px-3">#</th>
-                          <th className="text-left py-2 px-2 md:px-3">{t("guild")}</th>
-                          <th className="text-right py-2 px-2 md:px-3">{t("progress")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
-                          <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
-                            <td className="py-2 px-2 md:px-3 text-gray-300 font-medium">{guild.rank}</td>
-                            <td className="py-2 px-2 md:px-3">
-                              <div className="min-w-0">
-                                <span className="text-white font-medium block truncate">{guild.name}</span>
-                                <span className="text-gray-400 text-xs block truncate">{guild.realm}</span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 md:px-3 text-right whitespace-nowrap">
-                              <span className={`${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
-                                {guild.bossesKilled}/{guild.totalBosses}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* RWF Status Banner - show for RWF pickems */}
-            {pickemDetails.type === "rwf" && (
-              <div className={`rounded-lg p-4 border ${pickemDetails.finalized ? "bg-emerald-900/20 border-emerald-700/50" : "bg-purple-900/20 border-purple-700/50"}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${pickemDetails.finalized ? "bg-emerald-400" : "bg-purple-400 animate-pulse"}`} />
-                  <div>
-                    <h4 className={`font-semibold ${pickemDetails.finalized ? "text-emerald-300" : "text-purple-300"}`}>
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${pickemDetails.finalized ? "bg-emerald-400" : "bg-purple-400 animate-pulse"}`} />
+                  <div className="min-w-0">
+                    <span className={`font-semibold text-sm ${pickemDetails.finalized ? "text-emerald-300" : "text-purple-300"}`}>
                       {pickemDetails.finalized ? "Race Finished — Results Finalized" : "Race in Progress"}
-                    </h4>
-                    <p className="text-sm text-gray-400 mt-0.5">
-                      {pickemDetails.finalized
-                        ? "Final rankings have been set. Scores are calculated."
-                        : "Scores will be calculated when the race ends and results are finalized by an admin."}
+                    </span>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {pickemDetails.finalized ? "Final rankings have been set. Scores are calculated." : "Scores will be calculated when the race ends and results are finalized."}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Prize Pool Banner */}
+              {detailPrizeEnabled && pickemDetails.prizeConfig && (
+                <div className="flex-1 rounded-lg px-4 py-3 border border-amber-700/40 bg-linear-to-r from-amber-900/30 via-yellow-900/20 to-amber-900/30 flex items-center gap-3">
+                  <span className="text-lg shrink-0">🏆</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-amber-300 font-semibold text-sm">Prize Pool: {pickemDetails.prizeConfig.goldPool.toLocaleString()} gold</span>
+                    {pickemDetails.prizeConfig.distribution.length > 0 && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-amber-200/70 mt-0.5">
+                        {pickemDetails.prizeConfig.distribution.slice(0, 5).map((d, i) => {
+                          const medals = ["🥇", "🥈", "🥉"];
+                          const amount = Math.round((pickemDetails.prizeConfig!.goldPool * d.percentage) / 100);
+                          return (
+                            <span key={d.place}>
+                              {medals[i] || `#${d.place}`} {d.percentage}% ({amount.toLocaleString()}g)
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Main Content Grid - 3 columns for regular, 2 for RWF */}
+          <div className={`grid grid-cols-1 gap-4 ${pickemDetails.type !== "rwf" ? "xl:grid-cols-[1fr_minmax(280px,340px)_1fr]" : "lg:grid-cols-2"}`}>
+            {/* Column 1: Prediction Form */}
+            <div className="space-y-4">
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-base font-semibold text-white mb-3">{t("yourPredictions")}</h3>
+
+                {!user && !authLoading && (
+                  <div className="mb-3 p-2.5 bg-yellow-900/50 border border-yellow-700 rounded-md">
+                    <p className="text-yellow-300 text-sm">{t("loginToVote")}</p>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="mb-3 p-2.5 bg-red-900/50 border border-red-700 rounded-md">
+                    <p className="text-red-300 text-sm">{error}</p>
+                  </div>
+                )}
+
+                {successMessage && (
+                  <div className="mb-3 p-2.5 bg-green-900/50 border border-green-700 rounded-md">
+                    <p className="text-green-300 text-sm">{successMessage}</p>
+                  </div>
+                )}
+
+                {/* Unified prediction UI: autocomplete + drag-and-drop for both regular and RWF */}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => {
+                        const position = i + 1;
+                        const itemData: SortableItemData = {
+                          id: `prediction-${i}`,
+                          position,
+                          prediction: predictions[i],
+                        };
+                        return (
+                          <SortablePredictionItem
+                            key={`prediction-${i}`}
+                            data={itemData}
+                            guilds={sortedGuilds}
+                            disabled={!user || !pickemDetails.isVotingOpen}
+                            excludeGuilds={getExcludedGuilds(position)}
+                            onChange={handlePredictionChange}
+                            droppingIndex={droppingIndex}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+
+                {user && pickemDetails.isVotingOpen && (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="mt-4 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        {t("submitting")}
+                      </span>
+                    ) : (
+                      t("submitPredictions")
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Scoring Info */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+                <button
+                  onClick={() => setShowScoringInfo(!showScoringInfo)}
+                  className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
+                >
+                  <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showScoringInfo && (
+                  <div className="px-4 pb-3 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
+                    {scoringConfig.exactMatch > 0 && (
+                      <p>
+                        • <strong className="text-green-400">{scoringConfig.exactMatch} pts:</strong> Exact match
+                      </p>
+                    )}
+                    {scoringConfig.offByOne > 0 && (
+                      <p>
+                        • <strong className="text-yellow-400">{scoringConfig.offByOne} pts:</strong> ±1 position
+                      </p>
+                    )}
+                    {scoringConfig.offByTwo > 0 && (
+                      <p>
+                        • <strong className="text-orange-400">{scoringConfig.offByTwo} pts:</strong> ±2 positions
+                      </p>
+                    )}
+                    {scoringConfig.offByThree > 0 && (
+                      <p>
+                        • <strong className="text-orange-500">{scoringConfig.offByThree} pts:</strong> ±3 positions
+                      </p>
+                    )}
+                    {scoringConfig.offByFour > 0 && (
+                      <p>
+                        • <strong className="text-red-400">{scoringConfig.offByFour} pts:</strong> ±4 positions
+                      </p>
+                    )}
+                    <p>
+                      • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} pts:</strong> 5+ off or not in top {pickemDetails?.guildCount || 10}
+                    </p>
+                    {isUnfinalizedRwf && <p className="mt-2 text-purple-400 font-medium">RWF scores are calculated when the race ends and admin finalizes the results.</p>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Column 2: Current Guild Rankings - Only for regular pickems */}
+            {pickemDetails.type !== "rwf" && (
+              <div className="bg-gray-800 rounded-lg p-3 border border-gray-700 self-start">
+                <h3 className="text-base font-semibold text-white mb-2">{t("currentRankings")}</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-700 text-xs">
+                        <th className="text-left py-1.5 px-2">#</th>
+                        <th className="text-left py-1.5 px-2">{t("guild")}</th>
+                        <th className="text-right py-1.5 px-2">{t("progress")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
+                        <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
+                          <td className="py-1.5 px-2 text-gray-300 font-medium text-xs">{guild.rank}</td>
+                          <td className="py-1.5 px-2">
+                            <div className="min-w-0">
+                              <span className="text-white font-medium block truncate text-sm leading-tight">{guild.name}</span>
+                              <span className="text-gray-500 text-xs block truncate leading-tight">{guild.realm}</span>
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 text-right whitespace-nowrap">
+                            <span className={`text-xs ${guild.isComplete ? "text-green-400" : "text-gray-300"}`}>
+                              {guild.bossesKilled}/{guild.totalBosses}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
-            {/* Prize Pool Banner - show if prizes enabled */}
-            {detailPrizeEnabled && pickemDetails.prizeConfig && <PrizePoolBanner prizeConfig={pickemDetails.prizeConfig} />}
-
-            {/* Leaderboard */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700">
-              <h3 className="text-lg font-semibold text-white mb-4">{t("leaderboard")}</h3>
+            {/* Column 3 (or 2 for RWF): Leaderboard */}
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 self-start">
+              <h3 className="text-base font-semibold text-white mb-3">{t("leaderboard")}</h3>
               {pickemDetails.leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {pickemDetails.leaderboard.slice(0, 20).map((entry, index) => {
                     const prize = detailPrizeEnabled && pickemDetails.prizeConfig ? getPrizeForPlace(pickemDetails.prizeConfig, index + 1) : 0;
 
@@ -975,25 +996,22 @@ export default function PickemsPage() {
                         }`}
                       >
                         <details className="group">
-                          <summary className="p-3 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
-                            <div className="flex items-center gap-2 md:gap-3">
-                              <span className="text-base md:text-lg font-bold text-gray-400 w-5 md:w-6 shrink-0">{isUnfinalizedRwf ? "—" : index + 1}</span>
-                              <img src={entry.avatarUrl} alt={entry.username} className="w-7 h-7 md:w-8 md:h-8 rounded-full shrink-0" />
-                              <div className="flex-1 min-w-0 flex items-center gap-2">
-                                <span className="text-white font-medium truncate text-sm md:text-base">{entry.username}</span>
-                                <span className="text-xs text-gray-500 group-open:text-blue-400 transition-colors hidden sm:inline">{t("showPredictions")}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {detailPrizeEnabled && prize > 0 && !isUnfinalizedRwf && <span className="text-amber-400 text-xs font-medium">{prize.toLocaleString()}g</span>}
-                                <span className={`text-lg md:text-xl font-bold ${isUnfinalizedRwf ? "text-gray-500" : "text-blue-400"}`}>
-                                  {isUnfinalizedRwf ? "—" : entry.totalPoints}
-                                </span>
+                          <summary className="p-2.5 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-gray-400 w-5 shrink-0">{isUnfinalizedRwf ? "—" : index + 1}</span>
+                              <img src={entry.avatarUrl} alt={entry.username} className="w-6 h-6 rounded-full shrink-0" />
+                              <span className="text-white font-medium truncate text-sm flex-1 min-w-0">{entry.username}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {detailPrizeEnabled && prize > 0 && !isUnfinalizedRwf && (
+                                  <span className="text-amber-400 text-xs font-semibold bg-amber-900/30 px-1.5 py-0.5 rounded">🪙 {prize.toLocaleString()}g</span>
+                                )}
+                                <span className={`text-base font-bold ${isUnfinalizedRwf ? "text-gray-500" : "text-blue-400"}`}>{isUnfinalizedRwf ? "—" : entry.totalPoints}</span>
                               </div>
                             </div>
                           </summary>
-                          <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs border-t border-gray-700/50 mt-2">
+                          <div className="px-2.5 pb-2.5 pt-1 grid grid-cols-1 gap-0.5 text-xs border-t border-gray-700/50 mt-1.5">
                             {entry.predictions.map((pred) => (
-                              <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-1 min-w-0">
+                              <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-0.5 min-w-0">
                                 <span className="text-gray-500 shrink-0">#{pred.predictedRank}:</span>
                                 <span className="truncate flex-1">{pred.guildName}</span>
                                 {!isUnfinalizedRwf && <PointsBadge points={pred.points} />}
