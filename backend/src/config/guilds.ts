@@ -1330,4 +1330,30 @@ export const MANUAL_RAID_DATES = [
 ];
 
 // Custom PickEms, pick world first guild, top 3, this is hardcoded to: options being: Liquid, Echo, Method, 火 锅 英 雄, FatSharkYes
-export const PICK_EM_RWF_GUILDS = ["Liquid", "Echo", "Method", "火 锅 英 雄", "FatSharkYes"];
+export const PICK_EM_RWF_GUILDS = [
+  "Liquid",
+  "Echo",
+  "Method",
+  "Instant Dollars",
+  "FatSharkYes",
+  "Synergy",
+  "Mate",
+  "Huoguo Yingxiong (火锅英雄)",
+  "Ji Tian Hong (佶天鸿)",
+  "Banhammer",
+  "LAGET",
+  "Advance",
+  "Xiang Yu (项羽)",
+  "Honestly",
+  "Gnev Anarkhii (Гнев Анархии)",
+  "xD",
+  "poptart corndoG",
+  "Northern Sky",
+  "Rak Geyming (Рак Гейминг)",
+  "Evolve",
+  "Project",
+  "Ethical",
+  "Exposed",
+  "End Myth 1",
+  "Wave",
+];
