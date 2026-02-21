@@ -886,52 +886,6 @@ export default function PickemsPage() {
                   </button>
                 )}
               </div>
-
-              {/* Scoring Info */}
-              <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-                <button
-                  onClick={() => setShowScoringInfo(!showScoringInfo)}
-                  className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-gray-750 transition-colors"
-                >
-                  <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
-                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {showScoringInfo && (
-                  <div className="px-4 pb-3 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
-                    {scoringConfig.exactMatch > 0 && (
-                      <p>
-                        • <strong className="text-green-400">{scoringConfig.exactMatch} pts:</strong> Exact match
-                      </p>
-                    )}
-                    {scoringConfig.offByOne > 0 && (
-                      <p>
-                        • <strong className="text-yellow-400">{scoringConfig.offByOne} pts:</strong> ±1 position
-                      </p>
-                    )}
-                    {scoringConfig.offByTwo > 0 && (
-                      <p>
-                        • <strong className="text-orange-400">{scoringConfig.offByTwo} pts:</strong> ±2 positions
-                      </p>
-                    )}
-                    {scoringConfig.offByThree > 0 && (
-                      <p>
-                        • <strong className="text-orange-500">{scoringConfig.offByThree} pts:</strong> ±3 positions
-                      </p>
-                    )}
-                    {scoringConfig.offByFour > 0 && (
-                      <p>
-                        • <strong className="text-red-400">{scoringConfig.offByFour} pts:</strong> ±4 positions
-                      </p>
-                    )}
-                    <p>
-                      • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} pts:</strong> 5+ off or not in top {pickemDetails?.guildCount || 10}
-                    </p>
-                    {isUnfinalizedRwf && <p className="mt-2 text-purple-400 font-medium">RWF scores are calculated when the race ends and admin finalizes the results.</p>}
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Column 2: Current Guild Rankings - Only for regular pickems */}
@@ -972,6 +926,51 @@ export default function PickemsPage() {
 
             {/* Column 3 (or 2 for RWF): Leaderboard */}
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 self-start">
+              {/* Scoring Info */}
+              <div className="bg-gray-750 rounded-lg overflow-hidden border border-gray-700 mb-3">
+                <button
+                  onClick={() => setShowScoringInfo(!showScoringInfo)}
+                  className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-gray-700 transition-colors"
+                >
+                  <span className="text-sm font-semibold text-gray-300">{t("scoringSystem")}</span>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showScoringInfo ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showScoringInfo && (
+                  <div className="px-4 pb-3 text-xs text-gray-400 space-y-1.5 border-t border-gray-700 pt-3">
+                    {scoringConfig.exactMatch > 0 && (
+                      <p>
+                        • <strong className="text-green-400">{scoringConfig.exactMatch} pts:</strong> Exact match
+                      </p>
+                    )}
+                    {scoringConfig.offByOne > 0 && (
+                      <p>
+                        • <strong className="text-yellow-400">{scoringConfig.offByOne} pts:</strong> ±1 position
+                      </p>
+                    )}
+                    {scoringConfig.offByTwo > 0 && (
+                      <p>
+                        • <strong className="text-orange-400">{scoringConfig.offByTwo} pts:</strong> ±2 positions
+                      </p>
+                    )}
+                    {scoringConfig.offByThree > 0 && (
+                      <p>
+                        • <strong className="text-orange-500">{scoringConfig.offByThree} pts:</strong> ±3 positions
+                      </p>
+                    )}
+                    {scoringConfig.offByFour > 0 && (
+                      <p>
+                        • <strong className="text-red-400">{scoringConfig.offByFour} pts:</strong> ±4 positions
+                      </p>
+                    )}
+                    <p>
+                      • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} pts:</strong> 5+ off or not in top {pickemDetails?.guildCount || 10}
+                    </p>
+                    {isUnfinalizedRwf && <p className="mt-2 text-purple-400 font-medium">RWF scores are calculated when the race ends and admin finalizes the results.</p>}
+                  </div>
+                )}
+              </div>
               <h3 className="text-base font-semibold text-white mb-3">{t("leaderboard")}</h3>
               {pickemDetails.leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>

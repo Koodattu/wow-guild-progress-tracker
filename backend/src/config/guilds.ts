@@ -1354,6 +1354,6 @@ export const PICK_EM_RWF_GUILDS = [
   "Project",
   "Ethical",
   "Exposed",
-  "End Myth 1",
+  "End Myth (燃烧之刃)",
   "Wave",
 ];
