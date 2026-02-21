@@ -1260,10 +1260,10 @@ export const TRACKED_RAIDS = [
   44, // Manaforge Omega
   42, // Liberation of Undermine
   38, // Nerubar Palace
-  /* 35, // Amirdrassil the Dreams Hope
- // 33, // Aberrus, the Shadowed Crucible
- // 31, // Vault of the Incarnates
- // 29, // Sepulcher of the First Ones
+  35, // Amirdrassil the Dreams Hope
+  33, // Aberrus, the Shadowed Crucible
+  31, // Vault of the Incarnates
+  29, // Sepulcher of the First Ones
   28, // Sanctum of Domination
   26, // Castle Nathria
   24, // Ny'alotha, the Waking City
@@ -1280,7 +1280,7 @@ export const TRACKED_RAIDS = [
   7, // Blackrock Foundry
   6, // Highmaul
   5, // Siege of Orgrimmar
-  4, // Throne of Thunder */
+  4, // Throne of Thunder
 ];
 
 // Current raids that are actively being tracked for updates
