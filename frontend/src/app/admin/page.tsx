@@ -1519,7 +1519,7 @@ export default function AdminPage() {
                           setPickemForm({
                             ...pickemForm,
                             type: newType,
-                            guildCount: newType === "rwf" ? 5 : 10,
+                            guildCount: 10,
                             raidIds: newType === "rwf" ? [] : pickemForm.raidIds,
                           });
                         }}
@@ -1537,7 +1537,7 @@ export default function AdminPage() {
                       <input
                         type="number"
                         value={pickemForm.guildCount}
-                        onChange={(e) => setPickemForm({ ...pickemForm, guildCount: parseInt(e.target.value) || (pickemForm.type === "rwf" ? 5 : 10) })}
+                        onChange={(e) => setPickemForm({ ...pickemForm, guildCount: parseInt(e.target.value) || 10 })}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
                         min="1"
                         max={pickemForm.type === "rwf" ? 25 : 10}

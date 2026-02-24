@@ -676,6 +676,7 @@ export default function PickemsPage() {
       setError(null);
       const result = await api.submitPickemPredictions(selectedPickemId, filledPredictions);
       setSuccessMessage(result.message);
+      setTimeout(() => setSuccessMessage(null), 3000);
 
       const details = await api.getPickemDetails(selectedPickemId);
       setPickemDetails(details);
@@ -836,12 +837,6 @@ export default function PickemsPage() {
                   </div>
                 )}
 
-                {successMessage && (
-                  <div className="mb-3 p-2.5 bg-green-900/50 border border-green-700 rounded-md">
-                    <p className="text-green-300 text-sm">{successMessage}</p>
-                  </div>
-                )}
-
                 {/* Unified prediction UI: autocomplete + drag-and-drop for both regular and RWF */}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={Array.from({ length: pickemDetails.guildCount || 10 }, (_, i) => `prediction-${i}`)} strategy={verticalListSortingStrategy}>
@@ -869,22 +864,28 @@ export default function PickemsPage() {
                   </SortableContext>
                 </DndContext>
 
-                {user && pickemDetails.isVotingOpen && (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="mt-4 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
-                  >
-                    {submitting ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        {t("submitting")}
-                      </span>
-                    ) : (
-                      t("submitPredictions")
-                    )}
-                  </button>
-                )}
+                {user &&
+                  pickemDetails.isVotingOpen &&
+                  (successMessage ? (
+                    <div className="mt-4 w-full px-4 py-3 bg-green-800/60 border border-green-600 rounded-md text-center">
+                      <p className="text-green-300 text-sm font-medium">{successMessage}</p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      className="mt-4 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+                    >
+                      {submitting ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          {t("submitting")}
+                        </span>
+                      ) : (
+                        t("submitPredictions")
+                      )}
+                    </button>
+                  ))}
               </div>
             </div>
 

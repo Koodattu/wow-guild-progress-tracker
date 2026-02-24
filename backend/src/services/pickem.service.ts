@@ -17,7 +17,7 @@ class PickemService {
 
         if (!existing) {
           const type = seedData.type || "regular";
-          const guildCount = seedData.guildCount ?? (type === "rwf" ? 5 : 10);
+          const guildCount = seedData.guildCount ?? 10;
 
           await Pickem.create({
             pickemId: seedData.pickemId,
@@ -82,7 +82,7 @@ class PickemService {
     prizeConfig?: Partial<IPrizeConfig>;
   }): Promise<IPickem> {
     const type = data.type || "regular";
-    const guildCount = data.guildCount ?? (type === "rwf" ? 5 : 10);
+    const guildCount = data.guildCount ?? 10;
 
     const pickem = await Pickem.create({
       pickemId: data.pickemId,
