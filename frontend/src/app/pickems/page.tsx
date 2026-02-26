@@ -904,7 +904,10 @@ export default function PickemsPage() {
                     </thead>
                     <tbody>
                       {pickemDetails.guildRankings.slice(0, 15).map((guild) => (
-                        <tr key={`${guild.name}-${guild.realm}`} className={`border-b border-gray-700/50 ${guild.isComplete ? "bg-green-900/20" : ""}`}>
+                        <tr
+                          key={`${guild.name}-${guild.realm}`}
+                          className={`border-b ${guild.rank === pickemDetails.guildCount ? "border-b-2 border-blue-500/60" : "border-gray-700/50"} ${guild.isComplete ? "bg-green-900/20" : ""}`}
+                        >
                           <td className="py-1.5 px-2 text-gray-300 font-medium text-xs">{guild.rank}</td>
                           <td className="py-1.5 px-2">
                             <div className="min-w-0">
