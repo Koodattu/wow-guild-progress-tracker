@@ -99,6 +99,8 @@ router.get(
 );
 
 // Get simple guild list for autocomplete (just name and realm) - for regular pickems
+// Only returns parent guilds (guilds without parent_guild set).
+// Child guilds are represented by their parent in pickems — their progress contributes to the parent's ranking.
 router.get(
   "/guilds",
   cacheMiddleware(
@@ -107,7 +109,7 @@ router.get(
   ),
   async (req: Request, res: Response) => {
     try {
-      const guilds = await Guild.find({}, { name: 1, realm: 1, _id: 0 }).lean();
+      const guilds = await Guild.find({ $or: [{ parent_guild: null }, { parent_guild: "" }, { parent_guild: { $exists: false } }] }, { name: 1, realm: 1, _id: 0 }).lean();
       res.json(guilds);
     } catch (error) {
       logger.error("Error fetching guilds for pickems:", error);
@@ -324,13 +326,18 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
         }
       }
     } else {
-      // Batch validate all guilds in a single query
+      // Batch validate all guilds in a single query — only accept parent guilds (no parent_guild set)
       const guildQueries = predictions.map((p) => ({ name: p.guildName, realm: p.realm }));
-      const foundGuilds = await Guild.find({ $or: guildQueries }, { name: 1, realm: 1 }).lean();
-      const foundGuildSet = new Set(foundGuilds.map((g) => `${g.name}-${g.realm}`));
+      const foundGuilds = await Guild.find({ $or: guildQueries }, { name: 1, realm: 1, parent_guild: 1 }).lean();
+      const foundGuildMap = new Map(foundGuilds.map((g) => [`${g.name}-${g.realm}`, g]));
       for (const pred of predictions) {
-        if (!foundGuildSet.has(`${pred.guildName}-${pred.realm}`)) {
+        const key = `${pred.guildName}-${pred.realm}`;
+        const guild = foundGuildMap.get(key);
+        if (!guild) {
           return res.status(400).json({ error: `Guild "${pred.guildName}" on "${pred.realm}" not found` });
+        }
+        if (guild.parent_guild) {
+          return res.status(400).json({ error: `Guild "${pred.guildName}" is a sub-guild of "${guild.parent_guild}". Please pick the parent guild instead.` });
         }
       }
     }
@@ -371,22 +378,47 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
 });
 
 // Helper function to get guild rankings for a pickem's raids
+// Consolidates parent/child guilds: child guild progress is attributed to the parent guild,
+// and only the best-performing member of each guild family appears in the rankings.
 async function getGuildRankingsForPickem(raidIds: number[]) {
-  // Get all guilds with their progress for the specified raids
-  const guilds = await Guild.find({}).lean();
+  // Get all guilds with their progress and parent_guild field
+  const guilds = await Guild.find({}, { name: 1, realm: 1, parent_guild: 1, progress: 1 }).lean();
 
-  // Calculate completion status for each guild
-  // A guild's rank is determined by:
-  // 1. Total mythic bosses killed across all raids
-  // 2. Time of last kill (earlier = better rank)
-  const guildProgress: {
+  // Build a map of parent guild name -> parent guild (name, realm)
+  // A "parent guild" is any guild that has no parent_guild set AND has at least one child pointing to it
+  // For guilds without parent/child relationships, they are standalone and ranked individually
+  const childToParentName = new Map<string, string>(); // child "name-realm" -> parent guild name
+  const parentGuildInfo = new Map<string, { name: string; realm: string }>(); // parent name -> { name, realm }
+
+  for (const guild of guilds) {
+    if (guild.parent_guild) {
+      childToParentName.set(`${guild.name}-${guild.realm}`, guild.parent_guild);
+    }
+  }
+
+  // Resolve parent guild info (name + realm) from the DB entries
+  for (const guild of guilds) {
+    if (!guild.parent_guild) {
+      // This guild could be a parent — check if any child references it by name
+      const isParent = Array.from(childToParentName.values()).includes(guild.name);
+      if (isParent) {
+        parentGuildInfo.set(guild.name, { name: guild.name, realm: guild.realm });
+      }
+    }
+  }
+
+  // Calculate progress for every guild individually first
+  interface GuildProgressEntry {
     name: string;
     realm: string;
+    parentName: string | null; // null = standalone or is the parent itself
     totalBossesKilled: number;
     totalBosses: number;
     lastKillTime: Date | null;
     isComplete: boolean;
-  }[] = [];
+  }
+
+  const allProgress: GuildProgressEntry[] = [];
 
   for (const guild of guilds) {
     let totalKilled = 0;
@@ -399,7 +431,6 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
         totalKilled += raidProgress.bossesDefeated || 0;
         totalBosses += raidProgress.totalBosses || 0;
 
-        // Find the latest kill time among all bosses
         for (const boss of raidProgress.bosses || []) {
           if (boss.firstKillTime) {
             const killTime = new Date(boss.firstKillTime);
@@ -411,9 +442,12 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
       }
     }
 
-    guildProgress.push({
+    const parentName = childToParentName.get(`${guild.name}-${guild.realm}`) ?? null;
+
+    allProgress.push({
       name: guild.name,
       realm: guild.realm,
+      parentName,
       totalBossesKilled: totalKilled,
       totalBosses,
       lastKillTime,
@@ -421,25 +455,88 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
     });
   }
 
-  // Sort guilds by:
+  // Group guilds into families: parent guild name -> all members (parent + children)
+  // Guilds without parent/child relationships are standalone families
+  const guildFamilies = new Map<string, GuildProgressEntry[]>();
+
+  for (const entry of allProgress) {
+    if (entry.parentName) {
+      // This is a child guild — group under parent name
+      const familyKey = entry.parentName;
+      if (!guildFamilies.has(familyKey)) {
+        guildFamilies.set(familyKey, []);
+      }
+      guildFamilies.get(familyKey)!.push(entry);
+    } else if (parentGuildInfo.has(entry.name)) {
+      // This is a parent guild — group under its own name
+      const familyKey = entry.name;
+      if (!guildFamilies.has(familyKey)) {
+        guildFamilies.set(familyKey, []);
+      }
+      guildFamilies.get(familyKey)!.push(entry);
+    } else {
+      // Standalone guild (no parent/child relationship) — use unique key
+      const familyKey = `${entry.name}-${entry.realm}`;
+      guildFamilies.set(familyKey, [entry]);
+    }
+  }
+
+  // For each family, pick the best-performing member
+  // The representative uses the parent guild's name+realm (or own name for standalone)
+  const consolidatedProgress: {
+    name: string;
+    realm: string;
+    totalBossesKilled: number;
+    totalBosses: number;
+    lastKillTime: Date | null;
+    isComplete: boolean;
+  }[] = [];
+
+  for (const [familyKey, members] of guildFamilies) {
+    // Sort members: most bosses killed desc, then earliest last kill time asc
+    members.sort((a, b) => {
+      if (b.totalBossesKilled !== a.totalBossesKilled) {
+        return b.totalBossesKilled - a.totalBossesKilled;
+      }
+      if (a.lastKillTime && b.lastKillTime) {
+        return a.lastKillTime.getTime() - b.lastKillTime.getTime();
+      }
+      if (a.lastKillTime && !b.lastKillTime) return -1;
+      if (!a.lastKillTime && b.lastKillTime) return 1;
+      return 0;
+    });
+
+    const best = members[0];
+    const parent = parentGuildInfo.get(familyKey);
+
+    consolidatedProgress.push({
+      // Use parent guild identity if this is a guild family, otherwise use the guild's own identity
+      name: parent ? parent.name : best.name,
+      realm: parent ? parent.realm : best.realm,
+      totalBossesKilled: best.totalBossesKilled,
+      totalBosses: best.totalBosses,
+      lastKillTime: best.lastKillTime,
+      isComplete: best.isComplete,
+    });
+  }
+
+  // Sort consolidated guilds by:
   // 1. Total bosses killed (descending)
   // 2. Last kill time (ascending - earlier is better)
-  guildProgress.sort((a, b) => {
+  consolidatedProgress.sort((a, b) => {
     if (b.totalBossesKilled !== a.totalBossesKilled) {
       return b.totalBossesKilled - a.totalBossesKilled;
     }
-    // If same number of kills, earlier completion time wins
     if (a.lastKillTime && b.lastKillTime) {
       return a.lastKillTime.getTime() - b.lastKillTime.getTime();
     }
-    // Guilds with kill times rank higher than those without
     if (a.lastKillTime && !b.lastKillTime) return -1;
     if (!a.lastKillTime && b.lastKillTime) return 1;
     return 0;
   });
 
   // Return top guilds with their rank
-  return guildProgress.slice(0, 50).map((g, index) => ({
+  return consolidatedProgress.slice(0, 50).map((g, index) => ({
     rank: index + 1,
     name: g.name,
     realm: g.realm,
