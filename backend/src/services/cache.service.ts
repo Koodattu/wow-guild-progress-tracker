@@ -154,6 +154,8 @@ class CacheService {
   public readonly CURRENT_RAID_TTL = 5 * 60 * 1000; // 5 minutes for current raid
   public readonly LIVE_STREAMERS_TTL = 60 * 1000; // 1 minute
   public readonly EVENTS_TTL = 60 * 1000; // 1 minute
+  public readonly PICKEM_LEADERBOARD_TTL = 5 * 60 * 1000;
+  public readonly PICKEM_RANKINGS_TTL = 5 * 60 * 1000;
 
   // ============================================================================
   // INITIALIZATION
@@ -828,6 +830,20 @@ class CacheService {
    */
   getRaidAnalyticsRaidsKey(): string {
     return "raid-analytics:raids";
+  }
+
+  /**
+   * Get cache key for pickem leaderboard.
+   */
+  getPickemLeaderboardKey(pickemId: string): string {
+    return `pickems:leaderboard:${pickemId}`;
+  }
+
+  /**
+   * Get cache key for pickem guild rankings.
+   */
+  getPickemRankingsKey(pickemId: string): string {
+    return `pickems:rankings:${pickemId}`;
   }
 
   // ============================================================================

@@ -4,39 +4,12 @@ import User, { IPickemEntry, IPickemPrediction } from "../models/User";
 import { calculatePickemPoints, calculateStreakBonus, IPickem } from "../models/Pickem";
 import discordService from "../services/discord.service";
 import pickemService from "../services/pickem.service";
+import cacheService from "../services/cache.service";
 import { PICK_EM_RWF_GUILDS } from "../config/guilds";
 import { cacheMiddleware } from "../middleware/cache.middleware";
 import logger from "../utils/logger";
 
 const router = Router();
-
-// In-memory cache for expensive pickem computations (guild rankings & leaderboard)
-interface PickemCacheEntry {
-  guildRankings: { data: any[]; expiresAt: number } | null;
-  leaderboard: { data: any[]; expiresAt: number } | null;
-}
-const pickemComputationCache = new Map<string, PickemCacheEntry>();
-const RANKINGS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const LEADERBOARD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function getCachedOrCompute<T>(
-  cache: Map<string, PickemCacheEntry>,
-  key: string,
-  field: "guildRankings" | "leaderboard",
-  ttl: number,
-  compute: () => Promise<T>,
-): Promise<T> {
-  const entry = cache.get(key);
-  if (entry && entry[field] && entry[field]!.expiresAt > Date.now()) {
-    return entry[field]!.data as T;
-  }
-  const data = await compute();
-  if (!cache.has(key)) {
-    cache.set(key, { guildRankings: null, leaderboard: null });
-  }
-  cache.get(key)![field] = { data: data as any, expiresAt: Date.now() + ttl };
-  return data;
-}
 
 // Helper to get user from session (updated for express-session)
 async function getUserFromSession(req: Request) {
@@ -101,6 +74,7 @@ router.get(
 // Get simple guild list for autocomplete (just name and realm) - for regular pickems
 // Only returns parent guilds (guilds without parent_guild set).
 // Child guilds are represented by their parent in pickems — their progress contributes to the parent's ranking.
+// Uses the pre-warmed guild list cache (guilds:list) to avoid DB queries.
 router.get(
   "/guilds",
   cacheMiddleware(
@@ -109,6 +83,15 @@ router.get(
   ),
   async (req: Request, res: Response) => {
     try {
+      // Read from the pre-warmed guild list cache (warmed on startup and nightly)
+      const cachedGuildList = await cacheService.get<any[]>(cacheService.getGuildListKey());
+      if (cachedGuildList) {
+        const simpleGuilds = cachedGuildList.filter((g: any) => !g.parent_guild).map((g: any) => ({ name: g.name, realm: g.realm }));
+        return res.json(simpleGuilds);
+      }
+
+      // Fallback to direct DB query if cache is cold
+      logger.warn("Pickems guild list cache miss — falling back to DB query");
       const guilds = await Guild.find({ $or: [{ parent_guild: null }, { parent_guild: "" }, { parent_guild: { $exists: false } }] }, { name: 1, realm: 1, _id: 0 }).lean();
       res.json(guilds);
     } catch (error) {
@@ -176,10 +159,16 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
         }));
       }
     } else {
-      // For regular pickems, get rankings from guild progress (cached for 5 min)
-      guildRankings = await getCachedOrCompute(pickemComputationCache, `rankings:${pickemId}`, "guildRankings", RANKINGS_CACHE_TTL, () =>
-        getGuildRankingsForPickem(pickem.raidIds),
-      );
+      // For regular pickems, get rankings from cached guild progress data (two-tier cache)
+      const rankingsCacheKey = cacheService.getPickemRankingsKey(pickemId);
+      const cachedRankings = await cacheService.get<typeof guildRankings>(rankingsCacheKey);
+      if (cachedRankings) {
+        guildRankings = cachedRankings;
+      } else {
+        guildRankings = await getGuildRankingsForPickem(pickem.raidIds);
+        // Cache rankings in two-tier cache (L1 memory + L2 MongoDB)
+        await cacheService.set(rankingsCacheKey, guildRankings, cacheService.PICKEM_RANKINGS_TTL);
+      }
     }
 
     // Get user's predictions if logged in
@@ -192,10 +181,13 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
       }
     }
 
-    // Get leaderboard (all users' scores for this pickem, cached for 5 min)
-    const leaderboard = await getCachedOrCompute(pickemComputationCache, `leaderboard:${pickemId}`, "leaderboard", LEADERBOARD_CACHE_TTL, () =>
-      getPickemLeaderboard(pickemId, guildRankings, pickem),
-    );
+    // Get leaderboard (all users' scores for this pickem, two-tier cached with invalidation on prediction submit)
+    const leaderboardCacheKey = cacheService.getPickemLeaderboardKey(pickemId);
+    let leaderboard = await cacheService.get<any[]>(leaderboardCacheKey);
+    if (!leaderboard) {
+      leaderboard = await getPickemLeaderboard(pickemId, guildRankings, pickem);
+      await cacheService.set(leaderboardCacheKey, leaderboard, cacheService.PICKEM_LEADERBOARD_TTL);
+    }
 
     // Hide prediction details while voting is open to prevent copying strategies
     const sanitizedLeaderboard = isVotingOpen
@@ -364,8 +356,8 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
 
     await user.save();
 
-    // Invalidate leaderboard cache so new prediction shows up
-    pickemComputationCache.delete(`leaderboard:${pickemId}`);
+    // Invalidate leaderboard cache so new prediction shows up immediately
+    await cacheService.invalidate(cacheService.getPickemLeaderboardKey(pickemId));
 
     res.json({
       success: true,
@@ -378,28 +370,114 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
 });
 
 // Helper function to get guild rankings for a pickem's raids
+// Reads from the pre-warmed progress cache (progress:raid:{raidId}) instead of querying the DB directly.
+// Falls back to DB query only if cache is cold.
 // Consolidates parent/child guilds: child guild progress is attributed to the parent guild,
 // and only the best-performing member of each guild family appears in the rankings.
 async function getGuildRankingsForPickem(raidIds: number[]) {
-  // Get all guilds with their progress and parent_guild field
-  const guilds = await Guild.find({}, { name: 1, realm: 1, parent_guild: 1, progress: 1 }).lean();
+  // Try reading from the pre-warmed progress cache for each raid
+  const cachedGuildsByRaid: Map<number, any[]> = new Map();
+  let allCached = true;
 
-  // Build a map of parent guild name -> parent guild (name, realm)
-  // A "parent guild" is any guild that has no parent_guild set AND has at least one child pointing to it
-  // For guilds without parent/child relationships, they are standalone and ranked individually
-  const childToParentName = new Map<string, string>(); // child "name-realm" -> parent guild name
-  const parentGuildInfo = new Map<string, { name: string; realm: string }>(); // parent name -> { name, realm }
-
-  for (const guild of guilds) {
-    if (guild.parent_guild) {
-      childToParentName.set(`${guild.name}-${guild.realm}`, guild.parent_guild);
+  for (const raidId of raidIds) {
+    const cached = await cacheService.get<any[]>(cacheService.getProgressKey(raidId));
+    if (cached) {
+      cachedGuildsByRaid.set(raidId, cached);
+    } else {
+      allCached = false;
+      break;
     }
   }
 
-  // Resolve parent guild info (name + realm) from the DB entries
+  if (allCached) {
+    return buildRankingsFromCachedProgress(cachedGuildsByRaid, raidIds);
+  }
+
+  // Fallback: query DB directly (only happens if cache warmer hasn't run yet)
+  logger.warn(`Pickems rankings cache miss for raids [${raidIds.join(",")}] — falling back to DB query`);
+  return buildRankingsFromDB(raidIds);
+}
+
+/**
+ * Build guild rankings from pre-warmed progress cache data.
+ * The cached data from getAllGuildsForRaid already contains:
+ * - name, realm, parent_guild
+ * - progress[].difficulty, progress[].bossesDefeated, progress[].totalBosses, progress[].lastKillTime
+ */
+function buildRankingsFromCachedProgress(cachedGuildsByRaid: Map<number, any[]>, raidIds: number[]) {
+  // Collect all guilds across all raids, deduplicating by name+realm
+  const guildMap = new Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>();
+
+  for (const raidId of raidIds) {
+    const guilds = cachedGuildsByRaid.get(raidId) || [];
+    for (const guild of guilds) {
+      const key = `${guild.name}-${guild.realm}`;
+      if (!guildMap.has(key)) {
+        guildMap.set(key, {
+          name: guild.name,
+          realm: guild.realm,
+          parent_guild: guild.parent_guild || null,
+          progressByRaid: new Map(),
+        });
+      }
+      // Find mythic progress for this raid from the filtered progress array
+      const mythicProgress = guild.progress?.find((p: any) => p.difficulty === "mythic" && p.raidId === raidId);
+      if (mythicProgress) {
+        guildMap.get(key)!.progressByRaid.set(raidId, mythicProgress);
+      }
+    }
+  }
+
+  return consolidateAndRankGuilds(guildMap, raidIds);
+}
+
+/**
+ * Fallback: build guild rankings from direct DB query when cache is cold.
+ */
+async function buildRankingsFromDB(raidIds: number[]) {
+  const guilds = await Guild.find({}, { name: 1, realm: 1, parent_guild: 1, progress: 1 }).lean();
+
+  const guildMap = new Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>();
+
   for (const guild of guilds) {
+    const key = `${guild.name}-${guild.realm}`;
+    const progressByRaid = new Map<number, any>();
+
+    for (const raidId of raidIds) {
+      const raidProgress = guild.progress?.find((p: { raidId: number; difficulty: string }) => p.raidId === raidId && p.difficulty === "mythic");
+      if (raidProgress) {
+        progressByRaid.set(raidId, raidProgress);
+      }
+    }
+
+    guildMap.set(key, {
+      name: guild.name,
+      realm: guild.realm,
+      parent_guild: guild.parent_guild || null,
+      progressByRaid,
+    });
+  }
+
+  return consolidateAndRankGuilds(guildMap, raidIds);
+}
+
+/**
+ * Shared logic: consolidate parent/child guilds and rank them.
+ * Used by both cached and DB-fallback paths.
+ */
+function consolidateAndRankGuilds(guildMap: Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>, raidIds: number[]) {
+  // Build parent/child relationships
+  const childToParentName = new Map<string, string>();
+  const parentGuildInfo = new Map<string, { name: string; realm: string }>();
+
+  for (const [key, guild] of guildMap) {
+    if (guild.parent_guild) {
+      childToParentName.set(key, guild.parent_guild);
+    }
+  }
+
+  for (const [key, guild] of guildMap) {
     if (!guild.parent_guild) {
-      // This guild could be a parent — check if any child references it by name
       const isParent = Array.from(childToParentName.values()).includes(guild.name);
       if (isParent) {
         parentGuildInfo.set(guild.name, { name: guild.name, realm: guild.realm });
@@ -407,11 +485,11 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
     }
   }
 
-  // Calculate progress for every guild individually first
+  // Calculate combined progress across all raids for each guild
   interface GuildProgressEntry {
     name: string;
     realm: string;
-    parentName: string | null; // null = standalone or is the parent itself
+    parentName: string | null;
     totalBossesKilled: number;
     totalBosses: number;
     lastKillTime: Date | null;
@@ -420,29 +498,28 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
 
   const allProgress: GuildProgressEntry[] = [];
 
-  for (const guild of guilds) {
+  for (const [key, guild] of guildMap) {
     let totalKilled = 0;
     let totalBosses = 0;
     let lastKillTime: Date | null = null;
 
     for (const raidId of raidIds) {
-      const raidProgress = guild.progress?.find((p: { raidId: number; difficulty: string }) => p.raidId === raidId && p.difficulty === "mythic");
+      const raidProgress = guild.progressByRaid.get(raidId);
       if (raidProgress) {
         totalKilled += raidProgress.bossesDefeated || 0;
         totalBosses += raidProgress.totalBosses || 0;
 
-        for (const boss of raidProgress.bosses || []) {
-          if (boss.firstKillTime) {
-            const killTime = new Date(boss.firstKillTime);
-            if (!lastKillTime || killTime > lastKillTime) {
-              lastKillTime = killTime;
-            }
+        // Use lastKillTime from the cached progress data
+        if (raidProgress.lastKillTime) {
+          const killTime = new Date(raidProgress.lastKillTime);
+          if (!lastKillTime || killTime > lastKillTime) {
+            lastKillTime = killTime;
           }
         }
       }
     }
 
-    const parentName = childToParentName.get(`${guild.name}-${guild.realm}`) ?? null;
+    const parentName = childToParentName.get(key) ?? null;
 
     allProgress.push({
       name: guild.name,
@@ -455,34 +532,24 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
     });
   }
 
-  // Group guilds into families: parent guild name -> all members (parent + children)
-  // Guilds without parent/child relationships are standalone families
+  // Group guilds into families
   const guildFamilies = new Map<string, GuildProgressEntry[]>();
 
   for (const entry of allProgress) {
     if (entry.parentName) {
-      // This is a child guild — group under parent name
       const familyKey = entry.parentName;
-      if (!guildFamilies.has(familyKey)) {
-        guildFamilies.set(familyKey, []);
-      }
+      if (!guildFamilies.has(familyKey)) guildFamilies.set(familyKey, []);
       guildFamilies.get(familyKey)!.push(entry);
     } else if (parentGuildInfo.has(entry.name)) {
-      // This is a parent guild — group under its own name
       const familyKey = entry.name;
-      if (!guildFamilies.has(familyKey)) {
-        guildFamilies.set(familyKey, []);
-      }
+      if (!guildFamilies.has(familyKey)) guildFamilies.set(familyKey, []);
       guildFamilies.get(familyKey)!.push(entry);
     } else {
-      // Standalone guild (no parent/child relationship) — use unique key
-      const familyKey = `${entry.name}-${entry.realm}`;
-      guildFamilies.set(familyKey, [entry]);
+      guildFamilies.set(`${entry.name}-${entry.realm}`, [entry]);
     }
   }
 
-  // For each family, pick the best-performing member
-  // The representative uses the parent guild's name+realm (or own name for standalone)
+  // Pick the best-performing member of each family
   const consolidatedProgress: {
     name: string;
     realm: string;
@@ -493,14 +560,9 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
   }[] = [];
 
   for (const [familyKey, members] of guildFamilies) {
-    // Sort members: most bosses killed desc, then earliest last kill time asc
     members.sort((a, b) => {
-      if (b.totalBossesKilled !== a.totalBossesKilled) {
-        return b.totalBossesKilled - a.totalBossesKilled;
-      }
-      if (a.lastKillTime && b.lastKillTime) {
-        return a.lastKillTime.getTime() - b.lastKillTime.getTime();
-      }
+      if (b.totalBossesKilled !== a.totalBossesKilled) return b.totalBossesKilled - a.totalBossesKilled;
+      if (a.lastKillTime && b.lastKillTime) return a.lastKillTime.getTime() - b.lastKillTime.getTime();
       if (a.lastKillTime && !b.lastKillTime) return -1;
       if (!a.lastKillTime && b.lastKillTime) return 1;
       return 0;
@@ -510,7 +572,6 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
     const parent = parentGuildInfo.get(familyKey);
 
     consolidatedProgress.push({
-      // Use parent guild identity if this is a guild family, otherwise use the guild's own identity
       name: parent ? parent.name : best.name,
       realm: parent ? parent.realm : best.realm,
       totalBossesKilled: best.totalBossesKilled,
@@ -520,22 +581,15 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
     });
   }
 
-  // Sort consolidated guilds by:
-  // 1. Total bosses killed (descending)
-  // 2. Last kill time (ascending - earlier is better)
+  // Sort: most bosses killed desc, then earliest last kill time asc
   consolidatedProgress.sort((a, b) => {
-    if (b.totalBossesKilled !== a.totalBossesKilled) {
-      return b.totalBossesKilled - a.totalBossesKilled;
-    }
-    if (a.lastKillTime && b.lastKillTime) {
-      return a.lastKillTime.getTime() - b.lastKillTime.getTime();
-    }
+    if (b.totalBossesKilled !== a.totalBossesKilled) return b.totalBossesKilled - a.totalBossesKilled;
+    if (a.lastKillTime && b.lastKillTime) return a.lastKillTime.getTime() - b.lastKillTime.getTime();
     if (a.lastKillTime && !b.lastKillTime) return -1;
     if (!a.lastKillTime && b.lastKillTime) return 1;
     return 0;
   });
 
-  // Return top guilds with their rank
   return consolidatedProgress.slice(0, 50).map((g, index) => ({
     rank: index + 1,
     name: g.name,
