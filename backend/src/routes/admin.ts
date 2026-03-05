@@ -1108,7 +1108,7 @@ router.post("/pickems", async (req: Request, res: Response) => {
     }
 
     // Validate guildCount if provided
-    const finalGuildCount = guildCount ?? (pickemType === "rwf" ? 5 : 10);
+    const finalGuildCount = guildCount ?? 10;
     if (typeof finalGuildCount !== "number" || finalGuildCount < 1 || finalGuildCount > 25) {
       return res.status(400).json({ error: "guildCount must be a number between 1 and 25" });
     }

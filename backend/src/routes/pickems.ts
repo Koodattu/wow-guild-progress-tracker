@@ -49,7 +49,7 @@ router.get(
         name: p.name,
         type: p.type || "regular",
         raidIds: p.raidIds,
-        guildCount: p.guildCount || (p.type === "rwf" ? 5 : 10),
+        guildCount: p.guildCount || 10,
         votingStart: p.votingStart,
         votingEnd: p.votingEnd,
         isVotingOpen: now >= new Date(p.votingStart) && now <= new Date(p.votingEnd),
@@ -135,7 +135,7 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
     const hasEnded = now > new Date(pickem.votingEnd);
 
     const pickemType = pickem.type || "regular";
-    const guildCount = pickem.guildCount || (pickemType === "rwf" ? 5 : 10);
+    const guildCount = pickem.guildCount || 10;
 
     // Get actual guild rankings based on pickem type
     let guildRankings: { rank: number; name: string; realm: string; bossesKilled?: number; totalBosses?: number; isComplete?: boolean; lastKillTime?: Date | null }[];
@@ -258,7 +258,7 @@ router.post("/:pickemId/predict", async (req: Request, res: Response) => {
     }
 
     const pickemType = pickem.type || "regular";
-    const guildCount = pickem.guildCount || (pickemType === "rwf" ? 5 : 10);
+    const guildCount = pickem.guildCount || 10;
 
     // Validate predictions count matches pickem's guildCount
     if (!predictions || !Array.isArray(predictions) || predictions.length !== guildCount) {

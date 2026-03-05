@@ -2056,7 +2056,7 @@ export default function AdminPage() {
                                   name: pickem.name,
                                   type: pickem.type || "regular",
                                   raidIds: pickem.raidIds,
-                                  guildCount: pickem.guildCount || (pickem.type === "rwf" ? 5 : 10),
+                                  guildCount: pickem.guildCount || 10,
                                   votingStart: new Date(pickem.votingStart).toISOString().slice(0, 16),
                                   votingEnd: new Date(pickem.votingEnd).toISOString().slice(0, 16),
                                   active: pickem.active,
