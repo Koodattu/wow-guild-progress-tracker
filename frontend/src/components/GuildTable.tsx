@@ -178,7 +178,7 @@ const GuildTableRow = memo(
         </td>
       </tr>
     );
-  }
+  },
 );
 
 GuildTableRow.displayName = "GuildTableRow";
@@ -191,7 +191,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
       if (!selectedRaidId) return null;
       return guild.progress.find((p) => p.difficulty === difficulty && p.raidId === selectedRaidId) || null;
     },
-    [selectedRaidId]
+    [selectedRaidId],
   );
 
   const getBestPullForProgress = useCallback((progress: RaidProgressSummary | null): number => {
@@ -288,7 +288,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
         {guilds.map((guild, index) => (
           <MobileGuildCard key={guild._id} guild={guild} index={index} />
         ))}
-        {guilds.length === 0 && <div className="text-center py-12 text-gray-500">No guilds found. Add guilds to the config file and restart the server.</div>}
+        {guilds.length === 0 && <div className="text-center py-12 text-gray-500">No guilds found.</div>}
       </div>
 
       {/* Desktop View - Table Layout */}
@@ -325,7 +325,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
             ))}
           </tbody>
         </table>
-        {guilds.length === 0 && <div className="text-center py-12 text-gray-500">No guilds found. Add guilds to the config file and restart the server.</div>}
+        {guilds.length === 0 && <div className="text-center py-12 text-gray-500">No guilds found.</div>}
       </div>
     </>
   );
