@@ -287,6 +287,22 @@ export interface RaidPartition {
   name: string;
 }
 
+export interface CharacterRankingsRaidOption {
+  id: number;
+  name: string;
+  expansion: string;
+  iconUrl?: string;
+  partitions: RaidPartition[];
+}
+
+export interface CharacterRankingsFilterOptionsResponse {
+  raids: CharacterRankingsRaidOption[];
+  defaultSelection: {
+    zoneId: number;
+    partition: number | null;
+  };
+}
+
 // Full raid info with bosses and dates - for backward compatibility
 export interface Raid extends RaidInfo {
   starts?: RegionDates;

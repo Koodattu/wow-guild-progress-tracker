@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { getPatchPartitionOptions } from "@/lib/patch-partitions";
-import type { Boss, CharacterRankingRow } from "@/types";
+import type { Boss, CharacterRankingRow, CharacterRankingsRaidOption } from "@/types";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
+import CharacterRankingsRaidPartitionSelector, { type CharacterRankingsSelection } from "@/components/CharacterRankingsRaidPartitionSelector";
 
 type Filters = {
+  zoneId?: number;
   encounterId?: number;
   classId?: number | null;
   specName?: string | null;
@@ -31,7 +32,8 @@ function buildQuery(filters: Filters) {
 export default function CharacterRankingsPage() {
   const [rows, setRows] = useState<CharacterRankingRow[]>([]);
   const [bosses, setBosses] = useState<Boss[]>([]);
-  const [partitionOptions, setPartitionOptions] = useState(getPatchPartitionOptions());
+  const [raidOptions, setRaidOptions] = useState<CharacterRankingsRaidOption[]>([]);
+  const [selectedRaidPartition, setSelectedRaidPartition] = useState<CharacterRankingsSelection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -51,30 +53,75 @@ export default function CharacterRankingsPage() {
 
   useEffect(() => {
     let isActive = true;
-    const fetchBosses = async () => {
+    const fetchRankingOptions = async () => {
       try {
-        const homeData = await api.getHomeData();
-        const currentRaidId = homeData.raid?.id;
-        if (!currentRaidId) return;
-        const bossesData = await api.getBosses(currentRaidId);
-        const raidData = await api.getRaid(currentRaidId);
-        const partitionData = getPatchPartitionOptions(raidData.partitions || []);
+        const optionsData = await api.getCharacterRankingOptions();
         if (!isActive) return;
-        setBosses(bossesData);
-        setPartitionOptions(partitionData);
-      } catch (error) {
-        console.error("Error fetching bosses:", error);
+
+        setRaidOptions(optionsData.raids || []);
+
+        const defaultSelection: CharacterRankingsSelection = {
+          zoneId: optionsData.defaultSelection.zoneId,
+          partition: optionsData.defaultSelection.partition,
+        };
+
+        setSelectedRaidPartition(defaultSelection);
+        setFilters((prev) => ({
+          ...prev,
+          zoneId: defaultSelection.zoneId,
+          partition: defaultSelection.partition,
+          page: 1,
+        }));
+      } catch (fetchError) {
+        if (!isActive) return;
+        setError(fetchError instanceof Error ? fetchError.message : "Failed to fetch ranking options");
       }
     };
-    fetchBosses();
+
+    fetchRankingOptions();
     return () => {
       isActive = false;
     };
   }, []);
 
+  useEffect(() => {
+    const zoneId = selectedRaidPartition?.zoneId;
+    if (!zoneId) return;
+
+    let isActive = true;
+    const fetchBosses = async () => {
+      try {
+        const bossesData = await api.getBosses(zoneId);
+        if (!isActive) return;
+        setBosses(bossesData);
+      } catch (fetchError) {
+        if (!isActive) return;
+        console.error("Error fetching bosses:", fetchError);
+      }
+    };
+
+    fetchBosses();
+    return () => {
+      isActive = false;
+    };
+  }, [selectedRaidPartition?.zoneId]);
+
   const queryString = useMemo(() => buildQuery(filters), [filters]);
 
+  const handleRaidPartitionChange = (selection: CharacterRankingsSelection) => {
+    setSelectedRaidPartition(selection);
+    setFilters((prev) => ({
+      ...prev,
+      zoneId: selection.zoneId,
+      partition: selection.partition,
+      encounterId: undefined,
+      page: 1,
+    }));
+  };
+
   useEffect(() => {
+    if (!filters.zoneId) return;
+
     const requestId = (requestIdRef.current += 1);
     let isActive = true;
     (async () => {
@@ -101,10 +148,20 @@ export default function CharacterRankingsPage() {
 
   return (
     <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[90%] py-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-white">Character Rankings</h1>
+          <p className="text-gray-500 text-sm">Select a raid or a specific patch partition.</p>
+        </div>
+        <CharacterRankingsRaidPartitionSelector raids={raidOptions} selected={selectedRaidPartition} onChange={handleRaidPartitionChange} />
+      </div>
+
       <RankingTableWrapper
+        key={`rankings-${selectedRaidPartition?.zoneId ?? "none"}`}
         data={rows}
         bosses={bosses}
-        partitionOptions={partitionOptions}
+        partitionOptions={[]}
+        showPartitionSelector={false}
         loading={loading}
         error={error}
         pagination={pagination}

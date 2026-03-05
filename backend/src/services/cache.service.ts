@@ -846,6 +846,10 @@ class CacheService {
     return `pickems:rankings:${pickemId}`;
   }
 
+  getCharacterRankingsOptionsKey(): string {
+    return "character-rankings:options";
+  }
+
   // ============================================================================
   // TTL GETTERS
   // ============================================================================

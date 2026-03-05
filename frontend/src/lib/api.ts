@@ -50,6 +50,7 @@ import {
   RaidAnalytics,
   RaidAnalyticsListItem,
   CharacterRankingRow,
+  CharacterRankingsFilterOptionsResponse,
   RateLimitResponse,
   RateLimitStatus,
   ProcessingQueueStatsResponse,
@@ -759,6 +760,15 @@ export const api = {
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error || "Failed to fetch character rankings");
+    }
+    return response.json();
+  },
+
+  async getCharacterRankingOptions(): Promise<CharacterRankingsFilterOptionsResponse> {
+    const response = await fetch(`${API_URL}/api/character-rankings/options`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to fetch character ranking options");
     }
     return response.json();
   },

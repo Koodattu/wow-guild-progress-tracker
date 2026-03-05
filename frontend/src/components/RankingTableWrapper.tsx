@@ -15,6 +15,7 @@ interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
   bosses: Boss[];
   partitionOptions?: PatchPartitionOption[];
+  showPartitionSelector?: boolean;
   loading?: boolean;
   error?: string | null;
   pagination?: {
@@ -527,7 +528,7 @@ function RoleSelector({ selectedRole, allRolesLabel, onChange }: RoleSelectorPro
   );
 }
 
-export function RankingTableWrapper({ data, bosses, partitionOptions = [], loading = false, error = null, pagination, jumpTo, onFiltersChange }: RankingTableWrapperProps) {
+export function RankingTableWrapper({ data, bosses, partitionOptions = [], showPartitionSelector = true, loading = false, error = null, pagination, jumpTo, onFiltersChange }: RankingTableWrapperProps) {
   const t = useTranslations("characterRankingsPage");
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
@@ -790,15 +791,16 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
           {/* Role Selector */}
           <RoleSelector selectedRole={selectedRole} allRolesLabel={t("allRoles")} onChange={handleRoleChange} />
 
-          {/* Patch Selector */}
-          <Selector
-            items={partitionOptions}
-            selectedItem={selectedPartition}
-            onChange={handlePartitionChange}
-            placeholder={t("placeholderAllPatches")}
-            renderButton={(partition) => <span>{partition?.label}</span>}
-            renderOption={(partition) => <span>{partition.label}</span>}
-          />
+          {showPartitionSelector && (
+            <Selector
+              items={partitionOptions}
+              selectedItem={selectedPartition}
+              onChange={handlePartitionChange}
+              placeholder={t("placeholderAllPatches")}
+              renderButton={(partition) => <span>{partition?.label}</span>}
+              renderOption={(partition) => <span>{partition.label}</span>}
+            />
+          )}
         </div>
       </div>
 
