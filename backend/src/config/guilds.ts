@@ -1277,7 +1277,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
 export const TRACKED_RAIDS = [
-  46, // Voidspire / Dreamrift / March on Quel Danas
+  46, // Voidspire / Dreamrift / March on Quel'Danas
   44, // Manaforge Omega
   42, // Liberation of Undermine
   38, // Nerubar Palace
