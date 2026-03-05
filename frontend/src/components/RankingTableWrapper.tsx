@@ -333,6 +333,7 @@ type BuildRankingColumnsOptions = {
   currentPage: number;
   pageSize: number;
   selectedSpec: string | null;
+  selectedRole: "dps" | "healer" | "tank" | null;
   t: (key: string) => string;
 };
 
@@ -344,7 +345,7 @@ function formatRealmSlug(realm: string) {
     .join(" ");
 }
 
-function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, selectedRole, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
 
@@ -365,13 +366,16 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
         const name = row.character.name;
         const wclUrl = `https://www.warcraftlogs.com/character/eu/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`;
         const classIcon = getClassInfoById(row.character.classID)?.iconUrl;
-        const specIcon = isShowingDamage && row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : null;
+        const roleSpecName = isShowingDamage ? row.context.specName : row.context.bestSpecName ?? row.context.specName;
+        const roleSpecIcon = selectedRole && roleSpecName ? getSpecIconUrl(row.character.classID, roleSpecName) : null;
+        const primaryIcon = roleSpecIcon ?? classIcon;
+        const specIcon = !selectedRole && isShowingDamage && row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : null;
 
         return (
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div style={{ width: "24px", height: "24px", position: "relative" }}>
-                <IconImage iconFilename={classIcon} alt={row.character.name} fill style={{ objectFit: "cover" }} />
+                <IconImage iconFilename={primaryIcon} alt={row.character.name} fill style={{ objectFit: "cover" }} />
               </div>
               {specIcon && (
                 <div style={{ width: "18px", height: "18px", position: "relative" }}>
@@ -709,9 +713,10 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
       currentPage,
       pageSize,
       selectedSpec,
+      selectedRole,
       t,
     });
-  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, t]);
+  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, selectedRole, t]);
 
   // Find the index of the highlighted character in the current page data
   const highlightIndex = useMemo(() => {
