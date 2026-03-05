@@ -1253,10 +1253,21 @@ export const GUILDS_PROD: TrackedGuild[] = [
     realm: "Ravencrest",
     region: "EU",
   },
+  {
+    name: "YSKÄ",
+    realm: "Stormreaver",
+    region: "EU",
+  },
+  {
+    name: "Sorvan Kylä",
+    realm: "Ravencrest",
+    region: "EU",
+  },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
 export const TRACKED_RAIDS = [
+  46, // Voidspire / Dreamrift / March on Quel Danas
   44, // Manaforge Omega
   42, // Liberation of Undermine
   38, // Nerubar Palace
@@ -1282,6 +1293,9 @@ export const TRACKED_RAIDS = [
   5, // Siege of Orgrimmar
   4, // Throne of Thunder
 ];
+
+// Raider.IO expansion IDs to query (newest to oldest)
+export const RAIDER_IO_EXPANSION_IDS = [11, 10, 9, 8, 7, 6];
 
 // Current raids that are actively being tracked for updates
 // Multiple raids can be current at the same time during expansion transitions

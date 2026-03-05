@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { RAIDER_IO_EXPANSION_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 
 interface RaiderIORegionDates {
@@ -33,8 +34,8 @@ export class RaiderIOApiClient {
   private readonly apiKey: string;
   private readonly apiBaseUrl = "https://raider.io/api/v1";
 
-  // Expansion IDs we want to fetch
-  private readonly expansionIds = [10, 9, 8, 7, 6]; // TWW, DF, SL, BfA, Legion
+  // Expansion IDs are configured centrally in guilds config
+  private readonly expansionIds = RAIDER_IO_EXPANSION_IDS;
 
   constructor() {
     this.apiKey = process.env.RAIDER_IO_API_KEY!;
@@ -72,11 +73,11 @@ export class RaiderIOApiClient {
   }
 
   /**
-   * Fetch raid dates for all tracked expansions
+   * Fetch raid dates for all configured expansions
    * Returns a Map with raid slug/name as key and raid data as value
    */
   public async fetchAllRaidDates(): Promise<Map<string, RaiderIORaid>> {
-    logger.info("📅 Fetching raid dates from Raider.IO...");
+    logger.info("📅 Fetching raid dates from Raider.IO for configured expansions...");
 
     const allRaids = new Map<string, RaiderIORaid>();
 
