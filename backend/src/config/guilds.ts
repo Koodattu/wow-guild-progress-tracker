@@ -1263,6 +1263,16 @@ export const GUILDS_PROD: TrackedGuild[] = [
     realm: "Ravencrest",
     region: "EU",
   },
+  {
+    name: "Mallun Punane",
+    realm: "Ravencrest",
+    region: "EU",
+  },
+  {
+    name: "Anonyymit Wowittajat",
+    realm: "Ravencrest",
+    region: "EU",
+  },
 ];
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
