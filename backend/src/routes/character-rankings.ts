@@ -45,7 +45,7 @@ router.get(
         $match: {
           difficulty: MYTHIC_DIFFICULTY,
           zoneId: { $in: sortedZoneIds },
-          partition: { $ne: null },
+          partition: { $ne: null, $gt: 0 },
         },
       },
       {
@@ -80,7 +80,7 @@ router.get(
       const configuredPartitions = (raid.partitions || []).filter((partition: any) => availablePartitionIds.has(partition.id)).sort((a: any, b: any) => a.id - b.id);
 
       const missingNamedPartitions = [...availablePartitionIds]
-        .filter((partitionId) => !configuredPartitions.some((partition: any) => partition.id === partitionId))
+        .filter((partitionId) => partitionId > 0 && !configuredPartitions.some((partition: any) => partition.id === partitionId))
         .sort((a, b) => a - b)
         .map((partitionId) => ({ id: partitionId, name: `Patch ${partitionId}` }));
 

@@ -847,7 +847,7 @@ class CacheService {
   }
 
   getCharacterRankingsOptionsKey(): string {
-    return "character-rankings:options";
+    return "character-rankings:options:v2";
   }
 
   // ============================================================================
