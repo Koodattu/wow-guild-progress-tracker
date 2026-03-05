@@ -54,6 +54,7 @@ type RankingFilters = {
 type ClassSpecSelectorProps = {
   selectedClass: ClassInfo | null;
   selectedSpec: string | null;
+  selectedRole: "dps" | "healer" | "tank" | null;
   allClassesLabel: string;
   onClassSelect: (classInfo: ClassInfo) => void;
   onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
@@ -69,6 +70,7 @@ type ClassSpecButtonProps = {
 
 type ClassMenuProps = {
   classes: ClassInfo[];
+  selectedRole: "dps" | "healer" | "tank" | null;
   selectedClass: ClassInfo | null;
   selectedSpec: string | null;
   hoveredClass: ClassInfo | null;
@@ -83,6 +85,7 @@ type ClassMenuProps = {
 
 type SpecMenuProps = {
   classInfo: ClassInfo;
+  selectedRole: "dps" | "healer" | "tank" | null;
   selectedSpec: string | null;
   onSpecSelect: (classInfo: ClassInfo, specName: string) => void;
   onMenuEnter: () => void;
@@ -163,8 +166,11 @@ function ClassSpecButton({ selectedClass, selectedSpec, allClassesLabel, onToggl
   );
 }
 
-function SpecMenu({ classInfo, selectedSpec, onSpecSelect, onMenuEnter, onMenuLeave }: SpecMenuProps) {
-  const sortedSpecs = useMemo(() => [...classInfo.specs].sort((a, b) => formatSpecName(a.name).localeCompare(formatSpecName(b.name))), [classInfo.specs]);
+function SpecMenu({ classInfo, selectedRole, selectedSpec, onSpecSelect, onMenuEnter, onMenuLeave }: SpecMenuProps) {
+  const sortedSpecs = useMemo(() => {
+    const roleFilteredSpecs = selectedRole ? classInfo.specs.filter((spec) => spec.role === selectedRole) : classInfo.specs;
+    return [...roleFilteredSpecs].sort((a, b) => formatSpecName(a.name).localeCompare(formatSpecName(b.name)));
+  }, [classInfo.specs, selectedRole]);
 
   return (
     <div
@@ -200,6 +206,7 @@ function SpecMenu({ classInfo, selectedSpec, onSpecSelect, onMenuEnter, onMenuLe
 
 function ClassMenu({
   classes,
+  selectedRole,
   selectedClass,
   selectedSpec,
   hoveredClass,
@@ -243,7 +250,14 @@ function ClassMenu({
             </button>
 
             {isHovered ? (
-              <SpecMenu classInfo={classInfo} selectedSpec={isSelected ? selectedSpec : null} onSpecSelect={onSpecSelect} onMenuEnter={onMenuEnter} onMenuLeave={onMenuLeave} />
+              <SpecMenu
+                classInfo={classInfo}
+                selectedRole={selectedRole}
+                selectedSpec={isSelected ? selectedSpec : null}
+                onSpecSelect={onSpecSelect}
+                onMenuEnter={onMenuEnter}
+                onMenuLeave={onMenuLeave}
+              />
             ) : null}
           </div>
         );
@@ -252,8 +266,20 @@ function ClassMenu({
   );
 }
 
-function ClassSpecSelector({ selectedClass, selectedSpec, allClassesLabel, onClassSelect, onSpecSelect, onClear }: ClassSpecSelectorProps) {
-  const classes = useMemo(() => [...getAllClasses()].sort((a, b) => a.name.localeCompare(b.name)), []);
+function ClassSpecSelector({ selectedClass, selectedSpec, selectedRole, allClassesLabel, onClassSelect, onSpecSelect, onClear }: ClassSpecSelectorProps) {
+  const classes = useMemo(() => {
+    const allClasses = getAllClasses();
+    const roleFilteredClasses = selectedRole
+      ? allClasses
+          .map((classInfo) => ({
+            ...classInfo,
+            specs: classInfo.specs.filter((spec) => spec.role === selectedRole),
+          }))
+          .filter((classInfo) => classInfo.specs.length > 0)
+      : allClasses;
+
+    return [...roleFilteredClasses].sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedRole]);
   const menu = useHoverMenu();
 
   const handleClassSelect = useCallback(
@@ -284,6 +310,7 @@ function ClassSpecSelector({ selectedClass, selectedSpec, allClassesLabel, onCla
       {menu.isOpen ? (
         <ClassMenu
           classes={classes}
+          selectedRole={selectedRole}
           selectedClass={selectedClass}
           selectedSpec={selectedSpec}
           hoveredClass={menu.hoveredClass}
@@ -638,7 +665,26 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
 
   const handleRoleChange = (role: "dps" | "healer" | "tank" | null) => {
     setSelectedRole(role);
-    applyFilters({ role, page: 1 });
+
+    if (!role) {
+      applyFilters({ role: null, page: 1 });
+      return;
+    }
+
+    const isCurrentSelectionCompatibleWithRole = !selectedClass
+      ? true
+      : selectedSpec
+        ? selectedClass.specs.some((spec) => spec.name === selectedSpec && spec.role === role)
+        : selectedClass.specs.some((spec) => spec.role === role);
+
+    if (isCurrentSelectionCompatibleWithRole) {
+      applyFilters({ role, page: 1 });
+      return;
+    }
+
+    setSelectedClass(null);
+    setSelectedSpec(null);
+    applyFilters({ role, classId: null, specName: null, page: 1 });
   };
 
   const handlePageChange = (page: number) => {
@@ -729,6 +775,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], loadi
           <ClassSpecSelector
             selectedClass={selectedClass}
             selectedSpec={selectedSpec}
+            selectedRole={selectedRole}
             allClassesLabel={t("allClasses")}
             onClassSelect={handleClassChange}
             onSpecSelect={handleSpecSelect}
