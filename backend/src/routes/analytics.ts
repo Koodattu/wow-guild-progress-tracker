@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
 import { RequestLog, HourlyStats, DailyStats } from "../models/Analytics";
+import { requireAdmin } from "../middleware/admin.middleware";
 import logger from "../utils/logger";
 
 const router = Router();
+
+router.use(requireAdmin);
 
 // Helper to format bytes to human readable
 const formatBytes = (bytes: number): string => {
