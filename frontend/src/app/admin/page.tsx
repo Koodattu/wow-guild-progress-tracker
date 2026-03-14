@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import {
   AdminUser,
+  AdminUserPickemsResponse,
   AdminGuild,
   AdminUserStats,
   AdminGuildStats,
@@ -121,6 +122,11 @@ export default function AdminPage() {
   const [userStats, setUserStats] = useState<AdminUserStats | null>(null);
   const [usersPage, setUsersPage] = useState(1);
   const [usersTotalPages, setUsersTotalPages] = useState(1);
+  const [showUserPickemsModal, setShowUserPickemsModal] = useState(false);
+  const [selectedUserForPickems, setSelectedUserForPickems] = useState<AdminUser | null>(null);
+  const [userPickemsData, setUserPickemsData] = useState<AdminUserPickemsResponse | null>(null);
+  const [userPickemsLoading, setUserPickemsLoading] = useState(false);
+  const [userPickemsError, setUserPickemsError] = useState<string | null>(null);
 
   // Guilds data
   const [guilds, setGuilds] = useState<AdminGuild[]>([]);
@@ -721,6 +727,23 @@ export default function AdminPage() {
     }
   };
 
+  const handleOpenUserPickems = async (adminUser: AdminUser) => {
+    setSelectedUserForPickems(adminUser);
+    setShowUserPickemsModal(true);
+    setUserPickemsLoading(true);
+    setUserPickemsError(null);
+    setUserPickemsData(null);
+
+    try {
+      const data = await api.getAdminUserPickems(adminUser.id);
+      setUserPickemsData(data);
+    } catch (error) {
+      setUserPickemsError(error instanceof Error ? error.message : "Failed to load user pickems");
+    } finally {
+      setUserPickemsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -1023,6 +1046,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("users.twitch")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("users.battlenet")}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t("users.lastLogin")}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
@@ -1032,6 +1056,16 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-gray-300">{user.twitch?.displayName || "-"}</td>
                       <td className="px-4 py-3 text-gray-300">{user.battlenet?.battletag || "-"}</td>
                       <td className="px-4 py-3 text-gray-400 text-sm">{formatDate(user.lastLoginAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleOpenUserPickems(user)} className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                            View Pickems
+                          </button>
+                          <span className="px-2 py-1 bg-gray-700 text-gray-300 text-xs rounded">
+                            {user.pickemSubmissionCount} {user.pickemSubmissionCount === 1 ? "pickem" : "pickems"}
+                          </span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -2729,6 +2763,104 @@ export default function AdminPage() {
                     >
                       Next
                     </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* User Pickems Modal */}
+        {showUserPickemsModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                <h2 className="text-xl font-bold text-white">User Pickems: {selectedUserForPickems?.discord.username || "Unknown"}</h2>
+                <button
+                  onClick={() => {
+                    setShowUserPickemsModal(false);
+                    setSelectedUserForPickems(null);
+                    setUserPickemsData(null);
+                    setUserPickemsError(null);
+                  }}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-4">
+                {userPickemsLoading ? (
+                  <div className="text-center py-8 text-gray-400">Loading user pickems...</div>
+                ) : userPickemsError ? (
+                  <div className="text-center py-8 text-red-400">{userPickemsError}</div>
+                ) : !userPickemsData || userPickemsData.submissions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">No pickem submissions found for this user.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {userPickemsData.submissions.map((submission) => (
+                      <div key={`${submission.pickem.id}-${submission.updatedAt}`} className="bg-gray-700 rounded-lg p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                          <div>
+                            <h4 className="text-white font-semibold">{submission.pickem.name}</h4>
+                            <p className="text-gray-400 text-sm">ID: {submission.pickem.id}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className={`px-2 py-1 rounded ${submission.pickem.type === "rwf" ? "bg-purple-900/50 text-purple-300" : "bg-blue-900/50 text-blue-300"}`}>
+                              {submission.pickem.type.toUpperCase()}
+                            </span>
+                            <span className={`px-2 py-1 rounded ${submission.pickem.active ? "bg-green-900/50 text-green-300" : "bg-gray-600 text-gray-300"}`}>
+                              {submission.pickem.active ? "Active" : "Inactive"}
+                            </span>
+                            <span className={`px-2 py-1 rounded ${submission.pickem.finalized ? "bg-emerald-900/50 text-emerald-300" : "bg-gray-600 text-gray-300"}`}>
+                              {submission.pickem.finalized ? "Finalized" : "Not finalized"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-3">
+                          <p className="text-gray-300">
+                            <span className="text-gray-400">Guild count:</span> {submission.pickem.guildCount}
+                          </p>
+                          <p className="text-gray-300">
+                            <span className="text-gray-400">Voting window:</span>{" "}
+                            {submission.pickem.votingStart && submission.pickem.votingEnd
+                              ? `${formatDate(submission.pickem.votingStart)} → ${formatDate(submission.pickem.votingEnd)}`
+                              : "-"}
+                          </p>
+                          <p className="text-gray-300">
+                            <span className="text-gray-400">Submitted:</span> {formatDate(submission.submittedAt)}
+                          </p>
+                          <p className="text-gray-300">
+                            <span className="text-gray-400">Updated:</span> {formatDate(submission.updatedAt)}
+                          </p>
+                        </div>
+
+                        <div className="bg-gray-800 rounded-md overflow-hidden">
+                          <table className="w-full">
+                            <thead className="bg-gray-900">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Position</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Guild</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Realm</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-700">
+                              {submission.predictions
+                                .slice()
+                                .sort((a, b) => a.position - b.position)
+                                .map((prediction) => (
+                                  <tr key={`${prediction.position}-${prediction.guildName}-${prediction.realm}`}>
+                                    <td className="px-3 py-2 text-gray-300">{prediction.position}</td>
+                                    <td className="px-3 py-2 text-white">{prediction.guildName}</td>
+                                    <td className="px-3 py-2 text-gray-300">{prediction.realm}</td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

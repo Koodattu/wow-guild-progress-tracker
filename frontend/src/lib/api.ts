@@ -31,6 +31,7 @@ import {
   UserProfile,
   WoWCharacter,
   AdminUsersResponse,
+  AdminUserPickemsResponse,
   AdminGuildsResponse,
   AdminUserStats,
   AdminGuildStats,
@@ -475,6 +476,17 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch users");
+    return response.json();
+  },
+
+  async getAdminUserPickems(userId: string): Promise<AdminUserPickemsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/users/${userId}/pickems`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      if (response.status === 404) throw new Error("User not found");
+      throw new Error("Failed to fetch user pickems");
+    }
     return response.json();
   },
 

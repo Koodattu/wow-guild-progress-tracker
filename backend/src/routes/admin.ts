@@ -8,6 +8,7 @@ import Event from "../models/Event";
 import TierList from "../models/TierList";
 import Character from "../models/Character";
 import Ranking from "../models/Ranking";
+import Pickem from "../models/Pickem";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import { CLASSES } from "../config/classes";
 import pickemService from "../services/pickem.service";
@@ -38,22 +39,25 @@ router.get("/users", async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
 
     const [users, total] = await Promise.all([
-      User.find()
-        .select({
-          "discord.id": 1,
-          "discord.username": 1,
-          "discord.avatar": 1,
-          "twitch.displayName": 1,
-          "twitch.connectedAt": 1,
-          "battlenet.battletag": 1,
-          "battlenet.connectedAt": 1,
-          createdAt: 1,
-          lastLoginAt: 1,
-        })
-        .sort({ lastLoginAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      User.aggregate([
+        { $sort: { lastLoginAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $project: {
+            "discord.id": 1,
+            "discord.username": 1,
+            "discord.avatar": 1,
+            "twitch.displayName": 1,
+            "twitch.connectedAt": 1,
+            "battlenet.battletag": 1,
+            "battlenet.connectedAt": 1,
+            createdAt: 1,
+            lastLoginAt: 1,
+            pickemSubmissionCount: { $size: { $ifNull: ["$pickems", []] } },
+          },
+        },
+      ]),
       User.countDocuments(),
     ]);
 
@@ -79,6 +83,7 @@ router.get("/users", async (req: Request, res: Response) => {
         : null,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
+      pickemSubmissionCount: user.pickemSubmissionCount,
     }));
 
     res.json({
@@ -128,6 +133,72 @@ router.get("/users/stats", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error fetching user stats:", error);
     res.status(500).json({ error: "Failed to fetch user stats" });
+  }
+});
+
+// Get all pickem submissions for a specific user
+router.get("/users/:userId/pickems", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!/^[a-fA-F0-9]{24}$/.test(userId)) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = await User.findById(userId).select({ pickems: 1 }).lean();
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const pickemEntries = user.pickems || [];
+    const pickemIds = [...new Set(pickemEntries.map((entry) => entry.pickemId))];
+
+    const pickemConfigs =
+      pickemIds.length > 0
+        ? await Pickem.find({ pickemId: { $in: pickemIds } })
+            .select({
+              pickemId: 1,
+              name: 1,
+              type: 1,
+              guildCount: 1,
+              votingStart: 1,
+              votingEnd: 1,
+              active: 1,
+              finalized: 1,
+            })
+            .lean()
+        : [];
+
+    const pickemConfigById = new Map(pickemConfigs.map((pickem) => [pickem.pickemId, pickem]));
+
+    const submissions = pickemEntries.map((entry) => {
+      const metadata = pickemConfigById.get(entry.pickemId);
+
+      return {
+        pickem: {
+          id: metadata?.pickemId || entry.pickemId,
+          name: metadata?.name || entry.pickemId,
+          type: metadata?.type || "regular",
+          guildCount: metadata?.guildCount ?? entry.predictions.length,
+          votingStart: metadata?.votingStart || null,
+          votingEnd: metadata?.votingEnd || null,
+          active: metadata?.active ?? false,
+          finalized: metadata?.finalized ?? false,
+        },
+        submittedAt: entry.submittedAt,
+        updatedAt: entry.updatedAt,
+        predictions: [...entry.predictions].sort((a, b) => a.position - b.position),
+      };
+    });
+
+    res.json({
+      userId: user._id.toString(),
+      submissions,
+    });
+  } catch (error) {
+    logger.error("Error fetching user pickem submissions:", error);
+    res.status(500).json({ error: "Failed to fetch user pickem submissions" });
   }
 });
 

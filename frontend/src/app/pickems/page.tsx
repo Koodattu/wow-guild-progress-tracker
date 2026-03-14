@@ -980,7 +980,7 @@ export default function PickemsPage() {
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>
               ) : (
                 <div className="space-y-2">
-                  {pickemDetails.leaderboard.slice(0, 20).map((entry, index) => {
+                  {pickemDetails.leaderboard.map((entry, index) => {
                     const prize = detailPrizeEnabled && pickemDetails.prizeConfig ? getPrizeForPlace(pickemDetails.prizeConfig, index + 1) : 0;
 
                     return (

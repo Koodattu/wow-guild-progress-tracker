@@ -581,6 +581,7 @@ export interface AdminUser {
   } | null;
   createdAt: string;
   lastLoginAt: string;
+  pickemSubmissionCount: number;
 }
 
 export interface AdminGuild {
@@ -613,6 +614,29 @@ export interface AdminPagination {
 export interface AdminUsersResponse {
   users: AdminUser[];
   pagination: AdminPagination;
+}
+
+export interface AdminUserPickemMetadata {
+  id: string;
+  name: string;
+  type: PickemType;
+  guildCount: number;
+  votingStart: string | null;
+  votingEnd: string | null;
+  active: boolean;
+  finalized: boolean;
+}
+
+export interface AdminUserPickemSubmission {
+  pickem: AdminUserPickemMetadata;
+  submittedAt: string;
+  updatedAt: string;
+  predictions: PickemPrediction[];
+}
+
+export interface AdminUserPickemsResponse {
+  userId: string;
+  submissions: AdminUserPickemSubmission[];
 }
 
 export interface AdminGuildsResponse {
