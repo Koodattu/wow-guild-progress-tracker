@@ -7,6 +7,7 @@ export interface IRequestLog extends Document {
   statusCode: number;
   responseTime: number; // in milliseconds
   responseSize: number; // in bytes
+  visitorHash?: string;
   userAgent?: string;
   referer?: string;
   timestamp: Date;
@@ -19,13 +20,14 @@ const RequestLogSchema: Schema = new Schema(
     statusCode: { type: Number, required: true },
     responseTime: { type: Number, required: true },
     responseSize: { type: Number, required: true },
+    visitorHash: { type: String },
     userAgent: { type: String },
     referer: { type: String },
     timestamp: { type: Date, required: true, default: Date.now },
   },
   {
     timestamps: false,
-  }
+  },
 );
 
 // TTL index: automatically delete logs older than 30 days
@@ -33,6 +35,7 @@ RequestLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60
 // Index for querying
 RequestLogSchema.index({ endpoint: 1, timestamp: -1 });
 RequestLogSchema.index({ timestamp: -1 });
+RequestLogSchema.index({ visitorHash: 1, timestamp: -1 });
 
 // Hourly aggregated stats (for long-term storage)
 export interface IHourlyStats extends Document {
@@ -72,7 +75,7 @@ const HourlyStatsSchema: Schema = new Schema(
   },
   {
     timestamps: false,
-  }
+  },
 );
 
 HourlyStatsSchema.index({ hour: -1 });
@@ -120,7 +123,7 @@ const DailyStatsSchema: Schema = new Schema(
   },
   {
     timestamps: false,
-  }
+  },
 );
 
 DailyStatsSchema.index({ date: -1 });

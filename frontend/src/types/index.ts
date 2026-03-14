@@ -396,6 +396,7 @@ export interface AnalyticsPeriodStats {
   avgResponseTime: number;
   totalDataTransferred: number;
   formattedData: string;
+  uniqueVisitors: number;
 }
 
 export interface AnalyticsOverview {
@@ -418,6 +419,7 @@ export interface AnalyticsDaily {
   avgResponseTime: number;
   dataTransferred: number;
   formattedData: string;
+  uniqueVisitors: number;
 }
 
 export interface AnalyticsEndpoint {

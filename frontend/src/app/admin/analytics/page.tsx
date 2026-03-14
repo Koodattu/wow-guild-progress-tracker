@@ -300,6 +300,10 @@ export default function AdminAnalyticsPage() {
                         <span className="text-slate-300">Data Transferred</span>
                         <span className="font-semibold text-blue-400">{data.formattedData}</span>
                       </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-300">Unique Visitors</span>
+                        <span className="font-semibold text-emerald-400">{data.uniqueVisitors.toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -317,6 +321,7 @@ export default function AdminAnalyticsPage() {
                       <tr className="text-slate-400 text-sm border-b border-slate-700">
                         <th className="text-left py-2 px-2">Date</th>
                         <th className="text-right py-2 px-2">Requests</th>
+                        <th className="text-right py-2 px-2">Unique</th>
                         <th className="text-right py-2 px-2">Avg ms</th>
                         <th className="text-right py-2 px-2">Data</th>
                       </tr>
@@ -331,6 +336,7 @@ export default function AdminAnalyticsPage() {
                               {new Date(day.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                             </td>
                             <td className="py-2 px-2 text-right font-mono text-white">{day.requests.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right font-mono text-emerald-400">{day.uniqueVisitors.toLocaleString()}</td>
                             <td className={`py-2 px-2 text-right font-mono ${getResponseTimeColor(day.avgResponseTime)}`}>{day.avgResponseTime}</td>
                             <td className="py-2 px-2 text-right text-blue-400 text-sm">{day.formattedData}</td>
                           </tr>

@@ -25,7 +25,7 @@ router.get("/overview", async (req: Request, res: Response) => {
     const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     // Aggregate stats for different periods
-    const [stats24h, stats7d, stats30d] = await Promise.all([
+    const [stats24h, stats7d, stats30d, unique24h, unique7d, unique30d] = await Promise.all([
       HourlyStats.aggregate([
         { $match: { hour: { $gte: last24h } } },
         {
@@ -59,11 +59,23 @@ router.get("/overview", async (req: Request, res: Response) => {
           },
         },
       ]),
+      RequestLog.distinct("visitorHash", {
+        timestamp: { $gte: last24h },
+        visitorHash: { $exists: true, $ne: null },
+      }),
+      RequestLog.distinct("visitorHash", {
+        timestamp: { $gte: last7d },
+        visitorHash: { $exists: true, $ne: null },
+      }),
+      RequestLog.distinct("visitorHash", {
+        timestamp: { $gte: last30d },
+        visitorHash: { $exists: true, $ne: null },
+      }),
     ]);
 
-    const formatPeriodStats = (stats: Array<{ totalRequests: number; totalResponseTime: number; totalDataTransferred: number }>) => {
+    const formatPeriodStats = (stats: Array<{ totalRequests: number; totalResponseTime: number; totalDataTransferred: number }>, uniqueVisitors: unknown[]) => {
       if (!stats || stats.length === 0) {
-        return { totalRequests: 0, avgResponseTime: 0, totalDataTransferred: 0, formattedData: "0 B" };
+        return { totalRequests: 0, avgResponseTime: 0, totalDataTransferred: 0, formattedData: "0 B", uniqueVisitors: uniqueVisitors.length };
       }
       const s = stats[0];
       return {
@@ -71,13 +83,14 @@ router.get("/overview", async (req: Request, res: Response) => {
         avgResponseTime: s.totalRequests > 0 ? Math.round(s.totalResponseTime / s.totalRequests) : 0,
         totalDataTransferred: s.totalDataTransferred || 0,
         formattedData: formatBytes(s.totalDataTransferred || 0),
+        uniqueVisitors: uniqueVisitors.length,
       };
     };
 
     res.json({
-      last24Hours: formatPeriodStats(stats24h),
-      last7Days: formatPeriodStats(stats7d),
-      last30Days: formatPeriodStats(stats30d),
+      last24Hours: formatPeriodStats(stats24h, unique24h),
+      last7Days: formatPeriodStats(stats7d, unique7d),
+      last30Days: formatPeriodStats(stats30d, unique30d),
     });
   } catch (error) {
     logger.error("Error fetching analytics overview:", error);
@@ -138,12 +151,42 @@ router.get("/daily", async (req: Request, res: Response) => {
       { $sort: { _id: 1 } },
     ]);
 
+    const dailyUniqueVisitors = await RequestLog.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate },
+          visitorHash: { $exists: true, $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$timestamp" },
+          },
+          uniqueVisitors: { $addToSet: "$visitorHash" },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          uniqueVisitors: { $size: "$uniqueVisitors" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const uniqueVisitorsByDate = new Map<string, number>();
+    for (const day of dailyUniqueVisitors) {
+      uniqueVisitorsByDate.set(day._id as string, day.uniqueVisitors as number);
+    }
+
     const formatted = dailyStats.map((stat) => ({
       date: stat._id,
       requests: stat.totalRequests,
       avgResponseTime: stat.totalRequests > 0 ? Math.round(stat.totalResponseTime / stat.totalRequests) : 0,
       dataTransferred: stat.totalDataTransferred,
       formattedData: formatBytes(stat.totalDataTransferred),
+      uniqueVisitors: uniqueVisitorsByDate.get(stat._id as string) || 0,
     }));
 
     res.json(formatted);

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import logger from "../utils/logger";
 
@@ -9,6 +10,7 @@ interface LogEntry {
   statusCode: number;
   responseTime: number;
   responseSize: number;
+  visitorHash?: string;
   userAgent?: string;
   referer?: string;
   timestamp: Date;
@@ -38,6 +40,9 @@ const normalizeEndpoint = (path: string): string => {
     // Raid routes
     { regex: /^\/api\/raids\/(\d+)\/dates$/, replacement: "/api/raids/:raidId/dates" },
     { regex: /^\/api\/raids\/(\d+)$/, replacement: "/api/raids/:raidId" },
+    // Pickems routes
+    { regex: /^\/api\/pickems\/([^/]+)\/predict$/, replacement: "/api/pickems/:pickemId/predict" },
+    { regex: /^\/api\/pickems\/(?!guilds(?:\/rwf)?$)([^/]+)$/, replacement: "/api/pickems/:pickemId" },
     // Icon routes
     { regex: /^\/icons\/.*$/, replacement: "/icons/:file" },
   ];
@@ -49,6 +54,19 @@ const normalizeEndpoint = (path: string): string => {
   }
 
   return pathWithoutQuery;
+};
+
+const getVisitorHash = (req: Request): string | undefined => {
+  const userId = req.session?.userId;
+  const userAgent = req.get("user-agent") || "unknown";
+
+  const rawIdentifier = userId ? `user:${userId}` : `anon:${req.ip}|${userAgent}`;
+
+  if (!rawIdentifier) {
+    return undefined;
+  }
+
+  return crypto.createHash("sha256").update(rawIdentifier).digest("hex").slice(0, 32);
 };
 
 // Flush buffer to database
@@ -138,7 +156,7 @@ const flushBuffer = async () => {
             [`statusCodes`]: Object.fromEntries(data.statusCodes),
           },
         },
-        { upsert: true }
+        { upsert: true },
       ).catch(() => {
         // If update fails, try with $inc for all fields
         return HourlyStats.findOneAndUpdate(
@@ -150,7 +168,7 @@ const flushBuffer = async () => {
               totalDataTransferred: data.totalDataTransferred,
             },
           },
-          { upsert: true }
+          { upsert: true },
         );
       });
     }
@@ -201,6 +219,7 @@ export const analyticsMiddleware = (req: Request, res: Response, next: NextFunct
       statusCode: res.statusCode,
       responseTime,
       responseSize,
+      visitorHash: getVisitorHash(req),
       userAgent: req.get("user-agent"),
       referer: req.get("referer"),
       timestamp: new Date(),
