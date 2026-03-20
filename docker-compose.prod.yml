@@ -19,12 +19,37 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongo:27017/wow_guild_tracker
       - NODE_ENV=production
+      - WORKER_MODE=api
     deploy:
       resources:
         limits:
-          memory: 1536M # 1.5GB limit
+          cpus: "1.5"
+          memory: 1024M
         reservations:
-          memory: 512M # Reserve 512MB
+          memory: 256M
+    volumes:
+      - ./data/images:/app/data/images
+      - ./backend/logs:/app/logs
+    networks:
+      - app-network
+
+  backend-worker:
+    build: ./backend
+    container_name: wow-prog-backend-worker
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/wow_guild_tracker
+      - NODE_ENV=production
+      - WORKER_MODE=worker
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1536M
+        reservations:
+          memory: 512M
     volumes:
       - ./data/images:/app/data/images
       - ./backend/logs:/app/logs

@@ -16,6 +16,7 @@ import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 import Character from "../models/Character";
 import characterService from "./character.service";
+import { yieldToEventLoop } from "../utils/yield";
 
 class GuildService {
   // Configuration for death events fetching
@@ -550,6 +551,8 @@ class GuildService {
 
       // Process each guild
       for (const guild of guilds) {
+        // Yield to event loop between guilds so HTTP requests can be served
+        await yieldToEventLoop();
         try {
           // Check if guild has any reports (i.e., has already been initialized with data)
           const hasReports = await Report.exists({ guildId: guild._id });
@@ -989,6 +992,7 @@ class GuildService {
 
       // Save all guilds with updated ranks
       for (const pair of sortedPairs) {
+        await yieldToEventLoop();
         await pair.guild.save();
       }
 
@@ -2350,7 +2354,11 @@ class GuildService {
     );
 
     // THIRD PASS: Process all unique fights and build statistics
-    for (const fight of uniqueFights) {
+    for (let i = 0; i < uniqueFights.length; i++) {
+      // Yield every 50 fights to let the event loop process HTTP requests
+      if (i % 50 === 0 && i > 0) await yieldToEventLoop();
+
+      const fight = uniqueFights[i];
       const encounterId = fight.encounterID;
       const isKill = fight.isKill;
       const bossPercent = fight.bossPercentage || 0;
