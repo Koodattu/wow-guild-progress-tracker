@@ -779,24 +779,31 @@ class GuildService {
       return;
     }
 
-    for (const raidProgress of raidsWithProgress) {
-      try {
-        guildLog.info(`Fetching world rank for ${raidProgress.raidName}...`);
+    // Group by raidId to avoid duplicate API calls for the same raid
+    const raidIds = [...new Set(raidsWithProgress.map((p) => p.raidId))];
 
-        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidProgress.raidId);
+    for (const raidId of raidIds) {
+      try {
+        const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
+        const raidName = raidEntries[0].raidName;
+        guildLog.info(`Fetching world rank for ${raidName}...`);
+
+        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
 
         const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
         if (worldRank?.number) {
-          // Update the world rank in the guild's progress
-          raidProgress.worldRank = worldRank.number;
-          raidProgress.worldRankColor = worldRank.color;
-          guildLog.info(`${raidProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+          // Apply the world rank to all difficulty entries for this raid
+          for (const raidProgress of raidEntries) {
+            raidProgress.worldRank = worldRank.number;
+            raidProgress.worldRankColor = worldRank.color;
+          }
+          guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${raidEntries.map((e) => e.difficulty).join(", ")}`);
         } else {
-          guildLog.info(`${raidProgress.raidName}: No world rank data available`);
+          guildLog.info(`${raidName}: No world rank data available`);
         }
       } catch (error) {
-        guildLog.error(`Error fetching world rank for ${raidProgress.raidName}:`, error);
+        guildLog.error(`Error fetching world rank for raidId ${raidId}:`, error);
       }
     }
 
@@ -807,6 +814,7 @@ class GuildService {
 
   // Update world rankings for all current raids
   // Skip if guild has completed the raid (all mythic bosses defeated)
+  // Updates both mythic and heroic progress entries with world rank data
   async updateCurrentRaidsWorldRanking(guildId: string): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
@@ -825,23 +833,25 @@ class GuildService {
         continue;
       }
 
-      // Find mythic progress for this raid
+      // Find mythic and heroic progress for this raid
       const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
+      const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic");
 
-      if (!mythicProgress) {
-        guildLog.info(`No mythic progress for raid ${raidId}, skipping world rank update`);
+      if (!mythicProgress && !heroicProgress) {
+        guildLog.info(`No progress for raid ${raidId}, skipping world rank update`);
         continue;
       }
 
-      // Check if guild has completed all mythic bosses
-      const hasCompletedMythic = mythicProgress.bossesDefeated >= raidData.bosses.length;
+      // Check if guild has completed all mythic bosses - if so, world rank is final
+      const hasCompletedMythic = mythicProgress && mythicProgress.bossesDefeated >= raidData.bosses.length;
 
       if (hasCompletedMythic) {
         guildLog.info(`Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
         continue;
       }
 
-      guildLog.info(`Updating world rank for raid ${raidId} (${mythicProgress.raidName})...`);
+      const raidName = mythicProgress?.raidName || heroicProgress?.raidName || `Raid ${raidId}`;
+      guildLog.info(`Updating world rank for raid ${raidId} (${raidName})...`);
 
       try {
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
@@ -849,12 +859,25 @@ class GuildService {
         const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
         if (worldRank?.number) {
-          // Update the world rank in mythic progress
-          mythicProgress.worldRank = worldRank.number;
-          mythicProgress.worldRankColor = worldRank.color;
-          guildLog.info(`${mythicProgress.raidName}: World Rank #${worldRank.number} (${worldRank.color})`);
+          const updatedDifficulties: string[] = [];
+
+          // Mythic world rank takes priority - update mythic first
+          if (mythicProgress) {
+            mythicProgress.worldRank = worldRank.number;
+            mythicProgress.worldRankColor = worldRank.color;
+            updatedDifficulties.push("mythic");
+          }
+
+          // Also update heroic progress with the same world rank
+          if (heroicProgress) {
+            heroicProgress.worldRank = worldRank.number;
+            heroicProgress.worldRankColor = worldRank.color;
+            updatedDifficulties.push("heroic");
+          }
+
+          guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${updatedDifficulties.join(", ")}`);
         } else {
-          guildLog.info(`${mythicProgress.raidName}: No world rank data available`);
+          guildLog.info(`${raidName}: No world rank data available`);
         }
       } catch (error) {
         guildLog.error(`Error fetching world rank for raid ${raidId}:`, error);
