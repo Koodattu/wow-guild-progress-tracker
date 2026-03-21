@@ -128,6 +128,61 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
   );
 }
 
+interface GuildScoresTableProps {
+  guilds: GuildTierScore[];
+  onGuildClick: (realm: string, name: string) => void;
+  t: ReturnType<typeof useTranslations<"tierListsPage">>;
+}
+
+function GuildScoresTable({ guilds, onGuildClick, t }: GuildScoresTableProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const sortedGuilds = useMemo(() => [...guilds].sort((a, b) => b.overallScore - a.overallScore), [guilds]);
+
+  return (
+    <div className="mt-4">
+      <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
+        <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        {t("guildScores")}
+      </button>
+      {expanded && (
+        <div className="mt-2 border border-gray-700 rounded-lg overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
+              <tr>
+                <th className="px-3 py-2 w-10">{t("rank")}</th>
+                <th className="px-3 py-2">{t("guild")}</th>
+                <th className="px-3 py-2">{t("realm")}</th>
+                <th className="px-3 py-2 text-right">{t("overall")}</th>
+                <th className="px-3 py-2 text-right">{t("speed")}</th>
+                <th className="px-3 py-2 text-right">{t("efficiency")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedGuilds.map((guild, index) => (
+                <tr
+                  key={`${guild.guildId}-${index}`}
+                  onClick={() => onGuildClick(guild.realm, guild.guildName)}
+                  className="border-t border-gray-700 bg-gray-800/50 hover:bg-gray-700/60 cursor-pointer transition-colors"
+                >
+                  <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                  <td className="px-3 py-2 text-gray-200 font-medium">{guild.guildName}</td>
+                  <td className="px-3 py-2 text-gray-400">{guild.realm}</td>
+                  <td className="px-3 py-2 text-right text-gray-200">{guild.overallScore}</td>
+                  <td className="px-3 py-2 text-right text-gray-200">{guild.speedScore}</td>
+                  <td className="px-3 py-2 text-right text-gray-200">{guild.efficiencyScore}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TierListsPage() {
   const t = useTranslations("tierListsPage");
   const router = useRouter();
@@ -217,11 +272,14 @@ export default function TierListsPage() {
 
       {/* Tier Lists Grid - Stack on mobile, side by side on desktop */}
       {guilds.length > 0 ? (
-        <div className="flex flex-col lg:flex-row gap-4">
-          <TierListDisplay title={t("overall")} guilds={guilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
-          <TierListDisplay title={t("speed")} guilds={guilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
-          <TierListDisplay title={t("efficiency")} guilds={guilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
-        </div>
+        <>
+          <div className="flex flex-col lg:flex-row gap-4">
+            <TierListDisplay title={t("overall")} guilds={guilds} scoreKey="overallScore" onGuildClick={handleGuildClick} />
+            <TierListDisplay title={t("speed")} guilds={guilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
+            <TierListDisplay title={t("efficiency")} guilds={guilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
+          </div>
+          <GuildScoresTable guilds={guilds} onGuildClick={handleGuildClick} t={t} />
+        </>
       ) : (
         <div className="bg-gray-800 rounded-lg p-8 text-center">
           <p className="text-gray-400">{t("noDataForRaid")}</p>

@@ -190,7 +190,11 @@
     "efficiency": "Efficiency",
     "error": "Failed to load tier lists. Make sure the backend server is running.",
     "noData": "No tier list data available.",
-    "noDataForRaid": "No tier list data available for this raid."
+    "noDataForRaid": "No tier list data available for this raid.",
+    "guildScores": "Guild Scores",
+    "guild": "Guild",
+    "realm": "Realm",
+    "rank": "#"
   },
   "common": {
     "loading": "Loading...",
