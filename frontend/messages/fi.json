@@ -305,7 +305,8 @@
       "characters": "Hahmot",
       "pickems": "Veikkaukset",
       "analytics": "Analytiikka",
-      "system": "Järjestelmä"
+      "system": "Järjestelmä",
+      "tasks": "Tehtävät"
     },
     "overview": {
       "totalUsers": "Käyttäjiä yhteensä",
@@ -460,6 +461,22 @@
       "next": "Seuraava",
       "page": "Sivu",
       "of": "/"
+    },
+    "tasks": {
+      "running": "Käynnissä",
+      "completedToday": "Valmistuneet (24h)",
+      "failedToday": "Epäonnistuneet (24h)",
+      "latestPerTask": "Viimeisin per tehtävä",
+      "recentHistory": "Viimeaikaiset",
+      "taskName": "Tehtävä",
+      "status": "Tila",
+      "startedAt": "Aloitettu",
+      "duration": "Kesto",
+      "details": "Tiedot",
+      "statusRunning": "Käynnissä",
+      "statusCompleted": "Valmis",
+      "statusFailed": "Epäonnistui",
+      "noTasks": "Ei tehtäväaktiviteettia vielä."
     }
   },
   "pickemsPage": {

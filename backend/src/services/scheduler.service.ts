@@ -8,6 +8,7 @@ import characterService from "./character.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
+import taskTracker from "./task-tracker.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 
@@ -264,12 +265,15 @@ class UpdateScheduler {
     cron.schedule(
       "0 2 * * *",
       async () => {
+        const taskId = await taskTracker.start("Nightly Cache Warmup");
         logger.info("[Nightly/CacheWarmup] Starting full cache warm-up...");
         try {
           await cacheWarmerService.warmAllCaches();
           logger.info("[Nightly/CacheWarmup] Full cache warm-up completed");
+          await taskTracker.complete(taskId);
         } catch (error) {
           logger.error("[Nightly/CacheWarmup] Error:", error);
+          await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
         }
       },
       {
@@ -385,6 +389,7 @@ class UpdateScheduler {
   // NIGHTLY: Calculate tier lists
   async calculateTierLists(raidId?: number): Promise<void> {
     this.isUpdatingTierLists = true;
+    const taskId = await taskTracker.start("Calculate Tier Lists", raidId ? { raidId } : undefined);
 
     try {
       if (raidId) {
@@ -401,8 +406,10 @@ class UpdateScheduler {
       await cacheWarmerService.warmTierListCaches();
 
       logger.info("[Nightly/TierLists] Tier list calculation completed");
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/TierLists] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingTierLists = false;
     }
@@ -411,6 +418,7 @@ class UpdateScheduler {
   // NIGHTLY: Calculate raid analytics
   async calculateRaidAnalytics(raidId?: number): Promise<void> {
     this.isUpdatingRaidAnalytics = true;
+    const taskId = await taskTracker.start("Calculate Raid Analytics", raidId ? { raidId } : undefined);
 
     try {
       if (raidId) {
@@ -426,8 +434,10 @@ class UpdateScheduler {
       await cacheWarmerService.warmRaidAnalyticsCaches();
 
       logger.info("[Nightly/RaidAnalytics] Raid analytics calculation completed");
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/RaidAnalytics] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingRaidAnalytics = false;
     }
@@ -436,13 +446,16 @@ class UpdateScheduler {
   // NIGHTLY: Check for hiatus events
   async checkHiatusEvents(): Promise<void> {
     this.isCheckingHiatus = true;
+    const taskId = await taskTracker.start("Check Hiatus Events");
 
     try {
       logger.info("[Nightly/Hiatus] Starting hiatus event check...");
       await guildService.checkForHiatusEvents();
       logger.info("[Nightly/Hiatus] Hiatus event check completed");
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/Hiatus] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isCheckingHiatus = false;
     }
@@ -493,6 +506,7 @@ class UpdateScheduler {
   // HOT HOURS: Update active guilds (every 15 minutes during 16:00-01:00)
   async updateActiveGuilds(): Promise<void> {
     this.isUpdatingHotActive = true;
+    const taskId = await taskTracker.start("Update Active Guilds (Hot Hours)");
 
     try {
       // First, update activity statuses
@@ -532,8 +546,10 @@ class UpdateScheduler {
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       await this.debouncedWarmCurrentRaidCaches();
+      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingHotActive = false;
     }
@@ -542,6 +558,7 @@ class UpdateScheduler {
   // HOT HOURS: Update currently raiding guilds (every 5 minutes during 16:00-01:00)
   private async updateRaidingGuilds(): Promise<void> {
     this.isUpdatingHotRaiding = true;
+    const taskId = await taskTracker.start("Update Raiding Guilds (Hot Hours)");
 
     try {
       // Get guilds that are currently raiding (excluding guilds not found on WCL)
@@ -574,8 +591,10 @@ class UpdateScheduler {
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       await this.debouncedWarmCurrentRaidCaches();
+      await taskTracker.complete(taskId, { guildsUpdated: raidingGuilds.length });
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingHotRaiding = false;
     }
@@ -584,6 +603,7 @@ class UpdateScheduler {
   // OFF HOURS: Update active guilds (every hour during 01:00-16:00)
   private async updateActiveGuildsOffHours(): Promise<void> {
     this.isUpdatingOffActive = true;
+    const taskId = await taskTracker.start("Update Active Guilds (Off Hours)");
 
     try {
       // First, update activity statuses
@@ -623,8 +643,10 @@ class UpdateScheduler {
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       await this.debouncedWarmCurrentRaidCaches();
+      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingOffActive = false;
     }
@@ -633,6 +655,7 @@ class UpdateScheduler {
   // OFF HOURS: Update inactive guilds (once daily at 10:00)
   async updateInactiveGuilds(): Promise<void> {
     this.isUpdatingOffInactive = true;
+    const taskId = await taskTracker.start("Update Inactive Guilds (Daily)");
 
     try {
       // First, update activity statuses
@@ -672,8 +695,10 @@ class UpdateScheduler {
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       await this.debouncedWarmCurrentRaidCaches();
+      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingOffInactive = false;
     }
@@ -716,6 +741,7 @@ class UpdateScheduler {
   // Update world ranks for all guilds for specific raid IDs
   async updateWorldRanksForRaids(raidIds: number[]): Promise<void> {
     this.isUpdatingNightlyWorldRanks = true;
+    const taskId = await taskTracker.start("Update World Ranks", { raidIds });
 
     try {
       // Get all guilds (excluding guilds not found on WCL)
@@ -759,8 +785,10 @@ class UpdateScheduler {
       }
 
       logger.info(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);
+      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
     } catch (error) {
       logger.error("[Nightly/WorldRanks] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingNightlyWorldRanks = false;
     }
@@ -770,13 +798,16 @@ class UpdateScheduler {
   // Guild crests can be changed by guilds or sometimes fail to fetch initially
   async updateAllGuildCrests(): Promise<void> {
     this.isUpdatingGuildCrests = true;
+    const taskId = await taskTracker.start("Update Guild Crests");
 
     try {
       logger.info("[Nightly/GuildCrests] Starting guild crest update...");
       await guildService.updateAllGuildCrests();
       logger.info("[Nightly/GuildCrests] Guild crest update completed");
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/GuildCrests] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingGuildCrests = false;
     }
@@ -786,11 +817,14 @@ class UpdateScheduler {
   // This catches any fights that might have been missed during live polling or uploaded late
   async refetchRecentReportsForAllActiveGuilds(): Promise<void> {
     this.isUpdatingRefetchRecentReports = true;
+    const taskId = await taskTracker.start("Refetch Recent Reports");
 
     try {
       await guildService.refetchRecentReportsForAllActiveGuilds();
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/RefetchReports] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingRefetchRecentReports = false;
     }
@@ -801,13 +835,16 @@ class UpdateScheduler {
   // Then rebuilds the materialized leaderboard collection for fast queries
   private async refreshCharacterRankings(): Promise<void> {
     this.isUpdatingCharacterRankings = true;
+    const taskId = await taskTracker.start("Refresh Character Rankings");
 
     try {
       await guildService.refreshRaidPartitions();
       await characterService.checkAndRefreshCharacterRankings();
       await characterService.buildCharacterLeaderboards();
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Nightly/CharacterRankings] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingCharacterRankings = false;
     }
@@ -816,10 +853,12 @@ class UpdateScheduler {
   // HOT HOURS: Update Twitch stream status (every 15 minutes during 16:00-01:00)
   async updateTwitchStreamStatus(): Promise<void> {
     this.isUpdatingTwitchStreams = true;
+    const taskId = await taskTracker.start("Update Twitch Streams");
 
     try {
       if (!twitchService.isEnabled()) {
         this.isUpdatingTwitchStreams = false;
+        await taskTracker.complete(taskId, { skipped: true, reason: "Twitch disabled" });
         return;
       }
 
@@ -893,8 +932,10 @@ class UpdateScheduler {
       }
 
       logger.info(`[Hot/Twitch] Completed stream status update`);
+      await taskTracker.complete(taskId);
     } catch (error) {
       logger.error("[Hot/Twitch] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingTwitchStreams = false;
     }

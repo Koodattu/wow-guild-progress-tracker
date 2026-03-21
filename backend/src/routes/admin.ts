@@ -16,6 +16,7 @@ import pickemService from "../services/pickem.service";
 import rateLimitService from "../services/rate-limit.service";
 import backgroundGuildProcessor from "../services/background-guild-processor.service";
 import GuildProcessingQueue, { ProcessingStatus } from "../models/GuildProcessingQueue";
+import taskTracker from "../services/task-tracker.service";
 import logger from "../utils/logger";
 import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
@@ -2098,6 +2099,36 @@ router.delete("/characters/:characterId", async (req: Request, res: Response) =>
   } catch (error) {
     logger.error("Error deleting character:", error);
     res.status(500).json({ error: "Failed to delete character" });
+  }
+});
+
+// ============================================================
+// TASK LOGS
+// ============================================================
+
+// Get recent task logs
+router.get("/task-logs", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const logs = await taskTracker.getRecentLogs(limit);
+
+    res.json({ logs });
+  } catch (error) {
+    logger.error("Error fetching task logs:", error);
+    res.status(500).json({ error: "Failed to fetch task logs" });
+  }
+});
+
+// Get latest status per task
+router.get("/task-logs/latest", async (req: Request, res: Response) => {
+  try {
+    const latest = await taskTracker.getLatestByTask();
+    const stats = await taskTracker.getStats();
+
+    res.json({ tasks: latest, stats });
+  } catch (error) {
+    logger.error("Error fetching latest task statuses:", error);
+    res.status(500).json({ error: "Failed to fetch latest task statuses" });
   }
 });
 

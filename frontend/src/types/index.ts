@@ -1365,3 +1365,35 @@ export interface DeleteCharacterResponse {
     rankings: number;
   };
 }
+
+// ============================================================
+// TASK LOGS
+// ============================================================
+
+export type TaskLogStatus = "running" | "completed" | "failed";
+
+export interface TaskLogEntry {
+  _id: string;
+  taskName: string;
+  status: TaskLogStatus;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TaskLogStats {
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+export interface TaskLogsResponse {
+  logs: TaskLogEntry[];
+}
+
+export interface TaskLogsLatestResponse {
+  tasks: TaskLogEntry[];
+  stats: TaskLogStats;
+}

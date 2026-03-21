@@ -38,6 +38,8 @@ import {
   AdminOverview,
   AdminCharactersResponse,
   AdminCharacterStats,
+  TaskLogsResponse,
+  TaskLogsLatestResponse,
   HomePageData,
   PickemSummary,
   PickemDetails,
@@ -1003,6 +1005,27 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to fetch character stats");
+    return response.json();
+  },
+
+  // ============================================================================
+  // TASK LOGS (Admin)
+  // ============================================================================
+
+  async getAdminTaskLogs(limit: number = 50): Promise<TaskLogsResponse> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    const response = await fetch(`${API_URL}/api/admin/task-logs?${params}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch task logs");
+    return response.json();
+  },
+
+  async getAdminTaskLogsLatest(): Promise<TaskLogsLatestResponse> {
+    const response = await fetch(`${API_URL}/api/admin/task-logs/latest`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch latest task statuses");
     return response.json();
   },
 };

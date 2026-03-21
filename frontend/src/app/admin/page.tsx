@@ -62,9 +62,11 @@ import {
   AdminCharacter,
   AdminCharacterStats,
   AdminRaidOption,
+  TaskLogEntry,
+  TaskLogStats,
 } from "@/types";
 
-type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system";
+type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system" | "tasks";
 
 // Sortable item for finalization ranking with remove button
 function SortableRankingItem({ id, rank, onRemove }: { id: string; rank: number; onRemove?: (id: string) => void }) {
@@ -167,6 +169,12 @@ export default function AdminPage() {
   const [errorItems, setErrorItems] = useState<ProcessingQueueErrorItem[]>([]);
   const [errorFilter, setErrorFilter] = useState<ErrorType | "all">("all");
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+  // Task logs data
+  const [taskLogs, setTaskLogs] = useState<TaskLogEntry[]>([]);
+  const [taskLatest, setTaskLatest] = useState<TaskLogEntry[]>([]);
+  const [taskStats, setTaskStats] = useState<TaskLogStats | null>(null);
+  const [taskView, setTaskView] = useState<"latest" | "history">("latest");
 
   // Scheduler trigger status
   const [triggerLoading, setTriggerLoading] = useState<string | null>(null);
@@ -337,6 +345,14 @@ export default function AdminPage() {
             setErrorItems(errorsData.items);
             break;
           }
+
+          case "tasks": {
+            const [logsData, latestData] = await Promise.all([api.getAdminTaskLogs(100), api.getAdminTaskLogsLatest()]);
+            setTaskLogs(logsData.logs);
+            setTaskLatest(latestData.tasks);
+            setTaskStats(latestData.stats);
+            break;
+          }
         }
       } catch (err) {
         console.error("Error fetching admin data:", err);
@@ -406,6 +422,23 @@ export default function AdminPage() {
       setSystemRefreshInterval(null);
     }
   }, [activeTab, user?.isAdmin, queuePage, queueFilter]);
+
+  // Auto-refresh tasks tab every 10 seconds
+  useEffect(() => {
+    if (activeTab === "tasks" && user?.isAdmin) {
+      const interval = setInterval(async () => {
+        try {
+          const [logsData, latestData] = await Promise.all([api.getAdminTaskLogs(100), api.getAdminTaskLogsLatest()]);
+          setTaskLogs(logsData.logs);
+          setTaskLatest(latestData.tasks);
+          setTaskStats(latestData.stats);
+        } catch (err) {
+          console.error("Error refreshing task data:", err);
+        }
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, user?.isAdmin]);
 
   // Show loading state while checking auth
   if (authLoading) {
@@ -776,7 +809,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-700 pb-4">
-          {(["overview", "users", "guilds", "characters", "pickems", "system"] as TabType[]).map((tab) => (
+          {(["overview", "users", "guilds", "characters", "pickems", "system", "tasks"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2813,6 +2846,121 @@ export default function AdminPage() {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tasks Tab - Scheduled Task Activity Log */}
+        {!loading && activeTab === "tasks" && (
+          <div className="space-y-6">
+            {/* Stats Summary */}
+            {taskStats && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("tasks.running")}</h4>
+                  <p className="text-2xl font-bold text-blue-400">{taskStats.running}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("tasks.completedToday")}</h4>
+                  <p className="text-2xl font-bold text-green-400">{taskStats.completed}</p>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-gray-400 text-sm">{t("tasks.failedToday")}</h4>
+                  <p className="text-2xl font-bold text-red-400">{taskStats.failed}</p>
+                </div>
+              </div>
+            )}
+
+            {/* View Toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTaskView("latest")}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${taskView === "latest" ? "bg-amber-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
+              >
+                {t("tasks.latestPerTask")}
+              </button>
+              <button
+                onClick={() => setTaskView("history")}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${taskView === "history" ? "bg-amber-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
+              >
+                {t("tasks.recentHistory")}
+              </button>
+            </div>
+
+            {/* Task Table */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="px-4 py-3 text-gray-400 text-sm font-medium">{t("tasks.taskName")}</th>
+                      <th className="px-4 py-3 text-gray-400 text-sm font-medium">{t("tasks.status")}</th>
+                      <th className="px-4 py-3 text-gray-400 text-sm font-medium">{t("tasks.startedAt")}</th>
+                      <th className="px-4 py-3 text-gray-400 text-sm font-medium">{t("tasks.duration")}</th>
+                      <th className="px-4 py-3 text-gray-400 text-sm font-medium">{t("tasks.details")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(taskView === "latest" ? taskLatest : taskLogs).map((log) => (
+                      <tr key={log._id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                        <td className="px-4 py-3 text-white font-medium text-sm">{log.taskName}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                              log.status === "running"
+                                ? "bg-blue-500/20 text-blue-400"
+                                : log.status === "completed"
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-red-500/20 text-red-400"
+                            }`}
+                          >
+                            <span
+                              className={`inline-block w-2 h-2 rounded-full ${
+                                log.status === "running" ? "bg-blue-400 animate-pulse" : log.status === "completed" ? "bg-green-400" : "bg-red-400"
+                              }`}
+                            />
+                            {log.status === "running" ? t("tasks.statusRunning") : log.status === "completed" ? t("tasks.statusCompleted") : t("tasks.statusFailed")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 text-sm">{new Date(log.startedAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-gray-300 text-sm">
+                          {log.durationMs != null
+                            ? log.durationMs < 1000
+                              ? `${log.durationMs}ms`
+                              : log.durationMs < 60000
+                                ? `${(log.durationMs / 1000).toFixed(1)}s`
+                                : `${Math.floor(log.durationMs / 60000)}m ${Math.round((log.durationMs % 60000) / 1000)}s`
+                            : log.status === "running"
+                              ? "..."
+                              : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {log.error ? (
+                            <span className="text-red-400 truncate block max-w-xs" title={log.error}>
+                              {log.error}
+                            </span>
+                          ) : log.metadata ? (
+                            <span className="text-gray-400 truncate block max-w-xs" title={JSON.stringify(log.metadata)}>
+                              {Object.entries(log.metadata)
+                                .map(([k, v]) => `${k}: ${v}`)
+                                .join(", ")}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {(taskView === "latest" ? taskLatest : taskLogs).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                          {t("tasks.noTasks")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

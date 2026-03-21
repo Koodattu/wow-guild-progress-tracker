@@ -305,7 +305,8 @@
       "characters": "Characters",
       "pickems": "Pickems",
       "analytics": "Analytics",
-      "system": "System"
+      "system": "System",
+      "tasks": "Tasks"
     },
     "overview": {
       "totalUsers": "Total Users",
@@ -460,6 +461,22 @@
       "next": "Next",
       "page": "Page",
       "of": "of"
+    },
+    "tasks": {
+      "running": "Currently Running",
+      "completedToday": "Completed (24h)",
+      "failedToday": "Failed (24h)",
+      "latestPerTask": "Latest per Task",
+      "recentHistory": "Recent History",
+      "taskName": "Task",
+      "status": "Status",
+      "startedAt": "Started",
+      "duration": "Duration",
+      "details": "Details",
+      "statusRunning": "Running",
+      "statusCompleted": "Completed",
+      "statusFailed": "Failed",
+      "noTasks": "No task activity recorded yet."
     }
   },
   "pickemsPage": {
