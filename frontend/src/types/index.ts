@@ -233,13 +233,13 @@ export interface Guild {
 
 export interface Event {
   _id: string;
-  type: "boss_kill" | "best_pull" | "milestone";
+  type: "boss_kill" | "best_pull" | "milestone" | "hiatus" | "regress" | "reproge";
   guildId: string;
   guildName: string;
   raidId: number;
   raidName: string;
-  bossId: number;
-  bossName: string;
+  bossId?: number;
+  bossName?: string;
   difficulty: "mythic" | "heroic";
   data: {
     killRank?: number;
@@ -247,6 +247,7 @@ export interface Event {
     bestPercent?: number;
     timeSpent?: number;
     progressDisplay?: string; // Phase-enhanced display string like "45% P3"
+    hiatusDays?: number; // Days since last raid activity (7, 14, 30)
   };
   timestamp: string;
 }

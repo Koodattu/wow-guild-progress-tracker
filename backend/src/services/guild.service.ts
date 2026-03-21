@@ -281,11 +281,7 @@ class GuildService {
   }
 
   // Find matching Raider.IO raid rankings by DB slug/name with fuzzy matching
-  private findRaiderIORaidRankings(
-    rioRankings: Record<string, RaiderIORaidDifficultyRankings>,
-    dbSlug: string,
-    dbName: string
-  ): RaiderIORaidDifficultyRankings | null {
+  private findRaiderIORaidRankings(rioRankings: Record<string, RaiderIORaidDifficultyRankings>, dbSlug: string, dbName: string): RaiderIORaidDifficultyRankings | null {
     const slugLower = dbSlug.toLowerCase();
     const nameLower = dbName.toLowerCase();
 
@@ -1024,11 +1020,7 @@ class GuildService {
     guildLog.info("Fetching official raid progression from Raider.IO...");
 
     try {
-      const profile = await raiderIOService.fetchGuildRaidProgression(
-        guild.region.toLowerCase(),
-        guild.realm.toLowerCase().replace(/\s+/g, "-"),
-        guild.name,
-      );
+      const profile = await raiderIOService.fetchGuildRaidProgression(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
 
       if (!profile || !profile.raid_progression) {
         guildLog.info("No raid progression data from Raider.IO");
@@ -1774,7 +1766,18 @@ class GuildService {
       // This ensures we catch any fights that were missed during live polling
       if (!guild.isCurrentlyRaiding && wasRaiding) {
         guildLog.info("⚠️  Guild just STOPPED raiding - performing thorough refetch of newest reports...");
+
+        // Capture progress state BEFORE refetch/recalculation for regress detection
+        const preRaidProgress = guild.progress.filter((p) => CURRENT_RAID_IDS.includes(p.raidId)).map((p) => JSON.parse(JSON.stringify(p))) as IRaidProgress[];
+
         const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
+
+        // Check for regress events (no improvement during the raid night)
+        try {
+          await this.checkForRegressEvents(guild, preRaidProgress);
+        } catch (error) {
+          guildLog.error("Error checking for regress events:", error);
+        }
 
         if (recoveredFights > 0) {
           guildLog.info(`✅ Recovered ${recoveredFights} missing fights (statistics already recalculated)`);
@@ -2830,6 +2833,201 @@ class GuildService {
         }
       }
     }
+
+    // Check for re-progress: boss was previously killed, re-kill took more than 5 pulls
+    if (oldBoss.kills >= 1 && newBoss.kills > oldBoss.kills) {
+      const guildLog = getGuildLogger(guild.name, guild.realm);
+      guildLog.info(`Detected re-kill of ${newBoss.bossName} (${raidProgress.difficulty}) - checking for re-progress event`);
+
+      try {
+        const difficultyNumber = raidProgress.difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
+
+        // Find the two most recent kills to count pulls between them
+        const recentKills = await Fight.find({
+          guildId: guild._id,
+          encounterID: newBoss.bossId,
+          difficulty: difficultyNumber,
+          isKill: true,
+        })
+          .sort({ timestamp: -1 })
+          .limit(2);
+
+        if (recentKills.length >= 2) {
+          const latestKill = recentKills[0];
+          const previousKill = recentKills[1];
+
+          // Count all pulls (kills + wipes) between the two kills
+          const pullsBetweenKills = await Fight.countDocuments({
+            guildId: guild._id,
+            encounterID: newBoss.bossId,
+            difficulty: difficultyNumber,
+            timestamp: { $gt: previousKill.timestamp, $lte: latestKill.timestamp },
+          });
+
+          guildLog.info(`Re-kill of ${newBoss.bossName}: ${pullsBetweenKills} pulls between previous and latest kill`);
+
+          if (pullsBetweenKills > 5) {
+            await Event.create({
+              type: "reproge",
+              guildId: guild._id,
+              guildName: guild.name,
+              raidId: raidProgress.raidId,
+              raidName: raidProgress.raidName,
+              bossId: newBoss.bossId,
+              bossName: newBoss.bossName,
+              difficulty: raidProgress.difficulty,
+              data: {
+                pullCount: pullsBetweenKills,
+              },
+              timestamp: latestKill.timestamp,
+            });
+
+            guildLog.info(`Created reproge event for ${newBoss.bossName} (${pullsBetweenKills} pulls to re-kill)`);
+            await cacheService.invalidateEventCaches();
+          }
+        }
+      } catch (error) {
+        guildLog.error(`Error checking for reproge event on ${newBoss.bossName}:`, error);
+      }
+    }
+  }
+
+  // Detect regress: guild pulled a boss during a raid night but failed to improve bestPercent or kill it
+  // Called when guild transitions from raiding → not raiding, comparing pre-night vs post-night progress
+  async checkForRegressEvents(guild: IGuild, preRaidProgress: IRaidProgress[]): Promise<void> {
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+
+    for (const raidId of CURRENT_RAID_IDS) {
+      const oldRaidProgress = preRaidProgress.find((p) => p.raidId === raidId);
+      if (!oldRaidProgress) continue;
+
+      // Check both difficulties
+      for (const difficulty of ["mythic", "heroic"] as const) {
+        const oldDiffProgress = preRaidProgress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+        const newDiffProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+
+        if (!oldDiffProgress || !newDiffProgress) continue;
+
+        for (const newBoss of newDiffProgress.bosses) {
+          const oldBoss = oldDiffProgress.bosses.find((b) => b.bossId === newBoss.bossId);
+          if (!oldBoss) continue;
+
+          // Regress conditions:
+          // 1. Boss was not killed before AND still not killed
+          // 2. Pull count increased (they actually pulled it during this session)
+          // 3. Best percent did NOT improve (same or worse)
+          const pullsThisSession = newBoss.pullCount - oldBoss.pullCount;
+          const noImprovement = newBoss.bestPercent >= oldBoss.bestPercent;
+          const notKilled = oldBoss.kills === 0 && newBoss.kills === 0;
+
+          if (notKilled && pullsThisSession > 0 && noImprovement) {
+            guildLog.info(
+              `Regress detected for ${newBoss.bossName} (${difficulty}): ` +
+                `${pullsThisSession} pulls with no improvement (${oldBoss.bestPercent.toFixed(1)}% → ${newBoss.bestPercent.toFixed(1)}%)`,
+            );
+
+            await Event.create({
+              type: "regress",
+              guildId: guild._id,
+              guildName: guild.name,
+              raidId: raidId,
+              raidName: newDiffProgress.raidName,
+              bossId: newBoss.bossId,
+              bossName: newBoss.bossName,
+              difficulty: difficulty,
+              data: {
+                pullCount: pullsThisSession,
+                bestPercent: newBoss.bestPercent,
+              },
+              timestamp: new Date(),
+            });
+
+            await cacheService.invalidateEventCaches();
+          }
+        }
+      }
+    }
+  }
+
+  // Detect hiatus: guild has not raided for 7, 14, or 30 days
+  // Only applies to current tier guilds with heroic or mythic progress
+  // Each threshold triggers at most once per guild per raid tier
+  async checkForHiatusEvents(): Promise<void> {
+    const HIATUS_THRESHOLDS = [
+      { days: 30, label: "1 month" },
+      { days: 14, label: "14 days" },
+      { days: 7, label: "7 days" },
+    ];
+
+    logger.info("[Hiatus] Checking for hiatus events across all guilds...");
+
+    for (const raidId of CURRENT_RAID_IDS) {
+      const raidData = await this.getRaidData(raidId);
+      if (!raidData) continue;
+
+      // Find guilds that have current tier progress (heroic or mythic)
+      // and have a lastLogEndTime set (meaning they have raided before)
+      const guilds = await Guild.find({
+        lastLogEndTime: { $exists: true },
+        wclStatus: { $ne: "not_found" },
+        $or: [
+          { "progress.raidId": raidId, "progress.difficulty": "heroic", "progress.bossesDefeated": { $gt: 0 } },
+          { "progress.raidId": raidId, "progress.difficulty": "mythic", "progress.bossesDefeated": { $gt: 0 } },
+        ],
+      });
+
+      if (guilds.length === 0) continue;
+
+      logger.info(`[Hiatus] Checking ${guilds.length} guilds for raid ${raidData.name}`);
+
+      for (const guild of guilds) {
+        if (!guild.lastLogEndTime) continue;
+
+        const daysSinceLastLog = (Date.now() - guild.lastLogEndTime.getTime()) / (1000 * 60 * 60 * 24);
+
+        // Determine highest difficulty with progress for this guild/raid
+        const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic" && p.bossesDefeated > 0);
+        const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic" && p.bossesDefeated > 0);
+        const highestDifficulty = mythicProgress ? "mythic" : heroicProgress ? "heroic" : null;
+
+        if (!highestDifficulty) continue;
+
+        // Check each threshold (highest first so we only create the most relevant)
+        for (const threshold of HIATUS_THRESHOLDS) {
+          if (daysSinceLastLog < threshold.days) continue;
+
+          // Check if this hiatus event already exists for this guild/raid/threshold
+          const existingEvent = await Event.findOne({
+            type: "hiatus",
+            guildId: guild._id,
+            raidId: raidId,
+            "data.hiatusDays": threshold.days,
+          });
+
+          if (existingEvent) continue;
+
+          const guildLog = getGuildLogger(guild.name, guild.realm);
+          guildLog.info(`Creating hiatus event: ${threshold.days} days since last raid (last log: ${guild.lastLogEndTime.toISOString()})`);
+
+          await Event.create({
+            type: "hiatus",
+            guildId: guild._id,
+            guildName: guild.name,
+            raidId: raidId,
+            raidName: raidData.name,
+            difficulty: highestDifficulty,
+            data: {
+              hiatusDays: threshold.days,
+            },
+            timestamp: new Date(),
+          });
+
+          await cacheService.invalidateEventCaches();
+        }
+      }
+    }
+
+    logger.info("[Hiatus] Hiatus check complete");
   }
 
   // Check if guild has ongoing reports (currently raiding)

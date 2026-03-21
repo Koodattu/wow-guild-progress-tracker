@@ -12,8 +12,8 @@ interface EventCardProps {
 function formatEventMessageWithoutDifficulty(event: {
   type: string;
   guildName: string;
-  bossName: string;
-  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string };
+  bossName?: string;
+  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string; hiatusDays?: number };
 }): string {
   const { type, guildName, bossName, data } = event;
 
@@ -32,10 +32,18 @@ function formatEventMessageWithoutDifficulty(event: {
   }
 
   if (type === "hiatus") {
-    return `${guildName} has not raided for 7 days.`;
+    const days = data.hiatusDays || 7;
+    if (days >= 30) {
+      return `${guildName} has not raided for over a month.`;
+    }
+    return `${guildName} has not raided for ${days} days.`;
   }
 
   if (type === "regress") {
+    if (bossName) {
+      const percent = data.bestPercent || 0;
+      return `${guildName} failed to improve on ${bossName} (${percent.toFixed(1)}%) during their raid.`;
+    }
     return `${guildName} had no progress during their raid.`;
   }
 

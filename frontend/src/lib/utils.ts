@@ -41,9 +41,9 @@ export function getDifficultyColor(difficulty: "mythic" | "heroic"): string {
 export function formatEventMessage(event: {
   type: string;
   guildName: string;
-  bossName: string;
+  bossName?: string;
   difficulty: string;
-  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string };
+  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string; hiatusDays?: number };
 }): string {
   const { type, guildName, bossName, difficulty, data } = event;
 
@@ -61,7 +61,28 @@ export function formatEventMessage(event: {
     return `${guildName} reached ${percent.toFixed(1)}% on ${bossName} (${difficulty})!`;
   }
 
-  return `${guildName} - ${bossName}`;
+  if (type === "hiatus") {
+    const days = data.hiatusDays || 7;
+    if (days >= 30) {
+      return `${guildName} has not raided for over a month.`;
+    }
+    return `${guildName} has not raided for ${days} days.`;
+  }
+
+  if (type === "regress") {
+    if (bossName) {
+      const percent = data.bestPercent || 0;
+      return `${guildName} failed to improve on ${bossName} (${difficulty}, ${percent.toFixed(1)}%) during their raid.`;
+    }
+    return `${guildName} had no progress during their raid.`;
+  }
+
+  if (type === "reproge") {
+    const pulls = data.pullCount || 0;
+    return `${guildName} re-killed ${bossName} (${difficulty}) after ${pulls} pull${pulls !== 1 ? "s" : ""}!`;
+  }
+
+  return `${guildName} - ${bossName || "Unknown"}`;
 }
 
 // Get time ago string
