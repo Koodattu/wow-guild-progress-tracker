@@ -22,7 +22,7 @@ services:
       - WORKER_MODE=api
     # Higher CPU share = OS gives this container priority when CPU is contested
     cpu_shares: 1024
-    mem_limit: 512m
+    mem_limit: 1024m
     command: ["node", "--max-old-space-size=384", "dist/index.js"]
     volumes:
       - ./data/images:/app/data/images
@@ -43,7 +43,7 @@ services:
     # Lower CPU share = OS deprioritizes this when API needs CPU
     # nice -n 15 further lowers kernel scheduling priority
     cpu_shares: 256
-    mem_limit: 768m
+    mem_limit: 1024m
     command:
       ["nice", "-n", "15", "node", "--max-old-space-size=512", "dist/index.js"]
     volumes:
