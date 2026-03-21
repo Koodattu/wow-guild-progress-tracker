@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { GuildTierScore, RaidInfo } from "@/types";
-import { api } from "@/lib/api";
+import { GuildTierScore } from "@/types";
 import { useTranslations } from "next-intl";
 import GuildCrest from "@/components/GuildCrest";
 import RaidSelector from "@/components/RaidSelector";
+import { useRaids, useTierListRaids, useOverallTierList, useTierListForRaid } from "@/lib/queries";
 
 // Crown tier is special - only the highest scoring guild gets it
 // S and F tiers are harder to achieve (narrower score ranges)
@@ -131,72 +131,44 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
 export default function TierListsPage() {
   const t = useTranslations("tierListsPage");
   const router = useRouter();
-  const [guilds, setGuilds] = useState<GuildTierScore[]>([]);
-  const [raids, setRaids] = useState<RaidInfo[]>([]);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
-  const [calculatedAt, setCalculatedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-  // Fetch tier list data for a specific raid or overall
-  const fetchTierListData = useCallback(
-    async (raidId: number | null) => {
-      try {
-        setDataLoading(true);
-        if (raidId === null) {
-          const data = await api.getOverallTierList();
-          setGuilds(data.guilds);
-          setCalculatedAt(data.calculatedAt);
-        } else {
-          const data = await api.getTierListForRaid(raidId);
-          setGuilds(data.guilds);
-          setCalculatedAt(data.calculatedAt);
-        }
-      } catch (err) {
-        console.error("Error fetching tier list data:", err);
-        setError(t("error"));
-      } finally {
-        setDataLoading(false);
-      }
-    },
-    [t]
-  );
+  // Fetch raid metadata
+  const { data: allRaids } = useRaids();
+  const { data: tierListRaidsData, isLoading: isRaidsLoading, error: raidsError } = useTierListRaids();
 
-  // Initial load - fetch available raids and default to first (current) raid
+  // Filter to only raids that have tier list data
+  const raids = useMemo(() => {
+    if (!allRaids || !tierListRaidsData) return [];
+    const tierListRaidIds = new Set(tierListRaidsData.map((r) => r.raidId));
+    return allRaids.filter((r) => tierListRaidIds.has(r.id));
+  }, [allRaids, tierListRaidsData]);
+
+  // Set initial selectedRaidId when raids data loads (only once)
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setLoading(true);
-        // Fetch full raid info and tier list raids in parallel
-        const [allRaids, tierListRaids] = await Promise.all([api.getRaids(), api.getTierListRaids()]);
-
-        // Filter to only raids that have tier list data
-        const tierListRaidIds = new Set(tierListRaids.map((r) => r.raidId));
-        const availableRaids = allRaids.filter((r) => tierListRaidIds.has(r.id));
-        setRaids(availableRaids);
-
-        // Default to first raid (current raid) if available
-        const defaultRaidId = availableRaids.length > 0 ? availableRaids[0].id : null;
-        setSelectedRaidId(defaultRaidId);
-
-        // Fetch data for the default selection
-        await fetchTierListData(defaultRaidId);
-      } catch (err) {
-        console.error("Error fetching initial data:", err);
-        setError(t("error"));
-      } finally {
-        setLoading(false);
+    if (!initialized && allRaids && tierListRaidsData) {
+      if (raids.length > 0) {
+        setSelectedRaidId(raids[0].id);
       }
-    };
+      setInitialized(true);
+    }
+  }, [initialized, allRaids, tierListRaidsData, raids]);
 
-    fetchInitialData();
-  }, [t, fetchTierListData]);
+  // Fetch tier data based on selection
+  const isOverallSelected = selectedRaidId === null && initialized;
+  const { data: overallData, isLoading: isOverallLoading, error: overallError } = useOverallTierList(isOverallSelected);
+  const { data: raidData, isLoading: isRaidDataLoading, error: raidDataError } = useTierListForRaid(selectedRaidId);
 
-  // Handle raid selection from RaidSelector
-  const handleRaidSelect = async (raidId: number | null) => {
+  const loading = isRaidsLoading || !initialized;
+  const dataLoading = isOverallSelected ? isOverallLoading : isRaidDataLoading;
+  const error = raidsError || overallError || raidDataError;
+
+  const guilds = isOverallSelected ? (overallData?.guilds ?? []) : (raidData?.guilds ?? []);
+  const calculatedAt = isOverallSelected ? (overallData?.calculatedAt ?? null) : (raidData?.calculatedAt ?? null);
+
+  const handleRaidSelect = (raidId: number | null) => {
     setSelectedRaidId(raidId);
-    await fetchTierListData(raidId);
   };
 
   if (loading) {
@@ -213,7 +185,7 @@ export default function TierListsPage() {
     return (
       <div className="w-full px-6">
         <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 text-center">
-          <p className="text-red-300">{error}</p>
+          <p className="text-red-300">{t("error")}</p>
         </div>
       </div>
     );

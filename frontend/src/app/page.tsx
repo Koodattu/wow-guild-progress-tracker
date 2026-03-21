@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { GuildListItem, Event, Guild, Boss, HomePageData } from "@/types";
+import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
 import { getIconUrl } from "@/lib/utils";
+import { useHomeData } from "@/lib/queries";
 import GuildTable from "@/components/GuildTable";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import RaidDetailModal from "@/components/RaidDetailModal";
@@ -13,32 +14,12 @@ import RaidDetailModal from "@/components/RaidDetailModal";
 function HomeContent() {
   const router = useRouter();
 
-  const [homeData, setHomeData] = useState<HomePageData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: homeData, isLoading: loading, error: homeError } = useHomeData();
   const [error, setError] = useState<string | null>(null);
 
   // Modal state for raid detail
   const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
-
-  // Fetch all data from single endpoint
-  const fetchData = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await api.getHomeData();
-      setHomeData(data);
-    } catch (err) {
-      console.error("Error fetching data:", err);
-      setError("Failed to load data. Make sure the backend server is running.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   // Handle guild click - navigate to guild profile page
   const handleGuildClick = useCallback(
@@ -48,7 +29,7 @@ function HomeContent() {
       const encodedName = encodeURIComponent(guild.name);
       router.push(`/guilds/${encodedRealm}/${encodedName}`);
     },
-    [router]
+    [router],
   );
 
   // Handle raid progress click - open raid detail modal
@@ -83,30 +64,13 @@ function HomeContent() {
         setError("Failed to load raid details.");
       }
     },
-    [homeData]
+    [homeData],
   );
 
   // Handle closing raid detail modal
   const handleCloseModal = useCallback(() => {
     setSelectedGuildDetail(null);
     setBossesForSelectedRaid([]);
-  }, []);
-
-  // Auto-refresh with different intervals
-  useEffect(() => {
-    // Refresh home data every 1 minute
-    const refreshInterval = setInterval(() => {
-      api
-        .getHomeData()
-        .then(setHomeData)
-        .catch((err) => {
-          console.error("Error refreshing home data:", err);
-        });
-    }, 60000);
-
-    return () => {
-      clearInterval(refreshInterval);
-    };
   }, []);
 
   if (loading) {
@@ -140,7 +104,9 @@ function HomeContent() {
   return (
     <main className="text-white min-h-screen">
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
-        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
+        {(error || homeError) && (
+          <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error || homeError?.message || "Failed to load data."}</div>
+        )}
 
         {/* Horizontal Events Feed at the top */}
         <div className="mb-2">

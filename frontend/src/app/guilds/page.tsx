@@ -1,37 +1,19 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { GuildDirectoryItem } from "@/types";
-import { api } from "@/lib/api";
 import { getGuildProfileUrl, getRaiderIOGuildUrl } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { useGuildList } from "@/lib/queries";
+import { GuildDirectoryItem } from "@/types";
 
 export default function GuildsPage() {
   const t = useTranslations("guildsPage");
   const tTable = useTranslations("guildTable");
-  const [guilds, setGuilds] = useState<GuildDirectoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useGuildList();
+  const guilds = data ?? [];
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    const fetchGuilds = async () => {
-      try {
-        setError(null);
-        const data = await api.getGuildList();
-        setGuilds(data);
-      } catch (err) {
-        console.error("Error fetching guilds:", err);
-        setError("Failed to load guilds. Make sure the backend server is running.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGuilds();
-  }, []);
 
   // Filter and group guilds by first letter
   const groupedGuilds = useMemo(() => {
@@ -39,7 +21,7 @@ export default function GuildsPage() {
       (guild) =>
         guild.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         guild.parent_guild?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guild.realm.toLowerCase().includes(searchQuery.toLowerCase())
+        guild.realm.toLowerCase().includes(searchQuery.toLowerCase()),
     );
 
     const grouped: Record<string, GuildDirectoryItem[]> = {};
@@ -113,7 +95,7 @@ export default function GuildsPage() {
     };
   }, [sortedLetters, groupedGuilds]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-scree flex items-center justify-center">
         <div className="text-center">
@@ -138,9 +120,13 @@ export default function GuildsPage() {
           />
         </div>
 
-        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8 text-sm md:text-base">{error}</div>}
+        {error && (
+          <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8 text-sm md:text-base">
+            {error instanceof Error ? error.message : "Failed to load guilds."}
+          </div>
+        )}
 
-        {guilds.length === 0 && !loading && !error && <div className="text-center py-12 text-gray-500">{t("noGuilds")}</div>}
+        {guilds.length === 0 && !isLoading && !error && <div className="text-center py-12 text-gray-500">{t("noGuilds")}</div>}
 
         {sortedLetters.length === 0 && searchQuery && <div className="text-center py-12 text-gray-500">{t("noGuilds")}</div>}
 

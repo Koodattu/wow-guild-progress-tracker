@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useGuildSchedules } from "@/lib/queries";
 import { GuildSchedule, RaidScheduleDay } from "@/types";
 import { useTranslations } from "next-intl";
 
@@ -29,28 +29,11 @@ export default function TimetablePage() {
     t("weekdays.saturday"),
     t("weekdays.sunday"),
   ];
-  const [schedules, setSchedules] = useState<GuildSchedule[]>([]);
+  const { data, isLoading, error: queryError } = useGuildSchedules();
+  const schedules = data ?? [];
   const [selectedGuild, setSelectedGuild] = useState<string>("all");
   const [selectedDay, setSelectedDay] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const fetchSchedules = async () => {
-      try {
-        setLoading(true);
-        const data = await api.getGuildSchedules();
-        setSchedules(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load schedules");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSchedules();
-  }, []);
 
   // Initialize selectedDay to today
   useEffect(() => {
@@ -163,7 +146,7 @@ export default function TimetablePage() {
     return layouts;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="w-full px-4 py-8">
         <div className="flex items-center justify-center min-h-[400px]">
@@ -173,11 +156,11 @@ export default function TimetablePage() {
     );
   }
 
-  if (error) {
+  if (queryError) {
     return (
       <div className="w-full px-4 py-8">
         <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-          <p className="text-red-400">Error: {error}</p>
+          <p className="text-red-400">Error: {queryError.message}</p>
         </div>
       </div>
     );
@@ -253,8 +236,8 @@ export default function TimetablePage() {
                       selectedDay === day
                         ? "bg-blue-600 text-white"
                         : day === todayDayName
-                        ? "bg-gray-700 text-white hover:bg-gray-600"
-                        : "bg-gray-900 text-gray-300 hover:bg-gray-700"
+                          ? "bg-gray-700 text-white hover:bg-gray-600"
+                          : "bg-gray-900 text-gray-300 hover:bg-gray-700"
                     }`}
                   >
                     <span className="hidden sm:inline">{day}</span>
@@ -316,7 +299,7 @@ export default function TimetablePage() {
                           opacity: 0.9,
                         }}
                         title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
-                          daySchedule.endHour
+                          daySchedule.endHour,
                         )}`}
                       >
                         <div className="font-semibold truncate text-white drop-shadow text-[10px] md:text-xs">{guild.name}</div>
@@ -419,7 +402,7 @@ export default function TimetablePage() {
                             opacity: 0.9,
                           }}
                           title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
-                            daySchedule.endHour
+                            daySchedule.endHour,
                           )}`}
                         >
                           <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
@@ -511,7 +494,7 @@ export default function TimetablePage() {
                             opacity: 0.9,
                           }}
                           title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
-                            daySchedule.endHour
+                            daySchedule.endHour,
                           )}`}
                         >
                           <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
