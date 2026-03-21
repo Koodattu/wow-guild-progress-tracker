@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { GuildListItem, Event, RaidInfo, RaidDates, Guild, Boss } from "@/types";
+import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
+import { useRaids, useEvents, useGuilds, useRaidDates } from "@/lib/queries";
 import GuildTable from "@/components/GuildTable";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import RaidDetailModal from "@/components/RaidDetailModal";
@@ -13,17 +14,55 @@ function ProgressContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [guilds, setGuilds] = useState<GuildListItem[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [raids, setRaids] = useState<RaidInfo[]>([]);
-  const [raidDates, setRaidDates] = useState<RaidDates | null>(null);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Modal state for raid detail
   const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
+
+  // Track whether we've initialized selectedRaidId from URL/data
+  const hasInitializedRaid = useRef(false);
+
+  // ─── React Query hooks ──────────────────────────────────────────────────────
+  const { data: raids = [], isLoading: raidsLoading, error: raidsError } = useRaids();
+  const { data: events = [], error: eventsError } = useEvents(5);
+  const { data: guilds = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined);
+  const { data: raidDates, error: raidDatesError } = useRaidDates(selectedRaidId);
+
+  // Combined loading/error state
+  const loading = raidsLoading;
+  const queryError = raidsError || eventsError || guildsError || raidDatesError;
+  const error = queryError ? "Failed to load data. Make sure the backend server is running." : modalError;
+
+  // ─── Initialize selectedRaidId from URL params or first raid ────────────────
+  useEffect(() => {
+    if (hasInitializedRaid.current || raids.length === 0) return;
+    hasInitializedRaid.current = true;
+
+    const raidIdParam = searchParams.get("raidid");
+    let raidToSelect: number | null = null;
+
+    if (raidIdParam) {
+      const raidId = parseInt(raidIdParam, 10);
+      if (!isNaN(raidId) && raids.some((r) => r.id === raidId)) {
+        raidToSelect = raidId;
+      }
+    }
+
+    if (!raidToSelect) {
+      raidToSelect = raids[0].id;
+    }
+
+    setSelectedRaidId(raidToSelect);
+
+    // Update URL if raid was auto-selected (not from URL param)
+    if (!raidIdParam) {
+      const params = new URLSearchParams();
+      params.set("raidid", raidToSelect.toString());
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [raids, searchParams, pathname, router]);
 
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
@@ -35,99 +74,28 @@ function ProgressContent() {
       const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
       router.replace(newUrl, { scroll: false });
     },
-    [pathname, router]
+    [pathname, router],
   );
-
-  // Initial data fetch - only raids and events
-  const fetchInitialData = useCallback(async () => {
-    try {
-      setError(null);
-      const [raidsData, eventsData] = await Promise.all([api.getRaids(), api.getEvents(5)]);
-
-      setRaids(raidsData);
-      setEvents(eventsData);
-
-      // Check URL parameters
-      const raidIdParam = searchParams.get("raidid");
-
-      let raidToSelect: number | null = null;
-
-      // Try to use raid ID from URL first
-      if (raidIdParam) {
-        const raidId = parseInt(raidIdParam, 10);
-        if (!isNaN(raidId) && raidsData.some((r) => r.id === raidId)) {
-          raidToSelect = raidId;
-        }
-      }
-
-      // If no valid raid ID in URL, select the first raid by default
-      if (!raidToSelect && raidsData.length > 0) {
-        raidToSelect = raidsData[0].id;
-      }
-
-      if (raidToSelect) {
-        setSelectedRaidId(raidToSelect);
-        // Update URL if raid was auto-selected (not from URL param)
-        if (!raidIdParam) {
-          updateURL(raidToSelect);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching initial data:", err);
-      setError("Failed to load data. Make sure the backend server is running.");
-    } finally {
-      setLoading(false);
-    }
-  }, [searchParams, updateURL]);
-
-  // Fetch raid-specific data (dates and guilds) when raid is selected
-  const fetchRaidData = useCallback(async (raidId: number) => {
-    try {
-      setError(null);
-      const [datesData, guildsData] = await Promise.all([api.getRaidDates(raidId), api.getGuilds(raidId)]);
-
-      setRaidDates(datesData);
-      setGuilds(guildsData);
-    } catch (err) {
-      console.error("Error fetching raid data:", err);
-      setError("Failed to load raid data.");
-    }
-  }, []);
-
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
-
-  // Fetch raid-specific data when raid selection changes
-  useEffect(() => {
-    if (selectedRaidId !== null) {
-      fetchRaidData(selectedRaidId);
-    }
-  }, [selectedRaidId, fetchRaidData]);
 
   // Handle guild click - navigate to guild profile page
   const handleGuildClick = useCallback(
-    async (guild: GuildListItem) => {
-      // Navigate to guild profile page using realm/name format
+    (guild: GuildListItem) => {
       const encodedRealm = encodeURIComponent(guild.realm);
       const encodedName = encodeURIComponent(guild.name);
       router.push(`/guilds/${encodedRealm}/${encodedName}`);
     },
-    [router]
+    [router],
   );
 
-  // Handle raid progress click - open raid detail modal
+  // Handle raid progress click - open raid detail modal (imperative API calls)
   const handleRaidProgressClick = useCallback(
     async (guild: GuildListItem) => {
       if (!selectedRaidId) return;
 
       try {
-        setError(null);
-        // Fetch boss progress for this specific raid and bosses list
+        setModalError(null);
         const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(guild.realm, guild.name, selectedRaidId), api.getBosses(selectedRaidId)]);
 
-        // Create a detailed guild object for the modal
         const detailedGuild: Guild = {
           _id: guild._id,
           name: guild.name,
@@ -146,42 +114,18 @@ function ProgressContent() {
         setBossesForSelectedRaid(bosses);
       } catch (err) {
         console.error("Error fetching raid details:", err);
-        setError("Failed to load raid details.");
+        setModalError("Failed to load raid details.");
       }
     },
-    [selectedRaidId]
+    [selectedRaidId],
   );
 
   // Handle closing raid detail modal
   const handleCloseModal = useCallback(() => {
     setSelectedGuildDetail(null);
     setBossesForSelectedRaid([]);
+    setModalError(null);
   }, []);
-
-  // Auto-refresh with different intervals
-  useEffect(() => {
-    // Refresh events every 1 minute
-    const eventsInterval = setInterval(() => {
-      api
-        .getEvents(5)
-        .then(setEvents)
-        .catch((err) => {
-          console.error("Error refreshing events:", err);
-        });
-    }, 60000);
-
-    // Refresh guilds every 5 minutes
-    const guildsInterval = setInterval(() => {
-      if (selectedRaidId !== null) {
-        fetchRaidData(selectedRaidId);
-      }
-    }, 300000);
-
-    return () => {
-      clearInterval(eventsInterval);
-      clearInterval(guildsInterval);
-    };
-  }, [selectedRaidId, fetchRaidData]);
 
   // Handle raid selection change
   const handleRaidSelect = useCallback(
@@ -189,7 +133,7 @@ function ProgressContent() {
       setSelectedRaidId(raidId);
       updateURL(raidId);
     },
-    [updateURL]
+    [updateURL],
   );
 
   if (loading) {
@@ -211,7 +155,7 @@ function ProgressContent() {
         {/* Guild Leaderboard in the middle */}
         <div>
           {/* Integrated Raid Selector - replaces both the dropdown and the header */}
-          {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates} />}
+          {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates ?? null} />}
           <GuildTable guilds={guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={selectedRaidId} />
         </div>
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { GuildTierScore, TierListRaidInfo } from "@/types";
-import { api } from "@/lib/api";
+import { GuildTierScore } from "@/types";
 import { useTranslations } from "next-intl";
 import GuildCrest from "@/components/GuildCrest";
+import RaidSelector from "@/components/RaidSelector";
+import { useRaids, useTierListRaids, useOverallTierList, useTierListForRaid } from "@/lib/queries";
 
 // Crown tier is special - only the highest scoring guild gets it
 // S and F tiers are harder to achieve (narrower score ranges)
@@ -130,69 +131,44 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
 export default function TierListsPage() {
   const t = useTranslations("tierListsPage");
   const router = useRouter();
-  const [guilds, setGuilds] = useState<GuildTierScore[]>([]);
-  const [raids, setRaids] = useState<TierListRaidInfo[]>([]);
-  const [selectedRaidId, setSelectedRaidId] = useState<number | "overall" | null>(null);
-  const [calculatedAt, setCalculatedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-  // Fetch tier list data for a specific raid or overall
-  const fetchTierListData = useCallback(
-    async (raidId: number | "overall") => {
-      try {
-        setDataLoading(true);
-        if (raidId === "overall") {
-          const data = await api.getOverallTierList();
-          setGuilds(data.guilds);
-          setCalculatedAt(data.calculatedAt);
-        } else {
-          const data = await api.getTierListForRaid(raidId);
-          setGuilds(data.guilds);
-          setCalculatedAt(data.calculatedAt);
-        }
-      } catch (err) {
-        console.error("Error fetching tier list data:", err);
-        setError(t("error"));
-      } finally {
-        setDataLoading(false);
-      }
-    },
-    [t]
-  );
+  // Fetch raid metadata
+  const { data: allRaids } = useRaids();
+  const { data: tierListRaidsData, isLoading: isRaidsLoading, error: raidsError } = useTierListRaids();
 
-  // Initial load - fetch available raids and default to first raid
+  // Filter to only raids that have tier list data
+  const raids = useMemo(() => {
+    if (!allRaids || !tierListRaidsData) return [];
+    const tierListRaidIds = new Set(tierListRaidsData.map((r) => r.raidId));
+    return allRaids.filter((r) => tierListRaidIds.has(r.id));
+  }, [allRaids, tierListRaidsData]);
+
+  // Set initial selectedRaidId when raids data loads (only once)
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setLoading(true);
-        // Fetch available raids from tier list
-        const raidsData = await api.getTierListRaids();
-        setRaids(raidsData);
-
-        // Default to first raid if available, otherwise overall
-        const defaultSelection = raidsData.length > 0 ? raidsData[0].raidId : "overall";
-        setSelectedRaidId(defaultSelection);
-
-        // Fetch data for the default selection
-        await fetchTierListData(defaultSelection);
-      } catch (err) {
-        console.error("Error fetching initial data:", err);
-        setError(t("error"));
-      } finally {
-        setLoading(false);
+    if (!initialized && allRaids && tierListRaidsData) {
+      if (raids.length > 0) {
+        setSelectedRaidId(raids[0].id);
       }
-    };
+      setInitialized(true);
+    }
+  }, [initialized, allRaids, tierListRaidsData, raids]);
 
-    fetchInitialData();
-  }, [t, fetchTierListData]);
+  // Fetch tier data based on selection
+  const isOverallSelected = selectedRaidId === null && initialized;
+  const { data: overallData, isLoading: isOverallLoading, error: overallError } = useOverallTierList(isOverallSelected);
+  const { data: raidData, isLoading: isRaidDataLoading, error: raidDataError } = useTierListForRaid(selectedRaidId);
 
-  // Handle dropdown change
-  const handleRaidChange = async (value: string) => {
-    const newSelection = value === "overall" ? "overall" : parseInt(value);
-    setSelectedRaidId(newSelection);
-    await fetchTierListData(newSelection);
+  const loading = isRaidsLoading || !initialized;
+  const dataLoading = isOverallSelected ? isOverallLoading : isRaidDataLoading;
+  const error = raidsError || overallError || raidDataError;
+
+  const guilds = isOverallSelected ? (overallData?.guilds ?? []) : (raidData?.guilds ?? []);
+  const calculatedAt = isOverallSelected ? (overallData?.calculatedAt ?? null) : (raidData?.calculatedAt ?? null);
+
+  const handleRaidSelect = (raidId: number | null) => {
+    setSelectedRaidId(raidId);
   };
 
   if (loading) {
@@ -209,7 +185,7 @@ export default function TierListsPage() {
     return (
       <div className="w-full px-6">
         <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 text-center">
-          <p className="text-red-300">{error}</p>
+          <p className="text-red-300">{t("error")}</p>
         </div>
       </div>
     );
@@ -226,23 +202,10 @@ export default function TierListsPage() {
     <div className="w-full px-3 md:px-6">
       <div className="mb-4 md:mb-6">
         {/* Raid Selector and Last Calculated */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <label className="text-gray-300 text-sm md:text-base">{t("selectRaid")}:</label>
-            <select
-              value={selectedRaidId ?? ""}
-              onChange={(e) => handleRaidChange(e.target.value)}
-              disabled={dataLoading}
-              className="bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-sm md:text-base"
-            >
-              <option value="overall">{t("overallAllRaids")}</option>
-              {raids.map((raid) => (
-                <option key={raid.raidId} value={raid.raidId}>
-                  {raid.raidName}
-                </option>
-              ))}
-            </select>
-            {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
+          <div className="flex items-end gap-3">
+            <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} showOverall={true} />
+            {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mb-2"></div>}
           </div>
           {calculatedAt && (
             <p className="text-gray-400 text-xs md:text-sm">

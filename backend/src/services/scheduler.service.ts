@@ -47,6 +47,7 @@ class UpdateScheduler {
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
+  private isCheckingHiatus: boolean = false;
   private lastCacheWarmTime: number = 0;
 
   // Finnish timezone offset check
@@ -242,6 +243,22 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Check for hiatus events (at 8 AM Finnish time, after all other nightly jobs)
+    // Detects guilds that have stopped raiding for 7, 14, or 30 days
+    cron.schedule(
+      "0 8 * * *",
+      async () => {
+        if (this.isCheckingHiatus) {
+          logger.info("[Nightly/Hiatus] Previous check still in progress, skipping...");
+          return;
+        }
+        await this.checkHiatusEvents();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Full cache warmup at 02:00 UTC (before all other nightly jobs)
     // This ensures caches are fresh at the start of each day
     cron.schedule(
@@ -277,6 +294,7 @@ class UpdateScheduler {
     logger.info("    * Guild crests update: daily at 04:00");
     logger.info("    * Tier lists calculation: daily at 05:00");
     logger.info("    * Raid analytics calculation: daily at 06:00");
+    logger.info("    * Hiatus event check: daily at 08:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -401,6 +419,21 @@ class UpdateScheduler {
       logger.error("[Nightly/RaidAnalytics] Error:", error);
     } finally {
       this.isUpdatingRaidAnalytics = false;
+    }
+  }
+
+  // NIGHTLY: Check for hiatus events
+  async checkHiatusEvents(): Promise<void> {
+    this.isCheckingHiatus = true;
+
+    try {
+      logger.info("[Nightly/Hiatus] Starting hiatus event check...");
+      await guildService.checkForHiatusEvents();
+      logger.info("[Nightly/Hiatus] Hiatus event check completed");
+    } catch (error) {
+      logger.error("[Nightly/Hiatus] Error:", error);
+    } finally {
+      this.isCheckingHiatus = false;
     }
   }
 

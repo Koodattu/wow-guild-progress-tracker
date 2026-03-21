@@ -1,22 +1,20 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { EventsResponse } from "@/types";
-import { api } from "@/lib/api";
+import { useEffect, useState } from "react";
 import EventCard from "@/components/EventCard";
 import Cookies from "js-cookie";
 import { useTranslations } from "next-intl";
+import { useEventsPaginated } from "@/lib/queries";
 
 const EVENT_TYPES = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"] as const;
 const DIFFICULTIES = ["mythic", "heroic"] as const;
 
 export default function EventsPage() {
   const t = useTranslations("eventsPage");
-  const [eventsData, setEventsData] = useState<EventsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 50;
+
+  const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage);
 
   // Initialize filters from cookies or defaults
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(() => {
@@ -40,35 +38,6 @@ export default function EventsPage() {
 
   // Filter events based on selected types and difficulties
   const filteredEvents = eventsData?.events.filter((event) => selectedEventTypes.has(event.type) && selectedDifficulties.has(event.difficulty));
-
-  const fetchEvents = useCallback(async (page: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.getEventsPaginated(page, eventsPerPage);
-      setEventsData(data);
-    } catch (err) {
-      console.error("Error fetching events:", err);
-      setError("Failed to load events. Make sure the backend server is running.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEvents(currentPage);
-  }, [currentPage, fetchEvents]);
-
-  // Auto-refresh every 30 seconds (only on first page)
-  useEffect(() => {
-    if (currentPage === 1) {
-      const interval = setInterval(() => {
-        fetchEvents(1);
-      }, 30000);
-
-      return () => clearInterval(interval);
-    }
-  }, [currentPage, fetchEvents]);
 
   const handlePageChange = (newPage: number) => {
     if (eventsData && newPage >= 1 && newPage <= eventsData.pagination.totalPages) {
@@ -119,7 +88,7 @@ export default function EventsPage() {
     }
   };
 
-  if (loading && !eventsData) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -133,7 +102,7 @@ export default function EventsPage() {
   return (
     <main className="min-h-screen text-white">
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-5xl">
-        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8 text-sm md:text-base">{error}</div>}
+        {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-8 text-sm md:text-base">{error.message}</div>}
 
         {/* Filters */}
         <div className="mb-4 md:mb-6">

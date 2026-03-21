@@ -1,4 +1,4 @@
-import { ClassInfo } from "@/types";
+import { ClassInfo, RaidProgressSummary, OfficialRaidProgress } from "@/types";
 
 // Format seconds to a readable time string
 export function formatTime(seconds: number): string {
@@ -41,9 +41,9 @@ export function getDifficultyColor(difficulty: "mythic" | "heroic"): string {
 export function formatEventMessage(event: {
   type: string;
   guildName: string;
-  bossName: string;
+  bossName?: string;
   difficulty: string;
-  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string };
+  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string; hiatusDays?: number };
 }): string {
   const { type, guildName, bossName, difficulty, data } = event;
 
@@ -61,7 +61,28 @@ export function formatEventMessage(event: {
     return `${guildName} reached ${percent.toFixed(1)}% on ${bossName} (${difficulty})!`;
   }
 
-  return `${guildName} - ${bossName}`;
+  if (type === "hiatus") {
+    const days = data.hiatusDays || 7;
+    if (days >= 30) {
+      return `${guildName} has not raided for over a month.`;
+    }
+    return `${guildName} has not raided for ${days} days.`;
+  }
+
+  if (type === "regress") {
+    if (bossName) {
+      const percent = data.bestPercent || 0;
+      return `${guildName} failed to improve on ${bossName} (${difficulty}, ${percent.toFixed(1)}%) during their raid.`;
+    }
+    return `${guildName} had no progress during their raid.`;
+  }
+
+  if (type === "reproge") {
+    const pulls = data.pullCount || 0;
+    return `${guildName} re-killed ${bossName} (${difficulty}) after ${pulls} pull${pulls !== 1 ? "s" : ""}!`;
+  }
+
+  return `${guildName} - ${bossName || "Unknown"}`;
 }
 
 // Get time ago string
@@ -432,4 +453,39 @@ export function getSpecIconUrl(classId: number, specName: string): string | unde
   const normalizedSpecName = normalizeSpecNameForApi(specName);
   const specIconFilename = classInfo.iconUrl.replace(".jpg", `_${normalizedSpecName}.jpg`);
   return specIconFilename;
+}
+
+/** Find the matching OfficialRaidProgress entry for a given raid slug */
+export function findOfficialProgressForRaid(officialProgress: OfficialRaidProgress[] | undefined, raidSlug: string): OfficialRaidProgress | undefined {
+  if (!officialProgress?.length || !raidSlug) return undefined;
+  const normalized = raidSlug.toLowerCase();
+  return officialProgress.find((op) => {
+    const tierSlug = op.raidTierSlug.toLowerCase();
+    return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+  });
+}
+
+/**
+ * Returns the higher of log-based vs official (Raider.IO) progress, with a flag if official was used.
+ * Official progress reflects in-game kills regardless of log visibility.
+ */
+export function getEffectiveProgress(
+  logProgress: RaidProgressSummary | null,
+  official: OfficialRaidProgress | undefined,
+  difficulty: "mythic" | "heroic",
+): { text: string; isOfficial: boolean } {
+  const logKills = logProgress?.bossesDefeated ?? 0;
+  const totalBosses = logProgress?.totalBosses ?? official?.totalBosses ?? 0;
+  const officialKills = difficulty === "mythic" ? (official?.mythicBossesKilled ?? 0) : (official?.heroicBossesKilled ?? 0);
+
+  if (officialKills > logKills && totalBosses > 0) {
+    return { text: `${officialKills}/${totalBosses}`, isOfficial: true };
+  }
+  if (logProgress) {
+    return { text: `${logKills}/${totalBosses}`, isOfficial: false };
+  }
+  if (officialKills > 0 && totalBosses > 0) {
+    return { text: `${officialKills}/${totalBosses}`, isOfficial: true };
+  }
+  return { text: "-", isOfficial: false };
 }

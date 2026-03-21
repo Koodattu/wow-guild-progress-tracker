@@ -5,7 +5,7 @@ import mongoose, { Schema, Document } from "mongoose";
  */
 export type ProcessingStatus = "pending" | "in_progress" | "completed" | "failed" | "paused";
 
-export type JobType = "full_rescan" | "rescan_deaths" | "rescan_characters";
+export type JobType = "full_rescan" | "rescan_deaths" | "rescan_characters" | "recalculate_stats";
 
 /**
  * Interface for guild processing queue entry
@@ -81,7 +81,7 @@ const GuildProcessingQueueSchema = new Schema<IGuildProcessingQueue>(
     },
     jobType: {
       type: String,
-      enum: ["full_rescan", "rescan_deaths", "rescan_characters"],
+      enum: ["full_rescan", "rescan_deaths", "rescan_characters", "recalculate_stats"],
       required: true,
     },
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { LiveStreamer } from "@/types";
-import { api } from "@/lib/api";
+import { useLiveStreamers } from "@/lib/queries";
 import { formatPhaseDisplay, formatPercent } from "@/lib/utils";
 
 // Extend Window interface to include Twitch
@@ -14,11 +14,10 @@ declare global {
 }
 
 export default function LivestreamsPage() {
-  const [liveStreamers, setLiveStreamers] = useState<LiveStreamer[]>([]);
+  const { data, isLoading, error } = useLiveStreamers();
+  const liveStreamers = data ?? [];
   const [selectedStreamers, setSelectedStreamers] = useState<LiveStreamer[]>([]);
   const [activeChat, setActiveChat] = useState<string | "all" | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [chatVisible, setChatVisible] = useState(true);
   const [spotlightStream, setSpotlightStream] = useState<string | null>(null);
   const [twitchScriptLoaded, setTwitchScriptLoaded] = useState(false);
@@ -87,50 +86,29 @@ export default function LivestreamsPage() {
     }
   }, [selectedStreamers, urlInitialized]);
 
+  // Remove offline streams from selectedStreamers when data refreshes
   useEffect(() => {
-    const fetchLiveStreamers = async () => {
-      try {
-        setError(null);
-        const streamers = await api.getLiveStreamers();
-        setLiveStreamers(streamers);
-
-        // Remove offline streams from selected streamers
-        setSelectedStreamers((prev) => {
-          const liveChannelNames = new Set(streamers.map((s) => s.channelName));
-          const stillLive = prev.filter((s) => liveChannelNames.has(s.channelName));
-
-          // If we removed any streams, log it
-          if (stillLive.length < prev.length) {
-            const removed = prev.filter((s) => !liveChannelNames.has(s.channelName));
-            console.log(
-              "Removed offline streams:",
-              removed.map((s) => s.channelName)
-            );
-          }
-
-          return stillLive;
-        });
-      } catch (err) {
-        console.error("Error fetching live streamers:", err);
-        setError("Failed to load live streamers. Make sure the backend server is running.");
-      } finally {
-        setLoading(false);
+    if (!data) return;
+    setSelectedStreamers((prev) => {
+      const liveChannelNames = new Set(data.map((s) => s.channelName));
+      const stillLive = prev.filter((s) => liveChannelNames.has(s.channelName));
+      if (stillLive.length < prev.length) {
+        const removed = prev.filter((s) => !liveChannelNames.has(s.channelName));
+        console.log(
+          "Removed offline streams:",
+          removed.map((s) => s.channelName),
+        );
       }
-    };
-
-    fetchLiveStreamers();
-
-    // Auto-refresh every minute
-    const interval = setInterval(fetchLiveStreamers, 60000);
-    return () => clearInterval(interval);
-  }, []);
+      return stillLive;
+    });
+  }, [data]);
 
   // Mark URL as initialized after first fetch completes
   useEffect(() => {
-    if (!loading && liveStreamers.length >= 0 && !urlInitialized) {
+    if (!isLoading && !urlInitialized) {
       setUrlInitialized(true);
     }
-  }, [loading, liveStreamers.length, urlInitialized]);
+  }, [isLoading, urlInitialized]);
 
   // Control player volume and quality based on spotlight state
   useEffect(() => {
@@ -297,7 +275,7 @@ export default function LivestreamsPage() {
         }
       }
     },
-    [selectedStreamers, activeChat, spotlightStream]
+    [selectedStreamers, activeChat, spotlightStream],
   );
 
   const streamGridClass = useMemo(() => {
@@ -446,10 +424,10 @@ export default function LivestreamsPage() {
         };
       }
     },
-    [spotlightStream, isSpotlightEnabled, selectedStreamers]
+    [spotlightStream, isSpotlightEnabled, selectedStreamers],
   );
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -464,7 +442,7 @@ export default function LivestreamsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="text-red-400 text-xl mb-4">{error}</div>
+          <div className="text-red-400 text-xl mb-4">{error.message || "Failed to load live streamers."}</div>
         </div>
       </div>
     );

@@ -4,7 +4,8 @@ import discordService from "../services/discord.service";
 import twitchAuthService from "../services/twitch-auth.service";
 import battlenetAuthService from "../services/battlenet-auth.service";
 import logger from "../utils/logger";
-import { IUser } from "../models/User";
+import User, { IUser } from "../models/User";
+import Pickem from "../models/Pickem";
 
 // Extend express-session types
 declare module "express-session" {
@@ -502,6 +503,62 @@ router.post("/battlenet/characters/refresh", async (req: Request, res: Response)
   } catch (error) {
     logger.error("Error refreshing characters:", error);
     res.status(500).json({ error: "Failed to refresh characters" });
+  }
+});
+
+router.get("/me/pickems", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const pickemIds = user.pickems.map((entry) => entry.pickemId);
+    const pickems = await Pickem.find({ pickemId: { $in: pickemIds } }).lean();
+    const pickemMap = new Map(pickems.map((p) => [p.pickemId, p]));
+
+    const result = user.pickems.map((entry) => {
+      const pickem = pickemMap.get(entry.pickemId);
+      return {
+        pickemId: entry.pickemId,
+        pickemName: pickem?.name ?? null,
+        type: pickem?.type ?? null,
+        predictions: entry.predictions.map((pred) => ({
+          guildName: pred.guildName,
+          realm: pred.realm,
+          position: pred.position,
+        })),
+        submittedAt: entry.submittedAt,
+        updatedAt: entry.updatedAt,
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching user pickems:", error);
+    res.status(500).json({ error: "Failed to fetch pickems" });
+  }
+});
+
+router.delete("/me", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    await User.deleteOne({ _id: user._id });
+
+    req.session.destroy((err) => {
+      if (err) {
+        logger.error("Error destroying session after account deletion:", err);
+        return res.status(500).json({ error: "Account deleted but session cleanup failed" });
+      }
+      res.json({ success: true });
+    });
+  } catch (error) {
+    logger.error("Error deleting user account:", error);
+    res.status(500).json({ error: "Failed to delete account" });
   }
 });
 

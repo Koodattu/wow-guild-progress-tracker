@@ -30,6 +30,42 @@ interface RaiderIOStaticDataResponse {
   raids: RaiderIORaid[];
 }
 
+export interface RaiderIORaidTierProgress {
+  summary: string;
+  total_bosses: number;
+  normal_bosses_killed: number;
+  heroic_bosses_killed: number;
+  mythic_bosses_killed: number;
+}
+
+export interface RaiderIOGuildProfile {
+  name: string;
+  faction: string;
+  region: string;
+  realm: string;
+  raid_progression: Record<string, RaiderIORaidTierProgress>;
+}
+
+export interface RaiderIORaidRanks {
+  world: number;
+  region: number;
+  realm: number;
+}
+
+export interface RaiderIORaidDifficultyRankings {
+  normal?: RaiderIORaidRanks;
+  heroic?: RaiderIORaidRanks;
+  mythic?: RaiderIORaidRanks;
+}
+
+export interface RaiderIOGuildRankingsProfile {
+  name: string;
+  faction: string;
+  region: string;
+  realm: string;
+  raid_rankings: Record<string, RaiderIORaidDifficultyRankings>;
+}
+
 export class RaiderIOApiClient {
   private readonly apiKey: string;
   private readonly apiBaseUrl = "https://raider.io/api/v1";
@@ -132,6 +168,55 @@ export class RaiderIOApiClient {
     }
 
     return undefined;
+  }
+
+  /**
+   * Fetch guild raid progression from Raider.IO API
+   */
+  public async fetchGuildRaidProgression(region: string, realmSlug: string, guildName: string): Promise<RaiderIOGuildProfile | null> {
+    const encodedName = encodeURIComponent(guildName);
+    const url = `${this.apiBaseUrl}/guilds/profile?access_key=${this.apiKey}&region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_progression`;
+
+    logger.info(`[API REQUEST] GET ${this.apiBaseUrl}/guilds/profile?region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_progression`);
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        logger.warn(`Raider.IO guild profile request failed for ${guildName} (${region}-${realmSlug}): ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      return (await response.json()) as RaiderIOGuildProfile;
+    } catch (error: any) {
+      logger.warn(`Raider.IO guild profile fetch error for ${guildName} (${region}-${realmSlug}): ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch guild raid rankings from Raider.IO API
+   */
+  public async fetchGuildRaidRankings(region: string, realmSlug: string, guildName: string): Promise<Record<string, RaiderIORaidDifficultyRankings> | null> {
+    const encodedName = encodeURIComponent(guildName);
+    const url = `${this.apiBaseUrl}/guilds/profile?access_key=${this.apiKey}&region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_rankings`;
+
+    logger.info(`[API REQUEST] GET ${this.apiBaseUrl}/guilds/profile?region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_rankings`);
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        logger.warn(`Raider.IO guild rankings request failed for ${guildName} (${region}-${realmSlug}): ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      const data = (await response.json()) as RaiderIOGuildRankingsProfile;
+      return data.raid_rankings ?? null;
+    } catch (error: any) {
+      logger.warn(`Raider.IO guild rankings fetch error for ${guildName} (${region}-${realmSlug}): ${error.message}`);
+      return null;
+    }
   }
 }
 

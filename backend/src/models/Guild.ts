@@ -81,6 +81,16 @@ export interface IGuildCrest {
   };
 }
 
+export interface IOfficialRaidProgress {
+  raidTierSlug: string; // e.g., "tier-mn-1" from Raider.IO
+  summary: string; // e.g., "6/9 M"
+  totalBosses: number;
+  normalBossesKilled: number;
+  heroicBossesKilled: number;
+  mythicBossesKilled: number;
+  lastUpdated: Date;
+}
+
 export interface IRaidScheduleDay {
   day: string; // "Monday", "Tuesday", etc.
   startHour: number; // 0-23.5 (supports half hours: 0, 0.5, 1, 1.5, ..., 23, 23.5)
@@ -104,6 +114,7 @@ export interface IGuild extends Document {
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   streamers?: IStreamer[]; // Twitch streamers associated with this guild
   progress: IRaidProgress[];
+  officialProgress?: IOfficialRaidProgress[]; // Raid progression from Raider.IO (reflects in-game kills, not log-dependent)
   raidSchedule?: IRaidSchedule; // Calculated raiding schedule for current tier
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
@@ -211,6 +222,18 @@ const GuildSchema: Schema = new Schema(
     parent_guild: { type: String }, // Parent guild name if this is a team/sub-guild
     streamers: [StreamerSchema], // Twitch streamers associated with this guild
     progress: [RaidProgressSchema],
+    officialProgress: [
+      {
+        raidTierSlug: { type: String, required: true },
+        summary: { type: String, required: true },
+        totalBosses: { type: Number, required: true },
+        normalBossesKilled: { type: Number, default: 0 },
+        heroicBossesKilled: { type: Number, default: 0 },
+        mythicBossesKilled: { type: Number, default: 0 },
+        lastUpdated: { type: Date, default: Date.now },
+        _id: false,
+      },
+    ],
     raidSchedule: {
       days: [
         {

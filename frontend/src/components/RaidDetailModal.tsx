@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, PullHistoryEntry, PhaseDistribution } from "@/types";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
 import PullProgressChart from "./PullProgressChart";
 import PhaseDistributionChart from "./PhaseDistributionChart";
-import { api } from "@/lib/api";
+import { useBossPullHistory } from "@/lib/queries";
 
 interface RaidDetailModalProps {
   guild: Guild;
@@ -17,23 +17,59 @@ interface RaidDetailModalProps {
   bosses: Boss[];
 }
 
+// Sub-component that fetches and renders pull history charts when a boss is expanded.
+// By mounting only when expanded, the React Query hook fires on-demand.
+function BossPullHistoryContent({
+  realm,
+  guildName,
+  raidId,
+  bossId,
+  difficulty,
+  variant,
+}: {
+  realm: string;
+  guildName: string;
+  raidId: number;
+  bossId: number;
+  difficulty: "mythic" | "heroic";
+  variant: "mobile" | "desktop";
+}) {
+  const { data, isLoading } = useBossPullHistory(realm, guildName, raidId, bossId, difficulty);
+
+  const pullHistory = data?.pullHistory;
+  const phaseDistribution = data?.phaseDistribution;
+  const hasPullHistory = pullHistory && pullHistory.length > 0;
+
+  if (isLoading) {
+    return <div className="text-center py-4 text-gray-500">Loading pull history...</div>;
+  }
+
+  if (!hasPullHistory) {
+    return <div className="text-center py-4 text-gray-500">No pull history available</div>;
+  }
+
+  if (variant === "mobile") {
+    return (
+      <>
+        <PullProgressChart pullHistory={pullHistory} />
+        {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+      </>
+    );
+  }
+
+  return (
+    <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
+      <PullProgressChart pullHistory={pullHistory} />
+      {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+    </div>
+  );
+}
+
 export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses }: RaidDetailModalProps) {
-  // Track which bosses have their charts expanded (key: "${bossId}-${difficulty}")
   const [expandedBosses, setExpandedBosses] = useState<Set<string>>(new Set());
-  // Track loading state for each boss pull history
-  const [loadingPullHistory, setLoadingPullHistory] = useState<Set<number>>(new Set());
-  // Cache pull history data for each boss (key: `${bossId}-${difficulty}`)
-  const [pullHistoryCache, setPullHistoryCache] = useState<Map<string, PullHistoryEntry[]>>(new Map());
-  // Cache phase distribution data for each boss (key: `${bossId}-${difficulty}`)
-  const [phaseDistributionCache, setPhaseDistributionCache] = useState<Map<string, PhaseDistribution[]>>(new Map());
 
-  const toggleBossExpanded = async (boss: BossProgress, difficulty: "mythic" | "heroic") => {
-    const bossId = boss.bossId;
-    const cacheKey = `${bossId}-${difficulty}`;
-    const expandedKey = cacheKey; // Use composite key for expanded state
-    const isExpanding = !expandedBosses.has(expandedKey);
-
-    // Toggle expanded state
+  const toggleBossExpanded = (bossId: number, difficulty: "mythic" | "heroic") => {
+    const expandedKey = `${bossId}-${difficulty}`;
     setExpandedBosses((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(expandedKey)) {
@@ -43,53 +79,11 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
       }
       return newSet;
     });
-
-    // If expanding and we don't have cached data and pullHistory is not present, fetch it
-    if (isExpanding && !pullHistoryCache.has(cacheKey) && !boss.pullHistory) {
-      setLoadingPullHistory((prev) => new Set(prev).add(bossId));
-
-      try {
-        const response = await api.getBossPullHistory(guild.realm, guild.name, selectedRaidId!, bossId, difficulty);
-
-        setPullHistoryCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.set(cacheKey, response.pullHistory);
-          return newCache;
-        });
-
-        setPhaseDistributionCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.set(cacheKey, response.phaseDistribution);
-          return newCache;
-        });
-      } catch (error) {
-        console.error("Error fetching pull history:", error);
-        // On error, we'll just not show the chart
-      } finally {
-        setLoadingPullHistory((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(bossId);
-          return newSet;
-        });
-      }
-    }
   };
 
   const getBossIconUrl = (bossName: string): string | undefined => {
     const boss = bosses.find((b) => b.name === bossName);
     return boss?.iconUrl;
-  };
-
-  // Helper to get pull history from cache or boss object
-  const getPullHistory = (boss: BossProgress, difficulty: "mythic" | "heroic"): PullHistoryEntry[] | undefined => {
-    const cacheKey = `${boss.bossId}-${difficulty}`;
-    return pullHistoryCache.get(cacheKey) || boss.pullHistory;
-  };
-
-  // Helper to get phase distribution from cache
-  const getPhaseDistribution = (boss: BossProgress, difficulty: "mythic" | "heroic"): PhaseDistribution[] | undefined => {
-    const cacheKey = `${boss.bossId}-${difficulty}`;
-    return phaseDistributionCache.get(cacheKey);
   };
 
   const handleBossClick = (boss: BossProgress) => {
@@ -115,19 +109,13 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
     const bossIconFilename = getBossIconUrl(boss.bossName);
-    const phaseDistribution = getPhaseDistribution(boss, difficulty);
-    const pullHistory = getPullHistory(boss, difficulty);
-    const hasPullHistory = pullHistory && pullHistory.length > 0;
     const expandedKey = `${boss.bossId}-${difficulty}`;
     const isExpanded = expandedBosses.has(expandedKey);
-    const isLoading = loadingPullHistory.has(boss.bossId);
 
     return (
       <div
-        className={`rounded-lg p-2 mb-1.5 ${isDefeated ? "bg-green-900/20 border border-green-800/50" : "bg-gray-800/50 border border-gray-700/50"} ${
-          hasPullHistory || (!pullHistory && !isLoading) ? "cursor-pointer" : ""
-        }`}
-        onClick={() => (hasPullHistory || (!pullHistory && !isLoading)) && toggleBossExpanded(boss, difficulty)}
+        className={`rounded-lg p-2 mb-1.5 ${isDefeated ? "bg-green-900/20 border border-green-800/50" : "bg-gray-800/50 border border-gray-700/50"} cursor-pointer`}
+        onClick={() => toggleBossExpanded(boss.bossId, difficulty)}
       >
         <div className="flex items-center gap-2">
           {/* Boss number and icon */}
@@ -163,10 +151,10 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
                 {isDefeated
                   ? "✓"
                   : boss.bestPullPhase?.displayString
-                  ? formatPhaseDisplay(boss.bestPullPhase.displayString)
-                  : boss.bestPercent < 100
-                  ? formatPercent(boss.bestPercent)
-                  : "-"}
+                    ? formatPhaseDisplay(boss.bestPullPhase.displayString)
+                    : boss.bestPercent < 100
+                      ? formatPercent(boss.bestPercent)
+                      : "-"}
               </div>
               <div className="text-[9px] text-gray-500">best</div>
             </div>
@@ -174,23 +162,14 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
               <div className="text-gray-300">{boss.timeSpent > 0 ? formatTime(boss.timeSpent) : "-"}</div>
               <div className="text-[9px] text-gray-500">time</div>
             </div>
-            {(hasPullHistory || (!pullHistory && !isLoading)) && <span className="text-gray-500">{isExpanded ? "▼" : "▶"}</span>}
+            <span className="text-gray-500">{isExpanded ? "▼" : "▶"}</span>
           </div>
         </div>
 
         {/* Expanded charts */}
         {isExpanded && (
           <div className="mt-2 pt-2 border-t border-gray-700 space-y-4">
-            {isLoading ? (
-              <div className="text-center py-4 text-gray-500">Loading pull history...</div>
-            ) : hasPullHistory ? (
-              <>
-                <PullProgressChart pullHistory={pullHistory!} />
-                {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
-              </>
-            ) : (
-              <div className="text-center py-4 text-gray-500">No pull history available</div>
-            )}
+            <BossPullHistoryContent realm={guild.realm} guildName={guild.name} raidId={selectedRaidId ?? 0} bossId={boss.bossId} difficulty={difficulty} variant="mobile" />
           </div>
         )}
       </div>
@@ -203,21 +182,15 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
     const bossIconFilename = getBossIconUrl(boss.bossName);
-    const pullHistory = getPullHistory(boss, difficulty);
-    const phaseDistribution = getPhaseDistribution(boss, difficulty);
-    const hasPullHistory = pullHistory && pullHistory.length > 0;
     const expandedKey = `${boss.bossId}-${difficulty}`;
     const isExpanded = expandedBosses.has(expandedKey);
-    const isLoading = loadingPullHistory.has(boss.bossId);
 
     return (
       <React.Fragment key={boss.bossId}>
         <tr
-          className={`border-b border-gray-800 ${isDefeated ? "bg-green-900/10" : ""} ${
-            hasPullHistory || (!pullHistory && !isLoading) ? "cursor-pointer hover:bg-gray-800/50 transition-colors" : ""
-          }`}
-          onClick={() => (hasPullHistory || (!pullHistory && !isLoading)) && toggleBossExpanded(boss, difficulty)}
-          title={hasPullHistory || (!pullHistory && !isLoading) ? "Click to view pull progress chart" : ""}
+          className={`border-b border-gray-800 ${isDefeated ? "bg-green-900/10" : ""} cursor-pointer hover:bg-gray-800/50 transition-colors`}
+          onClick={() => toggleBossExpanded(boss.bossId, difficulty)}
+          title="Click to view pull progress chart"
         >
           <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-400">{bossNumber}</td>
           <td className="px-2 md:px-4 py-2 md:py-3">
@@ -260,33 +233,22 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
             {boss.firstKillTime ? new Date(boss.firstKillTime).toLocaleDateString("fi-FI") : "-"}
           </td>
           <td className="px-1 md:px-2 py-2 md:py-3 text-center text-xs md:text-sm">
-            {(hasPullHistory || (!pullHistory && !isLoading)) && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleBossExpanded(boss, difficulty);
-                }}
-                className="text-gray-500 hover:text-gray-300 transition-colors p-1"
-                title={isExpanded ? "Hide pull progress" : "Show pull progress"}
-              >
-                {isExpanded ? "▼" : "▶"}
-              </button>
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleBossExpanded(boss.bossId, difficulty);
+              }}
+              className="text-gray-500 hover:text-gray-300 transition-colors p-1"
+              title={isExpanded ? "Hide pull progress" : "Show pull progress"}
+            >
+              {isExpanded ? "▼" : "▶"}
+            </button>
           </td>
         </tr>
         {isExpanded && (
           <tr className="border-b border-gray-800 bg-gray-900/50">
             <td colSpan={8} className="px-2 md:px-4 py-2 md:py-3">
-              {isLoading ? (
-                <div className="text-center py-4 text-gray-500">Loading pull history...</div>
-              ) : hasPullHistory ? (
-                <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
-                  <PullProgressChart pullHistory={pullHistory!} />
-                  {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-gray-500">No pull history available</div>
-              )}
+              <BossPullHistoryContent realm={guild.realm} guildName={guild.name} raidId={selectedRaidId ?? 0} bossId={boss.bossId} difficulty={difficulty} variant="desktop" />
             </td>
           </tr>
         )}

@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { Achievement, BossIcon, RaidIcon, AuthToken, AchievementUpdateLog, GuildCrestEmblem, GuildCrestBorder } from "../models/Achievement";
+import Raid from "../models/Raid";
 import iconCacheService from "./icon-cache.service";
 import logger from "../utils/logger";
 
@@ -235,7 +236,7 @@ export class BlizzardApiClient {
           tokenType: token_type,
           expiresAt,
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       logger.info(`✅ New Blizzard token acquired, expires at: ${expiresAt.toISOString()}`);
@@ -328,7 +329,7 @@ export class BlizzardApiClient {
           lastFullUpdate: new Date(),
           $inc: { attemptCount: 1 },
         },
-        { upsert: true }
+        { upsert: true },
       );
 
       logger.info("✅ Achievement update completed successfully");
@@ -339,81 +340,139 @@ export class BlizzardApiClient {
   }
 
   /**
-   * Find achievement by partial boss name match
+   * Escape a string for use in a RegExp
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /**
+   * Strip leading articles ("The", "A", "An") from a name
+   */
+  private stripLeadingArticle(name: string): string {
+    return name.replace(/^(the|a|an)\s+/i, "").trim();
+  }
+
+  /**
+   * Get significant words from a name (length > 3, not common stop words)
+   */
+  private getSignificantWords(name: string): string[] {
+    const stopWords = new Set(["the", "a", "an", "of", "and", "in", "on", "at", "to", "for", "with"]);
+    return name.split(/\s+/).filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()));
+  }
+
+  /**
+   * Try to find an achievement matching a specific regex pattern.
+   * Returns the achievement if found, null otherwise.
+   */
+  private async tryAchievementMatch(pattern: RegExp): Promise<{ id: number; name: string } | null> {
+    const achievement = await Achievement.findOne({ name: { $regex: pattern } });
+    if (achievement) {
+      return { id: achievement.id, name: achievement.name };
+    }
+    return null;
+  }
+
+  /**
+   * Find achievement by boss name using a multi-phase matching strategy.
+   *
+   * Matching phases (in order of confidence):
+   * 1. Exact "Mythic: {name}" match (with and without article prefix)
+   * 2. Boss name as substring within "Mythic:" achievements only
+   * 3. Name without first word as substring in "Mythic:" achievements
+   *    (handles variants like "Felhounds of Sargeras" → "Mythic: Hounds of Sargeras")
+   * 4. Individual significant words as exact "Mythic: {word}" match
+   *    (handles abbreviated achievements like "The Defense of Eonar" → "Mythic: Eonar")
+   * 5. Individual significant words as substring within "Mythic:" achievements
+   * 6. Fallback: full name as substring in any achievement (no "Mythic:" requirement)
    */
   public async findAchievementByBossName(bossName: string): Promise<{ id: number; name: string } | null> {
     try {
-      // First, try exact match patterns for mythic achievements
-      const mythicPattern = `Mythic: ${bossName}`;
-      let achievement = await Achievement.findOne({
-        name: { $regex: new RegExp(`^${mythicPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
-      });
+      const normalized = this.stripLeadingArticle(bossName);
 
-      if (achievement) {
-        return { id: achievement.id, name: achievement.name };
-      }
+      // Build candidate names for exact and substring matching
+      const candidates = [...new Set([bossName, normalized])];
 
-      // Try partial matching with the boss name
-      const escapedBossName = bossName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      achievement = await Achievement.findOne({
-        name: { $regex: new RegExp(escapedBossName, "i") },
-      });
-
-      if (achievement) {
-        return { id: achievement.id, name: achievement.name };
-      }
-
-      // Try fuzzy matching with alternative boss name formats
-      // Some achievements only use the first part of the boss name before a comma
-      // Example: "Rashok, the Elder" -> "Mythic: Rashok"
+      // Handle comma-separated names: "Rashok, the Elder" → also try "Rashok"
       if (bossName.includes(",")) {
-        const firstPart = bossName.split(",")[0].trim();
-        const mythicFirstPart = `Mythic: ${firstPart}`;
-        const escapedFirstPart = firstPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-        achievement = await Achievement.findOne({
-          name: { $regex: new RegExp(`^${mythicFirstPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
-        });
-
-        if (achievement) {
-          logger.info(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
-          return { id: achievement.id, name: achievement.name };
-        }
-
-        achievement = await Achievement.findOne({
-          name: { $regex: new RegExp(escapedFirstPart, "i") },
-        });
-
-        if (achievement) {
-          logger.info(`✅ Found achievement using first part before comma: "${bossName}" -> "${achievement.name}"`);
-          return { id: achievement.id, name: achievement.name };
+        const beforeComma = bossName.split(",")[0].trim();
+        const beforeCommaStripped = this.stripLeadingArticle(beforeComma);
+        candidates.push(beforeComma);
+        if (beforeCommaStripped !== beforeComma) {
+          candidates.push(beforeCommaStripped);
         }
       }
 
-      // Try using just the first word of the boss name
-      // Example: "Igira the Cruel" -> "Mythic: Igira"
-      const firstWord = bossName.split(" ")[0].trim();
-      if (firstWord && firstWord.length > 3) {
-        // Only try if first word is substantial
-        const mythicFirstWord = `Mythic: ${firstWord}`;
-        const escapedFirstWord = firstWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Deduplicate candidates
+      const uniqueCandidates = [...new Set(candidates)];
 
-        achievement = await Achievement.findOne({
-          name: { $regex: new RegExp(`^${mythicFirstWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
-        });
-
-        if (achievement) {
-          logger.info(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
-          return { id: achievement.id, name: achievement.name };
+      // --- Phase 1: Exact "Mythic: {candidate}" match ---
+      for (const candidate of uniqueCandidates) {
+        const escaped = this.escapeRegex(candidate);
+        const match = await this.tryAchievementMatch(new RegExp(`^Mythic: ${escaped}$`, "i"));
+        if (match) {
+          logger.info(`✅ Boss icon match (exact mythic): "${bossName}" -> "${match.name}"`);
+          return match;
         }
+      }
 
-        achievement = await Achievement.findOne({
-          name: { $regex: new RegExp(escapedFirstWord, "i") },
-        });
+      // --- Phase 2: Candidate as substring within "Mythic:" achievements ---
+      for (const candidate of uniqueCandidates) {
+        const escaped = this.escapeRegex(candidate);
+        const match = await this.tryAchievementMatch(new RegExp(`^Mythic:.*${escaped}`, "i"));
+        if (match) {
+          logger.info(`✅ Boss icon match (mythic substring): "${bossName}" -> "${match.name}"`);
+          return match;
+        }
+      }
 
-        if (achievement) {
-          logger.info(`✅ Found achievement using first word: "${bossName}" -> "${achievement.name}"`);
-          return { id: achievement.id, name: achievement.name };
+      // --- Phase 3: Try without first word (handles name variants) ---
+      // Example: "Felhounds of Sargeras" → "of Sargeras" → matches "Mythic: Hounds of Sargeras"
+      const normalizedWords = normalized.split(/\s+/);
+      if (normalizedWords.length > 1) {
+        const withoutFirst = normalizedWords.slice(1).join(" ");
+        if (withoutFirst.length > 3) {
+          const escaped = this.escapeRegex(withoutFirst);
+          const match = await this.tryAchievementMatch(new RegExp(`^Mythic:.*${escaped}`, "i"));
+          if (match) {
+            logger.info(`✅ Boss icon match (mythic without first word): "${bossName}" -> "${match.name}"`);
+            return match;
+          }
+        }
+      }
+
+      // --- Phase 4: Individual significant words as exact "Mythic: {word}" match ---
+      // Example: "The Defense of Eonar" → words ["Defense", "Eonar"] → "Mythic: Eonar"
+      const significantWords = this.getSignificantWords(normalized);
+      // Sort longest first for most specific match
+      significantWords.sort((a, b) => b.length - a.length);
+
+      for (const word of significantWords) {
+        const escaped = this.escapeRegex(word);
+        const match = await this.tryAchievementMatch(new RegExp(`^Mythic: ${escaped}$`, "i"));
+        if (match) {
+          logger.info(`✅ Boss icon match (mythic exact word): "${bossName}" -> "${match.name}"`);
+          return match;
+        }
+      }
+
+      // --- Phase 5: Significant words as substring within "Mythic:" achievements ---
+      for (const word of significantWords) {
+        const escaped = this.escapeRegex(word);
+        const match = await this.tryAchievementMatch(new RegExp(`^Mythic:.*\\b${escaped}\\b`, "i"));
+        if (match) {
+          logger.info(`✅ Boss icon match (mythic word boundary): "${bossName}" -> "${match.name}"`);
+          return match;
+        }
+      }
+
+      // --- Phase 6: Fallback - full name as substring in any achievement ---
+      for (const candidate of uniqueCandidates) {
+        const escaped = this.escapeRegex(candidate);
+        const match = await this.tryAchievementMatch(new RegExp(escaped, "i"));
+        if (match) {
+          logger.info(`✅ Boss icon match (fallback substring): "${bossName}" -> "${match.name}"`);
+          return match;
         }
       }
 
@@ -426,10 +485,31 @@ export class BlizzardApiClient {
   }
 
   /**
+   * Hardcoded raid name → achievement name overrides for cases where
+   * the API raid name is completely different from the achievement name.
+   */
+  private static readonly RAID_ACHIEVEMENT_OVERRIDES: Record<string, string> = {
+    "VS / DR / MQD": "March on Quel'Danas",
+  };
+
+  /**
    * Find achievement by raid name match (looks for raid achievements)
    */
   public async findAchievementByRaidName(raidName: string): Promise<{ id: number; name: string } | null> {
     try {
+      // Check hardcoded overrides first
+      const override = BlizzardApiClient.RAID_ACHIEVEMENT_OVERRIDES[raidName];
+      if (override) {
+        const escapedOverride = this.escapeRegex(override);
+        const achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(escapedOverride, "i") },
+        });
+        if (achievement) {
+          logger.info(`✅ Found achievement using override: "${raidName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+      }
+
       // Try to find achievement that contains the raid name
       // Raid achievements typically have the raid name in them
       const escapedRaidName = raidName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -568,7 +648,7 @@ export class BlizzardApiClient {
           achievementId: achievement.id,
           lastUpdated: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       logger.info(`✅ Cached new icon for boss: ${bossName} -> ${iconFilename}`);
@@ -639,7 +719,7 @@ export class BlizzardApiClient {
           achievementId: achievement.id,
           lastUpdated: new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       logger.info(`✅ Cached new icon for raid: ${raidName} -> ${iconFilename}`);
@@ -706,6 +786,60 @@ export class BlizzardApiClient {
     }
 
     return results;
+  }
+
+  /**
+   * Retry matching boss icons for bosses that have no icon in the Raid collection.
+   * Scans all raids, finds bosses with missing iconUrl, and attempts to re-match.
+   * Updates both the BossIcon cache and the Raid document.
+   */
+  public async retryMissingBossIcons(): Promise<void> {
+    try {
+      const raids = await Raid.find({});
+      const missingBosses: { raidId: number; raidName: string; bossName: string }[] = [];
+
+      for (const raid of raids) {
+        for (const boss of raid.bosses) {
+          if (!boss.iconUrl) {
+            missingBosses.push({ raidId: raid.id, raidName: raid.name, bossName: boss.name });
+          }
+        }
+      }
+
+      if (missingBosses.length === 0) {
+        logger.info("✅ All bosses have icons, no re-matching needed");
+        return;
+      }
+
+      logger.info(`🔄 Found ${missingBosses.length} bosses without icons, attempting re-match...`);
+      let matched = 0;
+
+      for (const { raidId, raidName, bossName } of missingBosses) {
+        // Skip if already cached in BossIcon (means the Raid doc is just out of sync)
+        const existing = await BossIcon.findOne({ bossName });
+        let iconUrl: string | null = existing?.iconUrl || null;
+
+        if (!iconUrl) {
+          iconUrl = await this.getBossIconUrl(bossName);
+        }
+
+        if (iconUrl) {
+          // Update the boss iconUrl in the Raid document
+          await Raid.updateOne({ id: raidId, "bosses.name": bossName }, { $set: { "bosses.$.iconUrl": iconUrl } });
+          matched++;
+          logger.info(`✅ Re-matched boss icon: "${bossName}" (${raidName}) -> ${iconUrl}`);
+        } else {
+          logger.info(`⚠️  Still no match for boss: "${bossName}" (${raidName})`);
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      logger.info(`🔄 Boss icon re-matching complete: ${matched}/${missingBosses.length} matched`);
+    } catch (error: any) {
+      logger.error("Error retrying missing boss icons:", error.message);
+    }
   }
 
   /**
@@ -891,7 +1025,7 @@ export class BlizzardApiClient {
   public async getGuildData(
     guildName: string,
     realmSlug: string,
-    region: string
+    region: string,
   ): Promise<{
     crest: {
       emblem: { id: number; imageName: string; color: { r: number; g: number; b: number; a: number } };

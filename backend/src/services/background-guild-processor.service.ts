@@ -191,6 +191,9 @@ class BackgroundGuildProcessor {
         case "rescan_characters":
           await this.processGuildCharacterRescan(queueItem);
           break;
+        case "recalculate_stats":
+          await this.processGuildStatsRecalculation(queueItem);
+          break;
         case "full_rescan":
         default:
           await this.processGuild(queueItem);
@@ -737,6 +740,42 @@ class BackgroundGuildProcessor {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       guildLog.error(`[CharacterRescan] Fatal error: ${errorMessage}`);
+      const classifiedError = classifyError(errorMessage);
+      await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
+    }
+  }
+
+  /**
+   * Recalculate statistics for a guild.
+   * Used when admin triggers stats recalculation — runs in the worker process
+   * instead of blocking the API.
+   */
+  private async processGuildStatsRecalculation(queueItem: IGuildProcessingQueue): Promise<void> {
+    const guildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
+
+    try {
+      const guild = await Guild.findById(queueItem.guildId);
+      if (!guild) {
+        guildLog.error("[StatsRecalc] Guild not found in database");
+        await queueItem.markFailed("Guild not found", "unknown", true, "Guild no longer exists");
+        return;
+      }
+
+      guildLog.info("[StatsRecalc] Starting statistics recalculation");
+      await queueItem.updateProgress(0, 0, 0, 1);
+
+      await guildService.calculateGuildStatistics(guild, null);
+      await guild.save();
+
+      guildLog.info("[StatsRecalc] Statistics recalculated, warming caches");
+      await cacheService.invalidateAllGuildCaches();
+      await cacheWarmerService.warmAllCaches();
+
+      await queueItem.markCompleted();
+      guildLog.info("[StatsRecalc] Completed");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      guildLog.error(`[StatsRecalc] Fatal error: ${errorMessage}`);
       const classifiedError = classifyError(errorMessage);
       await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
     }

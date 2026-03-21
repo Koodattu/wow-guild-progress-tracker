@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
-import { WoWCharacter, UserProfile } from "@/types";
+import { WoWCharacter, UserProfile, UserPickemEntry } from "@/types";
+import Link from "next/link";
 import { FaBattleNet } from "react-icons/fa";
 import { FaTwitch } from "react-icons/fa";
 
@@ -51,6 +52,15 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const hasTriggeredRefresh = useRef(false);
 
+  // Pickems state
+  const [userPickems, setUserPickems] = useState<UserPickemEntry[]>([]);
+  const [isLoadingPickems, setIsLoadingPickems] = useState(false);
+
+  // Delete account state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
   // Fetch profile data
   const refreshProfile = useCallback(async () => {
     try {
@@ -69,6 +79,18 @@ export default function ProfilePage() {
       refreshProfile().finally(() => setIsLoadingProfile(false));
     }
   }, [isAuthLoading, authUser, refreshProfile]);
+
+  // Fetch user's pickem entries
+  useEffect(() => {
+    if (!isAuthLoading && authUser) {
+      setIsLoadingPickems(true);
+      api
+        .getMyPickems()
+        .then(setUserPickems)
+        .catch((error) => console.error("Failed to fetch pickems:", error))
+        .finally(() => setIsLoadingPickems(false));
+    }
+  }, [isAuthLoading, authUser]);
 
   // Check if we should open the dialog after Battle.net connection
   useEffect(() => {
@@ -271,6 +293,23 @@ export default function ProfilePage() {
       } finally {
         setIsLoadingCharacters(false);
       }
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+
+    try {
+      setIsDeletingAccount(true);
+      await api.deleteMyAccount();
+      setMessage({ type: "success", text: t("deleteAccountSuccess") });
+      setShowDeleteConfirm(false);
+      router.push("/");
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+      setMessage({ type: "error", text: t("deleteAccountError") });
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -552,6 +591,123 @@ export default function ProfilePage() {
             )}
           </div>
         )}
+
+        {/* My Pickems Section */}
+        <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h3 className="text-xl font-bold text-white mb-4">{t("myPickems")}</h3>
+
+          {isLoadingPickems ? (
+            <div className="text-gray-400 py-4">Loading...</div>
+          ) : userPickems.length === 0 ? (
+            <p className="text-gray-400 py-4">{t("noPickems")}</p>
+          ) : (
+            <div className="space-y-4">
+              {userPickems.map((entry) => (
+                <div key={entry.pickemId} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-white font-medium">{entry.pickemName ?? entry.pickemId}</h4>
+                      {entry.type && <span className="text-xs text-gray-400 uppercase">{entry.type}</span>}
+                    </div>
+                    <Link href={`/pickems/${entry.pickemId}`} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors text-sm">
+                      {t("viewPickem")}
+                    </Link>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-gray-600">
+                          <th className="text-left py-1 pr-4">{t("position")}</th>
+                          <th className="text-left py-1">{t("guild")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entry.predictions
+                          .sort((a, b) => a.position - b.position)
+                          .map((pred) => (
+                            <tr key={pred.position} className="border-b border-gray-700/50">
+                              <td className="py-1.5 pr-4 text-yellow-400 font-medium">#{pred.position}</td>
+                              <td className="py-1.5 text-white">
+                                {pred.guildName}
+                                {pred.realm && pred.realm !== "RWF" && <span className="text-gray-400 text-xs ml-1">-{pred.realm}</span>}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                    <span>
+                      {t("submittedAt")}{" "}
+                      {new Date(entry.submittedAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <span>
+                      {t("updatedAt")}{" "}
+                      {new Date(entry.updatedAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Delete Account Section */}
+        <div className="mt-8 bg-gray-800 rounded-lg border border-red-900/50 p-6">
+          <h3 className="text-xl font-bold text-red-400 mb-2">{t("deleteAccountTitle")}</h3>
+          <p className="text-gray-400 text-sm mb-4">{t("deleteAccountWarning")}</p>
+          <ul className="text-gray-400 text-sm mb-6 list-disc list-inside space-y-1">
+            <li>{t("deleteAccountData1")}</li>
+            <li>{t("deleteAccountData2")}</li>
+            <li>{t("deleteAccountData3")}</li>
+            <li>{t("deleteAccountData4")}</li>
+          </ul>
+
+          {!showDeleteConfirm ? (
+            <button onClick={() => setShowDeleteConfirm(true)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium">
+              {t("deleteAccount")}
+            </button>
+          ) : (
+            <div className="bg-red-950/30 border border-red-800 rounded-lg p-4">
+              <label className="block text-sm text-red-300 mb-2">{t("deleteAccountConfirmLabel")}</label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={t("deleteAccountConfirmPlaceholder")}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== "DELETE" || isDeletingAccount}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeletingAccount ? t("deleteAccountDeleting") : t("deleteAccountButton")}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText("");
+                  }}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors text-sm"
+                >
+                  {t("cancel")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Character Selector Dialog */}
         {showCharacterDialog && profile.battlenet && (

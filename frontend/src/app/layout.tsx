@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useState, useMemo } from "react";
 import { AuthProvider } from "@/context/AuthContext";
+import { QueryProvider } from "@/lib/query-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -153,13 +154,15 @@ export default function RootLayout({
         <meta property="twitter:image" content={`${SITE_URL}/logo.png`} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <Navigation />
-            {children}
-            {!isLivestreamsPage && <Footer />}
-          </NextIntlClientProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <NextIntlClientProvider locale={locale} messages={messages}>
+              <Navigation />
+              {children}
+              {!isLivestreamsPage && <Footer />}
+            </NextIntlClientProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

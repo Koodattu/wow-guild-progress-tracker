@@ -1,4 +1,4 @@
-import Guild, { IGuild, IRaidProgress, IBossProgress } from "../models/Guild";
+import Guild, { IGuild, IRaidProgress, IBossProgress, IOfficialRaidProgress } from "../models/Guild";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
@@ -8,6 +8,7 @@ import GuildProcessingQueue from "../models/GuildProcessingQueue";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
+import type { RaiderIORaidDifficultyRankings } from "./raiderio.service";
 import cacheService from "./cache.service";
 import backgroundGuildProcessor from "./background-guild-processor.service";
 import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
@@ -16,6 +17,7 @@ import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 import Character from "../models/Character";
 import characterService from "./character.service";
+import { yieldToEventLoop } from "../utils/yield";
 
 class GuildService {
   // Configuration for death events fetching
@@ -276,6 +278,30 @@ class GuildService {
   // Get raid data from database
   async getRaidData(zoneId: number): Promise<IRaid | null> {
     return await Raid.findOne({ id: zoneId });
+  }
+
+  // Find matching Raider.IO raid rankings by DB slug/name with fuzzy matching
+  private findRaiderIORaidRankings(rioRankings: Record<string, RaiderIORaidDifficultyRankings>, dbSlug: string, dbName: string): RaiderIORaidDifficultyRankings | null {
+    const slugLower = dbSlug.toLowerCase();
+    const nameLower = dbName.toLowerCase();
+
+    // Try exact slug match first
+    if (rioRankings[slugLower]) {
+      return rioRankings[slugLower];
+    }
+
+    // Try partial/contains match against all RaiderIO keys
+    for (const rioSlug of Object.keys(rioRankings)) {
+      if (rioSlug.includes(slugLower) || slugLower.includes(rioSlug)) {
+        return rioRankings[rioSlug];
+      }
+      const nameSlug = nameLower.replace(/[^a-z0-9]+/g, "-");
+      if (rioSlug.includes(nameSlug) || nameSlug.includes(rioSlug)) {
+        return rioRankings[rioSlug];
+      }
+    }
+
+    return null;
   }
 
   // Get all valid boss encounter IDs from tracked raids
@@ -550,6 +576,8 @@ class GuildService {
 
       // Process each guild
       for (const guild of guilds) {
+        // Yield to event loop between guilds so HTTP requests can be served
+        await yieldToEventLoop();
         try {
           // Check if guild has any reports (i.e., has already been initialized with data)
           const hasReports = await Report.exists({ guildId: guild._id });
@@ -684,6 +712,9 @@ class GuildService {
         }
       }
 
+      // Update official progression from Raider.IO (reflects in-game kills, works for private logs)
+      await this.updateOfficialProgress(guildId);
+
       getGuildLogger(guild.name, guild.realm).info("Successfully updated guild progress");
       return guild;
     } catch (error) {
@@ -781,6 +812,7 @@ class GuildService {
 
     // Group by raidId to avoid duplicate API calls for the same raid
     const raidIds = [...new Set(raidsWithProgress.map((p) => p.raidId))];
+    const raidsNeedingFallback: { raidId: number; raidEntries: typeof raidsWithProgress }[] = [];
 
     for (const raidId of raidIds) {
       try {
@@ -800,10 +832,44 @@ class GuildService {
           }
           guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${raidEntries.map((e) => e.difficulty).join(", ")}`);
         } else {
-          guildLog.info(`${raidName}: No world rank data available`);
+          guildLog.info(`${raidName}: No world rank data from WCL, will try Raider.IO fallback`);
+          raidsNeedingFallback.push({ raidId, raidEntries });
         }
       } catch (error) {
         guildLog.error(`Error fetching world rank for raidId ${raidId}:`, error);
+        const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
+        raidsNeedingFallback.push({ raidId, raidEntries });
+      }
+    }
+
+    // Raider.IO fallback for raids without WCL world rank
+    if (raidsNeedingFallback.length > 0) {
+      guildLog.info(`Attempting Raider.IO fallback for ${raidsNeedingFallback.length} raid(s)...`);
+      const rioRankings = await raiderIOService.fetchGuildRaidRankings(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
+
+      if (rioRankings) {
+        for (const { raidId, raidEntries } of raidsNeedingFallback) {
+          const raidData = await this.getRaidData(raidId);
+          if (!raidData) continue;
+
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
+          if (!diffRankings) {
+            guildLog.info(`${raidData.name}: No matching Raider.IO rankings found`);
+            continue;
+          }
+
+          const rank = diffRankings.mythic?.world || diffRankings.heroic?.world;
+          if (rank) {
+            for (const raidProgress of raidEntries) {
+              raidProgress.worldRank = rank;
+            }
+            guildLog.info(`${raidData.name}: World Rank #${rank} (Raider.IO fallback) - applied to ${raidEntries.map((e) => e.difficulty).join(", ")}`);
+          } else {
+            guildLog.info(`${raidData.name}: Raider.IO returned no valid world rank`);
+          }
+        }
+      } else {
+        guildLog.warn("Raider.IO fallback returned no data");
       }
     }
 
@@ -824,6 +890,8 @@ class GuildService {
 
     const guildLog = getGuildLogger(guild.name, guild.realm);
     guildLog.info("Updating world ranks for current raids...");
+
+    const raidsNeedingFallback: { raidId: number; raidData: IRaid; mythicProgress: IRaidProgress | undefined; heroicProgress: IRaidProgress | undefined; raidName: string }[] = [];
 
     for (const raidId of CURRENT_RAID_IDS) {
       // Find the raid data to get total boss count
@@ -877,10 +945,49 @@ class GuildService {
 
           guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${updatedDifficulties.join(", ")}`);
         } else {
-          guildLog.info(`${raidName}: No world rank data available`);
+          guildLog.info(`${raidName}: No world rank data from WCL, will try Raider.IO fallback`);
+          raidsNeedingFallback.push({ raidId, raidData, mythicProgress, heroicProgress, raidName });
         }
       } catch (error) {
         guildLog.error(`Error fetching world rank for raid ${raidId}:`, error);
+        raidsNeedingFallback.push({ raidId, raidData, mythicProgress, heroicProgress, raidName });
+      }
+    }
+
+    // Raider.IO fallback for raids without WCL world rank
+    if (raidsNeedingFallback.length > 0) {
+      guildLog.info(`Attempting Raider.IO fallback for ${raidsNeedingFallback.length} raid(s)...`);
+      const rioRankings = await raiderIOService.fetchGuildRaidRankings(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
+
+      if (rioRankings) {
+        for (const { raidData, mythicProgress, heroicProgress, raidName } of raidsNeedingFallback) {
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
+          if (!diffRankings) {
+            guildLog.info(`${raidName}: No matching Raider.IO rankings found`);
+            continue;
+          }
+
+          const rank = diffRankings.mythic?.world || diffRankings.heroic?.world;
+          if (rank) {
+            const updatedDifficulties: string[] = [];
+
+            if (mythicProgress) {
+              mythicProgress.worldRank = rank;
+              updatedDifficulties.push("mythic");
+            }
+
+            if (heroicProgress) {
+              heroicProgress.worldRank = rank;
+              updatedDifficulties.push("heroic");
+            }
+
+            guildLog.info(`${raidName}: World Rank #${rank} (Raider.IO fallback) - applied to ${updatedDifficulties.join(", ")}`);
+          } else {
+            guildLog.info(`${raidName}: Raider.IO returned no valid world rank`);
+          }
+        }
+      } else {
+        guildLog.warn("Raider.IO fallback returned no data");
       }
     }
 
@@ -900,6 +1007,47 @@ class GuildService {
     logger.info("Guild rankings calculation complete for all raids");
   }
 
+  // Fetch official raid progression from Raider.IO and store it
+  // This reflects Blizzard's in-game kill tracking, independent of WCL log visibility
+  async updateOfficialProgress(guildId: string): Promise<void> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      logger.error(`Guild not found: ${guildId}`);
+      return;
+    }
+
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Fetching official raid progression from Raider.IO...");
+
+    try {
+      const profile = await raiderIOService.fetchGuildRaidProgression(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
+
+      if (!profile || !profile.raid_progression) {
+        guildLog.info("No raid progression data from Raider.IO");
+        return;
+      }
+
+      const updatedEntries = Object.entries(profile.raid_progression).map(([tierSlug, tierData]) => ({
+        raidTierSlug: tierSlug,
+        summary: tierData.summary,
+        totalBosses: tierData.total_bosses,
+        normalBossesKilled: tierData.normal_bosses_killed,
+        heroicBossesKilled: tierData.heroic_bosses_killed,
+        mythicBossesKilled: tierData.mythic_bosses_killed,
+        lastUpdated: new Date(),
+      }));
+
+      guild.officialProgress = updatedEntries;
+      await guild.save();
+
+      for (const entry of updatedEntries) {
+        guildLog.info(`Official progress (${entry.raidTierSlug}): ${entry.summary}`);
+      }
+    } catch (error) {
+      guildLog.error("Error fetching official progress from Raider.IO:", error);
+    }
+  }
+
   // Calculate guild rankings for a specific raid
   // Rankings are calculated per difficulty (mythic and heroic separately)
   async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
@@ -913,21 +1061,41 @@ class GuildService {
       return;
     }
 
+    // Look up raid slug for matching official progress from Raider.IO
+    const raid = await Raid.findOne({ id: raidId }).lean();
+    const raidSlug = raid?.slug || "";
+
+    // Helper: find matching official progress entry for this raid
+    const findOfficialProgress = (guild: IGuild): IOfficialRaidProgress | undefined => {
+      if (!guild.officialProgress?.length || !raidSlug) return undefined;
+      const normalized = raidSlug.toLowerCase();
+      return guild.officialProgress.find((op) => {
+        const tierSlug = op.raidTierSlug.toLowerCase();
+        return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+      });
+    };
+
     // Calculate rankings for both difficulties
     for (const difficulty of ["mythic", "heroic"] as const) {
       // Collect all guild progress for this raid and difficulty
+      // Include guilds that have either WCL log progress OR official progress from Raider.IO
       const guildProgressPairs = guilds
         .map((guild) => {
           const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
-          if (progress && progress.bossesDefeated > 0) {
-            // Only include guilds with at least 1 boss kill
-            return { guild, progress };
+          const official = findOfficialProgress(guild);
+          const officialKills = difficulty === "mythic" ? (official?.mythicBossesKilled ?? 0) : (official?.heroicBossesKilled ?? 0);
+          const logKills = progress?.bossesDefeated ?? 0;
+          const effectiveKills = Math.max(logKills, officialKills);
+
+          if (effectiveKills > 0 && progress) {
+            return { guild, progress, effectiveKills };
           }
           return null;
         })
         .filter((pair) => pair !== null) as Array<{
         guild: IGuild;
         progress: IRaidProgress;
+        effectiveKills: number;
       }>;
 
       if (guildProgressPairs.length === 0) {
@@ -937,54 +1105,18 @@ class GuildService {
 
       // Sort guilds according to ranking rules
       const sortedPairs = guildProgressPairs.sort((a, b) => {
-        const aProgress = a.progress;
-        const bProgress = b.progress;
-
-        // Rule 1: One mythic boss kill is worth more than any number of heroic boss kills
-        // If we're comparing mythic progress, this doesn't apply (both are mythic)
-        // If we're comparing heroic progress, this doesn't apply (both are heroic)
-        // This rule is already enforced by calculating rankings per difficulty
-
-        // Rule 2: Most boss kills first
-        if (aProgress.bossesDefeated !== bProgress.bossesDefeated) {
-          return bProgress.bossesDefeated - aProgress.bossesDefeated; // Higher is better
+        // Rule 1: Most effective boss kills first (max of WCL logs and Raider.IO official)
+        if (a.effectiveKills !== b.effectiveKills) {
+          return b.effectiveKills - a.effectiveKills; // Higher is better
         }
 
-        // Rule 3: If all bosses killed, whoever killed the last boss first wins
-        if (aProgress.bossesDefeated === aProgress.totalBosses && bProgress.bossesDefeated === bProgress.totalBosses) {
-          // Both completed - find last boss kill time
-          const aLastBoss = aProgress.bosses.reduce((latest, boss) => {
-            if (boss.kills > 0 && boss.firstKillTime) {
-              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
-                return boss;
-              }
-            }
-            return latest;
-          }, null as any);
-
-          const bLastBoss = bProgress.bosses.reduce((latest, boss) => {
-            if (boss.kills > 0 && boss.firstKillTime) {
-              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
-                return boss;
-              }
-            }
-            return latest;
-          }, null as any);
-
-          if (aLastBoss?.firstKillTime && bLastBoss?.firstKillTime) {
-            const aTime = new Date(aLastBoss.firstKillTime).getTime();
-            const bTime = new Date(bLastBoss.firstKillTime).getTime();
-            return aTime - bTime; // Earlier is better
-          }
-        }
-
-        // Rule 4: If same boss kills and progressing, best pull progress wins
-        // Find the current boss (first unkilled boss)
-        const aCurrentBoss = aProgress.bosses.find((b) => b.kills === 0);
-        const bCurrentBoss = bProgress.bosses.find((b) => b.kills === 0);
+        // Rule 2: Best pull progress on current (next unkilled) boss
+        // This takes priority over world rank because world rank reflects the rank
+        // at the time of the LAST kill, not current progression on the next boss.
+        const aCurrentBoss = a.progress.bosses.find((boss) => boss.kills === 0);
+        const bCurrentBoss = b.progress.bosses.find((boss) => boss.kills === 0);
 
         if (aCurrentBoss && bCurrentBoss) {
-          // Compare best pull progress (fightCompletion: lower is better)
           const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
           const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
 
@@ -992,13 +1124,19 @@ class GuildService {
             return aFightCompletion - bFightCompletion; // Lower is better
           }
 
-          // Tiebreaker: bossHealth (lower is better)
           const aBossHealth = aCurrentBoss.bestPullPhase?.bossHealth ?? aCurrentBoss.bestPercent ?? 100;
           const bBossHealth = bCurrentBoss.bestPullPhase?.bossHealth ?? bCurrentBoss.bestPercent ?? 100;
 
           if (aBossHealth !== bBossHealth) {
             return aBossHealth - bBossHealth; // Lower is better
           }
+        }
+
+        // Rule 3: World rank (from WCL API) — reliable tiebreaker when pull progress is identical
+        const aWorldRank = a.progress.worldRank ?? Infinity;
+        const bWorldRank = b.progress.worldRank ?? Infinity;
+        if (aWorldRank !== bWorldRank) {
+          return aWorldRank - bWorldRank; // Lower is better
         }
 
         // Final tiebreaker: alphabetically by guild name
@@ -1012,6 +1150,7 @@ class GuildService {
 
       // Save all guilds with updated ranks
       for (const pair of sortedPairs) {
+        await yieldToEventLoop();
         await pair.guild.save();
       }
 
@@ -1627,7 +1766,18 @@ class GuildService {
       // This ensures we catch any fights that were missed during live polling
       if (!guild.isCurrentlyRaiding && wasRaiding) {
         guildLog.info("⚠️  Guild just STOPPED raiding - performing thorough refetch of newest reports...");
+
+        // Capture progress state BEFORE refetch/recalculation for regress detection
+        const preRaidProgress = guild.progress.filter((p) => CURRENT_RAID_IDS.includes(p.raidId)).map((p) => JSON.parse(JSON.stringify(p))) as IRaidProgress[];
+
         const recoveredFights = await this.thoroughlyRefetchNewestReports(guild);
+
+        // Check for regress events (no improvement during the raid night)
+        try {
+          await this.checkForRegressEvents(guild, preRaidProgress);
+        } catch (error) {
+          guildLog.error("Error checking for regress events:", error);
+        }
 
         if (recoveredFights > 0) {
           guildLog.info(`✅ Recovered ${recoveredFights} missing fights (statistics already recalculated)`);
@@ -2373,7 +2523,11 @@ class GuildService {
     );
 
     // THIRD PASS: Process all unique fights and build statistics
-    for (const fight of uniqueFights) {
+    for (let i = 0; i < uniqueFights.length; i++) {
+      // Yield every 50 fights to let the event loop process HTTP requests
+      if (i % 50 === 0 && i > 0) await yieldToEventLoop();
+
+      const fight = uniqueFights[i];
       const encounterId = fight.encounterID;
       const isKill = fight.isKill;
       const bossPercent = fight.bossPercentage || 0;
@@ -2679,6 +2833,201 @@ class GuildService {
         }
       }
     }
+
+    // Check for re-progress: boss was previously killed, re-kill took more than 5 pulls
+    if (oldBoss.kills >= 1 && newBoss.kills > oldBoss.kills) {
+      const guildLog = getGuildLogger(guild.name, guild.realm);
+      guildLog.info(`Detected re-kill of ${newBoss.bossName} (${raidProgress.difficulty}) - checking for re-progress event`);
+
+      try {
+        const difficultyNumber = raidProgress.difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
+
+        // Find the two most recent kills to count pulls between them
+        const recentKills = await Fight.find({
+          guildId: guild._id,
+          encounterID: newBoss.bossId,
+          difficulty: difficultyNumber,
+          isKill: true,
+        })
+          .sort({ timestamp: -1 })
+          .limit(2);
+
+        if (recentKills.length >= 2) {
+          const latestKill = recentKills[0];
+          const previousKill = recentKills[1];
+
+          // Count all pulls (kills + wipes) between the two kills
+          const pullsBetweenKills = await Fight.countDocuments({
+            guildId: guild._id,
+            encounterID: newBoss.bossId,
+            difficulty: difficultyNumber,
+            timestamp: { $gt: previousKill.timestamp, $lte: latestKill.timestamp },
+          });
+
+          guildLog.info(`Re-kill of ${newBoss.bossName}: ${pullsBetweenKills} pulls between previous and latest kill`);
+
+          if (pullsBetweenKills > 5) {
+            await Event.create({
+              type: "reproge",
+              guildId: guild._id,
+              guildName: guild.name,
+              raidId: raidProgress.raidId,
+              raidName: raidProgress.raidName,
+              bossId: newBoss.bossId,
+              bossName: newBoss.bossName,
+              difficulty: raidProgress.difficulty,
+              data: {
+                pullCount: pullsBetweenKills,
+              },
+              timestamp: latestKill.timestamp,
+            });
+
+            guildLog.info(`Created reproge event for ${newBoss.bossName} (${pullsBetweenKills} pulls to re-kill)`);
+            await cacheService.invalidateEventCaches();
+          }
+        }
+      } catch (error) {
+        guildLog.error(`Error checking for reproge event on ${newBoss.bossName}:`, error);
+      }
+    }
+  }
+
+  // Detect regress: guild pulled a boss during a raid night but failed to improve bestPercent or kill it
+  // Called when guild transitions from raiding → not raiding, comparing pre-night vs post-night progress
+  async checkForRegressEvents(guild: IGuild, preRaidProgress: IRaidProgress[]): Promise<void> {
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+
+    for (const raidId of CURRENT_RAID_IDS) {
+      const oldRaidProgress = preRaidProgress.find((p) => p.raidId === raidId);
+      if (!oldRaidProgress) continue;
+
+      // Check both difficulties
+      for (const difficulty of ["mythic", "heroic"] as const) {
+        const oldDiffProgress = preRaidProgress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+        const newDiffProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+
+        if (!oldDiffProgress || !newDiffProgress) continue;
+
+        for (const newBoss of newDiffProgress.bosses) {
+          const oldBoss = oldDiffProgress.bosses.find((b) => b.bossId === newBoss.bossId);
+          if (!oldBoss) continue;
+
+          // Regress conditions:
+          // 1. Boss was not killed before AND still not killed
+          // 2. Pull count increased (they actually pulled it during this session)
+          // 3. Best percent did NOT improve (same or worse)
+          const pullsThisSession = newBoss.pullCount - oldBoss.pullCount;
+          const noImprovement = newBoss.bestPercent >= oldBoss.bestPercent;
+          const notKilled = oldBoss.kills === 0 && newBoss.kills === 0;
+
+          if (notKilled && pullsThisSession > 0 && noImprovement) {
+            guildLog.info(
+              `Regress detected for ${newBoss.bossName} (${difficulty}): ` +
+                `${pullsThisSession} pulls with no improvement (${oldBoss.bestPercent.toFixed(1)}% → ${newBoss.bestPercent.toFixed(1)}%)`,
+            );
+
+            await Event.create({
+              type: "regress",
+              guildId: guild._id,
+              guildName: guild.name,
+              raidId: raidId,
+              raidName: newDiffProgress.raidName,
+              bossId: newBoss.bossId,
+              bossName: newBoss.bossName,
+              difficulty: difficulty,
+              data: {
+                pullCount: pullsThisSession,
+                bestPercent: newBoss.bestPercent,
+              },
+              timestamp: new Date(),
+            });
+
+            await cacheService.invalidateEventCaches();
+          }
+        }
+      }
+    }
+  }
+
+  // Detect hiatus: guild has not raided for 7, 14, or 30 days
+  // Only applies to current tier guilds with heroic or mythic progress
+  // Each threshold triggers at most once per guild per raid tier
+  async checkForHiatusEvents(): Promise<void> {
+    const HIATUS_THRESHOLDS = [
+      { days: 30, label: "1 month" },
+      { days: 14, label: "14 days" },
+      { days: 7, label: "7 days" },
+    ];
+
+    logger.info("[Hiatus] Checking for hiatus events across all guilds...");
+
+    for (const raidId of CURRENT_RAID_IDS) {
+      const raidData = await this.getRaidData(raidId);
+      if (!raidData) continue;
+
+      // Find guilds that have current tier progress (heroic or mythic)
+      // and have a lastLogEndTime set (meaning they have raided before)
+      const guilds = await Guild.find({
+        lastLogEndTime: { $exists: true },
+        wclStatus: { $ne: "not_found" },
+        $or: [
+          { "progress.raidId": raidId, "progress.difficulty": "heroic", "progress.bossesDefeated": { $gt: 0 } },
+          { "progress.raidId": raidId, "progress.difficulty": "mythic", "progress.bossesDefeated": { $gt: 0 } },
+        ],
+      });
+
+      if (guilds.length === 0) continue;
+
+      logger.info(`[Hiatus] Checking ${guilds.length} guilds for raid ${raidData.name}`);
+
+      for (const guild of guilds) {
+        if (!guild.lastLogEndTime) continue;
+
+        const daysSinceLastLog = (Date.now() - guild.lastLogEndTime.getTime()) / (1000 * 60 * 60 * 24);
+
+        // Determine highest difficulty with progress for this guild/raid
+        const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic" && p.bossesDefeated > 0);
+        const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic" && p.bossesDefeated > 0);
+        const highestDifficulty = mythicProgress ? "mythic" : heroicProgress ? "heroic" : null;
+
+        if (!highestDifficulty) continue;
+
+        // Check each threshold (highest first so we only create the most relevant)
+        for (const threshold of HIATUS_THRESHOLDS) {
+          if (daysSinceLastLog < threshold.days) continue;
+
+          // Check if this hiatus event already exists for this guild/raid/threshold
+          const existingEvent = await Event.findOne({
+            type: "hiatus",
+            guildId: guild._id,
+            raidId: raidId,
+            "data.hiatusDays": threshold.days,
+          });
+
+          if (existingEvent) continue;
+
+          const guildLog = getGuildLogger(guild.name, guild.realm);
+          guildLog.info(`Creating hiatus event: ${threshold.days} days since last raid (last log: ${guild.lastLogEndTime.toISOString()})`);
+
+          await Event.create({
+            type: "hiatus",
+            guildId: guild._id,
+            guildName: guild.name,
+            raidId: raidId,
+            raidName: raidData.name,
+            difficulty: highestDifficulty,
+            data: {
+              hiatusDays: threshold.days,
+            },
+            timestamp: new Date(),
+          });
+
+          await cacheService.invalidateEventCaches();
+        }
+      }
+    }
+
+    logger.info("[Hiatus] Hiatus check complete");
   }
 
   // Check if guild has ongoing reports (currently raiding)
@@ -2805,6 +3154,8 @@ class GuildService {
               cond: { $eq: ["$$p.raidId", raidId] },
             },
           },
+          // Include official progress from Raider.IO
+          officialProgress: 1,
           // Include raidSchedule for schedule summary calculation
           raidSchedule: 1,
           // Include streamers to check isLive status (only need isLive field)
@@ -2919,6 +3270,7 @@ class GuildService {
         isStreaming: isStreaming,
         lastFetched: guildObj.lastFetched,
         progress: minimalProgress,
+        officialProgress: guildObj.officialProgress || [],
         scheduleDisplay: scheduleSummary,
       };
     });
@@ -3182,6 +3534,7 @@ class GuildService {
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,
+      officialProgress: guildObj.officialProgress || [],
       scheduleDisplay: scheduleSummary,
       raidSchedule: raidSchedule,
       streamers: streamers,

@@ -22,16 +22,12 @@
   },
   "infoDialog": {
     "title": "About This Site",
-    "description": "This website tracks the progress of Finnish World of Warcraft guilds in current raid content. Data is updated automatically from Warcraft Logs and Raider.IO.",
-    "features": {
-      "title": "Features",
-      "realtime": "Real-time progress tracking",
-      "rankings": "World and server rankings",
-      "history": "Boss kill history and attempts",
-      "schedules": "Guild raid schedules",
-      "livestreams": "Live raid streams"
-    },
-    "dataSource": "Data sources: Warcraft Logs, Raider.IO, Blizzard API",
+    "description": "This is a completely fan-made passion project — not affiliated with Blizzard Entertainment in any way. It was built just for fun to help the Finnish World of Warcraft community keep track of guild raid progress.",
+    "community": "The goal is simple: give Finnish WoW players one place to see how our guilds are doing in current raid content. Whether you're pushing Mythic or just following the race, this site is for you.",
+    "noMonetization": "There are no ads, no tracking, no monetization. This project doesn't make any money — it's purely a labor of love for the community.",
+    "asIs": "Everything here is provided as-is. Things might break sometimes, data might lag behind, and features come when there's time to build them.",
+    "contact": "If something looks wrong, is broken, or you have ideas for improvements — don't hesitate to reach out on Discord! Feedback and suggestions are always welcome.",
+    "dataSource": "Data sources: Warcraft Logs, Raider.IO, and Blizzard API",
     "close": "Close"
   },
   "footer": {
@@ -39,7 +35,8 @@
     "and": "and",
     "sendFeedback": "Send feedback",
     "termsOfService": "Terms of Service",
-    "privacyPolicy": "Privacy Policy"
+    "privacyPolicy": "Privacy Policy",
+    "pickemsRules": "Pickems Rules"
   },
   "table": {
     "noData": "No data available",
@@ -68,7 +65,8 @@
     "viewOnWarcraftLogs": "View on Warcraft Logs",
     "viewOnRaiderIO": "View on Raider.IO",
     "noSchedule": "No schedule",
-    "noBestPull": "No best pull"
+    "noBestPull": "No best pull",
+    "officialProgressTooltip": "Based on in-game progress (Raider.IO) — higher than logged progress"
   },
   "homePage": {
     "title": "Finnish Guild Progress",
@@ -254,7 +252,29 @@
     "saveError": "Failed to save character selection. Please try again.",
     "lastSynced": "Last synced:",
     "editCharacters": "Edit Characters",
-    "noCharactersSelected": "No characters selected"
+    "noCharactersSelected": "No characters selected",
+    "myPickems": "My Pickem Predictions",
+    "noPickems": "You haven't participated in any pickems yet.",
+    "pickemPredictions": "Your Predictions",
+    "position": "Position",
+    "guild": "Guild",
+    "submittedAt": "Submitted",
+    "updatedAt": "Last Updated",
+    "deleteAccount": "Delete My Account",
+    "deleteAccountTitle": "Delete Account",
+    "deleteAccountWarning": "This action is permanent and cannot be undone. All your data will be deleted:",
+    "deleteAccountData1": "Your profile and Discord connection",
+    "deleteAccountData2": "All connected accounts (Twitch, Battle.net)",
+    "deleteAccountData3": "All WoW characters",
+    "deleteAccountData4": "All pickem predictions",
+    "deleteAccountConfirmLabel": "Type DELETE to confirm:",
+    "deleteAccountConfirmPlaceholder": "Type DELETE",
+    "deleteAccountButton": "Permanently Delete My Account",
+    "deleteAccountDeleting": "Deleting...",
+    "deleteAccountSuccess": "Your account has been deleted.",
+    "deleteAccountError": "Failed to delete account. Please try again.",
+    "viewPickem": "View Pickem",
+    "cancel": "Cancel"
   },
   "characterSelector": {
     "title": "Select Your Characters",
@@ -469,7 +489,8 @@
     "scoringOff2": "Off by 2: 6 points",
     "scoringOff3": "Off by 3: 4 points",
     "scoringOff4": "Off by 4: 2 points",
-    "scoringOff5": "Off by 5+: 0 points"
+    "scoringOff5": "Off by 5+: 0 points",
+    "viewFullRules": "View full rules & info"
   },
   "raidAnalyticsPage": {
     "title": "Raid Analytics",

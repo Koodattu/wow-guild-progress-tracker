@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { api } from "@/lib/api";
+import { usePickemsGuilds } from "@/lib/queries";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/context/AuthContext";
 import { PickemSummary, PickemDetails, PickemPrediction, SimpleGuild, LeaderboardEntry, GuildRanking, PrizeConfig } from "@/types";
@@ -523,8 +524,7 @@ export default function PickemsPage() {
   const [pickems, setPickems] = useState<PickemSummary[]>([]);
   const [selectedPickemId, setSelectedPickemId] = useState<string | null>(null);
   const [pickemDetails, setPickemDetails] = useState<PickemDetails | null>(null);
-  const [guilds, setGuilds] = useState<SimpleGuild[]>([]);
-  const [rwfGuilds, setRwfGuilds] = useState<SimpleGuild[]>([]);
+
   const [predictions, setPredictions] = useState<(PickemPrediction | null)[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -533,6 +533,9 @@ export default function PickemsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
   const [droppingIndex, setDroppingIndex] = useState<number | null>(null);
+
+  const raidType = pickems.find((p) => p.id === selectedPickemId)?.type === "rwf" ? "rwf" : "overall";
+  const { data: guildsData = [] } = usePickemsGuilds(raidType);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -545,15 +548,13 @@ export default function PickemsPage() {
     }),
   );
 
-  // Fetch pickems list and guilds on mount — do NOT auto-select first pickem
+  // Fetch pickems list on mount — do NOT auto-select first pickem
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [pickemsData, guildsData, rwfGuildsData] = await Promise.all([api.getPickems(), api.getPickemsGuilds(), api.getPickemsRwfGuilds()]);
+        const pickemsData = await api.getPickems();
         setPickems(pickemsData);
-        setGuilds(guildsData);
-        setRwfGuilds(rwfGuildsData);
       } catch (err) {
         setError("Failed to load pickems");
         console.error(err);
@@ -703,13 +704,9 @@ export default function PickemsPage() {
     return `${minutes}m remaining`;
   };
 
-  // Use RWF guilds for RWF pickems, regular guilds otherwise
   const sortedGuilds = useMemo(() => {
-    const selectedPickem = pickems.find((p) => p.id === selectedPickemId);
-    const isRwf = selectedPickem?.type === "rwf";
-    const guildList = isRwf ? rwfGuilds : guilds;
-    return [...guildList].sort((a, b) => a.name.localeCompare(b.name));
-  }, [guilds, rwfGuilds, pickems, selectedPickemId]);
+    return [...guildsData].sort((a, b) => a.name.localeCompare(b.name));
+  }, [guildsData]);
 
   const getExcludedGuilds = useCallback(
     (currentPosition: number) => {
@@ -975,6 +972,9 @@ export default function PickemsPage() {
                   </div>
                 )}
               </div>
+              <a href="/pickems-rules" className="block text-xs text-blue-400 hover:text-blue-300 transition-colors mb-3">
+                {t("viewFullRules")} →
+              </a>
               <h3 className="text-base font-semibold text-white mb-3">{t("leaderboard")}</h3>
               {pickemDetails.leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>

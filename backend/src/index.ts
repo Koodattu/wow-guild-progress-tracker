@@ -30,6 +30,19 @@ import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.midd
 import cacheService from "./services/cache.service";
 import cacheWarmerService from "./services/cache-warmer.service";
 
+// ============================================================================
+// WORKER MODE CONFIGURATION
+// ============================================================================
+// WORKER_MODE controls what this process does:
+//   "api"    — Only serve HTTP requests (Express). No background jobs.
+//   "worker" — Only run background jobs (scheduler, processor, cache warming).
+//              No Express server. Keeps API responsive by running heavy work
+//              in a separate process.
+//   "both"   — Run everything in one process (legacy / dev default).
+const WORKER_MODE = (process.env.WORKER_MODE || "both").toLowerCase() as "api" | "worker" | "both";
+const isApiProcess = WORKER_MODE === "api" || WORKER_MODE === "both";
+const isWorkerProcess = WORKER_MODE === "worker" || WORKER_MODE === "both";
+
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
@@ -230,6 +243,16 @@ async function runBackgroundInitialization(): Promise<void> {
   await runStartupTask("Sync raid data from WarcraftLogs", async () => {
     await guildService.syncRaidsFromWCL();
   });
+
+  // Retry matching boss icons for bosses that have no icon
+  const retryBossIcons = process.env.RETRY_MISSING_BOSS_ICONS_ON_STARTUP !== "false";
+  if (retryBossIcons) {
+    await runStartupTask("Retry missing boss icons", async () => {
+      await blizzardService.retryMissingBossIcons();
+    });
+  } else {
+    logger.info("RETRY_MISSING_BOSS_ICONS_ON_STARTUP is disabled, skipping boss icon re-matching");
+  }
 
   // Initialize guilds from config
   await runStartupTask("Initialize guilds from config", async () => {
@@ -435,10 +458,10 @@ async function runBackgroundInitialization(): Promise<void> {
 const startServer = async () => {
   try {
     logger.info("=".repeat(60));
-    logger.info("[Startup] Starting server...");
+    logger.info(`[Startup] Starting in ${WORKER_MODE.toUpperCase()} mode...`);
     logger.info("=".repeat(60));
 
-    // Connect to MongoDB - this is the only blocking requirement
+    // Connect to MongoDB - required by all modes
     setStartupTask("Connect to MongoDB");
     await connectDB();
     completeStartupTask("Connect to MongoDB");
@@ -448,21 +471,36 @@ const startServer = async () => {
     await cacheService.initialize();
     completeStartupTask("Initialize cache service");
 
-    // Start Express server IMMEDIATELY after database connection
-    app.listen(PORT, () => {
-      logger.info(`[Startup] Server running on port ${PORT}`);
-      logger.info(`[Startup] API available at http://localhost:${PORT}/api`);
-      logger.info(`[Startup] Health check: http://localhost:${PORT}/health`);
-      logger.info("[Startup] API is now accepting requests (initialization continuing in background)");
-    });
+    if (isApiProcess) {
+      // Start Express server IMMEDIATELY after database connection
+      app.listen(PORT, () => {
+        logger.info(`[Startup] Server running on port ${PORT}`);
+        logger.info(`[Startup] API available at http://localhost:${PORT}/api`);
+        logger.info(`[Startup] Health check: http://localhost:${PORT}/health`);
+        logger.info("[Startup] API is now accepting requests");
+      });
+    }
 
-    // Run all other initialization tasks in the background
-    // This is intentionally not awaited - we want the server to be available immediately
-    runBackgroundInitialization().catch((error) => {
-      startupState.status = "error";
-      startupState.errors.push(error instanceof Error ? error.message : String(error));
-      logger.error("[Startup] Fatal error during background initialization:", error);
-    });
+    if (isWorkerProcess) {
+      // Run background initialization (scheduler, processor, cache warming, etc.)
+      // In "both" mode this is fire-and-forget so the API is available immediately.
+      // In "worker" mode we await it so the process stays alive.
+      const bgPromise = runBackgroundInitialization().catch((error) => {
+        startupState.status = "error";
+        startupState.errors.push(error instanceof Error ? error.message : String(error));
+        logger.error("[Startup] Fatal error during background initialization:", error);
+      });
+
+      if (WORKER_MODE === "worker") {
+        await bgPromise;
+        logger.info("[Startup] Worker initialization complete, background jobs running");
+      }
+    } else {
+      // API-only mode: mark ready immediately (no background init needed)
+      startupState.status = "ready";
+      startupState.readyAt = new Date();
+      logger.info("[Startup] API-only mode ready (no background jobs in this process)");
+    }
   } catch (error) {
     startupState.status = "error";
     logger.error("Failed to start server:", error);
@@ -473,17 +511,25 @@ const startServer = async () => {
 // Handle shutdown gracefully
 process.on("SIGINT", async () => {
   logger.info("Shutting down gracefully...");
-  scheduler.stop();
-  backgroundGuildProcessor.stop();
-  await flushAnalytics(); // Flush any pending analytics
+  if (isWorkerProcess) {
+    scheduler.stop();
+    backgroundGuildProcessor.stop();
+  }
+  if (isApiProcess) {
+    await flushAnalytics();
+  }
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   logger.info("Shutting down gracefully...");
-  scheduler.stop();
-  backgroundGuildProcessor.stop();
-  await flushAnalytics(); // Flush any pending analytics
+  if (isWorkerProcess) {
+    scheduler.stop();
+    backgroundGuildProcessor.stop();
+  }
+  if (isApiProcess) {
+    await flushAnalytics();
+  }
   process.exit(0);
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
-import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl } from "@/lib/utils";
+import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl, getEffectiveProgress } from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
@@ -47,9 +47,24 @@ const GuildTableRow = memo(
     const mythicBestPull = getBestPullForProgress(mythicProgress);
     const mythicBestPullDisplay = getBestPullDisplayString(mythicProgress);
     const mythicPulls = getCurrentPullCount(mythicProgress);
+    const heroicBestPull = getBestPullForProgress(heroicProgress);
+    const heroicBestPullDisplay = getBestPullDisplayString(heroicProgress);
+    const heroicPulls = getCurrentPullCount(heroicProgress);
+    const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
     const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
+    const official = guild.officialProgress?.[0];
+    const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+    const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
+
+    // Use heroic data for pulls/progress/time columns when no mythic pull data exists
+    const effectivePulls = hasMythicPullData ? mythicPulls : heroicPulls;
+    const effectiveBestPull = hasMythicPullData ? mythicBestPull : heroicBestPull;
+    const effectiveBestPullDisplay = hasMythicPullData ? mythicBestPullDisplay : heroicBestPullDisplay;
+    const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
+    const isHeroicFallback = !hasMythicPullData && (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0);
+    const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
       <tr key={guild._id} className={`border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
@@ -142,7 +157,10 @@ const GuildTableRow = memo(
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
-          <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
+          <span className="text-orange-500 font-semibold" title={mythicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
+            {mythicDisplay.text}
+            {mythicDisplay.isOfficial && <span className="text-[10px] text-orange-400/60 ml-0.5">*</span>}
+          </span>
         </td>
         <td
           className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
@@ -150,31 +168,34 @@ const GuildTableRow = memo(
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
-          <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+          <span className="text-purple-500 font-semibold" title={heroicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
+            {heroicDisplay.text}
+            {heroicDisplay.isOfficial && <span className="text-[10px] text-purple-400/60 ml-0.5">*</span>}
+          </span>
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
           onClick={() => onRaidProgressClick(guild)}
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
-          {mythicPulls > 0 ? mythicPulls : "-"}
+          {effectivePulls > 0 ? effectivePulls : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
           onClick={() => onRaidProgressClick(guild)}
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
-          {mythicBestPullDisplay ? formatPhaseDisplay(mythicBestPullDisplay) : mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}
+          {effectiveBestPullDisplay ? formatPhaseDisplay(effectiveBestPullDisplay) : effectiveBestPull > 0 ? formatPercent(effectiveBestPull) : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
           onClick={() => onRaidProgressClick(guild)}
           onMouseEnter={() => setHoveredRaidProgressRow(true)}
           onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
-          {mythicProgress ? formatTime(mythicProgress.totalTimeSpent) : "-"}
+          {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
         </td>
       </tr>
     );
@@ -216,10 +237,23 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const mythicBestPull = getBestPullForProgress(mythicProgress);
     const mythicBestPullDisplay = getBestPullDisplayString(mythicProgress);
     const mythicPulls = getCurrentPullCount(mythicProgress);
+    const heroicBestPull = getBestPullForProgress(heroicProgress);
+    const heroicBestPullDisplay = getBestPullDisplayString(heroicProgress);
+    const heroicPulls = getCurrentPullCount(heroicProgress);
+    const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
     const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
-    const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+    const official = guild.officialProgress?.[0];
+    const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+    const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
+
+    const effectivePulls = hasMythicPullData ? mythicPulls : heroicPulls;
+    const effectiveBestPull = hasMythicPullData ? mythicBestPull : heroicBestPull;
+    const effectiveBestPullDisplay = hasMythicPullData ? mythicBestPullDisplay : heroicBestPullDisplay;
+    const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
+    const isHeroicFallback = !hasMythicPullData && (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0);
+    const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
       <div className={`bg-gray-800/50 rounded-lg mb-1.5 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
@@ -258,20 +292,26 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
             onClick={() => onRaidProgressClick(guild)}
           >
             <div className="text-center">
-              <div className="text-orange-500 font-bold text-xs">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
+              <div className="text-orange-500 font-bold text-xs">
+                {mythicDisplay.text}
+                {mythicDisplay.isOfficial && <span className="text-[8px] text-orange-400/60">*</span>}
+              </div>
               <div className="text-[9px] text-gray-500">M</div>
             </div>
             <div className="text-center">
-              <div className="text-purple-500 font-bold text-xs">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</div>
+              <div className="text-purple-500 font-bold text-xs">
+                {heroicDisplay.text}
+                {heroicDisplay.isOfficial && <span className="text-[8px] text-purple-400/60">*</span>}
+              </div>
               <div className="text-[9px] text-gray-500">H</div>
             </div>
             <div className="text-center">
-              <div className="text-gray-300 text-xs">{mythicPulls > 0 ? mythicPulls : "-"}</div>
+              <div className={`text-xs ${fallbackTextColor}`}>{effectivePulls > 0 ? effectivePulls : "-"}</div>
               <div className="text-[9px] text-gray-500">{t("pulls")}</div>
             </div>
             <div className="text-center min-w-8">
-              <div className="text-gray-300 text-xs">
-                {mythicBestPullDisplay ? formatPhaseDisplay(mythicBestPullDisplay) : mythicBestPull > 0 ? formatPercent(mythicBestPull) : "-"}
+              <div className={`text-xs ${fallbackTextColor}`}>
+                {effectiveBestPullDisplay ? formatPhaseDisplay(effectiveBestPullDisplay) : effectiveBestPull > 0 ? formatPercent(effectiveBestPull) : "-"}
               </div>
               <div className="text-[9px] text-gray-500">%</div>
             </div>

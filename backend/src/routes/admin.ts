@@ -369,7 +369,7 @@ router.get("/guilds/:guildId", async (req: Request, res: Response) => {
   }
 });
 
-// Recalculate stats for single guild
+// Recalculate stats for single guild (queued to background worker)
 router.post("/guilds/:guildId/recalculate-stats", async (req: Request, res: Response) => {
   try {
     const { guildId } = req.params;
@@ -379,18 +379,14 @@ router.post("/guilds/:guildId/recalculate-stats", async (req: Request, res: Resp
       return res.status(404).json({ error: "Guild not found" });
     }
 
-    // Run async
-    guildService
-      .calculateGuildStatistics(guild, null)
-      .then(async () => {
-        await guild.save();
-        logger.info(`Recalculated statistics for guild: ${guild.name}`);
-      })
-      .catch((err) => logger.error(`Failed to recalculate stats for ${guild.name}:`, err));
+    // Queue for background worker instead of running in the API process
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5, "recalculate_stats");
 
     res.json({
       success: true,
-      message: `Statistics recalculation started for ${guild.name}`,
+      message: `Statistics recalculation queued for ${guild.name}`,
+      queueId: queueItem._id.toString(),
+      status: queueItem.status,
     });
   } catch (error) {
     logger.error("Error triggering guild stats recalculation:", error);

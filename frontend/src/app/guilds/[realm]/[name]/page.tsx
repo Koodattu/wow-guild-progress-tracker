@@ -3,8 +3,9 @@
 import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
-import { GuildSummary, Guild, RaidProgressSummary, RaidInfo, Boss, Event } from "@/types";
+import { Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
 import { api } from "@/lib/api";
+import { useGuildSummaryByRealmName, useRaids, useGuildEventsByRealmName } from "@/lib/queries";
 import {
   formatTime,
   formatPercent,
@@ -15,6 +16,8 @@ import {
   getRaiderIOGuildUrl,
   getTierLetter,
   getTierBgColor,
+  getEffectiveProgress,
+  findOfficialProgressForRaid,
 } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
@@ -31,24 +34,32 @@ export default function GuildProfilePage({ params }: PageProps) {
   const searchParams = useSearchParams();
   const isClosingModalRef = useRef(false);
 
-  const [guildSummary, setGuildSummary] = useState<GuildSummary | null>(null);
+  // Decode URL parameters
+  const realm = decodeURIComponent(resolvedParams.realm);
+  const name = decodeURIComponent(resolvedParams.name);
+
+  // React Query hooks for initial data
+  const { data: guildSummary, isLoading: isLoadingGuildSummary, error: guildSummaryError } = useGuildSummaryByRealmName(realm, name);
+
+  const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
+
+  const { data: events = [] } = useGuildEventsByRealmName(realm, name, 5);
+
+  // Combined loading/error states
+  const loading = isLoadingGuildSummary || isLoadingRaids;
+  const error = guildSummaryError || raidsError;
+
+  // Modal-related state (kept as local state - imperative on-demand fetching)
   const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
-  const [raids, setRaids] = useState<RaidInfo[]>([]);
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
 
   // Hover state for clickable areas
   const [hoveredRaidInfoRow, setHoveredRaidInfoRow] = useState<number | null>(null);
   const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState<number | null>(null);
-
-  // Decode URL parameters
-  const realm = decodeURIComponent(resolvedParams.realm);
-  const name = decodeURIComponent(resolvedParams.name);
 
   // Scroll to top when component mounts (when navigating to a new guild)
   useEffect(() => {
@@ -68,49 +79,28 @@ export default function GuildProfilePage({ params }: PageProps) {
     [pathname, router],
   );
 
-  // Initial data fetch - guild summary, raids, and events
+  // Mark initial load complete once all queries have resolved
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setError(null);
-        const [summaryData, raidsData, eventsData] = await Promise.all([
-          api.getGuildSummaryByRealmName(realm, name),
-          api.getRaids(),
-          api.getGuildEventsByRealmName(realm, name, 5),
-        ]);
-
-        setGuildSummary(summaryData);
-        setRaids(raidsData);
-        setEvents(eventsData);
-
-        // Check URL for raid ID parameter
-        const raidIdParam = searchParams.get("raidid");
-        if (raidIdParam) {
-          const raidId = parseInt(raidIdParam, 10);
-          if (!isNaN(raidId)) {
-            setSelectedRaidId(raidId);
-          }
+    if (!loading && guildSummary && !initialLoadComplete) {
+      // Check URL for raid ID parameter
+      const raidIdParam = searchParams.get("raidid");
+      if (raidIdParam) {
+        const raidId = parseInt(raidIdParam, 10);
+        if (!isNaN(raidId)) {
+          setSelectedRaidId(raidId);
         }
-
-        setInitialLoadComplete(true);
-      } catch (err) {
-        console.error("Error fetching guild profile:", err);
-        setError("Failed to load guild profile. Make sure the backend server is running.");
-      } finally {
-        setLoading(false);
       }
-    };
+      setInitialLoadComplete(true);
+    }
+  }, [loading, guildSummary, initialLoadComplete, searchParams]);
 
-    fetchData();
-  }, [realm, name, searchParams]);
-
-  // Handle raid click - fetch full progress for that raid
+  // Handle raid click - fetch full progress for that raid (imperative)
   const handleRaidClick = useCallback(
     async (raidId: number) => {
       if (!guildSummary) return;
 
       try {
-        setError(null);
+        setModalError(null);
         // Fetch boss progress for this specific raid and bosses list
         const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(realm, name, raidId), api.getBosses(raidId)]);
 
@@ -132,7 +122,7 @@ export default function GuildProfilePage({ params }: PageProps) {
         updateURL(raidId);
       } catch (err) {
         console.error("Error fetching raid details:", err);
-        setError("Failed to load raid details.");
+        setModalError("Failed to load raid details.");
       }
     },
     [guildSummary, realm, name, updateURL],
@@ -183,10 +173,11 @@ export default function GuildProfilePage({ params }: PageProps) {
   }
 
   if (error || !guildSummary) {
+    const errorMessage = error instanceof Error ? error.message : "Guild not found";
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="text-red-400 text-xl mb-4">{error || "Guild not found"}</div>
+          <div className="text-red-400 text-xl mb-4">{errorMessage}</div>
           <button onClick={() => router.push("/guilds")} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
             Back to Guilds
           </button>
@@ -246,6 +237,9 @@ export default function GuildProfilePage({ params }: PageProps) {
   return (
     <main className="min-h-screen text-white">
       <div className="container mx-auto px-2 md:px-4 max-w-full md:max-w-[90%] lg:max-w-[75%]">
+        {/* Modal error banner */}
+        {modalError && <div className="mb-3 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-300 text-sm">{modalError}</div>}
+
         {/* Guild Header */}
         <div className={`mb-3 ${guildSummary.isCurrentlyRaiding ? "border-l-4 border-l-green-500 pl-2 md:pl-4" : ""}`}>
           {/* Mobile: Compact row layout */}
@@ -524,6 +518,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
                         const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
                         const hasProgress = mythicProgress || heroicProgress;
+                        const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                        const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+                        const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
 
                         return (
                           <div key={`mobile-raid-${raid.id}`} className={`rounded-lg mb-1.5 bg-gray-800/50 border border-gray-700/50 ${!hasProgress ? "opacity-40" : ""}`}>
@@ -550,11 +547,17 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                               >
                                 <div className="text-center">
-                                  <div className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-orange-500 font-semibold">
+                                    {mythicDisplay.text}
+                                    {mythicDisplay.isOfficial && <span className="text-[8px] text-orange-400/60">*</span>}
+                                  </div>
                                   <div className="text-[9px] text-gray-500">M</div>
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-purple-500 font-semibold">
+                                    {heroicDisplay.text}
+                                    {heroicDisplay.isOfficial && <span className="text-[8px] text-purple-400/60">*</span>}
+                                  </div>
                                   <div className="text-[9px] text-gray-500">H</div>
                                 </div>
                                 {(totalTime > 0 || currentBossPulls > 0 || bestProgress) && (
@@ -646,6 +649,11 @@ export default function GuildProfilePage({ params }: PageProps) {
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;
 
+                          // Official progress from Raider.IO
+                          const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                          const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+                          const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
+
                           return (
                             <tr key={raid.id} className="border-b border-gray-800">
                               {/* First clickable area: Raid Name, Rank, World Rank */}
@@ -692,7 +700,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
+                                <span className="text-orange-500 font-semibold">
+                                  {mythicDisplay.text}
+                                  {mythicDisplay.isOfficial && <span className="text-[10px] text-orange-400/60 ml-0.5">*</span>}
+                                </span>
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors ${
@@ -702,7 +713,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+                                <span className="text-purple-500 font-semibold">
+                                  {heroicDisplay.text}
+                                  {heroicDisplay.isOfficial && <span className="text-[10px] text-purple-400/60 ml-0.5">*</span>}
+                                </span>
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
