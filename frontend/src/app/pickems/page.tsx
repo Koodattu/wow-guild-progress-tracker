@@ -975,6 +975,9 @@ export default function PickemsPage() {
                   </div>
                 )}
               </div>
+              <a href="/pickems-rules" className="block text-xs text-blue-400 hover:text-blue-300 transition-colors mb-3">
+                {t("viewFullRules")} →
+              </a>
               <h3 className="text-base font-semibold text-white mb-3">{t("leaderboard")}</h3>
               {pickemDetails.leaderboard.length === 0 ? (
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>

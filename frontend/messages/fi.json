@@ -22,16 +22,12 @@
   },
   "infoDialog": {
     "title": "Tietoa Sivustosta",
-    "description": "Tämä sivusto seuraa suomalaisten World of Warcraft -kiltojen edistymistä nykyisessä raidi-sisällössä. Tiedot päivitetään automaattisesti Warcraft Logsista ja Raider.IO:sta.",
-    "features": {
-      "title": "Ominaisuudet",
-      "realtime": "Reaaliaikainen edistymisen seuranta",
-      "rankings": "Maailman- ja palvelintilastot",
-      "history": "Bossi-tapon historia ja yritykset",
-      "schedules": "Kiltojen raidi-aikataulut",
-      "livestreams": "Raidi-suoratoistot"
-    },
-    "dataSource": "Tietolähteet: Warcraft Logs, Raider.IO, Blizzard API",
+    "description": "Tämä on täysin fanien tekemä harrasteprojekti — ei millään tavalla Blizzard Entertainmentin kanssa yhteistyössä. Se on tehty ihan huvin vuoksi auttamaan suomalaista World of Warcraft -yhteisöä seuraamaan kiltojen raidi-edistymistä.",
+    "community": "Tavoite on yksinkertainen: tarjota suomalaisille WoW-pelaajille yksi paikka nähdä, miten kiltamme pärjäävät nykyisessä raidi-sisällössä. Olitpa sitten Mythic-puskaaja tai seuraat kilpailua sivusta, tämä sivusto on sinua varten.",
+    "noMonetization": "Sivustolla ei ole mainoksia, seurantaa eikä rahallista hyötyä. Tämä projekti ei tuota rahaa — se on puhtaasti rakkaudesta yhteisöä kohtaan.",
+    "asIs": "Kaikki täällä tarjotaan sellaisenaan. Joskus asiat saattavat mennä rikki, data saattaa laahata perässä ja uusia ominaisuuksia tulee kun aikaa riittää.",
+    "contact": "Jos jokin näyttää väärältä, on rikki tai sinulla on kehitysideoita — ota rohkeasti yhteyttä Discordissa! Palaute ja ehdotukset ovat aina tervetulleita.",
+    "dataSource": "Tietolähteet: Warcraft Logs, Raider.IO ja Blizzard API",
     "close": "Sulje"
   },
   "footer": {
@@ -39,7 +35,8 @@
     "and": "ja",
     "sendFeedback": "Lähetä palautetta",
     "termsOfService": "Käyttöehdot",
-    "privacyPolicy": "Tietosuojakäytäntö"
+    "privacyPolicy": "Tietosuojakäytäntö",
+    "pickemsRules": "Veikkausten säännöt"
   },
   "table": {
     "noData": "Ei tietoja saatavilla",
@@ -469,7 +466,8 @@
     "scoringOff2": "2 paikkaa ohi: 6 pistettä",
     "scoringOff3": "3 paikkaa ohi: 4 pistettä",
     "scoringOff4": "4 paikkaa ohi: 2 pistettä",
-    "scoringOff5": "5+ paikkaa ohi: 0 pistettä"
+    "scoringOff5": "5+ paikkaa ohi: 0 pistettä",
+    "viewFullRules": "Näytä säännöt ja tiedot"
   },
   "raidAnalyticsPage": {
     "title": "Raidi-analytiikka",

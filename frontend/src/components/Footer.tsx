@@ -53,6 +53,10 @@ export default function Footer() {
           <a href="/privacy" className="hover:text-gray-300 transition-colors">
             {t("privacyPolicy")}
           </a>
+          <span>•</span>
+          <a href="/pickems-rules" className="hover:text-gray-300 transition-colors">
+            {t("pickemsRules")}
+          </a>
         </div>
       </div>
     </footer>

@@ -6,100 +6,115 @@ export default function PrivacyPolicy() {
       <div className="space-y-6 text-gray-300">
         <section>
           <h2 className="text-2xl font-semibold mb-3 text-white">1. Introduction</h2>
-          <p>This Privacy Policy explains how WoW Guild Progress Tracker handles information. We are committed to transparency and protecting user privacy.</p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">2. Information We Do NOT Collect</h2>
-          <p className="mb-2">This is a simple information aggregator service. We do not collect, store, or track:</p>
-          <ul className="list-disc list-inside space-y-1 ml-4">
-            <li>Personal information (names, email addresses, etc.)</li>
-            <li>User accounts or login credentials</li>
-            <li>Cookies for tracking purposes</li>
-            <li>Analytics or behavioral data</li>
-            <li>IP addresses or device information</li>
-            <li>Any form of personally identifiable information (PII)</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">3. Public Data Display</h2>
-          <p>This service displays publicly available information about World of Warcraft guilds sourced from third-party APIs including:</p>
-          <ul className="list-disc list-inside space-y-1 ml-4 mt-2">
-            <li>Blizzard Entertainment&apos;s official World of Warcraft API</li>
-            <li>Warcraft Logs</li>
-            <li>Raider.IO</li>
-            <li>Other publicly accessible gaming data sources</li>
-          </ul>
-          <p className="mt-2">All displayed information is already publicly available through these services.</p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">4. Third-Party Services</h2>
           <p>
-            This website may contain links to external services (Discord, GitHub, Twitch, etc.). These third-party services have their own privacy policies, and we are not
-            responsible for their practices. We encourage you to review their privacy policies.
+            This Privacy Policy explains what information WoW Guild Progress Tracker collects, how we use it, and your choices. We believe in being straightforward — no legal
+            jargon, just an honest description of how things work.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">5. Server Logs</h2>
+          <h2 className="text-2xl font-semibold mb-3 text-white">2. Information We Collect</h2>
+          <p className="mb-3">When you use our service, we may collect the following information depending on which features you use:</p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Discord Login</h3>
+          <p className="mb-2">
+            When you log in with Discord, we receive and store your Discord ID, username, email address, and profile picture through Discord&apos;s OAuth system. This is used to
+            create and manage your account.
+          </p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Battle.net Connection (optional)</h3>
+          <p className="mb-2">
+            If you choose to connect your Battle.net account, we receive and store your Battle.net ID and your World of Warcraft character list (name, realm, class, level). You
+            choose which characters to associate with your profile.
+          </p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Twitch Connection (optional)</h3>
+          <p className="mb-2">If you choose to connect your Twitch account, we receive and store your Twitch username and channel information.</p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Session Cookies</h3>
+          <p className="mb-2">We use cookies solely to maintain your login session. We do not use tracking cookies of any kind.</p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Anonymous Usage &amp; Performance Statistics</h3>
+          <p className="mb-2">
+            We collect anonymous, aggregated statistics about site usage and performance to help us improve the service. This data cannot be tied to any individual user.
+          </p>
+
+          <h3 className="text-lg font-medium mb-2 text-white">Server Logs</h3>
+          <p>Basic technical logs (request timestamps, API calls) are kept for debugging purposes. These are not used for user tracking.</p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-3 text-white">3. How We Use Your Information</h2>
+          <ul className="list-disc list-inside space-y-1 ml-4">
+            <li>To provide and maintain your user account</li>
+            <li>To associate your WoW characters with your profile (if you choose to connect Battle.net)</li>
+            <li>To display your Twitch stream status (if you choose to connect Twitch)</li>
+            <li>To maintain your login session</li>
+            <li>To improve site performance and reliability using anonymous, aggregated data</li>
+            <li>To debug technical issues via server logs</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-3 text-white">4. What We Don&apos;t Do</h2>
+          <ul className="list-disc list-inside space-y-1 ml-4">
+            <li>We do not run ads or use ad tracking</li>
+            <li>We do not use third-party analytics services (no Google Analytics, etc.)</li>
+            <li>We do not sell, share, or give your personal data to third parties</li>
+            <li>We do not use tracking cookies</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-3 text-white">5. Third-Party Services</h2>
+          <p className="mb-2">
+            When you log in or connect accounts, you interact with Discord, Battle.net, and Twitch through their OAuth systems. Each of these services has its own privacy policy
+            that governs how they handle your data on their end:
+          </p>
+          <ul className="list-disc list-inside space-y-1 ml-4 mb-3">
+            <li>Discord — discord.com/privacy</li>
+            <li>Battle.net — blizzard.com/legal/a4380ee5-5c8d-4e3b-83b7-ea26d01a9918</li>
+            <li>Twitch — twitch.tv/p/legal/privacy-notice</li>
+          </ul>
           <p>
-            Like most web services, our server may automatically log basic technical information such as request timestamps and API calls for debugging and operational purposes
-            only. This data is not used for tracking individual users and is not shared with third parties.
+            All guild, raid, and character game data displayed on this site comes from publicly available sources: Warcraft Logs, Raider.IO, and Blizzard&apos;s official API. This
+            data is already public.
           </p>
         </section>
 
         <section>
           <h2 className="text-2xl font-semibold mb-3 text-white">6. Data Security</h2>
           <p>
-            Since we do not collect personal information, there is minimal risk to user privacy. However, we take reasonable measures to secure our infrastructure and prevent
-            unauthorized access.
+            We take reasonable measures to protect your data, including secure session handling and encrypted connections. That said, this is a community hobby project — not a
+            Fortune 500 company. We do our best to keep things secure, but no system is perfect.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">7. Children&apos;s Privacy</h2>
+          <h2 className="text-2xl font-semibold mb-3 text-white">7. Your Rights</h2>
+          <p className="mb-2">You have control over your data:</p>
+          <ul className="list-disc list-inside space-y-1 ml-4">
+            <li>You can disconnect your Battle.net or Twitch accounts at any time from your profile settings</li>
+            <li>You can request deletion of your account and all associated data by contacting us via Discord</li>
+            <li>For concerns about game data displayed from public APIs, contact those services directly (Blizzard, Warcraft Logs, Raider.IO)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-3 text-white">8. Changes to This Policy</h2>
           <p>
-            This service does not knowingly collect any information from anyone, including children under the age of 13. The service simply displays publicly available gaming data.
+            We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated date. Continued use of the service after changes means you
+            accept the updated policy.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">8. Your Rights</h2>
-          <p>
-            Since we do not collect or store personal information, there is no user data to access, modify, or delete. If you have concerns about data displayed from third-party
-            sources, please contact those services directly (Blizzard, Warcraft Logs, Raider.IO, etc.).
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">9. International Users</h2>
-          <p>
-            This service is available globally. By using this service, you acknowledge that the publicly available data displayed may be processed on servers in various locations.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">10. Changes to Privacy Policy</h2>
-          <p>
-            This Privacy Policy may be updated from time to time. Any changes will be posted on this page. Continued use of the service after changes constitutes acceptance of the
-            updated policy.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">11. Open Source</h2>
-          <p>This project is open-source. You can review the code on GitHub to verify our privacy practices and see exactly what data is processed.</p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3 text-white">12. Contact</h2>
-          <p>If you have any questions about this Privacy Policy, please contact us via our Discord server or GitHub repository.</p>
+          <h2 className="text-2xl font-semibold mb-3 text-white">9. Contact</h2>
+          <p>If you have questions about this Privacy Policy or want to request data deletion, reach out via our Discord server or GitHub repository.</p>
         </section>
 
         <div className="mt-8 pt-6 border-t border-gray-700 text-sm text-gray-400">
-          <p>Last updated: November 27, 2025</p>
+          <p>Last updated: March 21, 2026</p>
         </div>
       </div>
     </div>
