@@ -65,7 +65,8 @@
     "viewOnWarcraftLogs": "View on Warcraft Logs",
     "viewOnRaiderIO": "View on Raider.IO",
     "noSchedule": "No schedule",
-    "noBestPull": "No best pull"
+    "noBestPull": "No best pull",
+    "officialProgressTooltip": "Based on in-game progress (Raider.IO) — higher than logged progress"
   },
   "homePage": {
     "title": "Finnish Guild Progress",
@@ -251,7 +252,29 @@
     "saveError": "Failed to save character selection. Please try again.",
     "lastSynced": "Last synced:",
     "editCharacters": "Edit Characters",
-    "noCharactersSelected": "No characters selected"
+    "noCharactersSelected": "No characters selected",
+    "myPickems": "My Pickem Predictions",
+    "noPickems": "You haven't participated in any pickems yet.",
+    "pickemPredictions": "Your Predictions",
+    "position": "Position",
+    "guild": "Guild",
+    "submittedAt": "Submitted",
+    "updatedAt": "Last Updated",
+    "deleteAccount": "Delete My Account",
+    "deleteAccountTitle": "Delete Account",
+    "deleteAccountWarning": "This action is permanent and cannot be undone. All your data will be deleted:",
+    "deleteAccountData1": "Your profile and Discord connection",
+    "deleteAccountData2": "All connected accounts (Twitch, Battle.net)",
+    "deleteAccountData3": "All WoW characters",
+    "deleteAccountData4": "All pickem predictions",
+    "deleteAccountConfirmLabel": "Type DELETE to confirm:",
+    "deleteAccountConfirmPlaceholder": "Type DELETE",
+    "deleteAccountButton": "Permanently Delete My Account",
+    "deleteAccountDeleting": "Deleting...",
+    "deleteAccountSuccess": "Your account has been deleted.",
+    "deleteAccountError": "Failed to delete account. Please try again.",
+    "viewPickem": "View Pickem",
+    "cancel": "Cancel"
   },
   "characterSelector": {
     "title": "Select Your Characters",

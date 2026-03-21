@@ -65,7 +65,8 @@
     "viewOnWarcraftLogs": "Näytä Warcraft Logsissa",
     "viewOnRaiderIO": "Näytä Raider.IO:ssa",
     "noSchedule": "Ei aikataulua",
-    "noBestPull": "Ei parasta yritystä"
+    "noBestPull": "Ei parasta yritystä",
+    "officialProgressTooltip": "Perustuu pelinsisäiseen edistymiseen (Raider.IO) — korkeampi kuin lokitettu edistyminen"
   },
   "homePage": {
     "title": "Suomalaisten Kiltojen Edistyminen",
@@ -251,7 +252,29 @@
     "saveError": "Hahmovalinnan tallennus epäonnistui. Yritä uudelleen.",
     "lastSynced": "Viimeksi synkronoitu:",
     "editCharacters": "Muokkaa hahmoja",
-    "noCharactersSelected": "Ei hahmoja valittuna"
+    "noCharactersSelected": "Ei hahmoja valittuna",
+    "myPickems": "Omat veikkaukset",
+    "noPickems": "Et ole osallistunut veikkauksiin vielä.",
+    "pickemPredictions": "Veikkauksesi",
+    "position": "Sijoitus",
+    "guild": "Kilta",
+    "submittedAt": "Lähetetty",
+    "updatedAt": "Päivitetty",
+    "deleteAccount": "Poista tilini",
+    "deleteAccountTitle": "Poista tili",
+    "deleteAccountWarning": "Tämä toiminto on pysyvä eikä sitä voi peruuttaa. Kaikki tietosi poistetaan:",
+    "deleteAccountData1": "Profiilisi ja Discord-yhteys",
+    "deleteAccountData2": "Kaikki yhdistetyt tilit (Twitch, Battle.net)",
+    "deleteAccountData3": "Kaikki WoW-hahmot",
+    "deleteAccountData4": "Kaikki veikkaukset",
+    "deleteAccountConfirmLabel": "Kirjoita DELETE vahvistaaksesi:",
+    "deleteAccountConfirmPlaceholder": "Kirjoita DELETE",
+    "deleteAccountButton": "Poista tilini pysyvästi",
+    "deleteAccountDeleting": "Poistetaan...",
+    "deleteAccountSuccess": "Tilisi on poistettu.",
+    "deleteAccountError": "Tilin poistaminen epäonnistui. Yritä uudelleen.",
+    "viewPickem": "Näytä veikkaus",
+    "cancel": "Peruuta"
   },
   "characterSelector": {
     "title": "Valitse Hahmot",

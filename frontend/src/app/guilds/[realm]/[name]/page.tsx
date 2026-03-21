@@ -15,6 +15,8 @@ import {
   getRaiderIOGuildUrl,
   getTierLetter,
   getTierBgColor,
+  getEffectiveProgress,
+  findOfficialProgressForRaid,
 } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
@@ -524,6 +526,9 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
                         const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
                         const hasProgress = mythicProgress || heroicProgress;
+                        const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                        const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+                        const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
 
                         return (
                           <div key={`mobile-raid-${raid.id}`} className={`rounded-lg mb-1.5 bg-gray-800/50 border border-gray-700/50 ${!hasProgress ? "opacity-40" : ""}`}>
@@ -550,11 +555,17 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                               >
                                 <div className="text-center">
-                                  <div className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-orange-500 font-semibold">
+                                    {mythicDisplay.text}
+                                    {mythicDisplay.isOfficial && <span className="text-[8px] text-orange-400/60">*</span>}
+                                  </div>
                                   <div className="text-[9px] text-gray-500">M</div>
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</div>
+                                  <div className="text-purple-500 font-semibold">
+                                    {heroicDisplay.text}
+                                    {heroicDisplay.isOfficial && <span className="text-[8px] text-purple-400/60">*</span>}
+                                  </div>
                                   <div className="text-[9px] text-gray-500">H</div>
                                 </div>
                                 {(totalTime > 0 || currentBossPulls > 0 || bestProgress) && (
@@ -646,6 +657,11 @@ export default function GuildProfilePage({ params }: PageProps) {
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;
 
+                          // Official progress from Raider.IO
+                          const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                          const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
+                          const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
+
                           return (
                             <tr key={raid.id} className="border-b border-gray-800">
                               {/* First clickable area: Raid Name, Rank, World Rank */}
@@ -692,7 +708,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                <span className="text-orange-500 font-semibold">{mythicProgress ? `${mythicProgress.bossesDefeated}/${mythicProgress.totalBosses}` : "-"}</span>
+                                <span className="text-orange-500 font-semibold">
+                                  {mythicDisplay.text}
+                                  {mythicDisplay.isOfficial && <span className="text-[10px] text-orange-400/60 ml-0.5">*</span>}
+                                </span>
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors ${
@@ -702,7 +721,10 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                <span className="text-purple-500 font-semibold">{heroicProgress ? `${heroicProgress.bossesDefeated}/${heroicProgress.totalBosses}` : "-"}</span>
+                                <span className="text-purple-500 font-semibold">
+                                  {heroicDisplay.text}
+                                  {heroicDisplay.isOfficial && <span className="text-[10px] text-purple-400/60 ml-0.5">*</span>}
+                                </span>
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${

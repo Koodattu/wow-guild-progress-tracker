@@ -1,4 +1,4 @@
-import { ClassInfo } from "@/types";
+import { ClassInfo, RaidProgressSummary, OfficialRaidProgress } from "@/types";
 
 // Format seconds to a readable time string
 export function formatTime(seconds: number): string {
@@ -432,4 +432,39 @@ export function getSpecIconUrl(classId: number, specName: string): string | unde
   const normalizedSpecName = normalizeSpecNameForApi(specName);
   const specIconFilename = classInfo.iconUrl.replace(".jpg", `_${normalizedSpecName}.jpg`);
   return specIconFilename;
+}
+
+/** Find the matching OfficialRaidProgress entry for a given raid slug */
+export function findOfficialProgressForRaid(officialProgress: OfficialRaidProgress[] | undefined, raidSlug: string): OfficialRaidProgress | undefined {
+  if (!officialProgress?.length || !raidSlug) return undefined;
+  const normalized = raidSlug.toLowerCase();
+  return officialProgress.find((op) => {
+    const tierSlug = op.raidTierSlug.toLowerCase();
+    return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+  });
+}
+
+/**
+ * Returns the higher of log-based vs official (Raider.IO) progress, with a flag if official was used.
+ * Official progress reflects in-game kills regardless of log visibility.
+ */
+export function getEffectiveProgress(
+  logProgress: RaidProgressSummary | null,
+  official: OfficialRaidProgress | undefined,
+  difficulty: "mythic" | "heroic",
+): { text: string; isOfficial: boolean } {
+  const logKills = logProgress?.bossesDefeated ?? 0;
+  const totalBosses = logProgress?.totalBosses ?? official?.totalBosses ?? 0;
+  const officialKills = difficulty === "mythic" ? (official?.mythicBossesKilled ?? 0) : (official?.heroicBossesKilled ?? 0);
+
+  if (officialKills > logKills && totalBosses > 0) {
+    return { text: `${officialKills}/${totalBosses}`, isOfficial: true };
+  }
+  if (logProgress) {
+    return { text: `${logKills}/${totalBosses}`, isOfficial: false };
+  }
+  if (officialKills > 0 && totalBosses > 0) {
+    return { text: `${officialKills}/${totalBosses}`, isOfficial: true };
+  }
+  return { text: "-", isOfficial: false };
 }

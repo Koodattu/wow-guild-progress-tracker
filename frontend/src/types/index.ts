@@ -109,6 +109,17 @@ export interface RaidProgress {
   lastUpdated: string;
 }
 
+// Official raid progression from Raider.IO (reflects in-game kills, not log-dependent)
+export interface OfficialRaidProgress {
+  raidTierSlug: string;
+  summary: string; // e.g., "6/9 M"
+  totalBosses: number;
+  normalBossesKilled: number;
+  heroicBossesKilled: number;
+  mythicBossesKilled: number;
+  lastUpdated: string;
+}
+
 export interface ScheduleDisplay {
   totalDays: number;
   averageHours: number;
@@ -162,6 +173,7 @@ export interface GuildListItem {
   isStreaming?: boolean; // Computed field: true if any streamer is live
   lastFetched?: string;
   progress: RaidProgressSummary[];
+  officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
 }
 
@@ -197,6 +209,7 @@ export interface GuildSummary {
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgressSummary[];
+  officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
   raidSchedule?: RaidSchedule;
   streamers?: Streamer[]; // Twitch streamers for this guild
@@ -751,6 +764,15 @@ export interface PickemPrediction {
   guildName: string;
   realm: string;
   position: number;
+}
+
+export interface UserPickemEntry {
+  pickemId: string;
+  pickemName: string | null;
+  type: string | null;
+  predictions: PickemPrediction[];
+  submittedAt: string;
+  updatedAt: string;
 }
 
 export interface GuildRanking {

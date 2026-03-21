@@ -72,6 +72,7 @@ import {
   UpdateGuildInput,
   UpdateGuildResponse,
   DeleteCharacterResponse,
+  UserPickemEntry,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -391,6 +392,22 @@ export const api = {
       method: "POST",
       credentials: "include",
     });
+  },
+
+  async getMyPickems(): Promise<UserPickemEntry[]> {
+    const response = await fetch(`${API_URL}/api/auth/me/pickems`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch user pickems");
+    return response.json();
+  },
+
+  async deleteMyAccount(): Promise<void> {
+    const response = await fetch(`${API_URL}/api/auth/me`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to delete account");
   },
 
   // Twitch account connection

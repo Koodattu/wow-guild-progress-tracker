@@ -687,6 +687,9 @@ class GuildService {
         }
       }
 
+      // Update official progression from Raider.IO (reflects in-game kills, works for private logs)
+      await this.updateOfficialProgress(guildId);
+
       getGuildLogger(guild.name, guild.realm).info("Successfully updated guild progress");
       return guild;
     } catch (error) {
@@ -901,6 +904,51 @@ class GuildService {
     }
 
     logger.info("Guild rankings calculation complete for all raids");
+  }
+
+  // Fetch official raid progression from Raider.IO and store it
+  // This reflects Blizzard's in-game kill tracking, independent of WCL log visibility
+  async updateOfficialProgress(guildId: string): Promise<void> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      logger.error(`Guild not found: ${guildId}`);
+      return;
+    }
+
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Fetching official raid progression from Raider.IO...");
+
+    try {
+      const profile = await raiderIOService.fetchGuildRaidProgression(
+        guild.region.toLowerCase(),
+        guild.realm.toLowerCase().replace(/\s+/g, "-"),
+        guild.name,
+      );
+
+      if (!profile || !profile.raid_progression) {
+        guildLog.info("No raid progression data from Raider.IO");
+        return;
+      }
+
+      const updatedEntries = Object.entries(profile.raid_progression).map(([tierSlug, tierData]) => ({
+        raidTierSlug: tierSlug,
+        summary: tierData.summary,
+        totalBosses: tierData.total_bosses,
+        normalBossesKilled: tierData.normal_bosses_killed,
+        heroicBossesKilled: tierData.heroic_bosses_killed,
+        mythicBossesKilled: tierData.mythic_bosses_killed,
+        lastUpdated: new Date(),
+      }));
+
+      guild.officialProgress = updatedEntries;
+      await guild.save();
+
+      for (const entry of updatedEntries) {
+        guildLog.info(`Official progress (${entry.raidTierSlug}): ${entry.summary}`);
+      }
+    } catch (error) {
+      guildLog.error("Error fetching official progress from Raider.IO:", error);
+    }
   }
 
   // Calculate guild rankings for a specific raid
@@ -2813,6 +2861,8 @@ class GuildService {
               cond: { $eq: ["$$p.raidId", raidId] },
             },
           },
+          // Include official progress from Raider.IO
+          officialProgress: 1,
           // Include raidSchedule for schedule summary calculation
           raidSchedule: 1,
           // Include streamers to check isLive status (only need isLive field)
@@ -2927,6 +2977,7 @@ class GuildService {
         isStreaming: isStreaming,
         lastFetched: guildObj.lastFetched,
         progress: minimalProgress,
+        officialProgress: guildObj.officialProgress || [],
         scheduleDisplay: scheduleSummary,
       };
     });
@@ -3190,6 +3241,7 @@ class GuildService {
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: summaryProgress,
+      officialProgress: guildObj.officialProgress || [],
       scheduleDisplay: scheduleSummary,
       raidSchedule: raidSchedule,
       streamers: streamers,
