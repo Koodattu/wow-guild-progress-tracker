@@ -244,6 +244,16 @@ async function runBackgroundInitialization(): Promise<void> {
     await guildService.syncRaidsFromWCL();
   });
 
+  // Retry matching boss icons for bosses that have no icon
+  const retryBossIcons = process.env.RETRY_MISSING_BOSS_ICONS_ON_STARTUP !== "false";
+  if (retryBossIcons) {
+    await runStartupTask("Retry missing boss icons", async () => {
+      await blizzardService.retryMissingBossIcons();
+    });
+  } else {
+    logger.info("RETRY_MISSING_BOSS_ICONS_ON_STARTUP is disabled, skipping boss icon re-matching");
+  }
+
   // Initialize guilds from config
   await runStartupTask("Initialize guilds from config", async () => {
     await guildService.initializeGuilds();

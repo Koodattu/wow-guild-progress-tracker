@@ -1,4 +1,4 @@
-import Guild, { IGuild, IRaidProgress, IBossProgress } from "../models/Guild";
+import Guild, { IGuild, IRaidProgress, IBossProgress, IOfficialRaidProgress } from "../models/Guild";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
@@ -964,21 +964,41 @@ class GuildService {
       return;
     }
 
+    // Look up raid slug for matching official progress from Raider.IO
+    const raid = await Raid.findOne({ id: raidId }).lean();
+    const raidSlug = raid?.slug || "";
+
+    // Helper: find matching official progress entry for this raid
+    const findOfficialProgress = (guild: IGuild): IOfficialRaidProgress | undefined => {
+      if (!guild.officialProgress?.length || !raidSlug) return undefined;
+      const normalized = raidSlug.toLowerCase();
+      return guild.officialProgress.find((op) => {
+        const tierSlug = op.raidTierSlug.toLowerCase();
+        return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+      });
+    };
+
     // Calculate rankings for both difficulties
     for (const difficulty of ["mythic", "heroic"] as const) {
       // Collect all guild progress for this raid and difficulty
+      // Include guilds that have either WCL log progress OR official progress from Raider.IO
       const guildProgressPairs = guilds
         .map((guild) => {
           const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
-          if (progress && progress.bossesDefeated > 0) {
-            // Only include guilds with at least 1 boss kill
-            return { guild, progress };
+          const official = findOfficialProgress(guild);
+          const officialKills = difficulty === "mythic" ? (official?.mythicBossesKilled ?? 0) : (official?.heroicBossesKilled ?? 0);
+          const logKills = progress?.bossesDefeated ?? 0;
+          const effectiveKills = Math.max(logKills, officialKills);
+
+          if (effectiveKills > 0 && progress) {
+            return { guild, progress, effectiveKills };
           }
           return null;
         })
         .filter((pair) => pair !== null) as Array<{
         guild: IGuild;
         progress: IRaidProgress;
+        effectiveKills: number;
       }>;
 
       if (guildProgressPairs.length === 0) {
@@ -988,54 +1008,18 @@ class GuildService {
 
       // Sort guilds according to ranking rules
       const sortedPairs = guildProgressPairs.sort((a, b) => {
-        const aProgress = a.progress;
-        const bProgress = b.progress;
-
-        // Rule 1: One mythic boss kill is worth more than any number of heroic boss kills
-        // If we're comparing mythic progress, this doesn't apply (both are mythic)
-        // If we're comparing heroic progress, this doesn't apply (both are heroic)
-        // This rule is already enforced by calculating rankings per difficulty
-
-        // Rule 2: Most boss kills first
-        if (aProgress.bossesDefeated !== bProgress.bossesDefeated) {
-          return bProgress.bossesDefeated - aProgress.bossesDefeated; // Higher is better
+        // Rule 1: Most effective boss kills first (max of WCL logs and Raider.IO official)
+        if (a.effectiveKills !== b.effectiveKills) {
+          return b.effectiveKills - a.effectiveKills; // Higher is better
         }
 
-        // Rule 3: If all bosses killed, whoever killed the last boss first wins
-        if (aProgress.bossesDefeated === aProgress.totalBosses && bProgress.bossesDefeated === bProgress.totalBosses) {
-          // Both completed - find last boss kill time
-          const aLastBoss = aProgress.bosses.reduce((latest, boss) => {
-            if (boss.kills > 0 && boss.firstKillTime) {
-              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
-                return boss;
-              }
-            }
-            return latest;
-          }, null as any);
-
-          const bLastBoss = bProgress.bosses.reduce((latest, boss) => {
-            if (boss.kills > 0 && boss.firstKillTime) {
-              if (!latest || new Date(boss.firstKillTime) > new Date(latest.firstKillTime!)) {
-                return boss;
-              }
-            }
-            return latest;
-          }, null as any);
-
-          if (aLastBoss?.firstKillTime && bLastBoss?.firstKillTime) {
-            const aTime = new Date(aLastBoss.firstKillTime).getTime();
-            const bTime = new Date(bLastBoss.firstKillTime).getTime();
-            return aTime - bTime; // Earlier is better
-          }
-        }
-
-        // Rule 4: If same boss kills and progressing, best pull progress wins
-        // Find the current boss (first unkilled boss)
-        const aCurrentBoss = aProgress.bosses.find((b) => b.kills === 0);
-        const bCurrentBoss = bProgress.bosses.find((b) => b.kills === 0);
+        // Rule 2: Best pull progress on current (next unkilled) boss
+        // This takes priority over world rank because world rank reflects the rank
+        // at the time of the LAST kill, not current progression on the next boss.
+        const aCurrentBoss = a.progress.bosses.find((boss) => boss.kills === 0);
+        const bCurrentBoss = b.progress.bosses.find((boss) => boss.kills === 0);
 
         if (aCurrentBoss && bCurrentBoss) {
-          // Compare best pull progress (fightCompletion: lower is better)
           const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
           const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
 
@@ -1043,13 +1027,19 @@ class GuildService {
             return aFightCompletion - bFightCompletion; // Lower is better
           }
 
-          // Tiebreaker: bossHealth (lower is better)
           const aBossHealth = aCurrentBoss.bestPullPhase?.bossHealth ?? aCurrentBoss.bestPercent ?? 100;
           const bBossHealth = bCurrentBoss.bestPullPhase?.bossHealth ?? bCurrentBoss.bestPercent ?? 100;
 
           if (aBossHealth !== bBossHealth) {
             return aBossHealth - bBossHealth; // Lower is better
           }
+        }
+
+        // Rule 3: World rank (from WCL API) — reliable tiebreaker when pull progress is identical
+        const aWorldRank = a.progress.worldRank ?? Infinity;
+        const bWorldRank = b.progress.worldRank ?? Infinity;
+        if (aWorldRank !== bWorldRank) {
+          return aWorldRank - bWorldRank; // Lower is better
         }
 
         // Final tiebreaker: alphabetically by guild name
