@@ -1111,10 +1111,19 @@ class GuildService {
         // Rule 2: Best pull progress on current (next unkilled) boss
         // This takes priority over world rank because world rank reflects the rank
         // at the time of the LAST kill, not current progression on the next boss.
-        const aCurrentBoss = a.progress.bosses.find((boss) => boss.kills === 0);
-        const bCurrentBoss = b.progress.bosses.find((boss) => boss.kills === 0);
+        // Use effectiveKills to find the current boss — when RaiderIO shows more kills
+        // than WCL logs, the "next boss" is at index effectiveKills, not the first
+        // WCL-unkilled boss.
+        const aCurrentBoss = a.progress.bosses[a.effectiveKills] ?? a.progress.bosses.find((boss) => boss.kills === 0);
+        const bCurrentBoss = b.progress.bosses[b.effectiveKills] ?? b.progress.bosses.find((boss) => boss.kills === 0);
 
-        if (aCurrentBoss && bCurrentBoss) {
+        // Only compare pull progress when both guilds have meaningful pull data (pullCount > 0).
+        // If a guild has no WCL pull data on the current boss (e.g. progress is from RaiderIO only),
+        // skip this rule and fall through to world rank comparison.
+        const aHasPullData = aCurrentBoss && aCurrentBoss.pullCount > 0;
+        const bHasPullData = bCurrentBoss && bCurrentBoss.pullCount > 0;
+
+        if (aHasPullData && bHasPullData) {
           const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
           const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
 
@@ -1128,9 +1137,12 @@ class GuildService {
           if (aBossHealth !== bBossHealth) {
             return aBossHealth - bBossHealth; // Lower is better
           }
+        } else if (aHasPullData !== bHasPullData) {
+          // Guild with pull data on the current boss ranks higher than one without
+          return aHasPullData ? -1 : 1;
         }
 
-        // Rule 3: World rank (from WCL API) — reliable tiebreaker when pull progress is identical
+        // Rule 3: World rank (from WCL API or Raider.IO fallback)
         const aWorldRank = a.progress.worldRank ?? Infinity;
         const bWorldRank = b.progress.worldRank ?? Infinity;
         if (aWorldRank !== bWorldRank) {
