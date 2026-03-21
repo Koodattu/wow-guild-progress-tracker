@@ -151,11 +151,11 @@ export class RaiderIOApiClient {
   }
 
   /**
-   * Fetch guild raid progression from Raider.IO public API (no API key required)
+   * Fetch guild raid progression from Raider.IO API
    */
   public async fetchGuildRaidProgression(region: string, realmSlug: string, guildName: string): Promise<RaiderIOGuildProfile | null> {
     const encodedName = encodeURIComponent(guildName);
-    const url = `${this.apiBaseUrl}/guilds/profile?region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_progression`;
+    const url = `${this.apiBaseUrl}/guilds/profile?access_key=${this.apiKey}&region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_progression`;
 
     logger.info(`[API REQUEST] GET ${this.apiBaseUrl}/guilds/profile?region=${region}&realm=${realmSlug}&name=${encodedName}&fields=raid_progression`);
 
