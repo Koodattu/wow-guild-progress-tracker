@@ -29,6 +29,7 @@ import {
   queueGuildRescanDeaths,
   queueGuildRescanCharacters,
   verifyGuildReports,
+  getAdminRaids,
 } from "@/lib/api";
 import {
   AdminUser,
@@ -60,6 +61,7 @@ import {
   DeleteGuildResponse,
   AdminCharacter,
   AdminCharacterStats,
+  AdminRaidOption,
 } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system";
@@ -171,6 +173,10 @@ export default function AdminPage() {
   const [triggerMessage, setTriggerMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [triggerCooldowns, setTriggerCooldowns] = useState<Record<string, boolean>>({});
 
+  // Statistics & Analytics - raid tier selector
+  const [adminRaids, setAdminRaids] = useState<AdminRaidOption[]>([]);
+  const [selectedStatRaidId, setSelectedStatRaidId] = useState<string>("current");
+
   // Guild detail modal
   const [selectedGuild, setSelectedGuild] = useState<AdminGuildDetail | null>(null);
   const [showGuildDetail, setShowGuildDetail] = useState(false);
@@ -268,12 +274,18 @@ export default function AdminPage() {
       try {
         switch (activeTab) {
           case "overview": {
-            const [overviewData, rateLimitData, queueStatsData] = await Promise.all([api.getAdminOverview(), api.getAdminRateLimitStatus(), api.getAdminProcessingQueueStats()]);
+            const [overviewData, rateLimitData, queueStatsData, adminRaidsData] = await Promise.all([
+              api.getAdminOverview(),
+              api.getAdminRateLimitStatus(),
+              api.getAdminProcessingQueueStats(),
+              getAdminRaids(),
+            ]);
             setOverview(overviewData);
             setRateLimitStatus(rateLimitData.status);
             setRateLimitConfig(rateLimitData.config);
             setProcessorStatus(queueStatsData.processor);
             setQueueStats(queueStatsData.queue);
+            setAdminRaids(adminRaidsData.raids);
             break;
           }
 
@@ -923,43 +935,79 @@ export default function AdminPage() {
                   <h3 className="text-white font-medium mb-3 flex items-center gap-2">
                     <span>📊</span> Statistics & Analytics
                   </h3>
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => handleTrigger("all-statistics", () => triggerCalculateAllStatistics(true))}
-                      disabled={triggerLoading === "all-statistics" || triggerCooldowns["all-statistics"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Calculate All Statistics</span>
-                      {triggerLoading === "all-statistics" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["all-statistics"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("tier-lists", triggerCalculateTierLists)}
-                      disabled={triggerLoading === "tier-lists" || triggerCooldowns["tier-lists"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Calculate Tier Lists</span>
-                      {triggerLoading === "tier-lists" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["tier-lists"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("raid-analytics", triggerCalculateRaidAnalytics)}
-                      disabled={triggerLoading === "raid-analytics" || triggerCooldowns["raid-analytics"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Calculate Raid Analytics</span>
-                      {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["raid-analytics"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("world-ranks", triggerUpdateWorldRanks)}
-                      disabled={triggerLoading === "world-ranks" || triggerCooldowns["world-ranks"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Update World Ranks</span>
-                      {triggerLoading === "world-ranks" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["world-ranks"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
+                  <div className="space-y-3">
+                    {/* Raid tier selector */}
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Target Raid Tier</label>
+                      <select
+                        value={selectedStatRaidId}
+                        onChange={(e) => setSelectedStatRaidId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="all">All Raids</option>
+                        <option value="current">Current Tier Only</option>
+                        {adminRaids.map((raid) => (
+                          <option key={raid.id} value={String(raid.id)}>
+                            {raid.name}
+                            {raid.isCurrent ? " (current)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => {
+                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+                          handleTrigger("all-statistics", () => triggerCalculateAllStatistics(raidId, scope));
+                        }}
+                        disabled={triggerLoading === "all-statistics" || triggerCooldowns["all-statistics"]}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                      >
+                        <span>Calculate Statistics</span>
+                        {triggerLoading === "all-statistics" && <span className="animate-spin">⏳</span>}
+                        {triggerCooldowns["all-statistics"] && <span className="text-xs text-gray-400">⏱️</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+                          handleTrigger("tier-lists", () => triggerCalculateTierLists(raidId, scope));
+                        }}
+                        disabled={triggerLoading === "tier-lists" || triggerCooldowns["tier-lists"]}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                      >
+                        <span>Calculate Tier Lists</span>
+                        {triggerLoading === "tier-lists" && <span className="animate-spin">⏳</span>}
+                        {triggerCooldowns["tier-lists"] && <span className="text-xs text-gray-400">⏱️</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+                          handleTrigger("raid-analytics", () => triggerCalculateRaidAnalytics(raidId, scope));
+                        }}
+                        disabled={triggerLoading === "raid-analytics" || triggerCooldowns["raid-analytics"]}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                      >
+                        <span>Calculate Raid Analytics</span>
+                        {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
+                        {triggerCooldowns["raid-analytics"] && <span className="text-xs text-gray-400">⏱️</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+                          handleTrigger("world-ranks", () => triggerUpdateWorldRanks(raidId, scope));
+                        }}
+                        disabled={triggerLoading === "world-ranks" || triggerCooldowns["world-ranks"]}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                      >
+                        <span>Update World Ranks</span>
+                        {triggerLoading === "world-ranks" && <span className="animate-spin">⏳</span>}
+                        {triggerCooldowns["world-ranks"] && <span className="text-xs text-gray-400">⏱️</span>}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

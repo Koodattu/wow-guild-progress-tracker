@@ -6,6 +6,7 @@ import Report from "../models/Report";
 import Fight from "../models/Fight";
 import Event from "../models/Event";
 import TierList from "../models/TierList";
+import Raid from "../models/Raid";
 import Character from "../models/Character";
 import Ranking from "../models/Ranking";
 import Pickem from "../models/Pickem";
@@ -1702,26 +1703,56 @@ router.post("/processing-queue/queue-guild", async (req: Request, res: Response)
   }
 });
 
+// Get tracked raids list for admin dropdown
+router.get("/raids", async (req: Request, res: Response) => {
+  try {
+    const { TRACKED_RAIDS, CURRENT_RAID_IDS } = await import("../config/guilds");
+    const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
+      .select("id name slug expansion")
+      .sort({ id: -1 })
+      .lean();
+
+    res.json({
+      raids: raids.map((r) => ({
+        id: r.id,
+        name: r.name,
+        isCurrent: CURRENT_RAID_IDS.includes(r.id),
+      })),
+    });
+  } catch (error) {
+    logger.error("Error fetching admin raids:", error);
+    res.status(500).json({ error: "Failed to fetch raids" });
+  }
+});
+
 // ============================================================
 // MANUAL TRIGGER ENDPOINTS
 // ============================================================
 
 // Trigger recalculation of statistics for ALL guilds
+// Body: { raidId?: number, scope?: "all" | "current" }
 router.post("/trigger/calculate-all-statistics", async (req: Request, res: Response) => {
   try {
-    const currentTierOnly = req.body.currentTierOnly !== false; // Default true
+    const raidId = req.body.raidId ? Number(req.body.raidId) : undefined;
+    const scope: string = req.body.scope || "current";
+
+    // Determine recalculation mode
+    const currentTierOnly = raidId ? true : scope === "current";
+    const raidIds = raidId ? [raidId] : undefined;
 
     // Run async - don't wait for completion
     guildService
-      .recalculateExistingGuildStatistics(currentTierOnly)
+      .recalculateExistingGuildStatistics(currentTierOnly, raidIds)
       .then(() => logger.info("Calculate all statistics completed"))
       .catch((err) => logger.error("Calculate all statistics failed:", err));
 
-    res.json({
-      success: true,
-      message: "Statistics recalculation started for all guilds",
-      currentTierOnly,
-    });
+    const label = raidId
+      ? `Statistics recalculation started for raid ${raidId}`
+      : scope === "all"
+        ? "Statistics recalculation started for all raids"
+        : "Statistics recalculation started for current tier";
+
+    res.json({ success: true, message: label });
   } catch (error) {
     logger.error("Error triggering statistics calculation:", error);
     res.status(500).json({ error: "Failed to trigger statistics calculation" });
@@ -1731,12 +1762,17 @@ router.post("/trigger/calculate-all-statistics", async (req: Request, res: Respo
 // Trigger tier list calculation
 router.post("/trigger/calculate-tier-lists", async (req: Request, res: Response) => {
   try {
+    const raidId = req.body.raidId ? Number(req.body.raidId) : undefined;
+
     scheduler
-      .calculateTierLists()
+      .calculateTierLists(raidId)
       .then(() => logger.info("Calculate tier lists completed"))
       .catch((err) => logger.error("Calculate tier lists failed:", err));
 
-    res.json({ success: true, message: "Tier list calculation started" });
+    res.json({
+      success: true,
+      message: raidId ? `Tier list calculation started for raid ${raidId}` : "Tier list calculation started for all raids",
+    });
   } catch (error) {
     logger.error("Error triggering tier list calculation:", error);
     res.status(500).json({ error: "Failed to trigger tier list calculation" });
@@ -1759,14 +1795,35 @@ router.post("/trigger/check-twitch-streams", async (req: Request, res: Response)
 });
 
 // Trigger world ranks update for all guilds
+// Body: { raidId?: number, scope?: "all" | "current" }
 router.post("/trigger/update-world-ranks", async (req: Request, res: Response) => {
   try {
-    scheduler
-      .updateAllGuildsWorldRanks()
-      .then(() => logger.info("Update world ranks completed"))
-      .catch((err) => logger.error("Update world ranks failed:", err));
+    const raidId = req.body.raidId ? Number(req.body.raidId) : undefined;
+    const scope: string = req.body.scope || "current";
 
-    res.json({ success: true, message: "World ranks update started" });
+    // When scope is "all", pass undefined raidId but use a special flag
+    // The scheduler defaults to CURRENT_RAID_IDS when no raidId is given
+    if (scope === "all" && !raidId) {
+      // Import TRACKED_RAIDS to update world ranks for all tracked raids
+      const { TRACKED_RAIDS } = await import("../config/guilds");
+      scheduler
+        .updateWorldRanksForRaids(TRACKED_RAIDS)
+        .then(() => logger.info("Update world ranks completed for all raids"))
+        .catch((err) => logger.error("Update world ranks failed:", err));
+    } else {
+      scheduler
+        .updateAllGuildsWorldRanks(raidId)
+        .then(() => logger.info("Update world ranks completed"))
+        .catch((err) => logger.error("Update world ranks failed:", err));
+    }
+
+    const label = raidId
+      ? `World ranks update started for raid ${raidId}`
+      : scope === "all"
+        ? "World ranks update started for all tracked raids"
+        : "World ranks update started for current tier";
+
+    res.json({ success: true, message: label });
   } catch (error) {
     logger.error("Error triggering world ranks update:", error);
     res.status(500).json({ error: "Failed to trigger world ranks update" });
@@ -1774,14 +1831,37 @@ router.post("/trigger/update-world-ranks", async (req: Request, res: Response) =
 });
 
 // Trigger raid analytics calculation
+// Body: { raidId?: number, scope?: "all" | "current" }
 router.post("/trigger/calculate-raid-analytics", async (req: Request, res: Response) => {
   try {
-    scheduler
-      .calculateRaidAnalytics()
-      .then(() => logger.info("Calculate raid analytics completed"))
-      .catch((err) => logger.error("Calculate raid analytics failed:", err));
+    const raidId = req.body.raidId ? Number(req.body.raidId) : undefined;
+    const scope: string = req.body.scope || "current";
 
-    res.json({ success: true, message: "Raid analytics calculation started" });
+    if (raidId) {
+      scheduler
+        .calculateRaidAnalytics(raidId)
+        .then(() => logger.info(`Calculate raid analytics completed for raid ${raidId}`))
+        .catch((err) => logger.error("Calculate raid analytics failed:", err));
+    } else if (scope === "current") {
+      // Only calculate for current raid IDs
+      const { CURRENT_RAID_IDS } = await import("../config/guilds");
+      Promise.all(CURRENT_RAID_IDS.map((id) => scheduler.calculateRaidAnalytics(id)))
+        .then(() => logger.info("Calculate raid analytics completed for current tier"))
+        .catch((err) => logger.error("Calculate raid analytics failed:", err));
+    } else {
+      scheduler
+        .calculateRaidAnalytics()
+        .then(() => logger.info("Calculate raid analytics completed for all raids"))
+        .catch((err) => logger.error("Calculate raid analytics failed:", err));
+    }
+
+    const label = raidId
+      ? `Raid analytics calculation started for raid ${raidId}`
+      : scope === "all"
+        ? "Raid analytics calculation started for all raids"
+        : "Raid analytics calculation started for current tier";
+
+    res.json({ success: true, message: label });
   } catch (error) {
     logger.error("Error triggering raid analytics calculation:", error);
     res.status(500).json({ error: "Failed to trigger raid analytics calculation" });

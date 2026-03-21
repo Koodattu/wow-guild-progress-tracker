@@ -73,6 +73,7 @@ import {
   UpdateGuildResponse,
   DeleteCharacterResponse,
   UserPickemEntry,
+  AdminRaidOption,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -1017,21 +1018,23 @@ export async function triggerRefreshCharacterRankings(): Promise<TriggerResponse
   return response.json();
 }
 
-export async function triggerCalculateAllStatistics(currentTierOnly: boolean = true): Promise<TriggerResponse> {
+export async function triggerCalculateAllStatistics(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/calculate-all-statistics`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ currentTierOnly }),
+    body: JSON.stringify({ raidId, scope }),
   });
   if (!response.ok) throw new Error("Failed to trigger statistics calculation");
   return response.json();
 }
 
-export async function triggerCalculateTierLists(): Promise<TriggerResponse> {
+export async function triggerCalculateTierLists(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/calculate-tier-lists`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raidId, scope }),
   });
   if (!response.ok) throw new Error("Failed to trigger tier list calculation");
   return response.json();
@@ -1046,21 +1049,33 @@ export async function triggerCheckTwitchStreams(): Promise<TriggerResponse> {
   return response.json();
 }
 
-export async function triggerUpdateWorldRanks(): Promise<TriggerResponse> {
+export async function triggerUpdateWorldRanks(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/update-world-ranks`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raidId, scope }),
   });
   if (!response.ok) throw new Error("Failed to trigger world ranks update");
   return response.json();
 }
 
-export async function triggerCalculateRaidAnalytics(): Promise<TriggerResponse> {
+export async function triggerCalculateRaidAnalytics(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/calculate-raid-analytics`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raidId, scope }),
   });
   if (!response.ok) throw new Error("Failed to trigger raid analytics calculation");
+  return response.json();
+}
+
+export async function getAdminRaids(): Promise<{ raids: AdminRaidOption[] }> {
+  const response = await fetch(`${API_URL}/api/admin/raids`, {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to fetch admin raids");
   return response.json();
 }
 

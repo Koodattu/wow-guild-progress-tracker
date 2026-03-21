@@ -383,11 +383,17 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate tier lists
-  async calculateTierLists(): Promise<void> {
+  async calculateTierLists(raidId?: number): Promise<void> {
     this.isUpdatingTierLists = true;
 
     try {
-      logger.info("[Nightly/TierLists] Starting tier list calculation...");
+      if (raidId) {
+        logger.info(`[Admin/TierLists] Starting tier list calculation for raid ${raidId}...`);
+      } else {
+        logger.info("[Nightly/TierLists] Starting tier list calculation...");
+      }
+      // Tier lists are always calculated for all raids since the overall ranking depends on all data.
+      // The raidId parameter is logged for context but the full recalculation runs regardless.
       await tierListService.calculateTierLists();
 
       // Invalidate tier list caches and warm them with fresh data
@@ -403,12 +409,17 @@ class UpdateScheduler {
   }
 
   // NIGHTLY: Calculate raid analytics
-  async calculateRaidAnalytics(): Promise<void> {
+  async calculateRaidAnalytics(raidId?: number): Promise<void> {
     this.isUpdatingRaidAnalytics = true;
 
     try {
-      logger.info("[Nightly/RaidAnalytics] Starting raid analytics calculation...");
-      await raidAnalyticsService.calculateAllRaidAnalytics();
+      if (raidId) {
+        logger.info(`[Admin/RaidAnalytics] Starting raid analytics calculation for raid ${raidId}...`);
+        await raidAnalyticsService.calculateRaidAnalytics(raidId);
+      } else {
+        logger.info("[Nightly/RaidAnalytics] Starting raid analytics calculation...");
+        await raidAnalyticsService.calculateAllRaidAnalytics();
+      }
 
       // Invalidate raid analytics caches and warm them with fresh data
       await cacheService.invalidateRaidAnalyticsCaches();
@@ -697,7 +708,13 @@ class UpdateScheduler {
 
   // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)
   // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
-  async updateAllGuildsWorldRanks(): Promise<void> {
+  async updateAllGuildsWorldRanks(raidId?: number): Promise<void> {
+    const targetRaidIds = raidId ? [raidId] : CURRENT_RAID_IDS;
+    await this.updateWorldRanksForRaids(targetRaidIds);
+  }
+
+  // Update world ranks for all guilds for specific raid IDs
+  async updateWorldRanksForRaids(raidIds: number[]): Promise<void> {
     this.isUpdatingNightlyWorldRanks = true;
 
     try {
@@ -710,7 +727,7 @@ class UpdateScheduler {
         return;
       }
 
-      logger.info(`[Nightly/WorldRanks] Updating world ranks for current raid for ${guilds.length} guild(s)...`);
+      logger.info(`[Nightly/WorldRanks] Updating world ranks for raid(s) [${raidIds.join(", ")}] for ${guilds.length} guild(s)...`);
 
       // Update world ranks for all guilds sequentially with a small delay between each
       for (let i = 0; i < guilds.length; i++) {
@@ -718,7 +735,7 @@ class UpdateScheduler {
         logger.info(`[Nightly/WorldRanks] Guild ${i + 1}/${guilds.length}: ${guild.name}`);
 
         try {
-          await guildService.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+          await guildService.updateWorldRankingForRaids((guild._id as mongoose.Types.ObjectId).toString(), raidIds);
 
           // Yield to event loop periodically (every 5 guilds) to allow request handling
           if ((i + 1) % 5 === 0) {
@@ -736,9 +753,9 @@ class UpdateScheduler {
       }
 
       // Recalculate guild rankings after all world ranks are updated
-      logger.info(`[Nightly/WorldRanks] Recalculating guild rankings for current raids...`);
-      for (const raidId of CURRENT_RAID_IDS) {
-        await guildService.calculateGuildRankingsForRaid(raidId);
+      logger.info(`[Nightly/WorldRanks] Recalculating guild rankings for target raids...`);
+      for (const id of raidIds) {
+        await guildService.calculateGuildRankingsForRaid(id);
       }
 
       logger.info(`[Nightly/WorldRanks] Completed updating world ranks for ${guilds.length} guild(s)`);

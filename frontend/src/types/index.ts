@@ -1200,6 +1200,12 @@ export interface TriggerResponse {
   currentTierOnly?: boolean;
 }
 
+export interface AdminRaidOption {
+  id: number;
+  name: string;
+  isCurrent: boolean;
+}
+
 // Detailed Guild Info for Admin
 export interface AdminGuildDetail {
   id: string;

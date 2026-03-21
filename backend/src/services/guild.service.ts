@@ -559,9 +559,13 @@ class GuildService {
 
   // Recalculate statistics for existing guilds on startup
   // This is used when CALCULATE_GUILD_STATISTICS_ON_STARTUP is set to true
-  async recalculateExistingGuildStatistics(currentTierOnly: boolean = true): Promise<void> {
+  async recalculateExistingGuildStatistics(currentTierOnly: boolean = true, raidIds?: number[]): Promise<void> {
     logger.info("Recalculating statistics for existing guilds...");
-    logger.info(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
+    if (raidIds) {
+      logger.info(`Mode: Specific raids [${raidIds.join(", ")}]`);
+    } else {
+      logger.info(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
+    }
 
     try {
       // Get all guilds from database
@@ -590,9 +594,9 @@ class GuildService {
           getGuildLogger(guild.name, guild.realm).info("Recalculating statistics...");
 
           // Recalculate statistics based on the mode
-          if (currentTierOnly) {
-            // Only recalculate for current raids
-            for (const raidId of CURRENT_RAID_IDS) {
+          const targetRaidIds = raidIds || (currentTierOnly ? CURRENT_RAID_IDS : null);
+          if (targetRaidIds) {
+            for (const raidId of targetRaidIds) {
               await this.calculateGuildStatistics(guild, raidId);
             }
           } else {
@@ -882,6 +886,11 @@ class GuildService {
   // Skip if guild has completed the raid (all mythic bosses defeated)
   // Updates both mythic and heroic progress entries with world rank data
   async updateCurrentRaidsWorldRanking(guildId: string): Promise<void> {
+    await this.updateWorldRankingForRaids(guildId, CURRENT_RAID_IDS);
+  }
+
+  // Update world rankings for specific raids
+  async updateWorldRankingForRaids(guildId: string, raidIds: number[]): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
       logger.error(`Guild not found: ${guildId}`);
@@ -889,19 +898,17 @@ class GuildService {
     }
 
     const guildLog = getGuildLogger(guild.name, guild.realm);
-    guildLog.info("Updating world ranks for current raids...");
+    guildLog.info(`Updating world ranks for raids [${raidIds.join(", ")}]...`);
 
     const raidsNeedingFallback: { raidId: number; raidData: IRaid; mythicProgress: IRaidProgress | undefined; heroicProgress: IRaidProgress | undefined; raidName: string }[] = [];
 
-    for (const raidId of CURRENT_RAID_IDS) {
-      // Find the raid data to get total boss count
+    for (const raidId of raidIds) {
       const raidData = await this.getRaidData(raidId);
       if (!raidData) {
         guildLog.warn(`Raid data not found (ID: ${raidId}), skipping world rank update`);
         continue;
       }
 
-      // Find mythic and heroic progress for this raid
       const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
       const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic");
 
@@ -910,9 +917,7 @@ class GuildService {
         continue;
       }
 
-      // Check if guild has completed all mythic bosses - if so, world rank is final
       const hasCompletedMythic = mythicProgress && mythicProgress.bossesDefeated >= raidData.bosses.length;
-
       if (hasCompletedMythic) {
         guildLog.info(`Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
         continue;
@@ -923,20 +928,17 @@ class GuildService {
 
       try {
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
-
         const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
         if (worldRank?.number) {
           const updatedDifficulties: string[] = [];
 
-          // Mythic world rank takes priority - update mythic first
           if (mythicProgress) {
             mythicProgress.worldRank = worldRank.number;
             mythicProgress.worldRankColor = worldRank.color;
             updatedDifficulties.push("mythic");
           }
 
-          // Also update heroic progress with the same world rank
           if (heroicProgress) {
             heroicProgress.worldRank = worldRank.number;
             heroicProgress.worldRankColor = worldRank.color;
@@ -970,17 +972,14 @@ class GuildService {
           const rank = diffRankings.mythic?.world || diffRankings.heroic?.world;
           if (rank) {
             const updatedDifficulties: string[] = [];
-
             if (mythicProgress) {
               mythicProgress.worldRank = rank;
               updatedDifficulties.push("mythic");
             }
-
             if (heroicProgress) {
               heroicProgress.worldRank = rank;
               updatedDifficulties.push("heroic");
             }
-
             guildLog.info(`${raidName}: World Rank #${rank} (Raider.IO fallback) - applied to ${updatedDifficulties.join(", ")}`);
           } else {
             guildLog.info(`${raidName}: Raider.IO returned no valid world rank`);
@@ -991,9 +990,8 @@ class GuildService {
       }
     }
 
-    // Save the updated guild
     await guild.save();
-    guildLog.info("Current raids world ranks updated");
+    guildLog.info("World ranks updated for target raids");
   }
 
   // Calculate guild rankings for all tracked raids
