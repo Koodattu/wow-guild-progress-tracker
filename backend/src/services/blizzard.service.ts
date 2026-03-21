@@ -485,10 +485,31 @@ export class BlizzardApiClient {
   }
 
   /**
+   * Hardcoded raid name → achievement name overrides for cases where
+   * the API raid name is completely different from the achievement name.
+   */
+  private static readonly RAID_ACHIEVEMENT_OVERRIDES: Record<string, string> = {
+    "VS / DR / MQD": "March on Quel'Danas",
+  };
+
+  /**
    * Find achievement by raid name match (looks for raid achievements)
    */
   public async findAchievementByRaidName(raidName: string): Promise<{ id: number; name: string } | null> {
     try {
+      // Check hardcoded overrides first
+      const override = BlizzardApiClient.RAID_ACHIEVEMENT_OVERRIDES[raidName];
+      if (override) {
+        const escapedOverride = this.escapeRegex(override);
+        const achievement = await Achievement.findOne({
+          name: { $regex: new RegExp(escapedOverride, "i") },
+        });
+        if (achievement) {
+          logger.info(`✅ Found achievement using override: "${raidName}" -> "${achievement.name}"`);
+          return { id: achievement.id, name: achievement.name };
+        }
+      }
+
       // Try to find achievement that contains the raid name
       // Raid achievements typically have the raid name in them
       const escapedRaidName = raidName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -804,10 +825,7 @@ export class BlizzardApiClient {
 
         if (iconUrl) {
           // Update the boss iconUrl in the Raid document
-          await Raid.updateOne(
-            { id: raidId, "bosses.name": bossName },
-            { $set: { "bosses.$.iconUrl": iconUrl } },
-          );
+          await Raid.updateOne({ id: raidId, "bosses.name": bossName }, { $set: { "bosses.$.iconUrl": iconUrl } });
           matched++;
           logger.info(`✅ Re-matched boss icon: "${bossName}" (${raidName}) -> ${iconUrl}`);
         } else {
