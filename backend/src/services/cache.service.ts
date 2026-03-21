@@ -513,6 +513,15 @@ class CacheService {
       // ========================================
       // L2: Set in MongoDB
       // ========================================
+      // Check approximate JSON size to avoid BSON 16MB document limit.
+      // JSON.stringify is used only for the size check; MongoDB serializes
+      // via BSON which is slightly larger, so we use a conservative 14MB cap.
+      const jsonSize = Buffer.byteLength(JSON.stringify(data), "utf8");
+      if (jsonSize > 14 * 1024 * 1024) {
+        logger.warn(`[L2 Cache] Skipping MongoDB write for key ${key}: data too large (${Math.round(jsonSize / 1024 / 1024)}MB exceeds 14MB safety limit)`);
+        return;
+      }
+
       await Cache.findOneAndUpdate(
         { key },
         {

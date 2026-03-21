@@ -45,6 +45,7 @@ const isWorkerProcess = WORKER_MODE === "worker" || WORKER_MODE === "both";
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
+const WORKER_PORT = process.env.WORKER_PORT || 3002;
 
 // Trust first proxy (nginx) in production for secure cookies
 if (process.env.NODE_ENV === "production") {
@@ -478,6 +479,32 @@ const startServer = async () => {
         logger.info(`[Startup] API available at http://localhost:${PORT}/api`);
         logger.info(`[Startup] Health check: http://localhost:${PORT}/health`);
         logger.info("[Startup] API is now accepting requests");
+      });
+    }
+
+    if (isWorkerProcess && WORKER_MODE === "worker") {
+      // In worker-only mode, start a lightweight Express server on a separate
+      // port so nginx can route admin trigger requests here. This server only
+      // mounts the admin routes (which need session auth) and a health check.
+      const workerApp: Application = express();
+      if (process.env.NODE_ENV === "production") {
+        workerApp.set("trust proxy", 1);
+      }
+      workerApp.use(
+        cors({
+          origin: process.env.NODE_ENV === "production" ? "https://suomiwow.vaarattu.tv" : "http://localhost:3000",
+          credentials: true,
+        }),
+      );
+      workerApp.use(express.json());
+      workerApp.use(session(sessionConfig));
+      workerApp.use("/api/admin", adminRouter);
+      workerApp.get("/health", (_req: Request, res: Response) => {
+        res.json({ status: "ok", mode: "worker" });
+      });
+
+      workerApp.listen(WORKER_PORT, () => {
+        logger.info(`[Startup] Worker admin API running on port ${WORKER_PORT}`);
       });
     }
 

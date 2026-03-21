@@ -44,7 +44,8 @@ services:
     # nice -n 15 further lowers kernel scheduling priority
     cpu_shares: 256
     mem_limit: 768m
-    command: ["nice", "-n", "15", "node", "--max-old-space-size=512", "dist/index.js"]
+    command:
+      ["nice", "-n", "15", "node", "--max-old-space-size=512", "dist/index.js"]
     volumes:
       - ./data/images:/app/data/images
       - ./backend/logs:/app/logs
@@ -80,6 +81,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - backend-worker
     networks:
       - app-network
 
