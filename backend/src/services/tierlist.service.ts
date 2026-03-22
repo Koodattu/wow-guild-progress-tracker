@@ -277,7 +277,7 @@ class TierListService {
    */
   private calculateGuildRaidScores(
     guildData: GuildRaidData,
-    allGuildsData: GuildRaidData[]
+    allGuildsData: GuildRaidData[],
   ): {
     speedScore: number;
     efficiencyScore: number;
@@ -382,9 +382,10 @@ class TierListService {
     }
 
     // === CALCULATE HEROIC EFFICIENCY SCORE ===
+    // Efficiency requires at least 1 boss kill — pulls/time without kills = 0 efficiency
     let heroicEfficiencyScore = 0;
     let hasHeroicEfficiency = false;
-    if (guildData.heroicTotalPulls > 0 || guildData.heroicTimeSpent > 0 || guildData.heroicBossesDefeated > 0) {
+    if (guildData.heroicBossesDefeated > 0) {
       hasHeroicEfficiency = true;
       const scores: number[] = [];
 
@@ -409,9 +410,10 @@ class TierListService {
     }
 
     // === CALCULATE MYTHIC EFFICIENCY SCORE ===
+    // Efficiency requires at least 1 boss kill — pulls/time without kills = 0 efficiency
     let mythicEfficiencyScore = 0;
     let hasMythicEfficiency = false;
-    if (guildData.mythicTotalPulls > 0 || guildData.mythicTimeSpent > 0 || guildData.mythicBossesDefeated > 0) {
+    if (guildData.mythicBossesDefeated > 0) {
       hasMythicEfficiency = true;
       const scores: number[] = [];
 
@@ -436,25 +438,25 @@ class TierListService {
     }
 
     // === CALCULATE WEIGHTED SPEED SCORE ===
-    // Heroic 20%, Mythic 80%
+    // Heroic 20%, Mythic 80% — normalized when only one difficulty has data
     let speedScore = 0;
     if (hasHeroicSpeed && hasMythicSpeed) {
       speedScore = heroicSpeedScore * this.HEROIC_WEIGHT + mythicSpeedScore * this.MYTHIC_WEIGHT;
     } else if (hasHeroicSpeed) {
-      speedScore = heroicSpeedScore * this.HEROIC_WEIGHT;
+      speedScore = heroicSpeedScore;
     } else if (hasMythicSpeed) {
-      speedScore = mythicSpeedScore * this.MYTHIC_WEIGHT;
+      speedScore = mythicSpeedScore;
     }
 
     // === CALCULATE WEIGHTED EFFICIENCY SCORE ===
-    // Heroic 20%, Mythic 80%
+    // Heroic 20%, Mythic 80% — normalized when only one difficulty has data
     let efficiencyScore = 0;
     if (hasHeroicEfficiency && hasMythicEfficiency) {
       efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT + mythicEfficiencyScore * this.MYTHIC_WEIGHT;
     } else if (hasHeroicEfficiency) {
-      efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT;
+      efficiencyScore = heroicEfficiencyScore;
     } else if (hasMythicEfficiency) {
-      efficiencyScore = mythicEfficiencyScore * this.MYTHIC_WEIGHT;
+      efficiencyScore = mythicEfficiencyScore;
     }
 
     // === OVERALL SCORE ===
