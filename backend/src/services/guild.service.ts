@@ -613,7 +613,14 @@ class GuildService {
         }
       }
 
-      logger.info("Finished recalculating statistics for all guilds");
+      // Recalculate guild rankings after statistics are updated
+      const rankingRaidIds = raidIds || (currentTierOnly ? CURRENT_RAID_IDS : TRACKED_RAIDS);
+      logger.info(`Recalculating guild rankings for ${rankingRaidIds.length} raid(s)...`);
+      for (const raidId of rankingRaidIds) {
+        await this.calculateGuildRankingsForRaid(raidId);
+      }
+
+      logger.info("Finished recalculating statistics and rankings for all guilds");
     } catch (error) {
       logger.error("Error in recalculateExistingGuildStatistics:", error);
       throw error;
