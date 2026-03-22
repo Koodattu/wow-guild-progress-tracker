@@ -25,29 +25,70 @@ const TIER_COLORS: Record<TierName, string> = {
   F: "bg-cyan-300",
 };
 
-// Score thresholds for each tier (out of 1000)
-// Crown: Only the #1 guild (handled separately)
-// S: 900-1000 (harder to get - top 10%)
-// F: 0-100 (harder to get - bottom 10%)
-// A-E: Evenly split between 100-900 (160 points each)
-const TIER_THRESHOLDS: Record<Exclude<TierName, "Crown">, { min: number; max: number }> = {
-  S: { min: 900, max: 1000 },
-  A: { min: 740, max: 899 },
-  B: { min: 580, max: 739 },
-  C: { min: 420, max: 579 },
-  D: { min: 260, max: 419 },
-  E: { min: 100, max: 259 },
-  F: { min: 0, max: 99 },
-};
+// Proportional tier widths as fractions of the score range (must sum to 1.0)
+// S and F are narrower (10% each) making them harder to achieve
+// A-E are evenly split across the middle 80% (16% each)
+const TIER_PROPORTIONS: { tier: Exclude<TierName, "Crown">; fraction: number }[] = [
+  { tier: "S", fraction: 0.1 },
+  { tier: "A", fraction: 0.16 },
+  { tier: "B", fraction: 0.16 },
+  { tier: "C", fraction: 0.16 },
+  { tier: "D", fraction: 0.16 },
+  { tier: "E", fraction: 0.16 },
+  { tier: "F", fraction: 0.1 },
+];
 
-// Get tier based on score (0-1000 scale)
-function getTierByScore(score: number): Exclude<TierName, "Crown"> {
-  if (score >= TIER_THRESHOLDS.S.min) return "S";
-  if (score >= TIER_THRESHOLDS.A.min) return "A";
-  if (score >= TIER_THRESHOLDS.B.min) return "B";
-  if (score >= TIER_THRESHOLDS.C.min) return "C";
-  if (score >= TIER_THRESHOLDS.D.min) return "D";
-  if (score >= TIER_THRESHOLDS.E.min) return "E";
+// Calculate dynamic tier thresholds based on actual guild score distribution.
+// Crown guild (rank #1) is excluded from threshold calculation so the
+// remaining guilds spread naturally across S-F tiers.
+function calculateDynamicThresholds(scores: number[]): Record<Exclude<TierName, "Crown">, { min: number }> {
+  if (scores.length === 0) {
+    // Fallback: even split across 0-1000
+    return { S: { min: 900 }, A: { min: 740 }, B: { min: 580 }, C: { min: 420 }, D: { min: 260 }, E: { min: 100 }, F: { min: 0 } };
+  }
+
+  const maxScore = Math.max(...scores);
+  const minScore = Math.min(...scores);
+  const range = maxScore - minScore;
+
+  if (range === 0) {
+    // All guilds have the same score — put them all in C (middle tier)
+    return {
+      S: { min: maxScore + 1 },
+      A: { min: maxScore + 1 },
+      B: { min: maxScore + 1 },
+      C: { min: maxScore },
+      D: { min: maxScore - 1 },
+      E: { min: maxScore - 2 },
+      F: { min: maxScore - 3 },
+    };
+  }
+
+  // Walk from highest tier down, carving out each tier's slice of the range
+  const thresholds = {} as Record<Exclude<TierName, "Crown">, { min: number }>;
+  let cursor = maxScore;
+
+  for (const { tier, fraction } of TIER_PROPORTIONS) {
+    const tierSize = range * fraction;
+    const tierMin = cursor - tierSize;
+    thresholds[tier] = { min: tierMin };
+    cursor = tierMin;
+  }
+
+  // Ensure F tier always covers down to (or below) the actual minimum
+  thresholds.F.min = Math.min(thresholds.F.min, minScore);
+
+  return thresholds;
+}
+
+// Get tier based on score using dynamic thresholds
+function getTierByScore(score: number, thresholds: Record<Exclude<TierName, "Crown">, { min: number }>): Exclude<TierName, "Crown"> {
+  if (score >= thresholds.S.min) return "S";
+  if (score >= thresholds.A.min) return "A";
+  if (score >= thresholds.B.min) return "B";
+  if (score >= thresholds.C.min) return "C";
+  if (score >= thresholds.D.min) return "D";
+  if (score >= thresholds.E.min) return "E";
   return "F";
 }
 
@@ -59,31 +100,38 @@ interface TierListDisplayProps {
 }
 
 function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisplayProps) {
-  // Group guilds by their tier based on score thresholds
-  const tierGroups: Record<TierName, GuildTierScore[]> = {
-    Crown: [],
-    S: [],
-    A: [],
-    B: [],
-    C: [],
-    D: [],
-    E: [],
-    F: [],
-  };
-
   // Sort guilds by score descending to find the crown holder
-  const sortedGuilds = [...guilds].sort((a, b) => b[scoreKey] - a[scoreKey]);
+  const sortedGuilds = useMemo(() => [...guilds].sort((a, b) => b[scoreKey] - a[scoreKey]), [guilds, scoreKey]);
 
-  sortedGuilds.forEach((guild, index) => {
-    const score = guild[scoreKey];
-    // First guild (highest score) gets Crown tier
-    if (index === 0 && guilds.length > 0) {
-      tierGroups.Crown.push(guild);
-    } else {
-      const tier = getTierByScore(score);
-      tierGroups[tier].push(guild);
-    }
-  });
+  // Calculate dynamic tier thresholds from non-crown guild scores
+  const tierGroups = useMemo(() => {
+    const groups: Record<TierName, GuildTierScore[]> = {
+      Crown: [],
+      S: [],
+      A: [],
+      B: [],
+      C: [],
+      D: [],
+      E: [],
+      F: [],
+    };
+
+    if (sortedGuilds.length === 0) return groups;
+
+    // Crown goes to #1; thresholds computed from the rest
+    const nonCrownScores = sortedGuilds.slice(1).map((g) => g[scoreKey]);
+    const thresholds = calculateDynamicThresholds(nonCrownScores);
+
+    sortedGuilds.forEach((guild, index) => {
+      if (index === 0) {
+        groups.Crown.push(guild);
+      } else {
+        groups[getTierByScore(guild[scoreKey], thresholds)].push(guild);
+      }
+    });
+
+    return groups;
+  }, [sortedGuilds, scoreKey]);
 
   // Guilds are already sorted within each tier by score (highest first)
 
