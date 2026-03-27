@@ -35,28 +35,8 @@ router.get(
         return res.status(404).json({ error: "Current raid not found" });
       }
 
-      // Sort guilds by backend-calculated guild rank (lower is better)
-      const sortedGuilds = guilds.sort((a, b) => {
-        const aMythic = a.progress.find((p: any) => p.difficulty === "mythic" && p.raidId === currentRaidId);
-        const bMythic = b.progress.find((p: any) => p.difficulty === "mythic" && p.raidId === currentRaidId);
-        const aHeroic = a.progress.find((p: any) => p.difficulty === "heroic" && p.raidId === currentRaidId);
-        const bHeroic = b.progress.find((p: any) => p.difficulty === "heroic" && p.raidId === currentRaidId);
-
-        // Get the effective progress (mythic if exists, otherwise heroic)
-        const aProgress = aMythic || aHeroic;
-        const bProgress = bMythic || bHeroic;
-
-        // Guilds without progress go to the end
-        if (!aProgress && !bProgress) return 0;
-        if (!aProgress) return 1;
-        if (!bProgress) return -1;
-
-        // Use backend-calculated guildRank (lower is better)
-        const aRank = aProgress.guildRank ?? 999;
-        const bRank = bProgress.guildRank ?? 999;
-
-        return aRank - bRank;
-      });
+      // guilds are already sorted by guildRank via the aggregation pipeline
+      // (mythic rank preferred, falls back to heroic rank via $ifNull)
 
       // Prepare response
       const response = {
@@ -71,7 +51,7 @@ router.get(
           starts: raidDatesDoc?.starts,
           ends: raidDatesDoc?.ends,
         },
-        guilds: sortedGuilds,
+        guilds: guilds,
         events: events,
       };
 
