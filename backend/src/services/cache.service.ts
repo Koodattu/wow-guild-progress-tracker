@@ -772,10 +772,10 @@ class CacheService {
   }
 
   /**
-   * Get cache key for events with pagination.
+   * Get cache key for events with pagination and filters.
    */
-  getEventsPaginatedKey(limit: number, page: number): string {
-    return `events:limit:${limit}:page:${page}`;
+  getEventsPaginatedKey(limit: number, page: number, types: string = "", difficulties: string = "", guildName: string = ""): string {
+    return `events:limit:${limit}:page:${page}:types:${types}:diff:${difficulties}:guild:${guildName}`;
   }
 
   /**

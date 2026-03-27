@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import type { EventFilters } from "@/types";
 
 // ─── Query Key Factory ───────────────────────────────────────────────────────
 // Centralized query keys for cache management and invalidation.
@@ -22,7 +23,7 @@ export const queryKeys = {
   },
   events: {
     list: (limit: number) => ["events", "list", limit] as const,
-    paginated: (page: number, limit: number) => ["events", "paginated", page, limit] as const,
+    paginated: (page: number, limit: number, filters?: EventFilters) => ["events", "paginated", page, limit, filters] as const,
     guild: (guildId: string, limit: number) => ["events", "guild", guildId, limit] as const,
     guildByRealmName: (realm: string, name: string, limit: number) => ["events", "guildByRealmName", realm, name, limit] as const,
   },
@@ -122,10 +123,10 @@ export function useLiveStreamers() {
 
 // ─── Events ──────────────────────────────────────────────────────────────────
 
-export function useEventsPaginated(page: number, limit: number = 50) {
+export function useEventsPaginated(page: number, limit: number = 50, filters?: EventFilters) {
   return useQuery({
-    queryKey: queryKeys.events.paginated(page, limit),
-    queryFn: () => api.getEventsPaginated(page, limit),
+    queryKey: queryKeys.events.paginated(page, limit, filters),
+    queryFn: () => api.getEventsPaginated(page, limit, filters),
     refetchInterval: page === 1 ? 30 * 1000 : undefined, // Auto-refresh first page every 30s
   });
 }

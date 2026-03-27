@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import EventCard from "@/components/EventCard";
 import Cookies from "js-cookie";
 import { useTranslations } from "next-intl";
-import { useEventsPaginated } from "@/lib/queries";
+import { useEventsPaginated, useGuildList } from "@/lib/queries";
+import type { EventFilters } from "@/types";
 
 const EVENT_TYPES = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"] as const;
 const DIFFICULTIES = ["mythic", "heroic"] as const;
@@ -13,8 +14,6 @@ export default function EventsPage() {
   const t = useTranslations("eventsPage");
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 50;
-
-  const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage);
 
   // Initialize filters from cookies or defaults
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(() => {
@@ -27,6 +26,29 @@ export default function EventsPage() {
     return saved ? new Set(JSON.parse(saved)) : new Set(DIFFICULTIES);
   });
 
+  const [selectedGuild, setSelectedGuild] = useState<string>(() => {
+    return Cookies.get("event-guild-filter") || "";
+  });
+
+  // Build filters object for the API call
+  // Only include filters that are not "all selected" (to avoid unnecessary query params)
+  const filters: EventFilters = useMemo(() => {
+    const f: EventFilters = {};
+    if (selectedEventTypes.size > 0 && selectedEventTypes.size < EVENT_TYPES.length) {
+      f.types = Array.from(selectedEventTypes);
+    }
+    if (selectedDifficulties.size > 0 && selectedDifficulties.size < DIFFICULTIES.length) {
+      f.difficulties = Array.from(selectedDifficulties);
+    }
+    if (selectedGuild) {
+      f.guildName = selectedGuild;
+    }
+    return f;
+  }, [selectedEventTypes, selectedDifficulties, selectedGuild]);
+
+  const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage, filters);
+  const { data: guildList } = useGuildList();
+
   // Save filters to cookies whenever they change
   useEffect(() => {
     Cookies.set("event-types-filter", JSON.stringify(Array.from(selectedEventTypes)), { expires: 365 });
@@ -36,13 +58,22 @@ export default function EventsPage() {
     Cookies.set("event-difficulties-filter", JSON.stringify(Array.from(selectedDifficulties)), { expires: 365 });
   }, [selectedDifficulties]);
 
-  // Filter events based on selected types and difficulties
-  const filteredEvents = eventsData?.events.filter((event) => selectedEventTypes.has(event.type) && selectedDifficulties.has(event.difficulty));
+  useEffect(() => {
+    if (selectedGuild) {
+      Cookies.set("event-guild-filter", selectedGuild, { expires: 365 });
+    } else {
+      Cookies.remove("event-guild-filter");
+    }
+  }, [selectedGuild]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedEventTypes, selectedDifficulties, selectedGuild]);
 
   const handlePageChange = (newPage: number) => {
     if (eventsData && newPage >= 1 && newPage <= eventsData.pagination.totalPages) {
       setCurrentPage(newPage);
-      // Scroll to top of page
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
@@ -88,6 +119,13 @@ export default function EventsPage() {
     }
   };
 
+  // Build sorted unique guild names for the dropdown
+  const guildNames = useMemo(() => {
+    if (!guildList) return [];
+    const names = guildList.map((g) => g.name);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }, [guildList]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -98,6 +136,9 @@ export default function EventsPage() {
       </div>
     );
   }
+
+  const events = eventsData?.events ?? [];
+  const pagination = eventsData?.pagination;
 
   return (
     <main className="min-h-screen text-white">
@@ -144,26 +185,49 @@ export default function EventsPage() {
                 ))}
               </div>
             </div>
+
+            {/* Guild Filter */}
+            <div className="flex-1 min-w-0 md:min-w-[200px]">
+              <h3 className="text-xs md:text-sm font-semibold text-gray-300 mb-2">{t("guild")}</h3>
+              <select
+                value={selectedGuild}
+                onChange={(e) => setSelectedGuild(e.target.value)}
+                className="w-full md:w-auto px-3 py-1.5 rounded-lg text-xs md:text-sm bg-gray-800 text-white border border-gray-600 focus:ring-blue-600 focus:border-blue-600 cursor-pointer"
+              >
+                <option value="">{t("allGuilds")}</option>
+                {guildNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Event count */}
         <div className="flex justify-end mb-3 md:mb-4">
-          {eventsData && (
-            <div className="text-xs md:text-sm text-gray-400">{t("showingEvents", { start: 1, end: filteredEvents?.length || 0, total: eventsData.pagination.totalCount })}</div>
+          {pagination && (
+            <div className="text-xs md:text-sm text-gray-400">
+              {t("showingEvents", {
+                start: pagination.totalCount === 0 ? 0 : (currentPage - 1) * eventsPerPage + 1,
+                end: Math.min(currentPage * eventsPerPage, pagination.totalCount),
+                total: pagination.totalCount,
+              })}
+            </div>
           )}
         </div>
 
-        {filteredEvents && filteredEvents.length > 0 ? (
+        {events.length > 0 ? (
           <>
             <div className="space-y-3 md:space-y-4">
-              {filteredEvents.map((event) => (
+              {events.map((event) => (
                 <EventCard key={event._id} event={event} />
               ))}
             </div>
 
             {/* Pagination Controls */}
-            {eventsData && eventsData.pagination.totalPages > 1 && (
+            {pagination && pagination.totalPages > 1 && (
               <div className="flex items-center justify-center gap-1.5 md:gap-2 mt-6 md:mt-8 flex-wrap">
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
@@ -190,32 +254,31 @@ export default function EventsPage() {
                   )}
 
                   {/* Pages around current */}
-                  {eventsData &&
-                    Array.from({ length: eventsData.pagination.totalPages }, (_, i) => i + 1)
-                      .filter((page) => {
-                        return page === currentPage || page === currentPage - 1 || page === currentPage + 1 || page === currentPage - 2 || page === currentPage + 2;
-                      })
-                      .map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
-                            page === currentPage ? "bg-blue-600 text-white" : "bg-gray-800 text-white hover:bg-gray-700"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      return page === currentPage || page === currentPage - 1 || page === currentPage + 1 || page === currentPage - 2 || page === currentPage + 2;
+                    })
+                    .map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+                          page === currentPage ? "bg-blue-600 text-white" : "bg-gray-800 text-white hover:bg-gray-700"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
 
                   {/* Last page */}
-                  {eventsData && currentPage < eventsData.pagination.totalPages - 2 && (
+                  {currentPage < pagination.totalPages - 2 && (
                     <>
-                      {currentPage < eventsData.pagination.totalPages - 3 && <span className="text-gray-500 text-xs md:text-sm">...</span>}
+                      {currentPage < pagination.totalPages - 3 && <span className="text-gray-500 text-xs md:text-sm">...</span>}
                       <button
-                        onClick={() => handlePageChange(eventsData.pagination.totalPages)}
+                        onClick={() => handlePageChange(pagination.totalPages)}
                         className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors"
                       >
-                        {eventsData.pagination.totalPages}
+                        {pagination.totalPages}
                       </button>
                     </>
                   )}
@@ -223,9 +286,9 @@ export default function EventsPage() {
 
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={eventsData ? currentPage === eventsData.pagination.totalPages : true}
+                  disabled={currentPage === pagination.totalPages}
                   className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
-                    eventsData && currentPage === eventsData.pagination.totalPages ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
+                    currentPage === pagination.totalPages ? "bg-gray-800 text-gray-600 cursor-not-allowed" : "bg-gray-800 text-white hover:bg-gray-700"
                   }`}
                 >
                   {t("next")}

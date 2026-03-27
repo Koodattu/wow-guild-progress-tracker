@@ -5,6 +5,7 @@ import {
   GuildSummary,
   Event,
   EventsResponse,
+  EventFilters,
   RaidInfo,
   Raid,
   Boss,
@@ -196,8 +197,18 @@ export const api = {
     return Array.isArray(data) ? data : data.events;
   },
 
-  async getEventsPaginated(page: number = 1, limit: number = 50): Promise<EventsResponse> {
-    const response = await fetch(`${API_URL}/api/events?limit=${limit}&page=${page}`);
+  async getEventsPaginated(page: number = 1, limit: number = 50, filters?: EventFilters): Promise<EventsResponse> {
+    const params = new URLSearchParams({ limit: String(limit), page: String(page) });
+    if (filters?.types && filters.types.length > 0) {
+      params.set("types", filters.types.join(","));
+    }
+    if (filters?.difficulties && filters.difficulties.length > 0) {
+      params.set("difficulties", filters.difficulties.join(","));
+    }
+    if (filters?.guildName) {
+      params.set("guildName", filters.guildName);
+    }
+    const response = await fetch(`${API_URL}/api/events?${params.toString()}`);
     if (!response.ok) throw new Error("Failed to fetch events");
     const data = await response.json();
     // If old format (array), convert to new format

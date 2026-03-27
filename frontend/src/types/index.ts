@@ -334,6 +334,12 @@ export interface PaginationInfo {
   totalCount: number;
 }
 
+export interface EventFilters {
+  types?: string[];
+  difficulties?: string[];
+  guildName?: string;
+}
+
 export interface EventsResponse {
   events: Event[];
   pagination: PaginationInfo;

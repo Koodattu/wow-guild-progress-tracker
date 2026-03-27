@@ -91,6 +91,8 @@
     "filters": "Filters",
     "eventTypes": "Event Types",
     "difficulties": "Difficulties",
+    "guild": "Guild",
+    "allGuilds": "All Guilds",
     "bossKill": "Boss Kill",
     "bestPull": "Best Pull",
     "hiatus": "Hiatus",

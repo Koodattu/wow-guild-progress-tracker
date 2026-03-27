@@ -91,6 +91,8 @@
     "filters": "Suodattimet",
     "eventTypes": "Tapahtumatyypit",
     "difficulties": "Vaikeustasot",
+    "guild": "Kilta",
+    "allGuilds": "Kaikki killat",
     "bossKill": "Bossi-tappo",
     "bestPull": "Paras Yritys",
     "hiatus": "Tauko",

@@ -7,14 +7,52 @@ import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
-// Get recent events with pagination
+// Valid event types and difficulties for filtering
+const VALID_EVENT_TYPES = ["boss_kill", "best_pull", "milestone", "hiatus", "regress", "reproge"];
+const VALID_DIFFICULTIES = ["mythic", "heroic"];
+
+// Parse filter query params into a MongoDB filter object
+function parseEventFilters(query: Request["query"]): Record<string, unknown> {
+  const filter: Record<string, unknown> = {};
+
+  // Filter by event types (comma-separated)
+  const typesParam = query.types as string | undefined;
+  if (typesParam) {
+    const types = typesParam.split(",").filter((t) => VALID_EVENT_TYPES.includes(t));
+    if (types.length > 0 && types.length < VALID_EVENT_TYPES.length) {
+      filter.type = { $in: types };
+    }
+  }
+
+  // Filter by difficulties (comma-separated)
+  const difficultiesParam = query.difficulties as string | undefined;
+  if (difficultiesParam) {
+    const difficulties = difficultiesParam.split(",").filter((d) => VALID_DIFFICULTIES.includes(d));
+    if (difficulties.length > 0 && difficulties.length < VALID_DIFFICULTIES.length) {
+      filter.difficulty = { $in: difficulties };
+    }
+  }
+
+  // Filter by guild name (exact match, case-insensitive)
+  const guildNameParam = query.guildName as string | undefined;
+  if (guildNameParam) {
+    filter.guildName = guildNameParam;
+  }
+
+  return filter;
+}
+
+// Get recent events with pagination and optional filters
 router.get(
   "/",
   cacheMiddleware(
     (req) => {
       const limit = parseInt(req.query.limit as string) || 50;
       const page = parseInt(req.query.page as string) || 1;
-      return cacheService.getEventsPaginatedKey(limit, page);
+      const types = (req.query.types as string) || "";
+      const difficulties = (req.query.difficulties as string) || "";
+      const guildName = (req.query.guildName as string) || "";
+      return cacheService.getEventsPaginatedKey(limit, page, types, difficulties, guildName);
     },
     () => cacheService.getEventsTTL(),
   ),
@@ -23,8 +61,12 @@ router.get(
       const limit = parseInt(req.query.limit as string) || 50;
       const page = parseInt(req.query.page as string) || 1;
       const skip = (page - 1) * limit;
+      const filter = parseEventFilters(req.query);
 
-      const [events, totalCount] = await Promise.all([Event.find().sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"), Event.countDocuments()]);
+      const [events, totalCount] = await Promise.all([
+        Event.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"),
+        Event.countDocuments(filter),
+      ]);
 
       res.json({
         events,
