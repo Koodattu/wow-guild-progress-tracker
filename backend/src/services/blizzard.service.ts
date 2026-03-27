@@ -789,39 +789,86 @@ export class BlizzardApiClient {
   }
 
   /**
-   * Retry matching boss icons for bosses that have no icon in the Raid collection.
-   * Scans all raids, finds bosses with missing iconUrl, and attempts to re-match.
+   * Check whether a cached BossIcon match looks correct.
+   * A match is suspicious if the achievement name doesn't contain the boss name
+   * (or a recognizable portion of it) in a "Mythic:" pattern.
+   */
+  private isBossIconMatchSuspicious(bossName: string, achievementName: string): boolean {
+    const lower = achievementName.toLowerCase();
+
+    // If the achievement starts with "Mythic:" and contains the full boss name, it's fine
+    const normalizedBoss = this.stripLeadingArticle(bossName).toLowerCase();
+    if (lower.startsWith("mythic:") && lower.includes(normalizedBoss)) {
+      return false;
+    }
+
+    // If it starts with "Mythic:" and contains ANY significant word from the boss name, it's plausible
+    const significantWords = this.getSignificantWords(normalizedBoss);
+    if (lower.startsWith("mythic:")) {
+      const mythicPart = lower.slice(7).trim(); // everything after "Mythic: "
+      for (const word of significantWords) {
+        // Use word boundary check: the word must appear as a whole word, not as a substring of another word
+        const wordRegex = new RegExp(`\\b${this.escapeRegex(word)}\\b`, "i");
+        if (wordRegex.test(mythicPart)) {
+          return false;
+        }
+      }
+    }
+
+    // Achievement doesn't look like a correct Mythic: match for this boss
+    return true;
+  }
+
+  /**
+   * Retry matching for bosses with missing or suspicious icon matches.
+   * Scans all raids, finds bosses with missing iconUrl or where the cached
+   * BossIcon match looks incorrect, and re-runs the matching algorithm.
    * Updates both the BossIcon cache and the Raid document.
    */
   public async retryMissingBossIcons(): Promise<void> {
     try {
       const raids = await Raid.find({});
-      const missingBosses: { raidId: number; raidName: string; bossName: string }[] = [];
+      const bossesToRetry: { raidId: number; raidName: string; bossName: string; reason: string }[] = [];
 
       for (const raid of raids) {
         for (const boss of raid.bosses) {
           if (!boss.iconUrl) {
-            missingBosses.push({ raidId: raid.id, raidName: raid.name, bossName: boss.name });
+            bossesToRetry.push({ raidId: raid.id, raidName: raid.name, bossName: boss.name, reason: "missing" });
+            continue;
+          }
+
+          // Check if the existing cached match looks suspicious
+          const cached = await BossIcon.findOne({ bossName: boss.name });
+          if (cached) {
+            // Look up the achievement name for validation
+            const achievement = await Achievement.findOne({ id: cached.achievementId });
+            if (achievement && this.isBossIconMatchSuspicious(boss.name, achievement.name)) {
+              bossesToRetry.push({
+                raidId: raid.id,
+                raidName: raid.name,
+                bossName: boss.name,
+                reason: `suspicious match: "${achievement.name}"`,
+              });
+            }
           }
         }
       }
 
-      if (missingBosses.length === 0) {
-        logger.info("✅ All bosses have icons, no re-matching needed");
+      if (bossesToRetry.length === 0) {
+        logger.info("✅ All boss icons look correct, no re-matching needed");
         return;
       }
 
-      logger.info(`🔄 Found ${missingBosses.length} bosses without icons, attempting re-match...`);
+      logger.info(`🔄 Found ${bossesToRetry.length} boss icons to re-evaluate...`);
       let matched = 0;
 
-      for (const { raidId, raidName, bossName } of missingBosses) {
-        // Skip if already cached in BossIcon (means the Raid doc is just out of sync)
-        const existing = await BossIcon.findOne({ bossName });
-        let iconUrl: string | null = existing?.iconUrl || null;
+      for (const { raidId, raidName, bossName, reason } of bossesToRetry) {
+        logger.info(`🔄 Re-evaluating: "${bossName}" (${raidName}) — reason: ${reason}`);
 
-        if (!iconUrl) {
-          iconUrl = await this.getBossIconUrl(bossName);
-        }
+        // Delete the old BossIcon cache entry so the algorithm runs fresh
+        await BossIcon.deleteOne({ bossName });
+
+        const iconUrl = await this.getBossIconUrl(bossName);
 
         if (iconUrl) {
           // Update the boss iconUrl in the Raid document
@@ -829,6 +876,8 @@ export class BlizzardApiClient {
           matched++;
           logger.info(`✅ Re-matched boss icon: "${bossName}" (${raidName}) -> ${iconUrl}`);
         } else {
+          // Clear the bad iconUrl from the Raid document too
+          await Raid.updateOne({ id: raidId, "bosses.name": bossName }, { $unset: { "bosses.$.iconUrl": "" } });
           logger.info(`⚠️  Still no match for boss: "${bossName}" (${raidName})`);
         }
 
@@ -836,7 +885,7 @@ export class BlizzardApiClient {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      logger.info(`🔄 Boss icon re-matching complete: ${matched}/${missingBosses.length} matched`);
+      logger.info(`🔄 Boss icon re-matching complete: ${matched}/${bossesToRetry.length} resolved`);
     } catch (error: any) {
       logger.error("Error retrying missing boss icons:", error.message);
     }
