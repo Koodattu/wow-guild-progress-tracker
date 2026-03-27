@@ -251,21 +251,19 @@ class TierListService {
   }
 
   /**
-   * Calculate exponential progress score for bosses defeated
-   * Later bosses are worth more than earlier bosses (exponential growth)
-   * 0 bosses = 0 score, all bosses = 1000 score
-   * Uses exponential curve where each boss is worth more than the previous
+   * Calculate exponential progress score for bosses defeated.
+   * Later bosses are worth more than earlier bosses (exponential growth).
+   * 0 bosses = 0 score, all bosses = 1000 score.
+   *
+   * @param k Steepness factor. Higher = more emphasis on later bosses.
+   *          Speed scoring uses k=10 (only near-full clears matter).
+   *          Efficiency scoring uses k=3 (all progress meaningful).
    */
-  private calculateExponentialProgressScore(bossesDefeated: number, totalBosses: number): number {
+  private calculateExponentialProgressScore(bossesDefeated: number, totalBosses: number, k: number = 10): number {
     if (totalBosses === 0 || bossesDefeated === 0) return 0;
     if (bossesDefeated >= totalBosses) return this.MAX_SCORE;
 
-    // Use exponential formula: score = (e^(k * progress) - 1) / (e^k - 1) * 1000
-    // where k controls the steepness of the curve (higher = more emphasis on later bosses)
-    const k = 10; // Steepness factor - adjustable
     const progress = bossesDefeated / totalBosses;
-
-    // Exponential interpolation: early bosses worth less, later bosses worth more
     const exponentialProgress = (Math.exp(k * progress) - 1) / (Math.exp(k) - 1);
 
     return Math.round(exponentialProgress * this.MAX_SCORE);
@@ -308,22 +306,6 @@ class TierListService {
     // Total bosses (for progress calculation)
     const heroicTotalBosses = guildData.heroicTotalBosses || allGuildsData.find((g) => g.heroicTotalBosses > 0)?.heroicTotalBosses || 0;
     const mythicTotalBosses = guildData.mythicTotalBosses || allGuildsData.find((g) => g.mythicTotalBosses > 0)?.mythicTotalBosses || 0;
-
-    // Pull counts (find min/max across all guilds)
-    const heroicPullCounts = allGuildsData.filter((g) => g.heroicTotalPulls > 0).map((g) => g.heroicTotalPulls);
-    const mythicPullCounts = allGuildsData.filter((g) => g.mythicTotalPulls > 0).map((g) => g.mythicTotalPulls);
-    const minHeroicPulls = heroicPullCounts.length > 0 ? Math.min(...heroicPullCounts) : 0;
-    const maxHeroicPulls = heroicPullCounts.length > 0 ? Math.max(...heroicPullCounts) : 1;
-    const minMythicPulls = mythicPullCounts.length > 0 ? Math.min(...mythicPullCounts) : 0;
-    const maxMythicPulls = mythicPullCounts.length > 0 ? Math.max(...mythicPullCounts) : 1;
-
-    // Time spent (find min/max across all guilds)
-    const heroicTimes = allGuildsData.filter((g) => g.heroicTimeSpent > 0).map((g) => g.heroicTimeSpent);
-    const mythicTimes = allGuildsData.filter((g) => g.mythicTimeSpent > 0).map((g) => g.mythicTimeSpent);
-    const minHeroicTime = heroicTimes.length > 0 ? Math.min(...heroicTimes) : 0;
-    const maxHeroicTime = heroicTimes.length > 0 ? Math.max(...heroicTimes) : 1;
-    const minMythicTime = mythicTimes.length > 0 ? Math.min(...mythicTimes) : 0;
-    const maxMythicTime = mythicTimes.length > 0 ? Math.max(...mythicTimes) : 1;
 
     // === CALCULATE HEROIC SPEED SCORE ===
     let heroicSpeedScore = 0;
@@ -382,9 +364,16 @@ class TierListService {
     }
 
     // === CALCULATE EFFICIENCY SCORE ===
-    // Efficiency = many boss kills with few pulls/time. No kills at all = 0 efficiency.
-    // Boss progress is the dominant factor (50%), pulls (25%) and time (25%) are secondary.
-    // Mythic kills are always worth more than heroic (80/20 weighting on the progress component).
+    // Efficiency = how effectively a guild clears bosses relative to time/effort spent.
+    // Core insight: time and pulls are measured PER UNIT OF WEIGHTED PROGRESS, not in absolute terms.
+    // This means 3 hours for 6 bosses beats 51 min for 1 boss, because per-progress time is lower.
+    //
+    // Uses k=3 exponential curve (not k=10 used by speed) so partial progress is meaningful:
+    //   k=3: 1/9 → 21pts, 3/9 → 90pts, 6/9 → 335pts, 9/9 → 1000pts
+    //   k=10: 1/9 → 0pts, 6/9 → 36pts (too compressed, only rewards near-full clears)
+    //
+    // Components: 60% boss progress, 25% time-per-progress, 15% pulls-per-progress
+    // Mythic always worth more than heroic (80/20 weighting per difficulty).
     let heroicEfficiencyScore = 0;
     let mythicEfficiencyScore = 0;
     let efficiencyScore = 0;
@@ -392,63 +381,93 @@ class TierListService {
     const hasMythicEfficiency = guildData.mythicBossesDefeated > 0;
 
     if (hasHeroicEfficiency || hasMythicEfficiency) {
-      // --- Boss Progress Component (weighted 50% of final efficiency) ---
-      // Mythic kills worth 80%, heroic worth 20%. Both contribute to a single progress score.
-      let heroicProgressScore = 0;
-      let mythicProgressScore = 0;
+      const EFFICIENCY_K = 3;
 
-      if (heroicTotalBosses > 0) {
-        heroicProgressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses);
-      }
-      if (mythicTotalBosses > 0) {
-        mythicProgressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses);
+      // --- Precompute derived metrics across all guilds in this raid ---
+      // "time per weighted progress" and "pulls per weighted progress" normalize
+      // effort against achievement, so more bosses killed with more time is
+      // correctly scored as efficient if the time-per-progress ratio is low.
+      const heroicTimePerProgressValues: number[] = [];
+      const heroicPullsPerProgressValues: number[] = [];
+      const mythicTimePerProgressValues: number[] = [];
+      const mythicPullsPerProgressValues: number[] = [];
+
+      for (const g of allGuildsData) {
+        if (g.heroicBossesDefeated > 0 && heroicTotalBosses > 0) {
+          const prog = this.calculateExponentialProgressScore(g.heroicBossesDefeated, heroicTotalBosses, EFFICIENCY_K);
+          if (prog > 0) {
+            if (g.heroicTimeSpent > 0) heroicTimePerProgressValues.push(g.heroicTimeSpent / prog);
+            if (g.heroicTotalPulls > 0) heroicPullsPerProgressValues.push(g.heroicTotalPulls / prog);
+          }
+        }
+        if (g.mythicBossesDefeated > 0 && mythicTotalBosses > 0) {
+          const prog = this.calculateExponentialProgressScore(g.mythicBossesDefeated, mythicTotalBosses, EFFICIENCY_K);
+          if (prog > 0) {
+            if (g.mythicTimeSpent > 0) mythicTimePerProgressValues.push(g.mythicTimeSpent / prog);
+            if (g.mythicTotalPulls > 0) mythicPullsPerProgressValues.push(g.mythicTotalPulls / prog);
+          }
+        }
       }
 
-      // Weight progress: if both difficulties have kills, use 80/20.
-      // If only one, that difficulty's progress is the full progress score,
-      // but heroic-only is capped at the heroic weight ceiling (200/1000)
-      // to ensure mythic progress is always more valuable.
-      let progressScore: number;
+      const minHeroicTPP = heroicTimePerProgressValues.length > 0 ? Math.min(...heroicTimePerProgressValues) : 0;
+      const maxHeroicTPP = heroicTimePerProgressValues.length > 0 ? Math.max(...heroicTimePerProgressValues) : 1;
+      const minHeroicPPP = heroicPullsPerProgressValues.length > 0 ? Math.min(...heroicPullsPerProgressValues) : 0;
+      const maxHeroicPPP = heroicPullsPerProgressValues.length > 0 ? Math.max(...heroicPullsPerProgressValues) : 1;
+      const minMythicTPP = mythicTimePerProgressValues.length > 0 ? Math.min(...mythicTimePerProgressValues) : 0;
+      const maxMythicTPP = mythicTimePerProgressValues.length > 0 ? Math.max(...mythicTimePerProgressValues) : 1;
+      const minMythicPPP = mythicPullsPerProgressValues.length > 0 ? Math.min(...mythicPullsPerProgressValues) : 0;
+      const maxMythicPPP = mythicPullsPerProgressValues.length > 0 ? Math.max(...mythicPullsPerProgressValues) : 1;
+
+      // --- Score heroic efficiency ---
+      let heroicDifficultyScore = 0;
+      if (hasHeroicEfficiency && heroicTotalBosses > 0) {
+        const progressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses, EFFICIENCY_K);
+
+        let timeEffScore = 0;
+        if (progressScore > 0 && guildData.heroicTimeSpent > 0) {
+          timeEffScore = this.interpolateScore(guildData.heroicTimeSpent / progressScore, minHeroicTPP, maxHeroicTPP);
+        }
+
+        let pullEffScore = 0;
+        if (progressScore > 0 && guildData.heroicTotalPulls > 0) {
+          pullEffScore = this.interpolateScore(guildData.heroicTotalPulls / progressScore, minHeroicPPP, maxHeroicPPP);
+        }
+
+        heroicDifficultyScore = progressScore * 0.6 + timeEffScore * 0.25 + pullEffScore * 0.15;
+        heroicEfficiencyScore = Math.round(heroicDifficultyScore);
+      }
+
+      // --- Score mythic efficiency ---
+      let mythicDifficultyScore = 0;
+      if (hasMythicEfficiency && mythicTotalBosses > 0) {
+        const progressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses, EFFICIENCY_K);
+
+        let timeEffScore = 0;
+        if (progressScore > 0 && guildData.mythicTimeSpent > 0) {
+          timeEffScore = this.interpolateScore(guildData.mythicTimeSpent / progressScore, minMythicTPP, maxMythicTPP);
+        }
+
+        let pullEffScore = 0;
+        if (progressScore > 0 && guildData.mythicTotalPulls > 0) {
+          pullEffScore = this.interpolateScore(guildData.mythicTotalPulls / progressScore, minMythicPPP, maxMythicPPP);
+        }
+
+        mythicDifficultyScore = progressScore * 0.6 + timeEffScore * 0.25 + pullEffScore * 0.15;
+        mythicEfficiencyScore = Math.round(mythicDifficultyScore);
+      }
+
+      // --- Combine heroic + mythic ---
+      // Mythic 80%, Heroic 20%. Single-difficulty guilds are scaled by their weight
+      // so mythic-only can reach 800 and heroic-only caps at 200.
       if (hasHeroicEfficiency && hasMythicEfficiency) {
-        progressScore = heroicProgressScore * this.HEROIC_WEIGHT + mythicProgressScore * this.MYTHIC_WEIGHT;
+        efficiencyScore = Math.round(heroicDifficultyScore * this.HEROIC_WEIGHT + mythicDifficultyScore * this.MYTHIC_WEIGHT);
       } else if (hasMythicEfficiency) {
-        // Mythic-only: full score scaled by mythic weight (max 800)
-        progressScore = mythicProgressScore * this.MYTHIC_WEIGHT;
+        efficiencyScore = Math.round(mythicDifficultyScore * this.MYTHIC_WEIGHT);
       } else {
-        // Heroic-only: full score scaled by heroic weight (max 200)
-        progressScore = heroicProgressScore * this.HEROIC_WEIGHT;
+        efficiencyScore = Math.round(heroicDifficultyScore * this.HEROIC_WEIGHT);
       }
 
-      // --- Pull Count Component (weighted 25% of final efficiency) ---
-      // Fewer pulls = better. Combined across both difficulties.
-      const pullScores: number[] = [];
-      if (guildData.heroicTotalPulls > 0) {
-        pullScores.push(this.interpolateScore(guildData.heroicTotalPulls, minHeroicPulls, maxHeroicPulls));
-      }
-      if (guildData.mythicTotalPulls > 0) {
-        pullScores.push(this.interpolateScore(guildData.mythicTotalPulls, minMythicPulls, maxMythicPulls));
-      }
-      const pullScore = pullScores.length > 0 ? pullScores.reduce((a, b) => a + b, 0) / pullScores.length : 0;
-
-      // --- Time Spent Component (weighted 25% of final efficiency) ---
-      // Less time = better. Combined across both difficulties.
-      const timeScores: number[] = [];
-      if (guildData.heroicTimeSpent > 0) {
-        timeScores.push(this.interpolateScore(guildData.heroicTimeSpent, minHeroicTime, maxHeroicTime));
-      }
-      if (guildData.mythicTimeSpent > 0) {
-        timeScores.push(this.interpolateScore(guildData.mythicTimeSpent, minMythicTime, maxMythicTime));
-      }
-      const timeScore = timeScores.length > 0 ? timeScores.reduce((a, b) => a + b, 0) / timeScores.length : 0;
-
-      // --- Combine: Progress 50%, Pulls 25%, Time 25% ---
-      const combinedEfficiency = progressScore * 0.5 + pullScore * 0.25 + timeScore * 0.25;
-
-      // Store per-difficulty scores for logging/debugging
-      heroicEfficiencyScore = hasHeroicEfficiency ? Math.round(heroicProgressScore) : 0;
-      mythicEfficiencyScore = hasMythicEfficiency ? Math.round(mythicProgressScore) : 0;
-
-      efficiencyScore = Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, Math.round(combinedEfficiency)));
+      efficiencyScore = Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, efficiencyScore));
     }
 
     // === CALCULATE WEIGHTED SPEED SCORE ===
