@@ -89,8 +89,11 @@ export interface RaidProgressSummary {
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
   lastKillTime?: string | null; // Timestamp of the most recent boss kill
-  worldRank?: number; // World progress rank from WarcraftLogs
-  worldRankColor?: string; // Color class for the world rank
+  worldRank?: number; // Best world rank (lowest of WCL and Raider.IO)
+  worldRankColor?: string; // Color class for the best world rank
+  wclWorldRank?: number; // World rank from WarcraftLogs
+  wclWorldRankColor?: string; // Color from WarcraftLogs
+  rioWorldRank?: number; // World rank from Raider.IO
   guildRank?: number; // Rank among tracked guilds (1 = best)
 }
 
@@ -103,8 +106,11 @@ export interface RaidProgress {
   totalBosses: number;
   totalTimeSpent: number;
   bosses: BossProgress[];
-  worldRank?: number; // World progress rank from WarcraftLogs
-  worldRankColor?: string; // Color class for the world rank
+  worldRank?: number; // Best world rank (lowest of WCL and Raider.IO)
+  worldRankColor?: string; // Color class for the best world rank
+  wclWorldRank?: number; // World rank from WarcraftLogs
+  wclWorldRankColor?: string; // Color from WarcraftLogs
+  rioWorldRank?: number; // World rank from Raider.IO
   guildRank?: number; // Rank among tracked guilds (1 = best)
   lastUpdated: string;
 }

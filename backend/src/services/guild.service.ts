@@ -802,7 +802,34 @@ class GuildService {
     }
   }
 
+  // Compute the best (lowest) world rank from WCL and RaiderIO sources, and set the display fields
+  private computeBestWorldRank(progress: IRaidProgress): void {
+    const wclRank = progress.wclWorldRank;
+    const rioRank = progress.rioWorldRank;
+
+    if (wclRank && rioRank) {
+      // Both exist: use the lower (better) rank
+      if (wclRank <= rioRank) {
+        progress.worldRank = wclRank;
+        progress.worldRankColor = progress.wclWorldRankColor;
+      } else {
+        progress.worldRank = rioRank;
+        progress.worldRankColor = undefined; // RaiderIO doesn't provide color classes
+      }
+    } else if (wclRank) {
+      progress.worldRank = wclRank;
+      progress.worldRankColor = progress.wclWorldRankColor;
+    } else if (rioRank) {
+      progress.worldRank = rioRank;
+      progress.worldRankColor = undefined;
+    } else {
+      progress.worldRank = undefined;
+      progress.worldRankColor = undefined;
+    }
+  }
+
   // Update world rankings for all raids the guild has progress in
+  // Fetches from BOTH WarcraftLogs and Raider.IO, stores each separately, and picks the best
   async updateGuildWorldRankings(guildId: string): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
@@ -811,10 +838,9 @@ class GuildService {
     }
 
     const guildLog = getGuildLogger(guild.name, guild.realm);
-    guildLog.info("Updating world rankings...");
+    guildLog.info("Updating world rankings (WCL + Raider.IO)...");
 
     // Only update rankings for raids where the guild has made progress
-    // Progress is counted if either mythic or heroic bosses have been defeated
     const raidsWithProgress = guild.progress.filter((p) => (p.difficulty === "mythic" || p.difficulty === "heroic") && p.bossesDefeated > 0);
 
     if (raidsWithProgress.length === 0) {
@@ -824,46 +850,42 @@ class GuildService {
 
     // Group by raidId to avoid duplicate API calls for the same raid
     const raidIds = [...new Set(raidsWithProgress.map((p) => p.raidId))];
-    const raidsNeedingFallback: { raidId: number; raidEntries: typeof raidsWithProgress }[] = [];
 
+    // --- WarcraftLogs: fetch world rank per raid ---
     for (const raidId of raidIds) {
       try {
         const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
         const raidName = raidEntries[0].raidName;
-        guildLog.info(`Fetching world rank for ${raidName}...`);
+        guildLog.info(`Fetching WCL world rank for ${raidName}...`);
 
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
-
         const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
         if (worldRank?.number) {
-          // Apply the world rank to all difficulty entries for this raid
           for (const raidProgress of raidEntries) {
-            raidProgress.worldRank = worldRank.number;
-            raidProgress.worldRankColor = worldRank.color;
+            raidProgress.wclWorldRank = worldRank.number;
+            raidProgress.wclWorldRankColor = worldRank.color;
           }
-          guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${raidEntries.map((e) => e.difficulty).join(", ")}`);
+          guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
         } else {
-          guildLog.info(`${raidName}: No world rank data from WCL, will try Raider.IO fallback`);
-          raidsNeedingFallback.push({ raidId, raidEntries });
+          guildLog.info(`${raidName}: No WCL world rank data`);
         }
       } catch (error) {
-        guildLog.error(`Error fetching world rank for raidId ${raidId}:`, error);
-        const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
-        raidsNeedingFallback.push({ raidId, raidEntries });
+        guildLog.error(`Error fetching WCL world rank for raidId ${raidId}:`, error);
       }
     }
 
-    // Raider.IO fallback for raids without WCL world rank
-    if (raidsNeedingFallback.length > 0) {
-      guildLog.info(`Attempting Raider.IO fallback for ${raidsNeedingFallback.length} raid(s)...`);
+    // --- Raider.IO: fetch world rank for all raids in one call ---
+    try {
+      guildLog.info("Fetching Raider.IO world ranks...");
       const rioRankings = await raiderIOService.fetchGuildRaidRankings(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
 
       if (rioRankings) {
-        for (const { raidId, raidEntries } of raidsNeedingFallback) {
+        for (const raidId of raidIds) {
           const raidData = await this.getRaidData(raidId);
           if (!raidData) continue;
 
+          const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
           const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
           if (!diffRankings) {
             guildLog.info(`${raidData.name}: No matching Raider.IO rankings found`);
@@ -873,19 +895,25 @@ class GuildService {
           const rank = diffRankings.mythic?.world || diffRankings.heroic?.world;
           if (rank) {
             for (const raidProgress of raidEntries) {
-              raidProgress.worldRank = rank;
+              raidProgress.rioWorldRank = rank;
             }
-            guildLog.info(`${raidData.name}: World Rank #${rank} (Raider.IO fallback) - applied to ${raidEntries.map((e) => e.difficulty).join(", ")}`);
+            guildLog.info(`${raidData.name}: Raider.IO World Rank #${rank}`);
           } else {
             guildLog.info(`${raidData.name}: Raider.IO returned no valid world rank`);
           }
         }
       } else {
-        guildLog.warn("Raider.IO fallback returned no data");
+        guildLog.warn("Raider.IO returned no ranking data");
       }
+    } catch (error) {
+      guildLog.error("Error fetching Raider.IO world ranks:", error);
     }
 
-    // Save the updated guild with world rankings
+    // --- Compute the best world rank for each progress entry ---
+    for (const raidProgress of raidsWithProgress) {
+      this.computeBestWorldRank(raidProgress);
+    }
+
     await guild.save();
     guildLog.info("World rankings updated and saved");
   }
@@ -898,6 +926,7 @@ class GuildService {
   }
 
   // Update world rankings for specific raids
+  // Fetches from BOTH WarcraftLogs and Raider.IO, stores each separately, and picks the best
   async updateWorldRankingForRaids(guildId: string, raidIds: number[]): Promise<void> {
     const guild = await Guild.findById(guildId);
     if (!guild) {
@@ -906,9 +935,10 @@ class GuildService {
     }
 
     const guildLog = getGuildLogger(guild.name, guild.realm);
-    guildLog.info(`Updating world ranks for raids [${raidIds.join(", ")}]...`);
+    guildLog.info(`Updating world ranks for raids [${raidIds.join(", ")}] (WCL + Raider.IO)...`);
 
-    const raidsNeedingFallback: { raidId: number; raidData: IRaid; mythicProgress: IRaidProgress | undefined; heroicProgress: IRaidProgress | undefined; raidName: string }[] = [];
+    // Collect raids that actually need updating
+    const raidsToUpdate: { raidId: number; raidData: IRaid; mythicProgress: IRaidProgress | undefined; heroicProgress: IRaidProgress | undefined; raidName: string }[] = [];
 
     for (const raidId of raidIds) {
       const raidData = await this.getRaidData(raidId);
@@ -932,45 +962,46 @@ class GuildService {
       }
 
       const raidName = mythicProgress?.raidName || heroicProgress?.raidName || `Raid ${raidId}`;
-      guildLog.info(`Updating world rank for raid ${raidId} (${raidName})...`);
+      raidsToUpdate.push({ raidId, raidData, mythicProgress, heroicProgress, raidName });
+    }
 
+    if (raidsToUpdate.length === 0) {
+      guildLog.info("No raids to update world ranks for");
+      return;
+    }
+
+    // --- WarcraftLogs: fetch world rank per raid ---
+    for (const { raidId, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
       try {
+        guildLog.info(`Fetching WCL world rank for ${raidName}...`);
         const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
         const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
         if (worldRank?.number) {
-          const updatedDifficulties: string[] = [];
-
           if (mythicProgress) {
-            mythicProgress.worldRank = worldRank.number;
-            mythicProgress.worldRankColor = worldRank.color;
-            updatedDifficulties.push("mythic");
+            mythicProgress.wclWorldRank = worldRank.number;
+            mythicProgress.wclWorldRankColor = worldRank.color;
           }
-
           if (heroicProgress) {
-            heroicProgress.worldRank = worldRank.number;
-            heroicProgress.worldRankColor = worldRank.color;
-            updatedDifficulties.push("heroic");
+            heroicProgress.wclWorldRank = worldRank.number;
+            heroicProgress.wclWorldRankColor = worldRank.color;
           }
-
-          guildLog.info(`${raidName}: World Rank #${worldRank.number} (${worldRank.color}) - applied to ${updatedDifficulties.join(", ")}`);
+          guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
         } else {
-          guildLog.info(`${raidName}: No world rank data from WCL, will try Raider.IO fallback`);
-          raidsNeedingFallback.push({ raidId, raidData, mythicProgress, heroicProgress, raidName });
+          guildLog.info(`${raidName}: No WCL world rank data`);
         }
       } catch (error) {
-        guildLog.error(`Error fetching world rank for raid ${raidId}:`, error);
-        raidsNeedingFallback.push({ raidId, raidData, mythicProgress, heroicProgress, raidName });
+        guildLog.error(`Error fetching WCL world rank for raid ${raidId}:`, error);
       }
     }
 
-    // Raider.IO fallback for raids without WCL world rank
-    if (raidsNeedingFallback.length > 0) {
-      guildLog.info(`Attempting Raider.IO fallback for ${raidsNeedingFallback.length} raid(s)...`);
+    // --- Raider.IO: fetch world rank for all raids in one call ---
+    try {
+      guildLog.info("Fetching Raider.IO world ranks...");
       const rioRankings = await raiderIOService.fetchGuildRaidRankings(guild.region.toLowerCase(), guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.name);
 
       if (rioRankings) {
-        for (const { raidData, mythicProgress, heroicProgress, raidName } of raidsNeedingFallback) {
+        for (const { raidData, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
           const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
           if (!diffRankings) {
             guildLog.info(`${raidName}: No matching Raider.IO rankings found`);
@@ -979,23 +1010,28 @@ class GuildService {
 
           const rank = diffRankings.mythic?.world || diffRankings.heroic?.world;
           if (rank) {
-            const updatedDifficulties: string[] = [];
             if (mythicProgress) {
-              mythicProgress.worldRank = rank;
-              updatedDifficulties.push("mythic");
+              mythicProgress.rioWorldRank = rank;
             }
             if (heroicProgress) {
-              heroicProgress.worldRank = rank;
-              updatedDifficulties.push("heroic");
+              heroicProgress.rioWorldRank = rank;
             }
-            guildLog.info(`${raidName}: World Rank #${rank} (Raider.IO fallback) - applied to ${updatedDifficulties.join(", ")}`);
+            guildLog.info(`${raidName}: Raider.IO World Rank #${rank}`);
           } else {
             guildLog.info(`${raidName}: Raider.IO returned no valid world rank`);
           }
         }
       } else {
-        guildLog.warn("Raider.IO fallback returned no data");
+        guildLog.warn("Raider.IO returned no ranking data");
       }
+    } catch (error) {
+      guildLog.error("Error fetching Raider.IO world ranks:", error);
+    }
+
+    // --- Compute the best world rank for each progress entry ---
+    for (const { mythicProgress, heroicProgress } of raidsToUpdate) {
+      if (mythicProgress) this.computeBestWorldRank(mythicProgress);
+      if (heroicProgress) this.computeBestWorldRank(heroicProgress);
     }
 
     await guild.save();

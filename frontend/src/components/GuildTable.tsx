@@ -53,7 +53,6 @@ const GuildTableRow = memo(
     const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
-    const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
     const official = guild.officialProgress?.[0];
     const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
     const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
@@ -83,7 +82,13 @@ const GuildTableRow = memo(
           onMouseEnter={() => setHoveredGuildInfoRow(true)}
           onMouseLeave={() => setHoveredGuildInfoRow(false)}
         >
-          {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
+          {worldRank ? (
+            <span className="font-semibold" style={{ color: getWorldRankColor(worldRank) }}>
+              {worldRank}
+            </span>
+          ) : (
+            <span className="text-gray-500">-</span>
+          )}
         </td>
         <td
           className={`px-4 py-3 cursor-pointer transition-colors ${hoveredGuildInfoRow ? "bg-gray-800/30" : ""}`}
@@ -243,7 +248,6 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
-    const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
     const official = guild.officialProgress?.[0];
     const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
     const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
@@ -264,7 +268,11 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
             {/* Rank section */}
             <div className="flex flex-col items-center shrink-0 w-8">
               <span className={`font-bold text-sm ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>
-              {worldRank && <span className={`text-[10px] ${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+              {worldRank && (
+                <span className="text-[10px]" style={{ color: getWorldRankColor(worldRank) }}>
+                  W{worldRank}
+                </span>
+              )}
             </div>
 
             {/* Guild info */}

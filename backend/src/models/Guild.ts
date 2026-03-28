@@ -44,8 +44,11 @@ export interface IRaidProgress {
   totalBosses: number;
   totalTimeSpent: number; // in seconds
   bosses: IBossProgress[];
-  worldRank?: number; // World progress rank from WarcraftLogs (always uses highest difficulty)
-  worldRankColor?: string; // Color class for the world rank (e.g., "rare", "epic", "legendary")
+  worldRank?: number; // Best (lowest) world rank from either WCL or Raider.IO
+  worldRankColor?: string; // Color class for the displayed world rank (e.g., "rare", "epic", "legendary")
+  wclWorldRank?: number; // World rank from WarcraftLogs
+  wclWorldRankColor?: string; // Color class from WarcraftLogs
+  rioWorldRank?: number; // World rank from Raider.IO
   guildRank?: number; // Rank among tracked guilds (1 = best)
   lastUpdated: Date;
 }
@@ -173,8 +176,11 @@ const RaidProgressSchema: Schema = new Schema(
     totalBosses: { type: Number, required: true },
     totalTimeSpent: { type: Number, default: 0 },
     bosses: [BossProgressSchema],
-    worldRank: { type: Number }, // World progress rank from WarcraftLogs
-    worldRankColor: { type: String }, // Color class for the world rank
+    worldRank: { type: Number }, // Best (lowest) world rank from either WCL or Raider.IO
+    worldRankColor: { type: String }, // Color class for the displayed world rank
+    wclWorldRank: { type: Number }, // World rank from WarcraftLogs
+    wclWorldRankColor: { type: String }, // Color class from WarcraftLogs
+    rioWorldRank: { type: Number }, // World rank from Raider.IO
     guildRank: { type: Number }, // Rank among tracked guilds (1 = best)
     lastUpdated: { type: Date, default: Date.now },
   },

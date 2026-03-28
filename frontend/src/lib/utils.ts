@@ -136,23 +136,14 @@ export function formatPhaseDisplay(displayString: string): string {
   return formatted;
 }
 
-// Get Tailwind color class for WarcraftLogs rank colors
-export function getWorldRankColor(color: string | undefined): string {
-  if (!color) return "text-gray-400";
-
-  switch (color.toLowerCase()) {
-    case "legendary": // Orange/legendary
-      return "text-orange-500";
-    case "epic": // Purple
-      return "text-purple-500";
-    case "rare": // Blue
-      return "text-blue-400";
-    case "uncommon": // Green
-      return "text-green-500";
-    case "common": // White/gray
-    default:
-      return "text-gray-300";
-  }
+// Get CSS color for world rank based on rank number
+export function getWorldRankColor(rank: number | undefined): string {
+  if (!rank) return "var(--rank-gray)";
+  if (rank === 1) return "var(--rank-gold)";
+  if (rank <= 100) return "var(--rank-orange)";
+  if (rank <= 1000) return "var(--rank-blue)";
+  if (rank <= 10000) return "var(--rank-green)";
+  return "var(--rank-gray)";
 }
 
 export function getRankColor(rank: number, totalItems: number): { color: string } {

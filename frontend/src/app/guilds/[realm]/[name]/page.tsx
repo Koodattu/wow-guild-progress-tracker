@@ -516,7 +516,6 @@ export default function GuildProfilePage({ params }: PageProps) {
                             : null;
                         const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
                         const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
-                        const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
                         const hasProgress = mythicProgress || heroicProgress;
                         const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
                         const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
@@ -535,7 +534,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   <div className="text-sm font-semibold text-white truncate">{raid.name}</div>
                                   <div className="flex items-center gap-2 text-[10px]">
                                     {guildRank && <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>}
-                                    {worldRank && <span className={`${getWorldRankColor(worldRankColor)}`}>W{worldRank}</span>}
+                                    {worldRank && <span style={{ color: getWorldRankColor(worldRank) }}>W{worldRank}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -644,7 +643,6 @@ export default function GuildProfilePage({ params }: PageProps) {
 
                           // Get world rank - prefer mythic, fall back to heroic
                           const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
-                          const worldRankColor = mythicProgress?.worldRankColor || heroicProgress?.worldRankColor;
 
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;
@@ -688,7 +686,13 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidInfoRow(null)}
                               >
-                                {worldRank ? <span className={`font-semibold ${getWorldRankColor(worldRankColor)}`}>{worldRank}</span> : <span className="text-gray-500">-</span>}
+                                {worldRank ? (
+                                  <span className="font-semibold" style={{ color: getWorldRankColor(worldRank) }}>
+                                    {worldRank}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500">-</span>
+                                )}
                               </td>
 
                               {/* Second clickable area: Raid Progress columns */}
