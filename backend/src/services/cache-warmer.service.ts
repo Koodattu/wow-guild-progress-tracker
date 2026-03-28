@@ -86,25 +86,8 @@ class CacheWarmerService {
         return;
       }
 
-      // Sort guilds by rank
-      const sortedGuilds = guilds.sort((a: any, b: any) => {
-        const aMythic = a.progress.find((p: any) => p.difficulty === "mythic" && p.raidId === currentRaidId);
-        const bMythic = b.progress.find((p: any) => p.difficulty === "mythic" && p.raidId === currentRaidId);
-        const aHeroic = a.progress.find((p: any) => p.difficulty === "heroic" && p.raidId === currentRaidId);
-        const bHeroic = b.progress.find((p: any) => p.difficulty === "heroic" && p.raidId === currentRaidId);
-
-        const aProgress = aMythic || aHeroic;
-        const bProgress = bMythic || bHeroic;
-
-        if (!aProgress && !bProgress) return 0;
-        if (!aProgress) return 1;
-        if (!bProgress) return -1;
-
-        const aRank = aProgress.guildRank ?? 999;
-        const bRank = bProgress.guildRank ?? 999;
-
-        return aRank - bRank;
-      });
+      // guilds are already sorted by guildRank via the aggregation pipeline
+      // (mythic rank preferred, falls back to heroic rank via $ifNull)
 
       const response = {
         raid: {
@@ -118,7 +101,7 @@ class CacheWarmerService {
           starts: (raidDatesDoc as any)?.starts,
           ends: (raidDatesDoc as any)?.ends,
         },
-        guilds: sortedGuilds,
+        guilds: guilds,
         events: events,
       };
 
