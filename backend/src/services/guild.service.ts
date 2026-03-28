@@ -2810,70 +2810,106 @@ class GuildService {
 
     // Check for first kill
     if (oldBoss.kills === 0 && newBoss.kills > 0) {
-      await Event.create({
+      // Deduplicate: skip if a boss_kill event already exists for this guild/boss/difficulty
+      const existingKillEvent = await Event.findOne({
         type: "boss_kill",
         guildId: guild._id,
-        guildName: guild.name,
-        guildRealm: guild.realm,
-        guildCrest: guild.crest,
-        raidId: raidProgress.raidId,
-        raidName: raidProgress.raidName,
         bossId: newBoss.bossId,
-        bossName: newBoss.bossName,
-        bossIconUrl,
         difficulty: raidProgress.difficulty,
-        data: {
-          pullCount: newBoss.pullCount,
-          timeSpent: newBoss.timeSpent,
-        },
-        timestamp: newBoss.firstKillTime || new Date(),
+        raidId: raidProgress.raidId,
       });
 
-      eventCreated = true;
+      if (!existingKillEvent) {
+        await Event.create({
+          type: "boss_kill",
+          guildId: guild._id,
+          guildName: guild.name,
+          guildRealm: guild.realm,
+          guildCrest: guild.crest,
+          raidId: raidProgress.raidId,
+          raidName: raidProgress.raidName,
+          bossId: newBoss.bossId,
+          bossName: newBoss.bossName,
+          bossIconUrl,
+          difficulty: raidProgress.difficulty,
+          data: {
+            pullCount: newBoss.pullCount,
+            timeSpent: newBoss.timeSpent,
+          },
+          timestamp: newBoss.firstKillTime || new Date(),
+        });
 
-      // Update world rank after boss kill event (only for current raids)
-      if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
-        getGuildLogger(guild.name, guild.realm).info("Boss kill event created, updating world rank for current raids...");
-        await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
-        await this.calculateGuildRankingsForRaid(raidProgress.raidId);
+        eventCreated = true;
+
+        // Update world rank after boss kill event (only for current raids)
+        if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
+          getGuildLogger(guild.name, guild.realm).info("Boss kill event created, updating world rank for current raids...");
+          await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+          await this.calculateGuildRankingsForRaid(raidProgress.raidId);
+        }
+      } else {
+        getGuildLogger(guild.name, guild.realm).info(`Skipping duplicate boss_kill event for ${newBoss.bossName} (${raidProgress.difficulty})`);
       }
     }
 
     // Check for new best pull (improvement of at least 5% lower health)
     if (oldBoss.bestPercent - newBoss.bestPercent >= 5 && newBoss.kills === 0) {
-      await Event.create({
+      // Deduplicate: check if a best_pull event already exists at or below this percent
+      const existingPullEvent = await Event.findOne({
         type: "best_pull",
         guildId: guild._id,
-        guildName: guild.name,
-        guildRealm: guild.realm,
-        guildCrest: guild.crest,
-        raidId: raidProgress.raidId,
-        raidName: raidProgress.raidName,
         bossId: newBoss.bossId,
-        bossName: newBoss.bossName,
-        bossIconUrl,
         difficulty: raidProgress.difficulty,
-        data: {
-          bestPercent: newBoss.bestPercent,
-          pullCount: newBoss.pullCount,
-          progressDisplay: newBoss.bestPullPhase?.displayString, // Include phase display string
-        },
-        timestamp: new Date(),
+        raidId: raidProgress.raidId,
+        "data.bestPercent": { $lte: newBoss.bestPercent },
       });
 
-      eventCreated = true;
-
-      // Update world rank after significant progress event (only for current raids)
-      if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
-        getGuildLogger(guild.name, guild.realm).info("Best pull event created, updating world rank for current raids...");
-        await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
-        await this.calculateGuildRankingsForRaid(raidProgress.raidId);
-
-        // Invalidate event caches if any event was created
-        if (eventCreated) {
-          await cacheService.invalidateEventCaches();
+      if (!existingPullEvent) {
+        // Use actual fight timestamp for correct chronological ordering vs boss_kill events
+        let bestPullTimestamp = new Date();
+        if (newBoss.bestPullReportCode && newBoss.bestPullFightId) {
+          const bestPullFight = await Fight.findOne({ reportCode: newBoss.bestPullReportCode, fightId: newBoss.bestPullFightId }, { timestamp: 1 });
+          if (bestPullFight?.timestamp) {
+            bestPullTimestamp = bestPullFight.timestamp;
+          }
         }
+
+        await Event.create({
+          type: "best_pull",
+          guildId: guild._id,
+          guildName: guild.name,
+          guildRealm: guild.realm,
+          guildCrest: guild.crest,
+          raidId: raidProgress.raidId,
+          raidName: raidProgress.raidName,
+          bossId: newBoss.bossId,
+          bossName: newBoss.bossName,
+          bossIconUrl,
+          difficulty: raidProgress.difficulty,
+          data: {
+            bestPercent: newBoss.bestPercent,
+            pullCount: newBoss.pullCount,
+            progressDisplay: newBoss.bestPullPhase?.displayString, // Include phase display string
+          },
+          timestamp: bestPullTimestamp,
+        });
+
+        eventCreated = true;
+
+        // Update world rank after significant progress event (only for current raids)
+        if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
+          getGuildLogger(guild.name, guild.realm).info("Best pull event created, updating world rank for current raids...");
+          await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
+          await this.calculateGuildRankingsForRaid(raidProgress.raidId);
+        }
+      } else {
+        getGuildLogger(guild.name, guild.realm).info(`Skipping duplicate best_pull event for ${newBoss.bossName} (${raidProgress.difficulty}, ${newBoss.bestPercent.toFixed(1)}%)`);
       }
+    }
+
+    // Invalidate event caches if any event was created
+    if (eventCreated) {
+      await cacheService.invalidateEventCaches();
     }
 
     // Check for re-progress: boss was previously killed, re-kill took more than 5 pulls
@@ -2959,13 +2995,15 @@ class GuildService {
 
           // Regress conditions:
           // 1. Boss was not killed before AND still not killed
-          // 2. Pull count increased (they actually pulled it during this session)
-          // 3. Best percent did NOT improve (same or worse)
+          // 2. Guild had actually pulled this boss before (pullCount > 0 before the session)
+          // 3. Pull count increased during this session (they actually pulled it)
+          // 4. Best percent did NOT improve (same or worse)
           const pullsThisSession = newBoss.pullCount - oldBoss.pullCount;
           const noImprovement = newBoss.bestPercent >= oldBoss.bestPercent;
           const notKilled = oldBoss.kills === 0 && newBoss.kills === 0;
+          const hadPreviousPulls = oldBoss.pullCount > 0;
 
-          if (notKilled && pullsThisSession > 0 && noImprovement) {
+          if (notKilled && hadPreviousPulls && pullsThisSession > 0 && noImprovement) {
             guildLog.info(
               `Regress detected for ${newBoss.bossName} (${difficulty}): ` +
                 `${pullsThisSession} pulls with no improvement (${oldBoss.bestPercent.toFixed(1)}% → ${newBoss.bestPercent.toFixed(1)}%)`,
