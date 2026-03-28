@@ -20,22 +20,28 @@ const getGuildColor = (guildId: string): string => {
 
 export default function TimetablePage() {
   const t = useTranslations("timetablePage");
-  const WEEKDAYS = [
-    t("weekdays.monday"),
-    t("weekdays.tuesday"),
-    t("weekdays.wednesday"),
-    t("weekdays.thursday"),
-    t("weekdays.friday"),
-    t("weekdays.saturday"),
-    t("weekdays.sunday"),
-  ];
+
+  // English day keys used by the backend - used for data matching and state
+  const WEEKDAY_KEYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+
+  // Translated day names for display only
+  const WEEKDAY_LABELS: Record<string, string> = {
+    Monday: t("weekdays.monday"),
+    Tuesday: t("weekdays.tuesday"),
+    Wednesday: t("weekdays.wednesday"),
+    Thursday: t("weekdays.thursday"),
+    Friday: t("weekdays.friday"),
+    Saturday: t("weekdays.saturday"),
+    Sunday: t("weekdays.sunday"),
+  };
+
   const { data, isLoading, error: queryError } = useGuildSchedules();
   const schedules = data ?? [];
   const [selectedGuild, setSelectedGuild] = useState<string>("all");
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Initialize selectedDay to today
+  // Initialize selectedDay to today (using English key)
   useEffect(() => {
     if (!selectedDay) {
       const today = new Date();
@@ -175,7 +181,7 @@ export default function TimetablePage() {
   // Get today's day name for highlighting
   const getTodayDayName = () => {
     const today = new Date();
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
     return days[today.getDay()];
   };
 
@@ -228,7 +234,7 @@ export default function TimetablePage() {
             {/* Day Navigation Buttons as Header */}
             <div className="bg-gray-900 sticky top-0 z-10">
               <div className="grid grid-cols-7 gap-0 h-full">
-                {WEEKDAYS.map((day) => (
+                {WEEKDAY_KEYS.map((day) => (
                   <button
                     key={day}
                     onClick={() => setSelectedDay(day)}
@@ -240,8 +246,8 @@ export default function TimetablePage() {
                           : "bg-gray-900 text-gray-300 hover:bg-gray-700"
                     }`}
                   >
-                    <span className="hidden sm:inline">{day}</span>
-                    <span className="sm:hidden">{day.slice(0, 3)}</span>
+                    <span className="hidden sm:inline">{WEEKDAY_LABELS[day]}</span>
+                    <span className="sm:hidden">{WEEKDAY_LABELS[day].slice(0, 3)}</span>
                     {day === todayDayName && <span className="block text-[8px] md:text-[10px] text-gray-400">Today</span>}
                   </button>
                 ))}
@@ -343,10 +349,10 @@ export default function TimetablePage() {
           <div className="grid" style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}>
             {/* Header Row */}
             <div className="bg-gray-900 border-b border-gray-700 p-1 md:p-2 sticky top-0 z-10"></div>
-            {WEEKDAYS.map((day) => (
+            {WEEKDAY_KEYS.map((day) => (
               <div key={day} className="bg-gray-900 border-b border-l border-gray-700 p-1 md:p-2 text-center text-xs md:text-base font-semibold text-white sticky top-0 z-10">
-                <span className="md:hidden">{day.slice(0, 3)}</span>
-                <span className="hidden md:inline">{day}</span>
+                <span className="md:hidden">{WEEKDAY_LABELS[day].slice(0, 3)}</span>
+                <span className="hidden md:inline">{WEEKDAY_LABELS[day]}</span>
               </div>
             ))}
 
@@ -357,7 +363,7 @@ export default function TimetablePage() {
                 <div className="border-b border-gray-700 p-1 md:p-2 text-right text-xs md:text-sm text-gray-400 bg-gray-800 h-[50px] md:h-[60px]">{formatHour(hour)}</div>
 
                 {/* Day columns - empty cells for grid */}
-                {WEEKDAYS.map((day) => (
+                {WEEKDAY_KEYS.map((day) => (
                   <div key={`${day}-${hour}`} className="border-b border-l border-gray-700 bg-gray-850 h-[50px] md:h-[60px]"></div>
                 ))}
               </div>
@@ -371,7 +377,7 @@ export default function TimetablePage() {
               <div></div>
 
               {/* Event columns for each day */}
-              {WEEKDAYS.map((day) => {
+              {WEEKDAY_KEYS.map((day) => {
                 const dayEvents = getEventsForDay(day);
                 const layouts = calculateEventLayout(dayEvents);
 
@@ -424,7 +430,7 @@ export default function TimetablePage() {
               if (currentHour >= timeRange.start && currentHour <= timeRange.end) {
                 const hourHeight = 60;
                 const topPx = (currentHour - timeRange.start) * hourHeight;
-                const todayIndex = WEEKDAYS.indexOf(todayDayName);
+                const todayIndex = WEEKDAY_KEYS.indexOf(todayDayName);
 
                 if (todayIndex !== -1) {
                   return (
@@ -437,7 +443,7 @@ export default function TimetablePage() {
                       }}
                     >
                       <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", height: "2px" }}>
-                        {WEEKDAYS.map((day, idx) => (
+                        {WEEKDAY_KEYS.map((day, idx) => (
                           <div key={day} className="relative">
                             {idx === todayIndex && (
                               <>
@@ -463,7 +469,7 @@ export default function TimetablePage() {
               <div></div>
 
               {/* Event columns for each day */}
-              {WEEKDAYS.map((day) => {
+              {WEEKDAY_KEYS.map((day) => {
                 const dayEvents = getEventsForDay(day);
                 const layouts = calculateEventLayout(dayEvents);
 
@@ -513,7 +519,7 @@ export default function TimetablePage() {
               if (currentHour >= timeRange.start && currentHour <= timeRange.end) {
                 const hourHeight = 50;
                 const topPx = (currentHour - timeRange.start) * hourHeight;
-                const todayIndex = WEEKDAYS.indexOf(todayDayName);
+                const todayIndex = WEEKDAY_KEYS.indexOf(todayDayName);
 
                 if (todayIndex !== -1) {
                   return (
@@ -526,7 +532,7 @@ export default function TimetablePage() {
                       }}
                     >
                       <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", height: "2px" }}>
-                        {WEEKDAYS.map((day, idx) => (
+                        {WEEKDAY_KEYS.map((day, idx) => (
                           <div key={day} className="relative">
                             {idx === todayIndex && (
                               <>
