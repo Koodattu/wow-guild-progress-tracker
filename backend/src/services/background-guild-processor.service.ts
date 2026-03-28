@@ -345,8 +345,18 @@ class BackgroundGuildProcessor {
             await Guild.findByIdAndUpdate(queueItem.guildId, {
               wclStatus: "not_found",
               wclStatusUpdatedAt: new Date(),
+              initialFetchCompleted: true,
+              initialFetchCompletedAt: new Date(),
               $inc: { wclNotFoundCount: 1 },
             });
+
+            // Fall back to Raider.IO for progress data
+            guildLog.info("Guild not found on WCL, falling back to Raider.IO...");
+            try {
+              await guildService.updateGuildFromRaiderIO(queueItem.guildId.toString());
+            } catch (rioError) {
+              guildLog.warn("Raider.IO fallback also failed:", rioError instanceof Error ? rioError.message : "Unknown");
+            }
           }
 
           // Save progress and mark as failed
@@ -426,8 +436,19 @@ class BackgroundGuildProcessor {
         await Guild.findByIdAndUpdate(queueItem.guildId, {
           wclStatus: "not_found",
           wclStatusUpdatedAt: new Date(),
+          initialFetchCompleted: true,
+          initialFetchCompletedAt: new Date(),
           $inc: { wclNotFoundCount: 1 },
         });
+
+        // Fall back to Raider.IO for progress data
+        const fatalGuildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
+        fatalGuildLog.info("Guild not found on WCL (fatal), falling back to Raider.IO...");
+        try {
+          await guildService.updateGuildFromRaiderIO(queueItem.guildId.toString());
+        } catch (rioError) {
+          fatalGuildLog.warn("Raider.IO fallback also failed:", rioError instanceof Error ? rioError.message : "Unknown");
+        }
       }
 
       await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);

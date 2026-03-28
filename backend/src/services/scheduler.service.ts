@@ -49,6 +49,7 @@ class UpdateScheduler {
   private isUpdatingCharacterRankings: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
   private isCheckingHiatus: boolean = false;
+  private isUpdatingRaiderIOGuilds: boolean = false;
   private lastCacheWarmTime: number = 0;
 
   // Finnish timezone offset check
@@ -260,6 +261,22 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Update Raider.IO-only guilds (at 9 AM Finnish time)
+    // Fetches raid progress from Raider.IO for guilds not found on WarcraftLogs
+    cron.schedule(
+      "0 9 * * *",
+      async () => {
+        if (this.isUpdatingRaiderIOGuilds) {
+          logger.info("[Nightly/RaiderIO] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateRaiderIOGuilds();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Full cache warmup at 02:00 UTC (before all other nightly jobs)
     // This ensures caches are fresh at the start of each day
     cron.schedule(
@@ -299,6 +316,7 @@ class UpdateScheduler {
     logger.info("    * Tier lists calculation: daily at 05:00");
     logger.info("    * Raid analytics calculation: daily at 06:00");
     logger.info("    * Hiatus event check: daily at 08:00");
+    logger.info("    * Raider.IO guilds update: daily at 09:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {
@@ -483,20 +501,24 @@ class UpdateScheduler {
   }
 
   // Update activity status for all guilds based on their last log time
+  // Guilds with recent Raider.IO current-tier progress are also considered active
   private async updateGuildActivityStatus(): Promise<void> {
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Mark guilds as inactive if no logs in 30+ days
+      // Mark guilds as inactive if no WCL logs in 30+ days
+      // Exclude guilds that are RIO-only (wclStatus=not_found) with active RIO status -
+      // those are managed by updateRaiderIOGuilds instead
       await Guild.updateMany(
         {
+          wclStatus: { $ne: "not_found" },
           $or: [{ lastLogEndTime: { $lt: thirtyDaysAgo } }, { lastLogEndTime: { $exists: false } }],
         },
         { $set: { activityStatus: "inactive" } },
       );
 
-      // Mark guilds as active if they have logs within 30 days
+      // Mark guilds as active if they have WCL logs within 30 days
       await Guild.updateMany({ lastLogEndTime: { $gte: thirtyDaysAgo } }, { $set: { activityStatus: "active" } });
     } catch (error) {
       logger.error("[Activity Status] Error updating guild activity status:", error);
@@ -729,6 +751,70 @@ class UpdateScheduler {
     }
 
     logger.info("Full update completed");
+  }
+
+  // NIGHTLY: Update guilds that only have Raider.IO data (no WarcraftLogs)
+  // Fetches raid progress and world rankings from Raider.IO for guilds marked as not_found on WCL
+  async updateRaiderIOGuilds(): Promise<void> {
+    this.isUpdatingRaiderIOGuilds = true;
+    const taskId = await taskTracker.start("Update Raider.IO Guilds");
+
+    try {
+      // Get guilds that are not found on WCL and have completed initial fetch
+      // (initialFetchCompleted ensures the guild was already attempted on WCL)
+      const guilds = await Guild.find({
+        wclStatus: "not_found",
+        initialFetchCompleted: true,
+      });
+
+      if (guilds.length === 0) {
+        logger.info("[Nightly/RaiderIO] No RIO-only guilds to update");
+        await taskTracker.complete(taskId, { guildsUpdated: 0 });
+        return;
+      }
+
+      logger.info(`[Nightly/RaiderIO] Updating ${guilds.length} RIO-only guild(s)...`);
+
+      let updatedCount = 0;
+      for (let i = 0; i < guilds.length; i++) {
+        const guild = guilds[i];
+        logger.info(`[Nightly/RaiderIO] Guild ${i + 1}/${guilds.length}: ${guild.name} (${guild.realm})`);
+
+        try {
+          const hasProgress = await guildService.updateGuildFromRaiderIO((guild._id as mongoose.Types.ObjectId).toString());
+          if (hasProgress) updatedCount++;
+        } catch (error) {
+          logger.error(`[Nightly/RaiderIO] Failed to update ${guild.name}:`, error instanceof Error ? error.message : "Unknown");
+        }
+
+        // Yield to event loop periodically
+        if ((i + 1) % 5 === 0) {
+          await yieldToEventLoop();
+        }
+
+        // 2 second delay between guilds to respect RIO rate limits
+        if (i < guilds.length - 1) {
+          await throttleDelay(2000);
+        }
+      }
+
+      // Recalculate guild rankings for current raids after all RIO updates
+      logger.info("[Nightly/RaiderIO] Recalculating guild rankings for current raids...");
+      for (const raidId of CURRENT_RAID_IDS) {
+        await guildService.calculateGuildRankingsForRaid(raidId);
+      }
+
+      // Warm caches with updated data
+      await this.debouncedWarmCurrentRaidCaches();
+
+      logger.info(`[Nightly/RaiderIO] Completed: ${updatedCount}/${guilds.length} guilds have current-tier progress`);
+      await taskTracker.complete(taskId, { guildsUpdated: guilds.length, withProgress: updatedCount });
+    } catch (error) {
+      logger.error("[Nightly/RaiderIO] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isUpdatingRaiderIOGuilds = false;
+    }
   }
 
   // NIGHTLY: Update world ranks for all guilds for the current raid (at 4 AM European time)

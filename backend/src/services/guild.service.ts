@@ -1090,6 +1090,162 @@ class GuildService {
     }
   }
 
+  // Update guild data exclusively from Raider.IO when WCL data is unavailable.
+  // Creates/updates synthetic progress entries, official progress, and world rankings.
+  // Returns true if the guild has current-tier progress (should be considered active).
+  async updateGuildFromRaiderIO(guildId: string): Promise<boolean> {
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      logger.error(`Guild not found for RIO update: ${guildId}`);
+      return false;
+    }
+
+    const guildLog = getGuildLogger(guild.name, guild.realm);
+    guildLog.info("Updating guild data from Raider.IO (WCL unavailable)...");
+
+    try {
+      // Single API call to get both progression and rankings
+      const { progression, rankings, faction } = await raiderIOService.fetchGuildProgressionAndRankings(
+        guild.region.toLowerCase(),
+        guild.realm.toLowerCase().replace(/\s+/g, "-"),
+        guild.name,
+      );
+
+      if (!progression) {
+        guildLog.info("Guild not found on Raider.IO or no progression data");
+        guild.rioStatus = "not_found";
+        guild.lastRioUpdate = new Date();
+        await guild.save();
+        return false;
+      }
+
+      // Update faction if we got it and don't have it yet
+      if (faction && !guild.faction) {
+        guild.faction = faction;
+      }
+
+      // Update official progress from progression data
+      const updatedOfficialEntries = Object.entries(progression).map(([tierSlug, tierData]) => ({
+        raidTierSlug: tierSlug,
+        summary: tierData.summary,
+        totalBosses: tierData.total_bosses,
+        normalBossesKilled: tierData.normal_bosses_killed,
+        heroicBossesKilled: tierData.heroic_bosses_killed,
+        mythicBossesKilled: tierData.mythic_bosses_killed,
+        lastUpdated: new Date(),
+      }));
+      guild.officialProgress = updatedOfficialEntries;
+
+      // Load all tracked raids from DB to map RIO tier slugs to our internal raid IDs
+      const trackedRaids = await Raid.find({ id: { $in: TRACKED_RAIDS } }).lean();
+
+      let hasCurrentTierProgress = false;
+
+      // Create/update synthetic progress entries for each RIO tier with kills
+      for (const [tierSlug, tierData] of Object.entries(progression)) {
+        // Find matching raid in our DB by slug
+        const matchedRaid = this.findRaidForRIOTierSlug(tierSlug, trackedRaids);
+        if (!matchedRaid) {
+          guildLog.info(`RIO tier "${tierSlug}" has no matching tracked raid, skipping`);
+          continue;
+        }
+
+        // Check if this is a current raid
+        const isCurrentRaid = CURRENT_RAID_IDS.includes(matchedRaid.id);
+
+        // Create synthetic progress for Mythic if kills exist
+        if (tierData.mythic_bosses_killed > 0) {
+          this.upsertSyntheticProgress(guild, matchedRaid, "mythic", tierData.mythic_bosses_killed, tierData.total_bosses);
+          if (isCurrentRaid) hasCurrentTierProgress = true;
+        }
+
+        // Create synthetic progress for Heroic if kills exist
+        if (tierData.heroic_bosses_killed > 0) {
+          this.upsertSyntheticProgress(guild, matchedRaid, "heroic", tierData.heroic_bosses_killed, tierData.total_bosses);
+          if (isCurrentRaid) hasCurrentTierProgress = true;
+        }
+      }
+
+      // Update world rankings from RIO rankings data
+      if (rankings) {
+        for (const raidProgress of guild.progress) {
+          const raidData = trackedRaids.find((r) => r.id === raidProgress.raidId);
+          if (!raidData) continue;
+
+          const diffRankings = this.findRaiderIORaidRankings(rankings, raidData.slug, raidData.name);
+          if (!diffRankings) continue;
+
+          const rank = raidProgress.difficulty === "mythic" ? diffRankings.mythic?.world : diffRankings.heroic?.world;
+          if (rank) {
+            raidProgress.rioWorldRank = rank;
+            this.computeBestWorldRank(raidProgress);
+            guildLog.info(`${raidData.name} (${raidProgress.difficulty}): Raider.IO World Rank #${rank}`);
+          }
+        }
+      }
+
+      // Update activity status based on current tier progress
+      if (hasCurrentTierProgress) {
+        guild.activityStatus = "active";
+      }
+
+      guild.rioStatus = "active";
+      guild.lastRioUpdate = new Date();
+      guild.lastFetched = new Date();
+      guild.markModified("progress");
+      await guild.save();
+
+      guildLog.info(`RIO update complete: ${hasCurrentTierProgress ? "active" : "no"} current-tier progress`);
+      return hasCurrentTierProgress;
+    } catch (error) {
+      guildLog.error("Error updating guild from Raider.IO:", error);
+      guild.lastRioUpdate = new Date();
+      await guild.save();
+      return false;
+    }
+  }
+
+  // Match a Raider.IO tier slug (e.g., "liberation-of-undermine") to a Raid document
+  private findRaidForRIOTierSlug(tierSlug: string, raids: IRaid[]): IRaid | undefined {
+    const normalized = tierSlug.toLowerCase();
+    // Exact slug match
+    let match = raids.find((r) => r.slug.toLowerCase() === normalized);
+    if (match) return match;
+
+    // Partial/contains match (handle slight differences between RIO and WCL slugs)
+    match = raids.find((r) => {
+      const rSlug = r.slug.toLowerCase();
+      const rName = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      return rSlug.includes(normalized) || normalized.includes(rSlug) || rName.includes(normalized) || normalized.includes(rName);
+    });
+    return match;
+  }
+
+  // Create or update a synthetic IRaidProgress entry from Raider.IO data.
+  // Only updates bossesDefeated/totalBosses; preserves any existing boss-level detail from WCL.
+  private upsertSyntheticProgress(guild: IGuild, raid: IRaid, difficulty: "mythic" | "heroic", bossesDefeated: number, totalBosses: number): void {
+    let existing = guild.progress.find((p) => p.raidId === raid.id && p.difficulty === difficulty);
+
+    if (existing) {
+      // If WCL already has more kills tracked, don't overwrite
+      if (existing.bossesDefeated >= bossesDefeated) return;
+      existing.bossesDefeated = bossesDefeated;
+      existing.totalBosses = totalBosses;
+      existing.lastUpdated = new Date();
+    } else {
+      guild.progress.push({
+        raidId: raid.id,
+        raidName: raid.name,
+        difficulty,
+        bossesDefeated,
+        totalBosses,
+        totalTimeSpent: 0,
+        bosses: [],
+        lastUpdated: new Date(),
+      } as IRaidProgress);
+    }
+  }
+
   // Calculate guild rankings for a specific raid
   // Rankings are calculated per difficulty (mythic and heroic separately)
   async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
