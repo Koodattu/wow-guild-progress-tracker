@@ -11,6 +11,38 @@ const router = Router();
 const VALID_EVENT_TYPES = ["boss_kill", "best_pull", "milestone", "hiatus", "regress", "reproge"];
 const VALID_DIFFICULTIES = ["mythic", "heroic"];
 
+// Enrich events with live streamer data and guild realm (for backward compat)
+// Single batch query for all unique guilds referenced by the events
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function enrichEventsWithGuildData(events: any[]): Promise<Record<string, unknown>[]> {
+  if (events.length === 0) return events;
+
+  // Collect unique guildIds
+  const guildIds = [...new Set(events.map((e) => String(e.guildId)))];
+
+  // Batch fetch guilds — only the fields we need
+  const guilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
+
+  // Build lookup map: guildId -> { realm, liveStreamers[] }
+  const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
+  for (const guild of guilds) {
+    const liveStreamers = (guild.streamers || []).filter((s) => s.isLive).map((s) => s.channelName);
+    guildMap.set(String(guild._id), { realm: guild.realm, liveStreamers });
+  }
+
+  // Enrich each event
+  return events.map((event) => {
+    const guildData = guildMap.get(String(event.guildId));
+    return {
+      ...event,
+      // Backfill guildRealm for older events that don't have it
+      guildRealm: event.guildRealm || guildData?.realm,
+      // Always compute live streamers from current guild state
+      liveStreamers: guildData?.liveStreamers || [],
+    };
+  });
+}
+
 // Parse filter query params into a MongoDB filter object
 function parseEventFilters(query: Request["query"]): Record<string, unknown> {
   const filter: Record<string, unknown> = {};
@@ -64,12 +96,14 @@ router.get(
       const filter = parseEventFilters(req.query);
 
       const [events, totalCount] = await Promise.all([
-        Event.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"),
+        Event.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt").lean(),
         Event.countDocuments(filter),
       ]);
 
+      const enrichedEvents = await enrichEventsWithGuildData(events);
+
       res.json({
-        events,
+        events: enrichedEvents,
         pagination: {
           page,
           limit,
@@ -113,12 +147,14 @@ router.get(
       }
 
       const [events, totalCount] = await Promise.all([
-        Event.find({ guildId: guild._id }).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"),
+        Event.find({ guildId: guild._id }).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt").lean(),
         Event.countDocuments({ guildId: guild._id }),
       ]);
 
+      const enrichedEvents = await enrichEventsWithGuildData(events);
+
       res.json({
-        events,
+        events: enrichedEvents,
         pagination: {
           page,
           limit,
@@ -141,12 +177,14 @@ router.get("/guild/:guildId", async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
 
     const [events, totalCount] = await Promise.all([
-      Event.find({ guildId: req.params.guildId }).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt"),
+      Event.find({ guildId: req.params.guildId }).sort({ timestamp: -1 }).skip(skip).limit(limit).select("-__v -createdAt -updatedAt").lean(),
       Event.countDocuments({ guildId: req.params.guildId }),
     ]);
 
+    const enrichedEvents = await enrichEventsWithGuildData(events);
+
     res.json({
-      events,
+      events: enrichedEvents,
       pagination: {
         page,
         limit,

@@ -7,6 +7,7 @@ export interface IEvent extends Document {
   type: EventType;
   guildId: mongoose.Types.ObjectId;
   guildName: string;
+  guildRealm?: string; // Guild realm at time of event creation (for profile links)
   guildCrest?: IGuildCrest; // Guild crest at time of event creation
   raidId: number;
   raidName: string;
@@ -31,6 +32,7 @@ const EventSchema: Schema = new Schema(
     type: { type: String, enum: ["boss_kill", "best_pull", "milestone", "hiatus", "regress", "reproge"], required: true },
     guildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true },
     guildName: { type: String, required: true },
+    guildRealm: { type: String },
     guildCrest: {
       emblem: {
         id: { type: Number },
