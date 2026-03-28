@@ -236,10 +236,12 @@ export interface Event {
   type: "boss_kill" | "best_pull" | "milestone" | "hiatus" | "regress" | "reproge";
   guildId: string;
   guildName: string;
+  guildCrest?: GuildCrest;
   raidId: number;
   raidName: string;
   bossId?: number;
   bossName?: string;
+  bossIconUrl?: string;
   difficulty: "mythic" | "heroic";
   data: {
     killRank?: number;

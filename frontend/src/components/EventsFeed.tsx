@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Event } from "@/types";
-import { formatEventMessage, getTimeAgo } from "@/lib/utils";
+import { getTimeAgo } from "@/lib/utils";
+import EventMessage from "@/components/EventMessage";
 
 interface EventsFeedProps {
   events: Event[];
@@ -39,7 +40,9 @@ export default function EventsFeed({ events, maxDisplay, showHeader = true }: Ev
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <p className="text-white text-sm">{formatEventMessage(event)}</p>
+                  <div className="text-white text-sm">
+                    <EventMessage event={event} showDifficulty />
+                  </div>
                   <p className="text-gray-500 text-xs mt-1">{event.raidName}</p>
                 </div>
                 <span className="text-xs text-gray-500 whitespace-nowrap">{getTimeAgo(event.timestamp)}</span>

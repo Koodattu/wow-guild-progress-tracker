@@ -1,58 +1,12 @@
 "use client";
 
 import { Event } from "@/types";
-import { formatPhaseDisplay, getTimeAgo } from "@/lib/utils";
+import { getTimeAgo } from "@/lib/utils";
+import EventMessage from "@/components/EventMessage";
 
 interface EventCardProps {
   event: Event;
   className?: string;
-}
-
-// Format event message without difficulty
-function formatEventMessageWithoutDifficulty(event: {
-  type: string;
-  guildName: string;
-  bossName?: string;
-  data: { pullCount?: number; bestPercent?: number; progressDisplay?: string; hiatusDays?: number };
-}): string {
-  const { type, guildName, bossName, data } = event;
-
-  if (type === "boss_kill") {
-    const pulls = data.pullCount || 0;
-    return `${guildName} defeated ${bossName} after ${pulls} pull${pulls !== 1 ? "s" : ""}!`;
-  }
-
-  if (type === "best_pull") {
-    // Use progressDisplay if available (includes phase info), otherwise fall back to simple percent
-    if (data.progressDisplay) {
-      return `${guildName} reached ${formatPhaseDisplay(data.progressDisplay)} on ${bossName}!`;
-    }
-    const percent = data.bestPercent || 0;
-    return `${guildName} reached ${percent.toFixed(1)}% on ${bossName}!`;
-  }
-
-  if (type === "hiatus") {
-    const days = data.hiatusDays || 7;
-    if (days >= 30) {
-      return `${guildName} has not raided for over a month.`;
-    }
-    return `${guildName} has not raided for ${days} days.`;
-  }
-
-  if (type === "regress") {
-    if (bossName) {
-      const percent = data.bestPercent || 0;
-      return `${guildName} failed to improve on ${bossName} (${percent.toFixed(1)}%) during their raid.`;
-    }
-    return `${guildName} had no progress during their raid.`;
-  }
-
-  if (type === "reproge") {
-    const pulls = data.pullCount || 0;
-    return `${guildName} re-killed ${bossName} after ${pulls} pull${pulls !== 1 ? "s" : ""}!`;
-  }
-
-  return `${guildName} - ${bossName}`;
 }
 
 // Get display text for event type
@@ -105,7 +59,9 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
             <div className={`${difficultyColor} text-xs font-semibold uppercase`}>{event.difficulty}</div>
             <div className={`${eventTypeColor} text-xs font-semibold uppercase`}>{eventTypeText}</div>
           </div>
-          <p className="text-white text-xs md:text-sm leading-relaxed">{formatEventMessageWithoutDifficulty(event)}</p>
+          <div className="text-white text-xs md:text-sm leading-relaxed">
+            <EventMessage event={event} />
+          </div>
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-500 truncate">{event.raidName}</span>

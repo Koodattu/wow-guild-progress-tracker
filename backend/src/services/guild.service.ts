@@ -5,6 +5,7 @@ import Report from "../models/Report";
 import Fight from "../models/Fight";
 import TierList from "../models/TierList";
 import GuildProcessingQueue from "../models/GuildProcessingQueue";
+import { BossIcon } from "../models/Achievement";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
 import raiderIOService from "./raiderio.service";
@@ -2103,7 +2104,9 @@ class GuildService {
       }).sort({ timestamp: 1 });
 
       if (fights.length === 0) {
-        guildLog.info(`No fights found for ${raidData.name}, skipping schedule calculation`);
+        guildLog.info(`No fights found for ${raidData.name}, clearing stale schedule`);
+        guild.raidSchedule = { days: [], lastCalculated: new Date() };
+        guild.markModified("raidSchedule");
         return;
       }
 
@@ -2116,7 +2119,9 @@ class GuildService {
       });
 
       if (filteredFights.length === 0) {
-        guildLog.info(`No fights in date range for ${raidData.name}, skipping schedule calculation`);
+        guildLog.info(`No fights in date range for ${raidData.name}, clearing stale schedule`);
+        guild.raidSchedule = { days: [], lastCalculated: new Date() };
+        guild.markModified("raidSchedule");
         return;
       }
 
@@ -2786,8 +2791,22 @@ class GuildService {
     guildLog.info(`Processed ${difficulty} progress: ${defeatedCount}/${raidData.bosses.length} bosses defeated, ${raidProgress.bosses.length} bosses tracked`);
   }
 
+  // Look up a boss icon filename from the BossIcon cache
+  // Returns the cached filename or undefined if not found
+  private async getBossIconFilename(bossName: string): Promise<string | undefined> {
+    try {
+      const cachedIcon = await BossIcon.findOne({ bossName });
+      return cachedIcon?.iconUrl || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
     let eventCreated = false;
+
+    // Look up boss icon from cache (non-blocking, returns undefined if not found)
+    const bossIconUrl = await this.getBossIconFilename(newBoss.bossName);
 
     // Check for first kill
     if (oldBoss.kills === 0 && newBoss.kills > 0) {
@@ -2795,10 +2814,12 @@ class GuildService {
         type: "boss_kill",
         guildId: guild._id,
         guildName: guild.name,
+        guildCrest: guild.crest,
         raidId: raidProgress.raidId,
         raidName: raidProgress.raidName,
         bossId: newBoss.bossId,
         bossName: newBoss.bossName,
+        bossIconUrl,
         difficulty: raidProgress.difficulty,
         data: {
           pullCount: newBoss.pullCount,
@@ -2823,10 +2844,12 @@ class GuildService {
         type: "best_pull",
         guildId: guild._id,
         guildName: guild.name,
+        guildCrest: guild.crest,
         raidId: raidProgress.raidId,
         raidName: raidProgress.raidName,
         bossId: newBoss.bossId,
         bossName: newBoss.bossName,
+        bossIconUrl,
         difficulty: raidProgress.difficulty,
         data: {
           bestPercent: newBoss.bestPercent,
@@ -2888,10 +2911,12 @@ class GuildService {
               type: "reproge",
               guildId: guild._id,
               guildName: guild.name,
+              guildCrest: guild.crest,
               raidId: raidProgress.raidId,
               raidName: raidProgress.raidName,
               bossId: newBoss.bossId,
               bossName: newBoss.bossName,
+              bossIconUrl,
               difficulty: raidProgress.difficulty,
               data: {
                 pullCount: pullsBetweenKills,
@@ -2943,14 +2968,18 @@ class GuildService {
                 `${pullsThisSession} pulls with no improvement (${oldBoss.bestPercent.toFixed(1)}% → ${newBoss.bestPercent.toFixed(1)}%)`,
             );
 
+            const regressBossIconUrl = await this.getBossIconFilename(newBoss.bossName);
+
             await Event.create({
               type: "regress",
               guildId: guild._id,
               guildName: guild.name,
+              guildCrest: guild.crest,
               raidId: raidId,
               raidName: newDiffProgress.raidName,
               bossId: newBoss.bossId,
               bossName: newBoss.bossName,
+              bossIconUrl: regressBossIconUrl,
               difficulty: difficulty,
               data: {
                 pullCount: pullsThisSession,
@@ -3030,6 +3059,7 @@ class GuildService {
             type: "hiatus",
             guildId: guild._id,
             guildName: guild.name,
+            guildCrest: guild.crest,
             raidId: raidId,
             raidName: raidData.name,
             difficulty: highestDifficulty,
@@ -3099,27 +3129,37 @@ class GuildService {
   }
 
   // Get all guilds with only their raid schedules (for calendar/timetable view)
+  // Only includes guilds that have progress in the current raid tier
   async getAllGuildSchedules(): Promise<any[]> {
-    const guilds = await Guild.find().select("_id name realm region parent_guild raidSchedule").lean();
+    const currentRaidId = CURRENT_RAID_IDS[0];
 
-    // Filter out guilds without raid schedules and remove raidCount from days
-    return guilds
-      .filter((guild) => guild.raidSchedule && guild.raidSchedule.days && guild.raidSchedule.days.length > 0)
-      .map((guild) => ({
-        _id: guild._id,
-        name: guild.name,
-        realm: guild.realm,
-        region: guild.region,
-        parent_guild: guild.parent_guild,
-        raidSchedule: {
-          days: guild.raidSchedule!.days.map((day: any) => ({
-            day: day.day,
-            startHour: day.startHour,
-            endHour: day.endHour,
-          })),
-          lastCalculated: guild.raidSchedule!.lastCalculated,
+    const guilds = await Guild.find({
+      "raidSchedule.days.0": { $exists: true },
+      progress: {
+        $elemMatch: {
+          raidId: currentRaidId,
+          bossesDefeated: { $gt: 0 },
         },
-      }));
+      },
+    })
+      .select("_id name realm region parent_guild raidSchedule")
+      .lean();
+
+    return guilds.map((guild) => ({
+      _id: guild._id,
+      name: guild.name,
+      realm: guild.realm,
+      region: guild.region,
+      parent_guild: guild.parent_guild,
+      raidSchedule: {
+        days: guild.raidSchedule!.days.map((day: any) => ({
+          day: day.day,
+          startHour: day.startHour,
+          endHour: day.endHour,
+        })),
+        lastCalculated: guild.raidSchedule!.lastCalculated,
+      },
+    }));
   }
 
   // Get minimal guild list for directory page (only essential fields)
