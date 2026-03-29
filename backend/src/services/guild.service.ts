@@ -2362,12 +2362,23 @@ class GuildService {
                 charData?.reportData?.report?.rankedCharacters || [];
 
               for (const char of rankedChars) {
-                // Upsert character to TrackedCharacter model
-                // Fields: canonicalID, name, serverSlug, region, lastMythicSeenAt, etc.
-                console.log(
-                  `Discovered character: ${char.name} (${char.canonicalID})`,
-                );
+                const { guildName, guildRealm } =
+                  wclService.getPrimaryGuildInfo(char);
+                await characterService.upsertCharacterFromReport({
+                  canonicalID: char.canonicalID,
+                  name: char.name,
+                  serverSlug: char.server.slug,
+                  serverRegion: char.server.region.slug,
+                  classID: char.classID,
+                  hidden: char.hidden,
+                  guildName,
+                  guildRealm,
+                });
               }
+
+              guildLog.info(
+                `Saved ${rankedChars.length} characters from fight ${fight.id} in report ${report.code}`,
+              );
             } catch (error) {
               guildLog.error(
                 `Failed to fetch characters for fight ${fight.id}:`,
