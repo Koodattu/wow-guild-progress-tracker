@@ -3033,6 +3033,24 @@ class GuildService {
 
         eventCreated = true;
 
+        // Retroactively fix any best_pull events that were created in a prior cycle
+        // with a timestamp at or after the kill — progress must appear before the kill
+        const killTimestamp = newBoss.firstKillTime || new Date();
+        const fixedPulls = await Event.updateMany(
+          {
+            type: "best_pull",
+            guildId: guild._id,
+            bossId: newBoss.bossId,
+            difficulty: raidProgress.difficulty,
+            raidId: raidProgress.raidId,
+            timestamp: { $gte: killTimestamp },
+          },
+          { $set: { timestamp: new Date(killTimestamp.getTime() - 1000) } },
+        );
+        if (fixedPulls.modifiedCount > 0) {
+          getGuildLogger(guild.name, guild.realm).info(`Fixed ${fixedPulls.modifiedCount} best_pull event(s) for ${newBoss.bossName} with timestamp after kill`);
+        }
+
         // Update world rank after boss kill event (only for current raids)
         if (CURRENT_RAID_IDS.includes(raidProgress.raidId) && raidProgress.difficulty === "mythic") {
           getGuildLogger(guild.name, guild.realm).info("Boss kill event created, updating world rank for current raids...");
