@@ -287,52 +287,49 @@ class TierListService {
   } {
     // === FIND MIN/MAX VALUES FOR DYNAMIC SCORING ===
 
-    // Guild ranks (min is always 1, find max)
+    // Guild ranks (use actual min/max from data, not a phantom rank 1)
     const heroicGuildRanks = allGuildsData.filter((g) => g.heroicGuildRank !== null).map((g) => g.heroicGuildRank!);
     const mythicGuildRanks = allGuildsData.filter((g) => g.mythicGuildRank !== null).map((g) => g.mythicGuildRank!);
-    const minHeroicGuildRank = 1;
+    const minHeroicGuildRank = heroicGuildRanks.length > 0 ? Math.min(...heroicGuildRanks) : 1;
     const maxHeroicGuildRank = heroicGuildRanks.length > 0 ? Math.max(...heroicGuildRanks) : 1;
-    const minMythicGuildRank = 1;
+    const minMythicGuildRank = mythicGuildRanks.length > 0 ? Math.min(...mythicGuildRanks) : 1;
     const maxMythicGuildRank = mythicGuildRanks.length > 0 ? Math.max(...mythicGuildRanks) : 1;
-
-    // World ranks (find actual min, cap max at MAX_WORLD_RANK_CAP)
-    const heroicWorldRanks = allGuildsData.filter((g) => g.heroicWorldRank !== null).map((g) => g.heroicWorldRank!);
-    const mythicWorldRanks = allGuildsData.filter((g) => g.mythicWorldRank !== null).map((g) => g.mythicWorldRank!);
-    const minHeroicWorldRank = heroicWorldRanks.length > 0 ? Math.min(...heroicWorldRanks) : 1;
-    const maxHeroicWorldRank = heroicWorldRanks.length > 0 ? Math.min(Math.max(...heroicWorldRanks), this.MAX_WORLD_RANK_CAP) : this.MAX_WORLD_RANK_CAP;
-    const minMythicWorldRank = mythicWorldRanks.length > 0 ? Math.min(...mythicWorldRanks) : 1;
-    const maxMythicWorldRank = mythicWorldRanks.length > 0 ? Math.min(Math.max(...mythicWorldRanks), this.MAX_WORLD_RANK_CAP) : this.MAX_WORLD_RANK_CAP;
 
     // Total bosses (for progress calculation)
     const heroicTotalBosses = guildData.heroicTotalBosses || allGuildsData.find((g) => g.heroicTotalBosses > 0)?.heroicTotalBosses || 0;
     const mythicTotalBosses = guildData.mythicTotalBosses || allGuildsData.find((g) => g.mythicTotalBosses > 0)?.mythicTotalBosses || 0;
 
     // === CALCULATE HEROIC SPEED SCORE ===
+    // Speed = world rank (60%) + boss progress (25%) + guild rank (15%).
+    // World rank uses absolute scale [1, 10000] so scores are stable regardless of pool.
+    // Boss progress uses k=5 (moderate curve — partial progress matters but full clears rewarded).
+    // Missing components score 0 (not excluded) so guilds aren't inflated by sparse data.
+    const SPEED_K = 5;
     let heroicSpeedScore = 0;
     let hasHeroicSpeed = false;
     if (guildData.heroicGuildRank !== null || guildData.heroicWorldRank !== null || guildData.heroicBossesDefeated > 0) {
       hasHeroicSpeed = true;
-      const scores: number[] = [];
 
-      // Guild rank score (rank 1 = 1000, highest rank = 0)
-      if (guildData.heroicGuildRank !== null) {
-        scores.push(this.interpolateScore(guildData.heroicGuildRank, minHeroicGuildRank, maxHeroicGuildRank));
-      }
-
-      // World rank score (lowest = 1000, highest/cap = 0)
+      // World rank score — absolute scale [1, MAX_WORLD_RANK_CAP], 60% weight
+      let worldRankScore = 0;
       if (guildData.heroicWorldRank !== null) {
         const cappedRank = Math.min(guildData.heroicWorldRank, this.MAX_WORLD_RANK_CAP);
-        scores.push(this.interpolateScore(cappedRank, minHeroicWorldRank, maxHeroicWorldRank));
+        worldRankScore = this.interpolateScore(cappedRank, 1, this.MAX_WORLD_RANK_CAP);
       }
 
-      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
+      // Boss progress score — k=5 exponential, 25% weight
+      let progressScore = 0;
       if (heroicTotalBosses > 0) {
-        const progressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses);
-        scores.push(progressScore);
+        progressScore = this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses, SPEED_K);
       }
 
-      // Average of available scores
-      heroicSpeedScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+      // Guild rank score — relative to tracked pool, 15% weight
+      let guildRankScore = 0;
+      if (guildData.heroicGuildRank !== null) {
+        guildRankScore = this.interpolateScore(guildData.heroicGuildRank, minHeroicGuildRank, maxHeroicGuildRank);
+      }
+
+      heroicSpeedScore = worldRankScore * 0.6 + progressScore * 0.25 + guildRankScore * 0.15;
     }
 
     // === CALCULATE MYTHIC SPEED SCORE ===
@@ -340,27 +337,24 @@ class TierListService {
     let hasMythicSpeed = false;
     if (guildData.mythicGuildRank !== null || guildData.mythicWorldRank !== null || guildData.mythicBossesDefeated > 0) {
       hasMythicSpeed = true;
-      const scores: number[] = [];
 
-      // Guild rank score (rank 1 = 1000, highest rank = 0)
-      if (guildData.mythicGuildRank !== null) {
-        scores.push(this.interpolateScore(guildData.mythicGuildRank, minMythicGuildRank, maxMythicGuildRank));
-      }
-
-      // World rank score (lowest = 1000, highest/cap = 0)
+      let worldRankScore = 0;
       if (guildData.mythicWorldRank !== null) {
         const cappedRank = Math.min(guildData.mythicWorldRank, this.MAX_WORLD_RANK_CAP);
-        scores.push(this.interpolateScore(cappedRank, minMythicWorldRank, maxMythicWorldRank));
+        worldRankScore = this.interpolateScore(cappedRank, 1, this.MAX_WORLD_RANK_CAP);
       }
 
-      // Bosses defeated score (0 = 0, all = 1000) - exponential growth, later bosses worth more
+      let progressScore = 0;
       if (mythicTotalBosses > 0) {
-        const progressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses);
-        scores.push(progressScore);
+        progressScore = this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses, SPEED_K);
       }
 
-      // Average of available scores
-      mythicSpeedScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+      let guildRankScore = 0;
+      if (guildData.mythicGuildRank !== null) {
+        guildRankScore = this.interpolateScore(guildData.mythicGuildRank, minMythicGuildRank, maxMythicGuildRank);
+      }
+
+      mythicSpeedScore = worldRankScore * 0.6 + progressScore * 0.25 + guildRankScore * 0.15;
     }
 
     // === CALCULATE EFFICIENCY SCORE ===
@@ -471,14 +465,15 @@ class TierListService {
     }
 
     // === CALCULATE WEIGHTED SPEED SCORE ===
-    // Heroic 20%, Mythic 80% — normalized when only one difficulty has data
+    // Heroic 20%, Mythic 80%. Single-difficulty guilds are scaled by their weight
+    // so mythic-only can reach 800 and heroic-only caps at 200.
     let speedScore = 0;
     if (hasHeroicSpeed && hasMythicSpeed) {
       speedScore = heroicSpeedScore * this.HEROIC_WEIGHT + mythicSpeedScore * this.MYTHIC_WEIGHT;
     } else if (hasHeroicSpeed) {
-      speedScore = heroicSpeedScore;
+      speedScore = heroicSpeedScore * this.HEROIC_WEIGHT;
     } else if (hasMythicSpeed) {
-      speedScore = mythicSpeedScore;
+      speedScore = mythicSpeedScore * this.MYTHIC_WEIGHT;
     }
 
     // === OVERALL SCORE ===
