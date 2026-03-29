@@ -1091,6 +1091,30 @@ class GuildService {
       }));
 
       guild.officialProgress = updatedEntries;
+
+      // Ensure synthetic progress entries exist for tracked raids where RIO reports kills
+      // but no WCL progress entry exists (e.g. guild stopped logging but still raids)
+      const trackedRaids = await Raid.find({ id: { $in: TRACKED_RAIDS } }).lean();
+      let progressModified = false;
+
+      for (const entry of updatedEntries) {
+        const matchedRaid = this.findRaidForRIOTierSlug(entry.raidTierSlug, trackedRaids);
+        if (!matchedRaid) continue;
+
+        if (entry.mythicBossesKilled > 0) {
+          this.upsertSyntheticProgress(guild, matchedRaid, "mythic", entry.mythicBossesKilled, entry.totalBosses);
+          progressModified = true;
+        }
+        if (entry.heroicBossesKilled > 0) {
+          this.upsertSyntheticProgress(guild, matchedRaid, "heroic", entry.heroicBossesKilled, entry.totalBosses);
+          progressModified = true;
+        }
+      }
+
+      if (progressModified) {
+        guild.markModified("progress");
+      }
+
       await guild.save();
 
       for (const entry of updatedEntries) {
