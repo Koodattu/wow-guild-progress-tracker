@@ -12,7 +12,7 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     // Get only the tracked raids from the database, excluding unnecessary fields
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
-      .select("id name slug expansion iconUrl partitions -_id")
+      .select("id name slug rioSlug expansion iconUrl partitions -_id")
       .sort({ id: -1 });
     res.json(raids);
   } catch (error) {
@@ -79,9 +79,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const raidId = parseInt(req.params.id);
-      const raid = await Raid.findOne({ id: raidId }).select(
-        "starts ends -_id",
-      );
+      const raid = await Raid.findOne({ id: raidId }).select("starts ends -_id");
 
       if (!raid) {
         return res.status(404).json({ error: "Raid not found" });

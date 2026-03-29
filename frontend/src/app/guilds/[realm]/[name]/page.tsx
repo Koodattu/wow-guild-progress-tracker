@@ -518,7 +518,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
                         const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
                         const hasProgress = mythicProgress || heroicProgress;
-                        const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                        const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug, raid.rioSlug);
                         const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
                         const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
 
@@ -649,7 +649,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const hasProgress = mythicProgress || heroicProgress;
 
                           // Official progress from Raider.IO
-                          const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
+                          const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug, raid.rioSlug);
                           const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
                           const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
 

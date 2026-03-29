@@ -455,12 +455,13 @@ export function getSpecIconUrl(classId: number, specName: string): string | unde
 }
 
 /** Find the matching OfficialRaidProgress entry for a given raid slug */
-export function findOfficialProgressForRaid(officialProgress: OfficialRaidProgress[] | undefined, raidSlug: string): OfficialRaidProgress | undefined {
+export function findOfficialProgressForRaid(officialProgress: OfficialRaidProgress[] | undefined, raidSlug: string, rioSlug?: string): OfficialRaidProgress | undefined {
   if (!officialProgress?.length || !raidSlug) return undefined;
   const normalized = raidSlug.toLowerCase();
+  const normalizedRio = rioSlug?.toLowerCase() || "";
   return officialProgress.find((op) => {
     const tierSlug = op.raidTierSlug.toLowerCase();
-    return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+    return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug) || (normalizedRio && tierSlug === normalizedRio);
   });
 }
 

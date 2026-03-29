@@ -301,6 +301,7 @@ export interface RaidInfo {
   id: number;
   name: string;
   slug: string;
+  rioSlug?: string;
   expansion: string;
   iconUrl?: string;
   partitions?: RaidPartition[];

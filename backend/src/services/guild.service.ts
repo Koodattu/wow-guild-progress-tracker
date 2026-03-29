@@ -1101,6 +1101,9 @@ class GuildService {
         const matchedRaid = this.findRaidForRIOTierSlug(entry.raidTierSlug, trackedRaids);
         if (!matchedRaid) continue;
 
+        // Normalize RIO tier slug to WCL slug so downstream consumers can match
+        entry.raidTierSlug = matchedRaid.slug;
+
         if (entry.mythicBossesKilled > 0) {
           this.upsertSyntheticProgress(guild, matchedRaid, "mythic", entry.mythicBossesKilled, entry.totalBosses);
           progressModified = true;
@@ -1184,6 +1187,10 @@ class GuildService {
           guildLog.info(`RIO tier "${tierSlug}" has no matching tracked raid, skipping`);
           continue;
         }
+
+        // Normalize RIO tier slug to WCL slug in officialProgress so downstream consumers can match
+        const officialEntry = updatedOfficialEntries.find((e) => e.raidTierSlug === tierSlug);
+        if (officialEntry) officialEntry.raidTierSlug = matchedRaid.slug;
 
         // Check if this is a current raid
         const isCurrentRaid = CURRENT_RAID_IDS.includes(matchedRaid.id);
@@ -1302,14 +1309,16 @@ class GuildService {
     // Look up raid slug for matching official progress from Raider.IO
     const raid = await Raid.findOne({ id: raidId }).lean();
     const raidSlug = raid?.slug || "";
+    const raidRioSlug = raid?.rioSlug?.toLowerCase() || "";
 
     // Helper: find matching official progress entry for this raid
+    // Checks both WCL slug and RIO slug since officialProgress may store either format
     const findOfficialProgress = (guild: IGuild): IOfficialRaidProgress | undefined => {
       if (!guild.officialProgress?.length || !raidSlug) return undefined;
       const normalized = raidSlug.toLowerCase();
       return guild.officialProgress.find((op) => {
         const tierSlug = op.raidTierSlug.toLowerCase();
-        return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug);
+        return tierSlug === normalized || tierSlug.includes(normalized) || normalized.includes(tierSlug) || (raidRioSlug && tierSlug === raidRioSlug);
       });
     };
 
