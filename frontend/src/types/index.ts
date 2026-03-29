@@ -1241,6 +1241,8 @@ export interface AdminGuildDetail {
   wclStatus: "active" | "not_found" | "unclaimed" | "unknown";
   wclStatusUpdatedAt?: string;
   wclNotFoundCount: number;
+  rioStatus?: "active" | "not_found" | "unknown";
+  lastRioUpdate?: string;
   progress: Array<{
     raidName: string;
     difficulty: string;

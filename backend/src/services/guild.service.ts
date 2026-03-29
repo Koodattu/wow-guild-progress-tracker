@@ -1183,7 +1183,7 @@ class GuildService {
           const raidData = trackedRaids.find((r) => r.id === raidProgress.raidId);
           if (!raidData) continue;
 
-          const diffRankings = this.findRaiderIORaidRankings(rankings, raidData.slug, raidData.name);
+          const diffRankings = this.findRaiderIORaidRankings(rankings, raidData.slug, raidData.name, raidData.rioSlug);
           if (!diffRankings) continue;
 
           const rank = raidProgress.difficulty === "mythic" ? diffRankings.mythic?.world : diffRankings.heroic?.world;
@@ -1216,11 +1216,16 @@ class GuildService {
     }
   }
 
-  // Match a Raider.IO tier slug (e.g., "liberation-of-undermine") to a Raid document
+  // Match a Raider.IO tier slug (e.g., "tier-mn-1") to a Raid document
   private findRaidForRIOTierSlug(tierSlug: string, raids: IRaid[]): IRaid | undefined {
     const normalized = tierSlug.toLowerCase();
-    // Exact slug match
-    let match = raids.find((r) => r.slug.toLowerCase() === normalized);
+
+    // Check stored rioSlug first (most reliable — set during raid sync from RIO static data)
+    let match = raids.find((r) => r.rioSlug?.toLowerCase() === normalized);
+    if (match) return match;
+
+    // Exact WCL slug match
+    match = raids.find((r) => r.slug.toLowerCase() === normalized);
     if (match) return match;
 
     // Partial/contains match (handle slight differences between RIO and WCL slugs)

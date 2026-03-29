@@ -67,7 +67,7 @@ export default function Navigation() {
 
   const isActive = (path: string) => {
     if (path === "/") {
-      return pathname === "/";
+      return pathname === "/" || pathname === "/progress";
     }
     return pathname.startsWith(path);
   };
@@ -92,12 +92,6 @@ export default function Navigation() {
                 <Link
                   href="/"
                   className={`text-sm font-medium transition-colors ${isActive("/") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
-                >
-                  {t("home")}
-                </Link>
-                <Link
-                  href="/progress"
-                  className={`text-sm font-medium transition-colors ${isActive("/progress") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
                   {t("progressLeaderboard")}
                 </Link>

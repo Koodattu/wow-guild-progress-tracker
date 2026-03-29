@@ -1176,6 +1176,15 @@ export async function triggerRescanCharacters(): Promise<TriggerResponse> {
   return response.json();
 }
 
+export async function triggerUpdateRaiderIOGuilds(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/update-raiderio-guilds`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger Raider.IO guilds update");
+  return response.json();
+}
+
 // ==================== Admin Guild Management Functions ====================
 
 export async function getAdminGuildDetail(guildId: string): Promise<AdminGuildDetail> {

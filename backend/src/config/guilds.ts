@@ -13,6 +13,16 @@ export const GUILDS_DEV: TrackedGuild[] = [
     region: "EU",
     streamers: ["vaarattu", "forsen", "b0aty", "wiba"],
   },
+  {
+    name: "Sorvan Kylä",
+    realm: "Ravencrest",
+    region: "EU",
+  },
+  {
+    name: "Twilight Sentinels",
+    realm: "Ravencrest",
+    region: "EU",
+  },
 ];
 
 export const GUILDS_PROD: TrackedGuild[] = [
@@ -1260,11 +1270,6 @@ export const GUILDS_PROD: TrackedGuild[] = [
   },
   {
     name: "Sorvan Kylä",
-    realm: "Ravencrest",
-    region: "EU",
-  },
-  {
-    name: "Mallun Punane",
     realm: "Ravencrest",
     region: "EU",
   },

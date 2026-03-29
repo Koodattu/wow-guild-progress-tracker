@@ -30,7 +30,7 @@ const getPageMetadata = (pathname: string, locale: "en" | "fi") => {
 
   const pages: Record<string, { title: string; description: string }> = {
     "/": {
-      title: isEnglish ? "Home" : "Etusivu",
+      title: isEnglish ? "Progress Leaderboard" : "Edistymistilastot",
       description: isEnglish
         ? "Track World of Warcraft guild progression for Finnish guilds. View raid progress, boss kills, and latest events."
         : "Seuraa suomalaisten World of Warcraft -kiltojen edistymistä. Katso raid-edistyminen, boss-tapit ja viimeisimmät tapahtumat.",

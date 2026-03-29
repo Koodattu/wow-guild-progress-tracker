@@ -379,6 +379,17 @@ class UpdateScheduler {
     logger.info("Startup character rankings refresh completed");
   }
 
+  // Trigger Raider.IO guilds update from admin panel (returns false if already running)
+  triggerRaiderIOGuildsUpdate(): boolean {
+    if (this.isUpdatingRaiderIOGuilds) {
+      return false;
+    }
+    this.updateRaiderIOGuilds()
+      .then(() => logger.info("[Admin] Raider.IO guilds update completed"))
+      .catch((err) => logger.error("[Admin] Raider.IO guilds update failed:", err));
+    return true;
+  }
+
   // Trigger character rankings refresh from admin panel (returns false if already running)
   triggerCharacterRankingsRefresh(): boolean {
     if (this.isUpdatingCharacterRankings) {

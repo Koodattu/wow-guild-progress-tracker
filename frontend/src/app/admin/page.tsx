@@ -22,6 +22,7 @@ import {
   triggerRescanDeathEvents,
   triggerRescanCharacters,
   triggerRefreshCharacterRankings,
+  triggerUpdateRaiderIOGuilds,
   getAdminGuildDetail,
   recalculateGuildStats,
   updateGuildWorldRanks,
@@ -1085,6 +1086,15 @@ export default function AdminPage() {
                       <span>Rescan Characters</span>
                       {triggerLoading === "rescan-characters" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["rescan-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("update-raiderio", triggerUpdateRaiderIOGuilds)}
+                      disabled={triggerLoading === "update-raiderio" || triggerCooldowns["update-raiderio"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Update Raider.IO Guilds</span>
+                      {triggerLoading === "update-raiderio" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["update-raiderio"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                   </div>
                 </div>
@@ -3121,6 +3131,21 @@ export default function AdminPage() {
                         {selectedGuild.wclNotFoundCount > 0 && <span className="ml-2 text-xs text-red-400">({selectedGuild.wclNotFoundCount} failures)</span>}
                       </div>
                       <div>
+                        <h4 className="text-gray-400 text-sm">RIO Status</h4>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            selectedGuild.rioStatus === "active"
+                              ? "bg-green-900 text-green-300"
+                              : selectedGuild.rioStatus === "not_found"
+                                ? "bg-red-900 text-red-300"
+                                : "bg-gray-700 text-gray-300"
+                          }`}
+                        >
+                          {(selectedGuild.rioStatus || "unknown").replace("_", " ")}
+                        </span>
+                        {selectedGuild.lastRioUpdate && <span className="ml-2 text-xs text-gray-500">{new Date(selectedGuild.lastRioUpdate).toLocaleDateString()}</span>}
+                      </div>
+                      <div>
                         <h4 className="text-gray-400 text-sm">Activity</h4>
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium ${
@@ -3226,7 +3251,7 @@ export default function AdminPage() {
                           Verify Reports
                         </button>
                         <button onClick={() => handleQueueRescan(selectedGuild.id, selectedGuild.name)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                          Queue Full Rescan
+                          {selectedGuild.wclStatus === "not_found" ? "Rescan via Raider.IO" : "Queue Full Rescan"}
                         </button>
                         <button
                           onClick={() => handleQueueRescanDeaths(selectedGuild.id, selectedGuild.name)}

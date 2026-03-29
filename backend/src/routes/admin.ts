@@ -348,6 +348,8 @@ router.get("/guilds/:guildId", async (req: Request, res: Response) => {
       wclStatus: guild.wclStatus || "unknown",
       wclStatusUpdatedAt: guild.wclStatusUpdatedAt,
       wclNotFoundCount: guild.wclNotFoundCount || 0,
+      rioStatus: guild.rioStatus || "unknown",
+      lastRioUpdate: guild.lastRioUpdate,
       progress: guild.progress || [],
       reportCount,
       fightCount,
@@ -424,7 +426,7 @@ router.post("/guilds/:guildId/update-world-ranks", async (req: Request, res: Res
   }
 });
 
-// Queue guild for full rescan
+// Queue guild for full rescan (WCL guilds go to queue, RIO-only guilds get direct RIO update)
 router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response) => {
   try {
     const { guildId } = req.params;
@@ -432,6 +434,19 @@ router.post("/guilds/:guildId/queue-rescan", async (req: Request, res: Response)
     const guild = await Guild.findById(guildId);
     if (!guild) {
       return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // For guilds not found on WarcraftLogs, run Raider.IO update directly
+    if (guild.wclStatus === "not_found") {
+      logger.info(`[Admin] Running Raider.IO update for WCL-not-found guild: ${guild.name}-${guild.realm}`);
+      const hasProgress = await guildService.updateGuildFromRaiderIO(guildId);
+      return res.json({
+        success: true,
+        message: hasProgress
+          ? `Guild ${guild.name} updated from Raider.IO with current-tier progress`
+          : `Guild ${guild.name} updated from Raider.IO (no current-tier progress found)`,
+        source: "raiderio",
+      });
     }
 
     // Check if already in queue and processing with same job type
@@ -1971,6 +1986,20 @@ router.post("/trigger/rescan-characters", async (req: Request, res: Response) =>
   } catch (error) {
     logger.error("Error triggering character rescan:", error);
     res.status(500).json({ error: "Failed to trigger character rescan" });
+  }
+});
+
+// Trigger Raider.IO update for all WCL-not-found guilds (same as nightly 9 AM job)
+router.post("/trigger/update-raiderio-guilds", async (req: Request, res: Response) => {
+  try {
+    const started = scheduler.triggerRaiderIOGuildsUpdate();
+    if (!started) {
+      return res.json({ success: false, message: "Raider.IO guilds update is already running" });
+    }
+    res.json({ success: true, message: "Raider.IO guilds update started in background" });
+  } catch (error) {
+    logger.error("Error triggering Raider.IO guilds update:", error);
+    res.status(500).json({ error: "Failed to trigger Raider.IO guilds update" });
   }
 });
 
