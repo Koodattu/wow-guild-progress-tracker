@@ -802,16 +802,18 @@ export class BlizzardApiClient {
       return false;
     }
 
-    // If it starts with "Mythic:" and contains ANY significant word from the boss name, it's plausible
+    // If it starts with "Mythic:" and ALL significant words from the boss name appear, it's plausible
+    // Requiring ALL words prevents false positives like "Imperator" matching "Imperator's Fall"
+    // when the boss is actually "Imperator Averzian"
     const significantWords = this.getSignificantWords(normalizedBoss);
-    if (lower.startsWith("mythic:")) {
-      const mythicPart = lower.slice(7).trim(); // everything after "Mythic: "
-      for (const word of significantWords) {
-        // Use word boundary check: the word must appear as a whole word, not as a substring of another word
+    if (lower.startsWith("mythic:") && significantWords.length > 0) {
+      const mythicPart = lower.slice(7).trim();
+      const allMatch = significantWords.every((word) => {
         const wordRegex = new RegExp(`\\b${this.escapeRegex(word)}\\b`, "i");
-        if (wordRegex.test(mythicPart)) {
-          return false;
-        }
+        return wordRegex.test(mythicPart);
+      });
+      if (allMatch) {
+        return false;
       }
     }
 
@@ -839,17 +841,36 @@ export class BlizzardApiClient {
 
           // Check if the existing cached match looks suspicious
           const cached = await BossIcon.findOne({ bossName: boss.name });
-          if (cached) {
-            // Look up the achievement name for validation
-            const achievement = await Achievement.findOne({ id: cached.achievementId });
-            if (achievement && this.isBossIconMatchSuspicious(boss.name, achievement.name)) {
-              bossesToRetry.push({
-                raidId: raid.id,
-                raidName: raid.name,
-                bossName: boss.name,
-                reason: `suspicious match: "${achievement.name}"`,
-              });
-            }
+          if (!cached) {
+            // Boss has an iconUrl in Raid doc but no BossIcon entry — orphaned state, needs re-evaluation
+            bossesToRetry.push({
+              raidId: raid.id,
+              raidName: raid.name,
+              bossName: boss.name,
+              reason: "orphaned (iconUrl set but no BossIcon cache entry)",
+            });
+            continue;
+          }
+
+          // Validate the cached match against the achievement name
+          const achievement = await Achievement.findOne({ id: cached.achievementId });
+          if (!achievement) {
+            bossesToRetry.push({
+              raidId: raid.id,
+              raidName: raid.name,
+              bossName: boss.name,
+              reason: `achievement ${cached.achievementId} not found in DB`,
+            });
+            continue;
+          }
+
+          if (this.isBossIconMatchSuspicious(boss.name, achievement.name)) {
+            bossesToRetry.push({
+              raidId: raid.id,
+              raidName: raid.name,
+              bossName: boss.name,
+              reason: `suspicious match: "${achievement.name}"`,
+            });
           }
         }
       }
