@@ -1,7 +1,16 @@
 "use client";
 
 import { GuildListItem, RaidProgressSummary } from "@/types";
-import { formatTime, formatPercent, formatPhaseDisplay, getWorldRankColor, getLeaderboardRankColor, getRaiderIOGuildUrl, getEffectiveProgress } from "@/lib/utils";
+import {
+  formatTime,
+  formatPercent,
+  formatPhaseDisplay,
+  getWorldRankColor,
+  getBestWorldRank,
+  getLeaderboardRankColor,
+  getRaiderIOGuildUrl,
+  getEffectiveProgress,
+} from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
@@ -52,7 +61,7 @@ const GuildTableRow = memo(
     const heroicPulls = getCurrentPullCount(heroicProgress);
     const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
-    const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+    const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
     const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
     const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
@@ -247,7 +256,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const heroicPulls = getCurrentPullCount(heroicProgress);
     const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
-    const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+    const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
     const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
     const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");

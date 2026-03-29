@@ -12,6 +12,7 @@ import {
   getIconUrl,
   formatPhaseDisplay,
   getWorldRankColor,
+  getBestWorldRank,
   getLeaderboardRankColor,
   getRaiderIOGuildUrl,
   getTierLetter,
@@ -515,7 +516,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                             ? formatPercent(mythicProgress.bestPullPercent)
                             : null;
                         const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
-                        const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+                        const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
                         const hasProgress = mythicProgress || heroicProgress;
                         const official = findOfficialProgressForRaid(guildSummary.officialProgress, raid.slug);
                         const mythicDisplay = getEffectiveProgress(mythicProgress, official, "mythic");
@@ -641,8 +642,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                           // Get guild rank - prefer mythic, fall back to heroic
                           const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank;
 
-                          // Get world rank - prefer mythic, fall back to heroic
-                          const worldRank = mythicProgress?.worldRank || heroicProgress?.worldRank;
+                          // Get world rank - best of WCL and Raider.IO, prefer mythic over heroic
+                          const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
 
                           // Check if this raid has any progress
                           const hasProgress = mythicProgress || heroicProgress;

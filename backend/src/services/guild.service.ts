@@ -3538,6 +3538,8 @@ class GuildService {
           lastKillTime: lastKilledBoss?.firstKillTime || null,
           worldRank: p.worldRank,
           worldRankColor: p.worldRankColor,
+          wclWorldRank: p.wclWorldRank,
+          rioWorldRank: p.rioWorldRank,
           guildRank: p.guildRank,
         };
       });

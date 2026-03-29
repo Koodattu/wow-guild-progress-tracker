@@ -136,6 +136,14 @@ export function formatPhaseDisplay(displayString: string): string {
   return formatted;
 }
 
+// Pick the best (lowest) world rank from WCL and Raider.IO sources
+export function getBestWorldRank(progress: { wclWorldRank?: number; rioWorldRank?: number; worldRank?: number } | null | undefined): number | undefined {
+  if (!progress) return undefined;
+  const { wclWorldRank, rioWorldRank, worldRank } = progress;
+  if (wclWorldRank && rioWorldRank) return Math.min(wclWorldRank, rioWorldRank);
+  return wclWorldRank || rioWorldRank || worldRank;
+}
+
 // Get CSS color for world rank based on rank number
 export function getWorldRankColor(rank: number | undefined): string {
   if (!rank) return "var(--rank-gray)";

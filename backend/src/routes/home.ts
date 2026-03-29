@@ -1,7 +1,5 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
-import eventService from "../services/guild.service";
-import raidService from "../services/guild.service";
 import logger from "../utils/logger";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import Raid from "../models/Raid";
@@ -36,14 +34,16 @@ router.get(
         return res.status(404).json({ error: "Current raid not found" });
       }
 
-      // Enrich events with live streamer data and guild realm
+      // Enrich events with live streamer data and guild realm (for profile links)
       const guildIds = [...new Set(events.map((e) => String(e.guildId)))];
       const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
+
       const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
       for (const g of eventGuilds) {
         const liveStreamers = (g.streamers || []).filter((s) => s.isLive).map((s) => s.channelName);
         guildMap.set(String(g._id), { realm: g.realm, liveStreamers });
       }
+
       const enrichedEvents = events.map((event) => {
         const guildData = guildMap.get(String(event.guildId));
         return {
