@@ -12,6 +12,7 @@ export interface IRaid extends Document {
   id: number;
   name: string;
   slug: string;
+  rioSlug?: string;
   expansion: string;
   iconUrl?: string;
   partitions?: {
@@ -35,6 +36,7 @@ const RaidSchema: Schema = new Schema(
     id: { type: Number, required: true, unique: true },
     name: { type: String, required: true },
     slug: { type: String, required: true },
+    rioSlug: { type: String },
     expansion: { type: String, required: true },
     iconUrl: { type: String },
     partitions: [

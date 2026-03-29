@@ -216,6 +216,7 @@ class GuildService {
             // Add start/end dates if we found a match
             if (raiderIOMatch) {
               logger.info(`✅ Found Raider.IO dates for: ${zoneData.name}`);
+              updateData.rioSlug = raiderIOMatch.slug;
 
               // Convert string dates to Date objects
               updateData.starts = {
@@ -282,7 +283,17 @@ class GuildService {
   }
 
   // Find matching Raider.IO raid rankings by DB slug/name with fuzzy matching
-  private findRaiderIORaidRankings(rioRankings: Record<string, RaiderIORaidDifficultyRankings>, dbSlug: string, dbName: string): RaiderIORaidDifficultyRankings | null {
+  private findRaiderIORaidRankings(
+    rioRankings: Record<string, RaiderIORaidDifficultyRankings>,
+    dbSlug: string,
+    dbName: string,
+    rioSlug?: string,
+  ): RaiderIORaidDifficultyRankings | null {
+    // Try stored RaiderIO slug first (most reliable)
+    if (rioSlug && rioRankings[rioSlug]) {
+      return rioRankings[rioSlug];
+    }
+
     const slugLower = dbSlug.toLowerCase();
     const nameLower = dbName.toLowerCase();
 
@@ -886,7 +897,7 @@ class GuildService {
           if (!raidData) continue;
 
           const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
-          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug);
           if (!diffRankings) {
             guildLog.info(`${raidData.name}: No matching Raider.IO rankings found`);
             continue;
@@ -1002,7 +1013,7 @@ class GuildService {
 
       if (rioRankings) {
         for (const { raidData, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
-          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name);
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug);
           if (!diffRankings) {
             guildLog.info(`${raidName}: No matching Raider.IO rankings found`);
             continue;
