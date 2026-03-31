@@ -60,13 +60,14 @@ router.get(
   },
 );
 
-// Get all guilds with their progress
-// Optional query param: raidId - if provided, only returns progress for that raid
+// Get all guilds with their progress for a specific raid
+// Required query param: raidId
 router.get(
   "/",
   cacheMiddleware(
     (req) => {
       const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
+      if (!raidId) return "guilds:invalid"; // will never cache — route returns 400 before this runs
       return cacheService.getGuildsKey(raidId);
     },
     (req) => {
@@ -78,13 +79,11 @@ router.get(
     try {
       const raidId = req.query.raidId ? parseInt(req.query.raidId as string) : null;
 
-      let guilds;
-      if (raidId) {
-        guilds = await guildService.getAllGuildsForRaid(raidId);
-      } else {
-        guilds = await guildService.getAllGuilds();
+      if (!raidId) {
+        return res.status(400).json({ error: "raidId query parameter is required" });
       }
 
+      const guilds = await guildService.getAllGuildsForRaid(raidId);
       res.json(guilds);
     } catch (error) {
       logger.error("Error fetching guilds:", error);

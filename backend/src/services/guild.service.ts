@@ -272,8 +272,48 @@ class GuildService {
 
         logger.info("Raid sync completed");
       }
+
+      // Always ensure tracked raids have rioSlug populated (handles the case
+      // where raids already existed in DB before rioSlug was introduced)
+      await this.ensureRaidRioSlugs();
     } catch (error) {
       logger.error("Error syncing raids from WarcraftLogs:", error);
+    }
+  }
+
+  /**
+   * Ensure all tracked raids have their rioSlug field populated.
+   * Fetches RIO static data only if needed and updates Raid documents in-place.
+   * This handles the case where Raid documents were created before rioSlug support was added.
+   */
+  private async ensureRaidRioSlugs(): Promise<void> {
+    const trackedRaids = await Raid.find({ id: { $in: TRACKED_RAIDS } });
+    const missingRioSlug = trackedRaids.filter((r) => !r.rioSlug);
+
+    if (missingRioSlug.length === 0) {
+      logger.info("[RIO Slugs] All tracked raids have rioSlug populated");
+      return;
+    }
+
+    logger.info(`[RIO Slugs] ${missingRioSlug.length} tracked raid(s) missing rioSlug, fetching RIO static data...`);
+
+    try {
+      const rioRaidMap = await raiderIOService.fetchAllRaidDates();
+
+      for (const raid of missingRioSlug) {
+        const raidSlug = raid.slug || raid.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const rioMatch = raiderIOService.findRaidMatch(rioRaidMap, raid.name, raidSlug);
+
+        if (rioMatch) {
+          raid.rioSlug = rioMatch.slug;
+          await raid.save();
+          logger.info(`[RIO Slugs] Set rioSlug for "${raid.name}": ${rioMatch.slug}`);
+        } else {
+          logger.warn(`[RIO Slugs] No RIO match found for tracked raid "${raid.name}" (slug: ${raidSlug})`);
+        }
+      }
+    } catch (error) {
+      logger.error("[RIO Slugs] Failed to fetch RIO static data for slug resolution:", error);
     }
   }
 
@@ -3468,12 +3508,6 @@ class GuildService {
   async getGuildListMinimal(): Promise<any[]> {
     const guilds = await Guild.find().select("name realm region parent_guild warcraftlogsId isCurrentlyRaiding -_id").sort({ name: 1 }).lean();
     return guilds;
-  }
-
-  // Get all guilds sorted by progress
-  async getAllGuilds(): Promise<IGuild[]> {
-    const guilds = await Guild.find().sort({ "progress.bossesDefeated": -1 }).lean();
-    return guilds as IGuild[];
   }
 
   // Get all guilds with progress filtered by raidId (minimal data for leaderboard)

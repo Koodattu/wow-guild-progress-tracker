@@ -725,8 +725,8 @@ class CacheService {
   /**
    * Get cache key for guilds list by raid.
    */
-  getGuildsKey(raidId: number | null): string {
-    return raidId ? `guilds:raid:${raidId}` : "guilds:all";
+  getGuildsKey(raidId: number): string {
+    return `guilds:raid:${raidId}`;
   }
 
   /**

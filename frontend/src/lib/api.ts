@@ -101,9 +101,8 @@ export const api = {
   },
 
   // Guild endpoints
-  async getGuilds(raidId?: number): Promise<GuildListItem[]> {
-    const url = raidId ? `${API_URL}/api/progress?raidId=${raidId}` : `${API_URL}/api/guilds`;
-    const response = await fetch(url);
+  async getGuilds(raidId: number): Promise<GuildListItem[]> {
+    const response = await fetch(`${API_URL}/api/progress?raidId=${raidId}`);
     if (!response.ok) throw new Error("Failed to fetch guilds");
     return response.json();
   },
@@ -153,12 +152,6 @@ export const api = {
   async getGuildFullProfile(id: string): Promise<Guild> {
     const response = await fetch(`${API_URL}/api/guilds/${id}/profile`);
     if (!response.ok) throw new Error("Failed to fetch guild profile");
-    return response.json();
-  },
-
-  async getAllGuilds(): Promise<GuildListItem[]> {
-    const response = await fetch(`${API_URL}/api/guilds`);
-    if (!response.ok) throw new Error("Failed to fetch all guilds");
     return response.json();
   },
 

@@ -8,7 +8,6 @@ import type { EventFilters } from "@/types";
 export const queryKeys = {
   home: ["home"] as const,
   guilds: {
-    all: ["guilds"] as const,
     list: ["guilds", "list"] as const,
     byRaid: (raidId: number) => ["guilds", "byRaid", raidId] as const,
     detail: (id: string) => ["guilds", "detail", id] as const,
@@ -67,9 +66,9 @@ export function useHomeData() {
 
 export function useGuilds(raidId?: number) {
   return useQuery({
-    queryKey: raidId ? queryKeys.guilds.byRaid(raidId) : queryKeys.guilds.all,
-    queryFn: () => api.getGuilds(raidId),
-    enabled: raidId !== undefined ? raidId > 0 : true,
+    queryKey: queryKeys.guilds.byRaid(raidId!),
+    queryFn: () => api.getGuilds(raidId!),
+    enabled: raidId !== undefined && raidId > 0,
   });
 }
 
