@@ -14,6 +14,9 @@ const LAYER_CONFIG = {
   rings: { scale: 0.85, offsetX: 0, offsetY: 0 },
 };
 
+// Default neutral color for guilds without crest data
+const DEFAULT_BANNER_COLOR = { r: 120, g: 120, b: 140, a: 1 };
+
 interface GuildCrestProps {
   crest: GuildCrestType | undefined;
   faction?: string; // "Alliance" or "Horde"
@@ -37,7 +40,7 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   useEffect(() => {
-    if (!crest || !canvasRef.current) return;
+    if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d", { willReadFrequently: false });
@@ -86,7 +89,7 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
       y: number,
       width: number,
       height: number,
-      color: { r: number; g: number; b: number; a: number }
+      color: { r: number; g: number; b: number; a: number },
     ) => {
       // Create a temporary canvas to draw and color the image
       const tempCanvas = document.createElement("canvas");
@@ -133,15 +136,25 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
         // Determine faction circle
         const factionCirclePath = faction?.toLowerCase() === "horde" ? "/custom_components/horde_circle.png" : "/custom_components/alliance_circle.png";
 
-        // Load all images
-        const [factionCircle, circleBorder, banner, borderImg, emblemImg, rings] = await Promise.allSettled([
+        // Load all images - only load border/emblem if crest data exists
+        const imagePromises: Promise<HTMLImageElement>[] = [
           loadImage(factionCirclePath, false),
           loadImage("/custom_components/circle_border.png", false),
           loadImage("/custom_components/banner.png", false),
-          loadImage(crest.border.imageName, true),
-          loadImage(crest.emblem.imageName, true),
+          ...(crest ? [loadImage(crest.border.imageName, true)] : []),
+          ...(crest ? [loadImage(crest.emblem.imageName, true)] : []),
           loadImage("/custom_components/rings.png", false),
-        ]);
+        ];
+
+        const results = await Promise.allSettled(imagePromises);
+
+        // Map results back to named variables
+        const factionCircle = results[0];
+        const circleBorder = results[1];
+        const banner = results[2];
+        const borderImg = crest ? results[3] : undefined;
+        const emblemImg = crest ? results[4] : undefined;
+        const rings = crest ? results[5] : results[3];
 
         if (!isMounted) return;
 
@@ -173,19 +186,20 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
         // Layer 3: Banner with background color (multiply blend)
         if (banner.status === "fulfilled") {
           const dims = getLayerDimensions(LAYER_CONFIG.banner);
-          applyMultiplyBlend(ctx, banner.value, dims.x, dims.y, dims.width, dims.height, crest.background.color);
+          const bannerColor = crest ? crest.background.color : DEFAULT_BANNER_COLOR;
+          applyMultiplyBlend(ctx, banner.value, dims.x, dims.y, dims.width, dims.height, bannerColor);
         }
 
         // Layer 4: Border image with border color (multiply blend)
-        if (borderImg.status === "fulfilled") {
+        if (borderImg && borderImg.status === "fulfilled") {
           const dims = getLayerDimensions(LAYER_CONFIG.border);
-          applyMultiplyBlend(ctx, borderImg.value, dims.x, dims.y, dims.width, dims.height, crest.border.color);
+          applyMultiplyBlend(ctx, borderImg.value, dims.x, dims.y, dims.width, dims.height, crest!.border.color);
         }
 
         // Layer 5: Emblem image with emblem color (multiply blend)
-        if (emblemImg.status === "fulfilled") {
+        if (emblemImg && emblemImg.status === "fulfilled") {
           const dims = getLayerDimensions(LAYER_CONFIG.emblem);
-          applyMultiplyBlend(ctx, emblemImg.value, dims.x, dims.y, dims.width, dims.height, crest.emblem.color);
+          applyMultiplyBlend(ctx, emblemImg.value, dims.x, dims.y, dims.width, dims.height, crest!.emblem.color);
         }
 
         if (drawFactionCircle) {
@@ -208,10 +222,7 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
     return () => {
       isMounted = false;
     };
-  }, [crest, faction, size, apiUrl, drawFactionCircle]); // If no crest data, show placeholder
-  if (!crest) {
-    return <div className={`bg-gray-700 rounded ${className}`} style={{ width: size, height: size }} />;
-  }
+  }, [crest, faction, size, apiUrl, drawFactionCircle]);
 
   return (
     <div className={`relative ${className}`} style={{ width: size, height: size }}>

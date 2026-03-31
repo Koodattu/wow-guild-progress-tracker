@@ -10,11 +10,9 @@ import IconImage from "@/components/IconImage";
 function GuildName({ event }: { event: Event }) {
   const inner = (
     <span className="inline-flex items-center gap-1 align-middle">
-      {event.guildCrest && (
-        <span className="w-5 h-5 shrink-0 inline-block">
-          <GuildCrest crest={event.guildCrest} size={128} className="scale-[0.156] origin-top-left" drawFactionCircle={false} />
-        </span>
-      )}
+      <span className="w-5 h-5 shrink-0 inline-block">
+        <GuildCrest crest={event.guildCrest} size={128} className="scale-[0.156] origin-top-left" drawFactionCircle={false} />
+      </span>
       <span className="font-semibold">{event.guildName}</span>
     </span>
   );

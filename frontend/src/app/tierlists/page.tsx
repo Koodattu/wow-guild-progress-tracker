@@ -153,11 +153,9 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
                     className="bg-gray-700 hover:bg-gray-600 px-1.5 md:px-2 py-1 md:py-1.5 rounded text-xs md:text-sm text-gray-200 flex items-center gap-1 md:gap-2 transition-colors cursor-pointer"
                     onClick={() => onGuildClick(guild.realm, guild.guildName)}
                   >
-                    {guild.crest && (
-                      <div className="w-5 h-5 md:w-8 md:h-8 shrink-0">
-                        <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.15] md:scale-[0.25] origin-top-left" />
-                      </div>
-                    )}
+                    <div className="w-5 h-5 md:w-8 md:h-8 shrink-0">
+                      <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.15] md:scale-[0.25] origin-top-left" />
+                    </div>
                     <div className="flex flex-col min-w-0">
                       <span className="truncate">
                         <span className="font-bold">{guild.guildName}</span>
