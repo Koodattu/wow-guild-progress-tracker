@@ -12,6 +12,12 @@ import taskTracker from "./task-tracker.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 
+// Polling intervals from environment (in minutes), with sensible defaults
+const POLLING_ACTIVE_GUILDS_MS = parseInt(process.env.POLLING_ACTIVE_GUILDS_MINUTES || "5", 10) * 60 * 1000;
+const POLLING_RAIDING_GUILDS_MS = parseInt(process.env.POLLING_RAIDING_GUILDS_MINUTES || "3", 10) * 60 * 1000;
+const POLLING_OFF_HOURS_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
+const POLLING_TWITCH_MS = 15 * 60 * 1000; // 15 minutes
+
 /**
  * Yield to the event loop to prevent blocking.
  * Use this in loops to allow request handling.
@@ -74,65 +80,53 @@ class UpdateScheduler {
     logger.info("Finnish time hot hours: 16:00 - 01:00 (4 PM - 1 AM)");
     logger.info("Off hours: 01:00 - 16:00 (1 AM - 4 PM)");
 
-    // HOT HOURS - Active guilds: Check every 15 minutes
-    this.hotHoursActiveInterval = setInterval(
-      async () => {
-        if (!this.isHotHours()) return; // Skip if not hot hours
+    // HOT HOURS - Active guilds: Check at configured interval
+    this.hotHoursActiveInterval = setInterval(async () => {
+      if (!this.isHotHours()) return; // Skip if not hot hours
 
-        if (this.isUpdatingHotActive) {
-          logger.info("[Hot/Active] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.updateActiveGuilds();
-      },
-      15 * 60 * 1000,
-    ); // 15 minutes
+      if (this.isUpdatingHotActive) {
+        logger.info("[Hot/Active] Previous update still in progress, skipping...");
+        return;
+      }
+      await this.updateActiveGuilds();
+    }, POLLING_ACTIVE_GUILDS_MS);
 
-    // HOT HOURS - Currently raiding guilds: Check every 5 minutes
-    this.hotHoursRaidingInterval = setInterval(
-      async () => {
-        if (!this.isHotHours()) return; // Skip if not hot hours
+    // HOT HOURS - Currently raiding guilds: Check at configured interval
+    this.hotHoursRaidingInterval = setInterval(async () => {
+      if (!this.isHotHours()) return; // Skip if not hot hours
 
-        if (this.isUpdatingHotRaiding) {
-          logger.info("[Hot/Raiding] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.updateRaidingGuilds();
-      },
-      5 * 60 * 1000,
-    ); // 5 minutes
+      if (this.isUpdatingHotRaiding) {
+        logger.info("[Hot/Raiding] Previous update still in progress, skipping...");
+        return;
+      }
+      await this.updateRaidingGuilds();
+    }, POLLING_RAIDING_GUILDS_MS);
 
     // HOT HOURS - Twitch stream status: Check every 15 minutes
-    this.hotHoursTwitchInterval = setInterval(
-      async () => {
-        if (!this.isHotHours()) {
-          // Outside hot hours, set all streams to offline
-          await this.setAllStreamsOffline();
-          return;
-        }
+    this.hotHoursTwitchInterval = setInterval(async () => {
+      if (!this.isHotHours()) {
+        // Outside hot hours, set all streams to offline
+        await this.setAllStreamsOffline();
+        return;
+      }
 
-        if (this.isUpdatingTwitchStreams) {
-          logger.info("[Hot/Twitch] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.updateTwitchStreamStatus();
-      },
-      15 * 60 * 1000,
-    ); // 15 minutes
+      if (this.isUpdatingTwitchStreams) {
+        logger.info("[Hot/Twitch] Previous update still in progress, skipping...");
+        return;
+      }
+      await this.updateTwitchStreamStatus();
+    }, POLLING_TWITCH_MS);
 
     // OFF HOURS - Active guilds: Check every hour
-    this.offHoursActiveInterval = setInterval(
-      async () => {
-        if (this.isHotHours()) return; // Skip if hot hours
+    this.offHoursActiveInterval = setInterval(async () => {
+      if (this.isHotHours()) return; // Skip if hot hours
 
-        if (this.isUpdatingOffActive) {
-          logger.info("[Off/Active] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.updateActiveGuildsOffHours();
-      },
-      60 * 60 * 1000,
-    ); // 1 hour
+      if (this.isUpdatingOffActive) {
+        logger.info("[Off/Active] Previous update still in progress, skipping...");
+        return;
+      }
+      await this.updateActiveGuildsOffHours();
+    }, POLLING_OFF_HOURS_ACTIVE_MS);
 
     // OFF HOURS - Inactive guilds: Check once per day (at 10 AM Finnish time)
     cron.schedule(
@@ -300,8 +294,8 @@ class UpdateScheduler {
 
     logger.info("Background scheduler started:");
     logger.info("  - Hot hours (16:00-01:00):");
-    logger.info("    * Active guilds: every 15 minutes");
-    logger.info("    * Raiding guilds: every 5 minutes");
+    logger.info(`    * Active guilds: every ${POLLING_ACTIVE_GUILDS_MS / 60000} minutes`);
+    logger.info(`    * Raiding guilds: every ${POLLING_RAIDING_GUILDS_MS / 60000} minutes`);
     logger.info("    * Twitch streams: every 15 minutes");
     logger.info("  - Off hours (01:00-16:00):");
     logger.info("    * Active guilds: every 60 minutes");
