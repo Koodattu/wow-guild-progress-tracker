@@ -489,6 +489,8 @@
   "pickemsPage": {
     "title": "Pickems",
     "ended": "Ended",
+    "finalized": "Finalized",
+    "awaitingResults": "Awaiting Results",
     "selectPickem": "Select Season",
     "noPickems": "No pickems available at this time.",
     "votingOpen": "Voting Open",

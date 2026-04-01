@@ -489,6 +489,8 @@
   "pickemsPage": {
     "title": "Veikkaukset",
     "ended": "Päättynyt",
+    "finalized": "Viimeistelty",
+    "awaitingResults": "Odottaa tuloksia",
     "selectPickem": "Valitse kausi",
     "noPickems": "Ei veikkauksia saatavilla tällä hetkellä.",
     "votingOpen": "Äänestys auki",

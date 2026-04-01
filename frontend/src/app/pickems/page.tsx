@@ -268,11 +268,13 @@ function PickemSelector({
     const end = new Date(pickem.votingEnd);
 
     if (now < start) {
-      return { status: t("notStarted"), color: "text-gray-400", bgColor: "bg-gray-700" };
-    } else if (now > end) {
-      return { status: t("ended"), color: "text-red-400", bgColor: "bg-red-900/30" };
-    } else {
+      return { status: t("votingNotStarted"), color: "text-gray-400", bgColor: "bg-gray-700" };
+    } else if (now <= end) {
       return { status: getTimeRemaining(pickem.votingEnd), color: "text-green-400", bgColor: "bg-green-900/30" };
+    } else if (pickem.finalized) {
+      return { status: t("finalized"), color: "text-emerald-400", bgColor: "bg-emerald-900/20" };
+    } else {
+      return { status: t("awaitingResults"), color: "text-amber-400", bgColor: "bg-amber-900/20" };
     }
   };
 
