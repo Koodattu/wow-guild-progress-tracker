@@ -766,7 +766,21 @@ export const api = {
     return response.json();
   },
 
-  async unfinalizeRwfPickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
+  async finalizeRegularPickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
+    const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to finalize pickem");
+    }
+    return response.json();
+  },
+
+  async unfinalizePickem(pickemId: string): Promise<{ success: boolean; pickem: AdminPickem }> {
     const response = await fetch(`${API_URL}/api/admin/pickems/${pickemId}/unfinalize`, {
       method: "POST",
       credentials: "include",

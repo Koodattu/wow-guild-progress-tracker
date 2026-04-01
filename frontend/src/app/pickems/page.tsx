@@ -408,7 +408,7 @@ function PickemCard({ pickem, getTimeRemaining, onClick }: { pickem: PickemSumma
           )}
           {hasEnded && (
             <>
-              {pickem.type === "rwf" && pickem.finalized ? (
+              {pickem.finalized ? (
                 <>
                   <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
                     <path
@@ -421,8 +421,8 @@ function PickemCard({ pickem, getTimeRemaining, onClick }: { pickem: PickemSumma
                 </>
               ) : (
                 <>
-                  <div className="w-2 h-2 rounded-full bg-gray-500" />
-                  <span className="text-gray-400 text-sm">Ended</span>
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-amber-400 text-sm font-medium">Awaiting Results</span>
                 </>
               )}
             </>
@@ -461,7 +461,7 @@ function PickemCard({ pickem, getTimeRemaining, onClick }: { pickem: PickemSumma
   );
 }
 
-// Landing page view showing all pickems in a grid
+// Landing page view showing all pickems in a grid, split by lifecycle phase
 function PickemsLandingView({
   pickems,
   getTimeRemaining,
@@ -472,13 +472,29 @@ function PickemsLandingView({
   onSelectPickem: (id: string) => void;
 }) {
   const now = new Date();
+
+  // Phase 1: Voting still open (including upcoming)
   const activePickems = pickems.filter((p) => {
     const end = new Date(p.votingEnd);
     return now <= end;
   });
-  const completedPickems = pickems.filter((p) => {
+
+  // Phase 2: Voting closed but not yet finalized
+  const awaitingResultsPickems = pickems.filter((p) => {
     const end = new Date(p.votingEnd);
-    return now > end;
+    return now > end && !p.finalized;
+  });
+
+  // Phase 3: Finalized — split into recent (< 6 months) and archived (>= 6 months)
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const completedPickems = pickems.filter((p) => {
+    return p.finalized && (!p.finalizedAt || new Date(p.finalizedAt) >= sixMonthsAgo);
+  });
+
+  const archivedPickems = pickems.filter((p) => {
+    return p.finalized && p.finalizedAt && new Date(p.finalizedAt) < sixMonthsAgo;
   });
 
   return (
@@ -497,11 +513,46 @@ function PickemsLandingView({
         </section>
       )}
 
+      {awaitingResultsPickems.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-amber-400 mb-4 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            Awaiting Results
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {awaitingResultsPickems.map((p) => (
+              <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {completedPickems.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-gray-400 mb-4">Completed</h2>
+          <h2 className="text-lg font-semibold text-gray-400 mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            Completed
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {completedPickems.map((p) => (
+              <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {archivedPickems.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-gray-500 mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Archive
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {archivedPickems.map((p) => (
               <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
             ))}
           </div>

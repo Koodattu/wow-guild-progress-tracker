@@ -199,7 +199,7 @@ class PickemService {
     }
 
     if (pickem.type !== "rwf") {
-      return { success: false, error: "Only RWF pickems can be manually finalized" };
+      return { success: false, error: "Only RWF pickems can be finalized with rankings. Use finalizeRegularPickem for regular pickems." };
     }
 
     if (pickem.finalized) {
@@ -236,18 +236,44 @@ class PickemService {
   }
 
   /**
-   * Unfinalize an RWF pickem (admin correction)
-   * This clears the final results and allows re-finalization
+   * Finalize a regular pickem (admin marks the race as over, rankings are locked)
+   * For regular pickems, no finalRankings are needed — scores are derived from live guild data.
    */
-  async unfinalizeRwfPickem(pickemId: string): Promise<{ success: boolean; pickem?: IPickem; error?: string }> {
+  async finalizeRegularPickem(pickemId: string): Promise<{ success: boolean; pickem?: IPickem; error?: string }> {
     const pickem = await Pickem.findOne({ pickemId });
 
     if (!pickem) {
       return { success: false, error: "Pickem not found" };
     }
 
-    if (pickem.type !== "rwf") {
-      return { success: false, error: "Only RWF pickems can be unfinalized" };
+    if (pickem.type !== "regular") {
+      return { success: false, error: "Use finalizeRwfPickem for RWF pickems" };
+    }
+
+    if (pickem.finalized) {
+      return { success: false, error: "Pickem has already been finalized" };
+    }
+
+    pickem.finalized = true;
+    pickem.finalizedAt = new Date();
+
+    await pickem.save();
+
+    logger.info(`Finalized regular pickem ${pickemId}`);
+
+    return { success: true, pickem: pickem.toObject() };
+  }
+
+  /**
+   * Unfinalize a pickem (admin correction)
+   * Works for both RWF and regular pickems.
+   * For RWF pickems, this also clears the final rankings.
+   */
+  async unfinalizePickem(pickemId: string): Promise<{ success: boolean; pickem?: IPickem; error?: string }> {
+    const pickem = await Pickem.findOne({ pickemId });
+
+    if (!pickem) {
+      return { success: false, error: "Pickem not found" };
     }
 
     if (!pickem.finalized) {
@@ -255,13 +281,15 @@ class PickemService {
     }
 
     // Clear finalization
-    pickem.finalRankings = [];
+    if (pickem.type === "rwf") {
+      pickem.finalRankings = [];
+    }
     pickem.finalized = false;
     pickem.finalizedAt = null;
 
     await pickem.save();
 
-    logger.info(`Unfinalized RWF pickem ${pickemId}`);
+    logger.info(`Unfinalized pickem ${pickemId} (type: ${pickem.type})`);
 
     return { success: true, pickem: pickem.toObject() };
   }

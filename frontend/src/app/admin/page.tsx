@@ -2253,12 +2253,33 @@ export default function AdminPage() {
                                 {t("pickems.table.finalize")}
                               </button>
                             )}
-                            {pickem.type === "rwf" && pickem.finalized && (
+                            {/* Regular pickem finalization button */}
+                            {pickem.type === "regular" && !pickem.finalized && (
+                              <button
+                                onClick={async () => {
+                                  if (confirm(t("pickems.table.finalizeRegularConfirm"))) {
+                                    try {
+                                      await api.finalizeRegularPickem(pickem.pickemId);
+                                      const pickemsData = await api.getAdminPickems();
+                                      setPickems(pickemsData.pickems);
+                                      setPickemStats(pickemsData.stats);
+                                    } catch (err) {
+                                      console.error("Failed to finalize pickem:", err);
+                                    }
+                                  }
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700"
+                              >
+                                {t("pickems.table.finalize")}
+                              </button>
+                            )}
+                            {/* Unfinalize button - works for both types */}
+                            {pickem.finalized && (
                               <button
                                 onClick={async () => {
                                   if (confirm(t("pickems.table.unfinalizeConfirm"))) {
                                     try {
-                                      await api.unfinalizeRwfPickem(pickem.pickemId);
+                                      await api.unfinalizePickem(pickem.pickemId);
                                       const pickemsData = await api.getAdminPickems();
                                       setPickems(pickemsData.pickems);
                                       setPickemStats(pickemsData.stats);

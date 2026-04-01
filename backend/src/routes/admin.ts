@@ -1306,34 +1306,51 @@ router.post("/pickems/:pickemId/finalize", async (req: Request, res: Response) =
     const { pickemId } = req.params;
     const { finalRankings } = req.body;
 
-    // Validate finalRankings is an array of strings
-    if (!Array.isArray(finalRankings) || finalRankings.length === 0) {
-      return res.status(400).json({ error: "finalRankings must be a non-empty array of guild names" });
+    // Check pickem type to determine finalization path
+    const pickem = await pickemService.getPickemById(pickemId);
+    if (!pickem) {
+      return res.status(404).json({ error: "Pickem not found" });
     }
 
-    if (!finalRankings.every((g: unknown) => typeof g === "string")) {
-      return res.status(400).json({ error: "All items in finalRankings must be strings" });
+    if (pickem.type === "rwf") {
+      // RWF pickems require finalRankings
+      if (!Array.isArray(finalRankings) || finalRankings.length === 0) {
+        return res.status(400).json({ error: "finalRankings must be a non-empty array of guild names" });
+      }
+
+      if (!finalRankings.every((g: unknown) => typeof g === "string")) {
+        return res.status(400).json({ error: "All items in finalRankings must be strings" });
+      }
+
+      const result = await pickemService.finalizeRwfPickem(pickemId, finalRankings);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ success: true, pickem: result.pickem });
+    } else {
+      // Regular pickems just get marked as finalized (rankings come from live data)
+      const result = await pickemService.finalizeRegularPickem(pickemId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ success: true, pickem: result.pickem });
     }
-
-    const result = await pickemService.finalizeRwfPickem(pickemId, finalRankings);
-
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-
-    res.json({ success: true, pickem: result.pickem });
   } catch (error) {
     logger.error("Error finalizing pickem:", error);
     res.status(500).json({ error: "Failed to finalize pickem" });
   }
 });
 
-// Unfinalize an RWF pickem (admin correction)
+// Unfinalize a pickem (admin correction) - works for both RWF and regular
 router.post("/pickems/:pickemId/unfinalize", async (req: Request, res: Response) => {
   try {
     const { pickemId } = req.params;
 
-    const result = await pickemService.unfinalizeRwfPickem(pickemId);
+    const result = await pickemService.unfinalizePickem(pickemId);
 
     if (!result.success) {
       return res.status(400).json({ error: result.error });
