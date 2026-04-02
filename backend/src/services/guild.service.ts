@@ -3372,9 +3372,11 @@ class GuildService {
 
         const daysSinceLastLog = (Date.now() - guild.lastLogEndTime.getTime()) / (1000 * 60 * 60 * 24);
 
-        // Determine highest difficulty with progress for this guild/raid
-        const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic" && p.bossesDefeated > 0);
-        const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic" && p.bossesDefeated > 0);
+        // Determine highest difficulty with WCL-backed progress for this guild/raid.
+        // Synthetic RaiderIO-only entries have an empty bosses array — skip those,
+        // since hiatus only makes sense for guilds that actually have WarcraftLogs data.
+        const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic" && p.bossesDefeated > 0 && p.bosses.length > 0);
+        const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic" && p.bossesDefeated > 0 && p.bosses.length > 0);
         const highestDifficulty = mythicProgress ? "mythic" : heroicProgress ? "heroic" : null;
 
         if (!highestDifficulty) continue;
