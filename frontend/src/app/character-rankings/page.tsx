@@ -10,7 +10,7 @@ type Filters = {
   encounterId?: number;
   classId?: number | null;
   specName?: string | null;
-  role?: "dps" | "healer" | "tank" | null;
+  metric?: "dps" | "hps";
   page?: number;
   limit?: number;
   partition?: number | null;

@@ -555,7 +555,6 @@
     "placeholderAllBosses": "All bosses",
     "placeholderAllPatches": "All patches",
     "allClasses": "All classes",
-    "allRoles": "All roles",
     "searchPlaceholder": "Search character",
     "searchGuildPlaceholder": "Search guild",
     "columnRank": "Rank",
@@ -563,6 +562,7 @@
     "columnGuild": "Guild",
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
+    "columnHps": "HPS",
     "columnScore": "Score"
   }
 }

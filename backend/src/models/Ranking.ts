@@ -25,6 +25,7 @@ export interface IRanking extends Document {
   specName: string;
   role: "dps" | "healer" | "tank";
   bestSpecName: string;
+  metric: "dps" | "hps";
 
   rankPercent: number;
   medianPercent: number;
@@ -72,6 +73,7 @@ const RankingSchema: Schema = new Schema(
 
     specName: { type: String, required: true },
     bestSpecName: { type: String, required: true },
+    metric: { type: String, enum: ["dps", "hps"], required: true, default: "dps", index: true },
     role: {
       type: String,
       enum: ["dps", "healer", "tank"],
@@ -91,7 +93,7 @@ const RankingSchema: Schema = new Schema(
   { timestamps: true },
 );
 
-// Unique index per partition (allows same boss/spec across partitions)
+// Unique index per partition + metric (allows same boss/spec to have both dps and hps docs)
 RankingSchema.index(
   {
     characterId: 1,
@@ -100,6 +102,7 @@ RankingSchema.index(
     partition: 1,
     "encounter.id": 1,
     specName: 1,
+    metric: 1,
   },
   { unique: true },
 );

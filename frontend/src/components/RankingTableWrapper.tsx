@@ -29,7 +29,7 @@ interface RankingTableWrapperProps {
     encounterId?: number;
     classId?: number | null;
     specName?: string | null;
-    role?: "dps" | "healer" | "tank" | null;
+    metric?: "dps" | "hps";
     partition?: number | null;
     characterName?: string | null;
     guildName?: string | null;
@@ -41,7 +41,7 @@ type RankingFilters = {
   encounterId?: number;
   classId?: number | null;
   specName?: string | null;
-  role?: "dps" | "healer" | "tank" | null;
+  metric?: "dps" | "hps";
   partition?: number | null;
   characterName?: string | null;
   guildName?: string | null;
@@ -149,7 +149,7 @@ function ClassSpecButton({ selectedClass, selectedSpec, allClassesLabel, onToggl
     <button
       type="button"
       onClick={onToggle}
-      className="relative w-full min-h-10 cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+      className="relative w-full min-h-10 cursor-default rounded-md bg-gray-800 py-2 pl-3 pr-10 text-left text-white shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold whitespace-nowrap overflow-hidden"
     >
       <div className="flex items-center gap-3">
         {icon ? (
@@ -330,7 +330,7 @@ type BuildRankingColumnsOptions = {
   currentPage: number;
   pageSize: number;
   selectedSpec: string | null;
-  selectedRole: "dps" | "healer" | "tank" | null;
+  selectedMetric: "dps" | "hps";
   t: (key: string) => string;
 };
 
@@ -342,7 +342,7 @@ function formatRealmSlug(realm: string) {
     .join(" ");
 }
 
-function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, selectedRole, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
 
@@ -364,9 +364,9 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
         const wclUrl = `https://www.warcraftlogs.com/character/eu/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`;
         const classIcon = getClassInfoById(row.character.classID)?.iconUrl;
         const roleSpecName = isShowingDamage ? row.context.specName : row.context.bestSpecName ?? row.context.specName;
-        const roleSpecIcon = selectedRole && roleSpecName ? getSpecIconUrl(row.character.classID, roleSpecName) : null;
+        const roleSpecIcon = selectedMetric === "hps" && roleSpecName ? getSpecIconUrl(row.character.classID, roleSpecName) : null;
         const primaryIcon = roleSpecIcon ?? classIcon;
-        const specIcon = !selectedRole && isShowingDamage && row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : null;
+        const specIcon = selectedMetric !== "hps" && isShowingDamage && row.context.specName ? getSpecIconUrl(row.character.classID, row.context.specName) : null;
 
         return (
           <div className="flex justify-between items-center">
@@ -418,7 +418,7 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
 
   columns.push({
     id: "metric",
-    header: isShowingDamage ? t("columnDps") : t("columnScore"),
+    header: isShowingDamage ? (selectedMetric === "hps" ? t("columnHps") : t("columnDps")) : t("columnScore"),
     shrink: true,
     accessor: (row: CharacterRankingRow) => {
       const value = isShowingDamage ? row.stats.bestAmount?.toFixed(1) : row.stats.allStars?.points?.toFixed(1);
@@ -487,38 +487,37 @@ function MobileBossScores({ row, bosses, selectedSpec }: { row: CharacterRanking
   );
 }
 
-const ROLE_OPTIONS = [
+const METRIC_OPTIONS = [
   { value: "dps" as const, label: "DPS", icon: "/icons/roleicon_damage.png" },
-  { value: "healer" as const, label: "Healer", icon: "/icons/roleicon_healer.png" },
-  { value: "tank" as const, label: "Tank", icon: "/icons/roleicon_tank.png" },
+  { value: "hps" as const, label: "HPS", icon: "/icons/roleicon_healer.png" },
 ];
 
-type RoleSelectorProps = {
-  selectedRole: "dps" | "healer" | "tank" | null;
-  allRolesLabel: string;
-  onChange: (role: "dps" | "healer" | "tank" | null) => void;
+type MetricSelectorProps = {
+  selectedMetric: "dps" | "hps";
+  onChange: (metric: "dps" | "hps") => void;
 };
 
-function RoleSelector({ selectedRole, allRolesLabel, onChange }: RoleSelectorProps) {
-  const activeOption = ROLE_OPTIONS.find((o) => o.value === selectedRole) ?? null;
+function MetricSelector({ selectedMetric, onChange }: MetricSelectorProps) {
+  const activeOption = METRIC_OPTIONS.find((o) => o.value === selectedMetric) ?? METRIC_OPTIONS[0];
 
   return (
     <Selector
-      items={ROLE_OPTIONS}
+      items={METRIC_OPTIONS}
       selectedItem={activeOption}
-      onChange={(opt) => onChange(opt?.value ?? null)}
-      placeholder={allRolesLabel}
+      onChange={(opt) => onChange(opt?.value ?? "dps")}
+      nullable={false}
+      placeholder="DPS"
       renderButton={(opt) => (
         <div className="flex items-center gap-2">
-          <Image src={opt!.icon} alt={opt!.label} width={22} height={22} />
-          {opt!.label}
+          <Image src={opt!.icon} alt={opt!.label} width={18} height={18} />
+          <span>{opt!.label}</span>
         </div>
       )}
       renderOption={(opt) => (
-        <>
-          <Image src={opt.icon} alt={opt.label} width={22} height={22} />
-          {opt.label}
-        </>
+        <div className="flex items-center gap-2">
+          <Image src={opt.icon} alt={opt.label} width={18} height={18} />
+          <span>{opt.label}</span>
+        </div>
       )}
     />
   );
@@ -532,7 +531,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
   const [selectedPartition, setSelectedPartition] = useState<PatchPartitionOption | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const [guildSearchValue, setGuildSearchValue] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"dps" | "healer" | "tank" | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<"dps" | "hps">("dps");
   const searchInitializedRef = useRef(false);
   const guildSearchInitializedRef = useRef(false);
   const searchDebounceRef = useRef<number | null>(null);
@@ -545,7 +544,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
         encounterId: selectedBoss?.id,
         classId: selectedClass?.id ?? null,
         specName: selectedSpec,
-        role: selectedRole,
+        metric: selectedMetric,
         partition: selectedPartition?.value ?? null,
         characterName: searchValue.trim() || null,
         guildName: guildSearchValue.trim() || null,
@@ -553,7 +552,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
         ...overrides,
       });
     },
-    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedRole, selectedSpec, searchValue, guildSearchValue],
+    [onFiltersChange, selectedBoss?.id, selectedClass?.id, selectedPartition?.value, selectedMetric, selectedSpec, searchValue, guildSearchValue],
   );
 
   useEffect(() => {
@@ -639,28 +638,23 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
     applyFilters({ partition: partition?.value ?? null, page: 1 });
   };
 
-  const handleRoleChange = (role: "dps" | "healer" | "tank" | null) => {
-    setSelectedRole(role);
+  const handleMetricChange = (metric: "dps" | "hps") => {
+    setSelectedMetric(metric);
 
-    if (!role) {
-      applyFilters({ role: null, page: 1 });
-      return;
+    // When switching to HPS, clear any class/spec selection that isn't a healer
+    if (metric === "hps" && selectedClass) {
+      const hasHealerSpec = selectedClass.specs.some((spec) => spec.role === "healer");
+      const isSpecHealer = selectedSpec ? selectedClass.specs.some((spec) => spec.name === selectedSpec && spec.role === "healer") : false;
+
+      if ((selectedSpec && !isSpecHealer) || (!selectedSpec && !hasHealerSpec)) {
+        setSelectedClass(null);
+        setSelectedSpec(null);
+        applyFilters({ metric, classId: null, specName: null, page: 1 });
+        return;
+      }
     }
 
-    const isCurrentSelectionCompatibleWithRole = !selectedClass
-      ? true
-      : selectedSpec
-        ? selectedClass.specs.some((spec) => spec.name === selectedSpec && spec.role === role)
-        : selectedClass.specs.some((spec) => spec.role === role);
-
-    if (isCurrentSelectionCompatibleWithRole) {
-      applyFilters({ role, page: 1 });
-      return;
-    }
-
-    setSelectedClass(null);
-    setSelectedSpec(null);
-    applyFilters({ role, classId: null, specName: null, page: 1 });
+    applyFilters({ metric, page: 1 });
   };
 
   const handlePageChange = (page: number) => {
@@ -684,10 +678,10 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
       currentPage,
       pageSize,
       selectedSpec,
-      selectedRole,
+      selectedMetric,
       t,
     });
-  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, selectedRole, t]);
+  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, selectedMetric, t]);
 
   const title = selectedBoss ? `${t("titleForBoss")} ${selectedBoss.name}` : t("titleAllStars");
 
@@ -696,74 +690,78 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
       {error ? <div className="rounded-md border border-red-500/40 bg-red-950/30 px-4 py-3 text-red-200">{error}</div> : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 w-full">
+        <div className="flex flex-wrap gap-3 w-full">
           {/* Character Search */}
-          <div className="w-full">
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-              maxLength={64}
-              placeholder={t("searchPlaceholder")}
-              className="w-full min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
-            />
-          </div>
+          <input
+            type="text"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            maxLength={64}
+            placeholder={t("searchPlaceholder")}
+            className="flex-1 min-w-[160px] min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold whitespace-nowrap"
+          />
 
           {/* Guild Search */}
-          <div className="w-full">
-            <input
-              type="text"
-              value={guildSearchValue}
-              onChange={(event) => setGuildSearchValue(event.target.value)}
-              maxLength={64}
-              placeholder={t("searchGuildPlaceholder")}
-              className="w-full min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold"
+          <input
+            type="text"
+            value={guildSearchValue}
+            onChange={(event) => setGuildSearchValue(event.target.value)}
+            maxLength={64}
+            placeholder={t("searchGuildPlaceholder")}
+            className="flex-1 min-w-[160px] min-h-10 rounded-md bg-gray-800 py-2 px-3 text-white shadow-md placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm font-bold whitespace-nowrap"
+          />
+
+          {/* Boss Selector */}
+          <div className="flex-1 min-w-[160px]">
+            <Selector
+              items={bosses}
+              selectedItem={selectedBoss}
+              onChange={handleBossChange}
+              placeholder={t("placeholderAllBosses")}
+              renderButton={(boss) => (
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <IconImage iconFilename={boss?.iconUrl} alt={`${boss?.name} icon`} width={24} height={24} />
+                  {boss?.name}
+                </div>
+              )}
+              renderOption={(boss) => (
+                <>
+                  <IconImage iconFilename={boss.iconUrl} alt={`${boss.name} icon`} width={24} height={24} />
+                  {boss.name}
+                </>
+              )}
             />
           </div>
 
-          {/* Boss Selector */}
-          <Selector
-            items={bosses}
-            selectedItem={selectedBoss}
-            onChange={handleBossChange}
-            placeholder={t("placeholderAllBosses")}
-            renderButton={(boss) => (
-              <div className="flex items-center gap-2">
-                <IconImage iconFilename={boss?.iconUrl} alt={`${boss?.name} icon`} width={24} height={24} />
-                {boss?.name}
-              </div>
-            )}
-            renderOption={(boss) => (
-              <>
-                <IconImage iconFilename={boss.iconUrl} alt={`${boss.name} icon`} width={24} height={24} />
-                {boss.name}
-              </>
-            )}
-          />
-
           {/* Class / Spec Selector */}
-          <ClassSpecSelector
-            selectedClass={selectedClass}
-            selectedSpec={selectedSpec}
-            selectedRole={selectedRole}
-            allClassesLabel={t("allClasses")}
-            onClassSelect={handleClassChange}
-            onSpecSelect={handleSpecSelect}
-            onClear={clearClassAndSpec}
-          />
+          <div className="flex-1 min-w-[160px]">
+            <ClassSpecSelector
+              selectedClass={selectedClass}
+              selectedSpec={selectedSpec}
+              selectedRole={selectedMetric === "hps" ? "healer" : null}
+              allClassesLabel={t("allClasses")}
+              onClassSelect={handleClassChange}
+              onSpecSelect={handleSpecSelect}
+              onClear={clearClassAndSpec}
+            />
+          </div>
 
-          {/* Role Selector */}
-          <RoleSelector selectedRole={selectedRole} allRolesLabel={t("allRoles")} onChange={handleRoleChange} />
+          {/* Metric Selector */}
+          <div className="min-w-[100px]">
+            <MetricSelector selectedMetric={selectedMetric} onChange={handleMetricChange} />
+          </div>
 
           {showPartitionSelector && (
-            <Selector
-              items={partitionOptions}
-              selectedItem={selectedPartition}
-              onChange={handlePartitionChange}
-              placeholder={t("placeholderAllPatches")}
-              renderButton={(partition) => <span>{partition?.label}</span>}
-              renderOption={(partition) => <span>{partition.label}</span>}
-            />
+            <div className="flex-1 min-w-[160px]">
+              <Selector
+                items={partitionOptions}
+                selectedItem={selectedPartition}
+                onChange={handlePartitionChange}
+                placeholder={t("placeholderAllPatches")}
+                renderButton={(partition) => <span className="whitespace-nowrap">{partition?.label}</span>}
+                renderOption={(partition) => <span>{partition.label}</span>}
+              />
+            </div>
           )}
         </div>
       </div>

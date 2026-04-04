@@ -124,6 +124,7 @@ export type CharacterRankingRow = {
   context: {
     zoneId: number;
     difficulty: number;
+    metric: "dps" | "hps";
     partition?: number;
     encounterId: number | null;
     specName?: string;
@@ -465,6 +466,7 @@ class CharacterService {
                   difficulty: MYTHIC_DIFFICULTY,
                   partition,
                   specName: specSlug,
+                  metric: "dps",
                 });
                 logger.debug(`[CharacterRankings] No rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 continue;
@@ -481,6 +483,7 @@ class CharacterService {
                   difficulty: MYTHIC_DIFFICULTY,
                   partition: zoneRankings.partition,
                   specName: specSlug,
+                  metric: "dps",
                 });
                 logger.debug(`[CharacterRankings] No rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
                 continue;
@@ -497,6 +500,7 @@ class CharacterService {
                 difficulty: MYTHIC_DIFFICULTY,
                 partition: zoneRankings.partition,
                 specName: specSlug,
+                metric: "dps",
               }).lean();
 
               const freshPoints = allStarsEntries.reduce((sum, a) => sum + (a.points ?? 0), 0);
@@ -538,6 +542,7 @@ class CharacterService {
                     partition: rankingPartition,
                     "encounter.id": r.encounter.id,
                     specName: specSlug,
+                    metric: "dps",
                   },
                   {
                     characterId: char._id,
@@ -551,6 +556,7 @@ class CharacterService {
                     zoneId: CURRENT_TIER_ID,
                     difficulty: MYTHIC_DIFFICULTY,
                     partition: rankingPartition,
+                    metric: "dps",
 
                     encounter: {
                       id: r.encounter.id,
@@ -582,6 +588,185 @@ class CharacterService {
               }
 
               logger.info(`[CharacterRankings] Updated rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
+            }
+
+            // ── HPS rankings for healer specs ─────────────────────────
+            const healerSpecSlugs = specSlugs.filter((slug) => classSpecMap[slug] === "healer");
+
+            if (healerSpecSlugs.length > 0) {
+              if (rateLimitService.getPercentUsed() >= RATE_LIMIT_PAUSE_PERCENT) {
+                const resetMs = rateLimitService.getTimeUntilReset();
+                logger.info(
+                  `[CharacterRankings] Rate limit at ${rateLimitService.getPercentUsed().toFixed(1)}%, pausing for ${Math.ceil(resetMs / 1000)}s before HPS query`,
+                );
+                await rateLimitService.waitForReset();
+                logger.info(`[CharacterRankings] Rate limit reset, resuming`);
+              }
+
+              const hpsSpecAliasFields = healerSpecSlugs.map((slug) => {
+                const wclName = toWclSpecName(slug);
+                const alias = toSpecAlias(slug);
+                return `${alias}: zoneRankings(zoneID: $zoneID, difficulty: ${MYTHIC_DIFFICULTY}, metric: hps, compare: Rankings, timeframe: Historical, partition: ${partition}, specName: "${wclName}")`;
+              });
+
+              const hpsQuery = `
+                query($serverSlug: String!, $serverRegion: String!, $characterName: String!, $zoneID: Int!) {
+                  rateLimitData {
+                    limitPerHour
+                    pointsSpentThisHour
+                    pointsResetIn
+                  }
+                  characterData {
+                    character(
+                      name: $characterName,
+                      serverSlug: $serverSlug,
+                      serverRegion: $serverRegion
+                    ) {
+                      id
+                      canonicalID
+                      name
+                      classID
+                      hidden
+                      ${hpsSpecAliasFields.join("\n                      ")}
+                    }
+                  }
+                }
+              `;
+
+              processedCount += 1;
+
+              const hpsResult = await wclService.query<IWarcraftLogsResponse>(hpsQuery, variables);
+              const hpsCharacter = hpsResult.characterData?.character;
+
+              if (hpsCharacter && !hpsCharacter.hidden) {
+                for (const specSlug of healerSpecSlugs) {
+                  const alias = toSpecAlias(specSlug);
+                  const hpsZoneRankings = (hpsCharacter as Record<string, unknown>)[alias] as IWarcraftLogsZoneRankings | null;
+
+                  if (!hpsZoneRankings || (hpsZoneRankings as any).error) {
+                    await Ranking.deleteMany({
+                      characterId: char._id,
+                      zoneId: CURRENT_TIER_ID,
+                      difficulty: MYTHIC_DIFFICULTY,
+                      partition,
+                      specName: specSlug,
+                      metric: "hps",
+                    });
+                    logger.debug(`[CharacterRankings] No HPS rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
+                    continue;
+                  }
+
+                  const hpsAllStarsEntries = hpsZoneRankings.allStars ?? [];
+                  const hpsRankingsEntries = hpsZoneRankings.rankings ?? [];
+
+                  if (hpsAllStarsEntries.length === 0 && hpsRankingsEntries.length === 0) {
+                    await Ranking.deleteMany({
+                      characterId: char._id,
+                      zoneId: CURRENT_TIER_ID,
+                      difficulty: MYTHIC_DIFFICULTY,
+                      partition: hpsZoneRankings.partition,
+                      specName: specSlug,
+                      metric: "hps",
+                    });
+                    logger.debug(`[CharacterRankings] No HPS rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
+                    continue;
+                  }
+
+                  const existingHpsRankings = await Ranking.find({
+                    characterId: char._id,
+                    zoneId: CURRENT_TIER_ID,
+                    difficulty: MYTHIC_DIFFICULTY,
+                    partition: hpsZoneRankings.partition,
+                    specName: specSlug,
+                    metric: "hps",
+                  }).lean();
+
+                  const freshHpsPoints = hpsAllStarsEntries.reduce((sum, a) => sum + (a.points ?? 0), 0);
+                  const freshHpsPossiblePoints = hpsAllStarsEntries.reduce((sum, a) => sum + (a.possiblePoints ?? 0), 0);
+                  const storedHpsPoints = existingHpsRankings.reduce((sum, r: any) => sum + (r.allStars?.points ?? 0), 0);
+                  const storedHpsPossiblePoints = existingHpsRankings.reduce((sum, r: any) => sum + (r.allStars?.possiblePoints ?? 0), 0);
+
+                  const hpsAllStarsChanged = freshHpsPoints !== storedHpsPoints || freshHpsPossiblePoints !== storedHpsPossiblePoints;
+
+                  const freshHpsFingerprint = hpsRankingsEntries
+                    .map((r) => `${r.encounter.id}:${r.bestAmount ?? 0}:${r.rankPercent ?? 0}:${r.totalKills ?? 0}`)
+                    .sort()
+                    .join("|");
+                  const storedHpsFingerprint = existingHpsRankings
+                    .map((r: any) => `${r.encounter?.id}:${r.bestAmount ?? 0}:${r.rankPercent ?? 0}:${r.totalKills ?? 0}`)
+                    .sort()
+                    .join("|");
+
+                  const hpsHasChanged = existingHpsRankings.length === 0 || hpsAllStarsChanged || freshHpsFingerprint !== storedHpsFingerprint;
+
+                  if (!hpsHasChanged) {
+                    logger.debug(`[CharacterRankings] No HPS changes for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
+                    continue;
+                  }
+
+                  for (const r of hpsRankingsEntries) {
+                    const rankingSpecSlug = r.spec ? slugifySpecName(r.spec) : specSlug;
+                    const role = resolveRole(char.classID, rankingSpecSlug);
+                    const normalizedBestSpecName = r.bestSpec ? slugifySpecName(r.bestSpec) : rankingSpecSlug;
+                    const rankingPartition = r.allStars?.partition ?? hpsZoneRankings.partition ?? partition;
+
+                    await Ranking.findOneAndUpdate(
+                      {
+                        characterId: char._id,
+                        zoneId: CURRENT_TIER_ID,
+                        difficulty: MYTHIC_DIFFICULTY,
+                        partition: rankingPartition,
+                        "encounter.id": r.encounter.id,
+                        specName: specSlug,
+                        metric: "hps",
+                      },
+                      {
+                        characterId: char._id,
+                        wclCanonicalCharacterId: hpsCharacter.canonicalID,
+
+                        name: char.name,
+                        realm: char.realm,
+                        region: char.region,
+                        classID: char.classID,
+
+                        zoneId: CURRENT_TIER_ID,
+                        difficulty: MYTHIC_DIFFICULTY,
+                        partition: rankingPartition,
+                        metric: "hps",
+
+                        encounter: {
+                          id: r.encounter.id,
+                          name: r.encounter.name,
+                        },
+
+                        specName: rankingSpecSlug,
+                        role,
+
+                        bestSpecName: normalizedBestSpecName,
+
+                        rankPercent: r.rankPercent ?? 0,
+                        medianPercent: r.medianPercent ?? 0,
+                        lockedIn: r.lockedIn,
+                        totalKills: r.totalKills,
+                        bestAmount: r.bestAmount ?? 0,
+
+                        allStars: r.allStars
+                          ? {
+                              points: typeof r.allStars.points === "number" ? r.allStars.points : 0,
+                              possiblePoints: typeof r.allStars.possiblePoints === "number" ? r.allStars.possiblePoints : 0,
+                            }
+                          : { points: 0, possiblePoints: 0 },
+
+                        ilvl: r.bestRank?.ilvl,
+                      },
+                      { upsert: true, new: true },
+                    );
+                  }
+
+                  hasAnySpecRankings = true;
+                  logger.info(`[CharacterRankings] Updated HPS rankings for ${char.name} (${char.realm}) [spec: ${specSlug}]`);
+                }
+              }
             }
 
             if (hasAnySpecRankings) {
@@ -630,9 +815,10 @@ class CharacterService {
     logger.info("[Leaderboard] Starting leaderboard build...");
 
     try {
-      // Discover distinct encounters and partitions in the current tier
+      // Discover distinct encounters, partitions, and metrics in the current tier
       const encounterIds: number[] = await Ranking.distinct("encounter.id", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
       const partitions: number[] = await Ranking.distinct("partition", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
+
 
       logger.info(`[Leaderboard] Found ${encounterIds.length} encounters, ${partitions.length} partitions`);
 
@@ -650,10 +836,10 @@ class CharacterService {
 
       const entries: any[] = [];
 
-      // ── Boss leaderboards (per encounter × per partition) ──────────
+      // ── Boss leaderboards (per encounter × per partition × per metric) ─
       for (const encId of encounterIds) {
         for (const part of partitions) {
-          // Group by wclCanonicalCharacterId to keep only the best spec per character
+          // Group by (wclCanonicalCharacterId, metric) to keep only the best spec per character per metric
           const rows = await Ranking.aggregate([
             {
               $match: {
@@ -667,7 +853,7 @@ class CharacterService {
             { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
             {
               $group: {
-                _id: "$wclCanonicalCharacterId",
+                _id: { char: "$wclCanonicalCharacterId", metric: "$metric" },
                 characterId: { $first: "$characterId" },
                 wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
                 name: { $first: "$name" },
@@ -677,6 +863,7 @@ class CharacterService {
                 specName: { $first: "$specName" },
                 bestSpecName: { $first: "$bestSpecName" },
                 role: { $first: "$role" },
+                metric: { $first: "$metric" },
                 ilvl: { $first: "$ilvl" },
                 bestAmount: { $first: "$bestAmount" },
                 encounterName: { $first: "$encounter.name" },
@@ -697,6 +884,7 @@ class CharacterService {
               type: "boss",
               encounterId: encId,
               partition: part,
+              metric: r.metric ?? "dps",
               characterId: r.characterId,
               wclCanonicalCharacterId: r.wclCanonicalCharacterId,
               name: r.name,
@@ -725,13 +913,13 @@ class CharacterService {
           }
         }
 
-        // Boss + all partitions (best per character across partitions)
+        // Boss + all partitions (best per character per metric across partitions)
         const bestPerChar = await Ranking.aggregate([
           { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, "encounter.id": encId } },
           { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
           {
             $group: {
-              _id: "$wclCanonicalCharacterId",
+              _id: { char: "$wclCanonicalCharacterId", metric: "$metric" },
               characterId: { $first: "$characterId" },
               wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
               name: { $first: "$name" },
@@ -741,6 +929,7 @@ class CharacterService {
               specName: { $first: "$specName" },
               bestSpecName: { $first: "$bestSpecName" },
               role: { $first: "$role" },
+              metric: { $first: "$metric" },
               ilvl: { $first: "$ilvl" },
               bestAmount: { $first: "$bestAmount" },
               encounterName: { $first: "$encounter.name" },
@@ -763,6 +952,7 @@ class CharacterService {
             type: "boss",
             encounterId: encId,
             partition: null,
+            metric: r.metric ?? "dps",
             characterId: r.characterId,
             wclCanonicalCharacterId: r.wclCanonicalCharacterId,
             name: r.name,
@@ -791,14 +981,14 @@ class CharacterService {
         }
       }
 
-      // ── AllStars leaderboards (per partition) ──────────────────────
+      // ── AllStars leaderboards (per partition × per metric) ────────────
       for (const part of partitions) {
         const allStarsAgg = await Ranking.aggregate([
           { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, partition: part } },
           { $sort: { "allStars.points": -1 } },
           {
             $group: {
-              _id: { characterId: "$characterId", encounterId: "$encounter.id" },
+              _id: { characterId: "$characterId", encounterId: "$encounter.id", metric: "$metric" },
               characterId: { $first: "$characterId" },
               wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
               name: { $first: "$name" },
@@ -807,6 +997,7 @@ class CharacterService {
               classID: { $first: "$classID" },
               specName: { $first: "$specName" },
               role: { $first: "$role" },
+              metric: { $first: "$metric" },
               points: { $first: "$allStars.points" },
               possiblePoints: { $first: "$allStars.possiblePoints" },
               ilvl: { $first: "$ilvl" },
@@ -817,7 +1008,7 @@ class CharacterService {
           },
           {
             $group: {
-              _id: "$_id.characterId",
+              _id: { characterId: "$_id.characterId", metric: "$_id.metric" },
               characterId: { $first: "$characterId" },
               wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
               name: { $first: "$name" },
@@ -826,6 +1017,7 @@ class CharacterService {
               classID: { $first: "$classID" },
               specName: { $first: "$specName" },
               role: { $first: "$role" },
+              metric: { $first: "$metric" },
               points: { $sum: "$points" },
               possiblePoints: { $sum: "$possiblePoints" },
               ilvl: { $first: "$ilvl" },
@@ -853,6 +1045,7 @@ class CharacterService {
             type: "allstars",
             encounterId: null,
             partition: part,
+            metric: r.metric ?? "dps",
             characterId: r.characterId,
             wclCanonicalCharacterId: r.wclCanonicalCharacterId,
             name: r.name,
@@ -881,13 +1074,13 @@ class CharacterService {
         }
       }
 
-      // ── AllStars + all partitions (best per boss across partitions) ─
+      // ── AllStars + all partitions (best per boss per metric across partitions) ─
       const allStarsAllPartitions = await Ranking.aggregate([
         { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY } },
         { $sort: { "allStars.points": -1, partition: -1 } },
         {
           $group: {
-            _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id" },
+            _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id", metric: "$metric" },
             characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
@@ -896,6 +1089,7 @@ class CharacterService {
             classID: { $first: "$classID" },
             specName: { $first: "$specName" },
             role: { $first: "$role" },
+            metric: { $first: "$metric" },
             points: { $first: "$allStars.points" },
             possiblePoints: { $first: "$allStars.possiblePoints" },
             ilvl: { $first: "$ilvl" },
@@ -906,7 +1100,7 @@ class CharacterService {
         },
         {
           $group: {
-            _id: "$_id.wclCanonicalCharacterId",
+            _id: { wclCanonicalCharacterId: "$_id.wclCanonicalCharacterId", metric: "$_id.metric" },
             characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
@@ -915,6 +1109,7 @@ class CharacterService {
             classID: { $first: "$classID" },
             specName: { $first: "$specName" },
             role: { $first: "$role" },
+            metric: { $first: "$metric" },
             points: { $sum: "$points" },
             possiblePoints: { $sum: "$possiblePoints" },
             ilvl: { $first: "$ilvl" },
@@ -942,6 +1137,7 @@ class CharacterService {
           type: "allstars",
           encounterId: null,
           partition: null,
+          metric: r.metric ?? "dps",
           characterId: r.characterId,
           wclCanonicalCharacterId: r.wclCanonicalCharacterId,
           name: r.name,
@@ -1002,13 +1198,14 @@ class CharacterService {
     classId?: number;
     specName?: string;
     role?: "dps" | "healer" | "tank";
+    metric?: "dps" | "hps";
     partition?: number;
     limit?: number;
     page?: number;
     characterName?: string;
     guildName?: string;
   }): Promise<CharacterRankingsResponse> {
-    const { zoneId, encounterId, classId, specName, role, partition, limit = 100, page = 1, characterName, guildName } = options;
+    const { zoneId, encounterId, classId, specName, role, metric = "dps", partition, limit = 100, page = 1, characterName, guildName } = options;
 
     const MYTHIC_DIFFICULTY = 5;
     const normalizedSpecName = specName?.trim().toLowerCase();
@@ -1028,6 +1225,7 @@ class CharacterService {
       type: encounterId !== undefined ? "boss" : "allstars",
       encounterId: encounterId ?? null,
       partition: partition ?? null,
+      metric,
     };
 
     // ── Optional filters ─────────────────────────────────────────────
@@ -1103,6 +1301,7 @@ class CharacterService {
         context: {
           zoneId: e.zoneId,
           difficulty: e.difficulty,
+          metric: e.metric ?? "dps",
           partition: e.sourcePartition || e.partition,
           encounterId: e.encounterId,
           specName: e.specName,
