@@ -12,6 +12,6 @@ export const ROLE_BY_CLASS_AND_SPEC: Record<number, Record<string, Role>> = {
   9: { elemental: "dps", enhancement: "dps", restoration: "healer" },
   10: { affliction: "dps", demonology: "dps", destruction: "dps" },
   11: { arms: "dps", fury: "dps", protection: "tank" },
-  12: { havoc: "dps", vengeance: "tank" },
+  12: { havoc: "dps", vengeance: "tank", devourer: "dps" },
   13: { devastation: "dps", augmentation: "dps", preservation: "healer" },
 };
