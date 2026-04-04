@@ -1,5 +1,6 @@
 import Guild, { IGuild, IGuildCrest } from "../models/Guild";
 import TierList, { IGuildTierScore, IRaidTierList } from "../models/TierList";
+import Fight from "../models/Fight";
 import { TRACKED_RAIDS } from "../config/guilds";
 import logger from "../utils/logger";
 
@@ -59,6 +60,22 @@ class TierListService {
         return;
       }
 
+      // Find which guilds have WarcraftLogs fight data per raid
+      // Efficiency scores depend on fight data, so exclude guilds without any
+      const fightAgg = await Fight.aggregate([{ $match: { zoneId: { $in: TRACKED_RAIDS } } }, { $group: { _id: { guildId: "$guildId", zoneId: "$zoneId" } } }]);
+
+      const guildsWithFights = new Map<number, Set<string>>();
+      for (const doc of fightAgg) {
+        const raidId = doc._id.zoneId as number;
+        const guildId = doc._id.guildId.toString() as string;
+        if (!guildsWithFights.has(raidId)) {
+          guildsWithFights.set(raidId, new Set());
+        }
+        guildsWithFights.get(raidId)!.add(guildId);
+      }
+
+      logger.info(`[TierList] Found WarcraftLogs fight data for ${guildsWithFights.size} raids`);
+
       // Collect raid data for all guilds
       const guildRaidDataMap = new Map<string, GuildRaidData[]>();
 
@@ -72,6 +89,13 @@ class TierListService {
 
           // Skip if no progress for this raid
           if (!heroicProgress && !mythicProgress) continue;
+
+          // Skip if guild has no WarcraftLogs fight data for this raid
+          // Efficiency scores depend entirely on WCL data (time spent, pulls)
+          if (!guildsWithFights.get(raidId)?.has(guildId)) {
+            logger.debug(`[TierList] Skipping guild ${guild.name} for raid ${raidId} - no WCL fight data`);
+            continue;
+          }
 
           const raidName = heroicProgress?.raidName || mythicProgress?.raidName || `Raid ${raidId}`;
 
