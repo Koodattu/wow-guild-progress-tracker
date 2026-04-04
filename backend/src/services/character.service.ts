@@ -159,10 +159,6 @@ export type CharacterRankingsResponse = {
     currentPage: number;
     pageSize: number;
   };
-  jumpTo?: {
-    rank: number;
-    wclCanonicalCharacterId: number;
-  };
 };
 
 class CharacterService {
@@ -1020,7 +1016,6 @@ class CharacterService {
     const normalizedCharacterName = characterName?.trim();
     const normalizedGuildName = guildName?.trim();
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const exactNameRegex = normalizedCharacterName ? new RegExp(`^${escapeRegex(normalizedCharacterName)}$`, "i") : undefined;
     const partialNameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
     const partialGuildNameRegex = normalizedGuildName ? new RegExp(escapeRegex(normalizedGuildName), "i") : undefined;
 
@@ -1043,41 +1038,18 @@ class CharacterService {
     // Total ranked items (before any name filter)
     const totalRankedItems = await CharacterLeaderboard.countDocuments(baseQuery);
 
-    let jumpTo: { rank: number; wclCanonicalCharacterId: number } | undefined;
     let effectiveSkip: number;
     let effectivePage: number;
     let totalItems: number;
     let fetchQuery: any = { ...baseQuery };
     let needsGlobalRanks = false;
 
-    if (exactNameRegex) {
-      // Try exact match → jump to character's page
-      const exactMatch = await CharacterLeaderboard.findOne({ ...baseQuery, name: exactNameRegex })
-        .select("score wclCanonicalCharacterId")
-        .lean();
-
-      if (exactMatch) {
-        const higherCount = await CharacterLeaderboard.countDocuments({
-          ...baseQuery,
-          score: { $gt: exactMatch.score },
-        });
-        const rank = higherCount + 1;
-        effectivePage = Math.ceil(rank / safeLimit) || 1;
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-        totalItems = totalRankedItems;
-        jumpTo = { rank, wclCanonicalCharacterId: exactMatch.wclCanonicalCharacterId };
-      } else if (partialNameRegex) {
-        // No exact match → fall back to partial name filter
-        fetchQuery = { ...baseQuery, name: partialNameRegex };
-        totalItems = await CharacterLeaderboard.countDocuments(fetchQuery);
-        effectivePage = Math.max(page, 1);
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-        needsGlobalRanks = true;
-      } else {
-        totalItems = totalRankedItems;
-        effectivePage = Math.max(page, 1);
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-      }
+    if (partialNameRegex) {
+      fetchQuery = { ...baseQuery, name: partialNameRegex };
+      totalItems = await CharacterLeaderboard.countDocuments(fetchQuery);
+      effectivePage = Math.max(page, 1);
+      effectiveSkip = (effectivePage - 1) * safeLimit;
+      needsGlobalRanks = true;
     } else {
       totalItems = totalRankedItems;
       effectivePage = Math.max(page, 1);
@@ -1089,12 +1061,6 @@ class CharacterService {
       fetchQuery.guildName = partialGuildNameRegex;
       totalItems = await CharacterLeaderboard.countDocuments(fetchQuery);
       needsGlobalRanks = true;
-      // Invalidate jump-to when guild filter is active (page set changed)
-      if (jumpTo) {
-        jumpTo = undefined;
-        effectivePage = Math.max(page, 1);
-        effectiveSkip = (effectivePage - 1) * safeLimit;
-      }
     }
 
     // ── Fetch the page ───────────────────────────────────────────────
@@ -1190,7 +1156,6 @@ class CharacterService {
         currentPage: effectivePage,
         pageSize: safeLimit,
       },
-      jumpTo,
     };
   }
 }

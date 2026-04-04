@@ -1416,3 +1416,42 @@ export interface TaskLogsLatestResponse {
   tasks: TaskLogEntry[];
   stats: TaskLogStats;
 }
+
+// ============================================================
+// ADMIN REPORT MANAGEMENT TYPES
+// ============================================================
+
+export interface AdminReportFightsByDifficulty {
+  [difficulty: string]: { total: number; kills: number };
+}
+
+export interface AdminReport {
+  id: string;
+  code: string;
+  startTime: number;
+  endTime?: number;
+  fightCount: number;
+  fightsByDifficulty: AdminReportFightsByDifficulty;
+  createdAt: string;
+  lastProcessed: string;
+}
+
+export interface AdminReportRaidGroup {
+  zoneId: number;
+  raidName: string;
+  reports: AdminReport[];
+}
+
+export interface AdminGuildReportsResponse {
+  guildName: string;
+  guildId: string;
+  raids: AdminReportRaidGroup[];
+  totalReports: number;
+}
+
+export interface AdminDeleteReportResponse {
+  success: boolean;
+  message: string;
+  deletedFights: number;
+  reportCode: string;
+}

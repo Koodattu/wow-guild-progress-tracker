@@ -612,6 +612,143 @@ router.get("/guilds/:guildId/verify-reports", async (req: Request, res: Response
   }
 });
 
+// Get all reports for a guild, grouped by raid tier with fight counts
+router.get("/guilds/:guildId/reports", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId).lean();
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Fetch reports and raid metadata in parallel
+    const [reports, raids] = await Promise.all([
+      Report.find({ guildId: guild._id }).lean(),
+      Raid.find({}).lean(),
+    ]);
+
+    const raidMap = new Map(raids.map((r) => [r.id, r.name]));
+
+    // Aggregate fight counts by reportCode and difficulty in one query
+    const fightAggregation = await Fight.aggregate([
+      { $match: { guildId: guild._id } },
+      {
+        $group: {
+          _id: { reportCode: "$reportCode", difficulty: "$difficulty" },
+          total: { $sum: 1 },
+          kills: { $sum: { $cond: ["$isKill", 1, 0] } },
+        },
+      },
+    ]);
+
+    // Build a lookup: reportCode -> { difficulty -> { total, kills } }
+    const fightsByReport = new Map<string, Map<number, { total: number; kills: number }>>();
+    for (const entry of fightAggregation) {
+      const code = entry._id.reportCode;
+      const diff = entry._id.difficulty;
+      if (!fightsByReport.has(code)) {
+        fightsByReport.set(code, new Map());
+      }
+      fightsByReport.get(code)!.set(diff, { total: entry.total, kills: entry.kills });
+    }
+
+    // Group reports by zoneId
+    const groupedByZone = new Map<number, typeof reports>();
+    for (const report of reports) {
+      if (!groupedByZone.has(report.zoneId)) {
+        groupedByZone.set(report.zoneId, []);
+      }
+      groupedByZone.get(report.zoneId)!.push(report);
+    }
+
+    // Build response
+    const raidGroups = Array.from(groupedByZone.entries()).map(([zoneId, zoneReports]) => {
+      // Sort by startTime descending (newest first)
+      zoneReports.sort((a, b) => b.startTime - a.startTime);
+
+      const enrichedReports = zoneReports.map((report) => {
+        const diffMap = fightsByReport.get(report.code);
+        const fightsByDifficulty: Record<string, { total: number; kills: number }> = {};
+        let fightCount = 0;
+
+        if (diffMap) {
+          for (const [diff, counts] of diffMap.entries()) {
+            fightsByDifficulty[String(diff)] = counts;
+            fightCount += counts.total;
+          }
+        }
+
+        return {
+          id: report._id.toString(),
+          code: report.code,
+          startTime: report.startTime,
+          endTime: report.endTime,
+          fightCount,
+          fightsByDifficulty,
+          createdAt: report.createdAt,
+          lastProcessed: report.lastProcessed,
+        };
+      });
+
+      return {
+        zoneId,
+        raidName: raidMap.get(zoneId) || `Unknown Raid (${zoneId})`,
+        reports: enrichedReports,
+      };
+    });
+
+    res.json({
+      guildName: guild.name,
+      guildId: guild._id.toString(),
+      raids: raidGroups,
+      totalReports: reports.length,
+    });
+  } catch (error) {
+    logger.error("Error fetching guild reports:", error);
+    res.status(500).json({ error: "Failed to fetch guild reports" });
+  }
+});
+
+// Delete a single report and all associated fights
+router.delete("/guilds/:guildId/reports/:reportId", async (req: Request, res: Response) => {
+  try {
+    const { guildId, reportId } = req.params;
+
+    const guild = await Guild.findById(guildId).lean();
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const report = await Report.findOne({ _id: reportId, guildId: guild._id });
+    if (!report) {
+      return res.status(404).json({ error: "Report not found for this guild" });
+    }
+
+    // Delete all fights for this report, then the report itself
+    const fightDeleteResult = await Fight.deleteMany({
+      reportCode: report.code,
+      guildId: report.guildId,
+    });
+
+    await Report.deleteOne({ _id: report._id });
+
+    logger.info(
+      `Deleted report ${report.code} and ${fightDeleteResult.deletedCount} fights for guild ${guild.name}`,
+    );
+
+    res.json({
+      success: true,
+      message: `Report ${report.code} deleted with ${fightDeleteResult.deletedCount} fights`,
+      deletedFights: fightDeleteResult.deletedCount,
+      reportCode: report.code,
+    });
+  } catch (error) {
+    logger.error("Error deleting report:", error);
+    res.status(500).json({ error: "Failed to delete report" });
+  }
+});
+
 // Create a new guild
 router.post("/guilds", async (req: Request, res: Response) => {
   try {

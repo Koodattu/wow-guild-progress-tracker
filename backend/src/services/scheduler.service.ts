@@ -143,7 +143,7 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM European time)
+    // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM Finnish time)
     // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
     cron.schedule(
       "0 4 * * *",
@@ -153,22 +153,6 @@ class UpdateScheduler {
           return;
         }
         await this.updateAllGuildsWorldRanks();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Update all guild crests (at 4 AM Finnish time)
-    // Guild crests can be changed by guilds or sometimes fail to fetch initially
-    cron.schedule(
-      "0 4 * * *",
-      async () => {
-        if (this.isUpdatingGuildCrests) {
-          logger.info("[Nightly/GuildCrests] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.updateAllGuildCrests();
       },
       {
         timezone: "Europe/Helsinki",
@@ -191,74 +175,11 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Refresh character rankings (at 7 AM Finnish time)
-    // Updates zone rankings and encounter rankings for eligible tracked characters
-    cron.schedule(
-      "0 7 * * *",
-      async () => {
-        if (this.isUpdatingCharacterRankings) {
-          logger.info("[Nightly/CharacterRankings] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.refreshCharacterRankings();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Calculate tier lists (at 5 AM Finnish time, after all other nightly jobs)
-    // This ensures tier lists are calculated with the most up-to-date data
+    // NIGHTLY: Update Raider.IO-only guilds (at 5 AM Finnish time)
+    // Fetches raid progress from Raider.IO for guilds not found on WarcraftLogs
+    // Runs before tier lists and analytics so RIO guild data is included in calculations
     cron.schedule(
       "0 5 * * *",
-      async () => {
-        if (this.isUpdatingTierLists) {
-          logger.info("[Nightly/TierLists] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.calculateTierLists();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Calculate raid analytics (at 6 AM Finnish time, after tier lists)
-    // Provides aggregated statistics across all guilds for each raid
-    cron.schedule(
-      "0 6 * * *",
-      async () => {
-        if (this.isUpdatingRaidAnalytics) {
-          logger.info("[Nightly/RaidAnalytics] Previous update still in progress, skipping...");
-          return;
-        }
-        await this.calculateRaidAnalytics();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Check for hiatus events (at 8 AM Finnish time, after all other nightly jobs)
-    // Detects guilds that have stopped raiding for 7, 14, or 30 days
-    cron.schedule(
-      "0 8 * * *",
-      async () => {
-        if (this.isCheckingHiatus) {
-          logger.info("[Nightly/Hiatus] Previous check still in progress, skipping...");
-          return;
-        }
-        await this.checkHiatusEvents();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Update Raider.IO-only guilds (at 9 AM Finnish time)
-    // Fetches raid progress from Raider.IO for guilds not found on WarcraftLogs
-    cron.schedule(
-      "0 9 * * *",
       async () => {
         if (this.isUpdatingRaiderIOGuilds) {
           logger.info("[Nightly/RaiderIO] Previous update still in progress, skipping...");
@@ -271,10 +192,92 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Full cache warmup at 02:00 UTC (before all other nightly jobs)
-    // This ensures caches are fresh at the start of each day
+    // NIGHTLY: Calculate tier lists (at 6 AM Finnish time)
+    // Runs after world ranks + RIO updates so tier lists use all fresh data
     cron.schedule(
-      "0 2 * * *",
+      "0 6 * * *",
+      async () => {
+        if (this.isUpdatingTierLists) {
+          logger.info("[Nightly/TierLists] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.calculateTierLists();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Calculate raid analytics (at 7 AM Finnish time, after tier lists)
+    // Provides aggregated statistics across all guilds for each raid
+    cron.schedule(
+      "0 7 * * *",
+      async () => {
+        if (this.isUpdatingRaidAnalytics) {
+          logger.info("[Nightly/RaidAnalytics] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.calculateRaidAnalytics();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Refresh character rankings (at 8 AM Finnish time)
+    // Updates zone rankings and encounter rankings for eligible tracked characters
+    // Independent of guild data - does not affect guild rankings or tier lists
+    cron.schedule(
+      "0 8 * * *",
+      async () => {
+        if (this.isUpdatingCharacterRankings) {
+          logger.info("[Nightly/CharacterRankings] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.refreshCharacterRankings();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Update all guild crests (at 8 AM Finnish time)
+    // Guild crests can be changed by guilds or sometimes fail to fetch initially
+    // Independent of other data - safe to run in parallel with character rankings
+    cron.schedule(
+      "0 8 * * *",
+      async () => {
+        if (this.isUpdatingGuildCrests) {
+          logger.info("[Nightly/GuildCrests] Previous update still in progress, skipping...");
+          return;
+        }
+        await this.updateAllGuildCrests();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Check for hiatus events (at 9 AM Finnish time)
+    // Detects guilds that have stopped raiding for 7, 14, or 30 days
+    cron.schedule(
+      "0 9 * * *",
+      async () => {
+        if (this.isCheckingHiatus) {
+          logger.info("[Nightly/Hiatus] Previous check still in progress, skipping...");
+          return;
+        }
+        await this.checkHiatusEvents();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Full cache warmup at 11:00 Finnish time (after all other nightly jobs)
+    // Runs last to ensure all caches are warmed with the freshest data
+    cron.schedule(
+      "0 11 * * *",
       async () => {
         const taskId = await taskTracker.start("Nightly Cache Warmup");
         logger.info("[Nightly/CacheWarmup] Starting full cache warm-up...");
@@ -288,7 +291,7 @@ class UpdateScheduler {
         }
       },
       {
-        timezone: "UTC",
+        timezone: "Europe/Helsinki",
       },
     );
 
@@ -301,16 +304,16 @@ class UpdateScheduler {
     logger.info("    * Active guilds: every 60 minutes");
     logger.info("    * Inactive guilds: once daily at 10:00");
     logger.info("    * Twitch streams: all marked offline");
-    logger.info("  - Nightly jobs:");
-    logger.info("    * Character rankings refresh: daily at 07:00");
-    logger.info("    * Full cache warmup: daily at 02:00 UTC");
+    logger.info("  - Nightly jobs (Europe/Helsinki):");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
-    logger.info("    * Guild crests update: daily at 04:00");
-    logger.info("    * Tier lists calculation: daily at 05:00");
-    logger.info("    * Raid analytics calculation: daily at 06:00");
-    logger.info("    * Hiatus event check: daily at 08:00");
-    logger.info("    * Raider.IO guilds update: daily at 09:00");
+    logger.info("    * Raider.IO guilds update: daily at 05:00");
+    logger.info("    * Tier lists calculation: daily at 06:00");
+    logger.info("    * Raid analytics calculation: daily at 07:00");
+    logger.info("    * Character rankings refresh: daily at 08:00");
+    logger.info("    * Guild crests update: daily at 08:00");
+    logger.info("    * Hiatus event check: daily at 09:00");
+    logger.info("    * Full cache warmup: daily at 11:00");
 
     // Do an initial update based on current time
     if (this.isHotHours()) {

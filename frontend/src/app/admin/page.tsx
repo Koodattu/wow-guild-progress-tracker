@@ -30,6 +30,8 @@ import {
   queueGuildRescanDeaths,
   queueGuildRescanCharacters,
   verifyGuildReports,
+  getAdminGuildReports,
+  deleteAdminReport,
   getAdminRaids,
 } from "@/lib/api";
 import {
@@ -65,6 +67,8 @@ import {
   AdminRaidOption,
   TaskLogEntry,
   TaskLogStats,
+  AdminGuildReportsResponse,
+  AdminReportRaidGroup,
 } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system" | "tasks";
@@ -191,6 +195,13 @@ export default function AdminPage() {
   const [showGuildDetail, setShowGuildDetail] = useState(false);
   const [guildDetailLoading, setGuildDetailLoading] = useState(false);
   const [verifyResult, setVerifyResult] = useState<VerifyReportsResponse | null>(null);
+
+  // Report management modal
+  const [showReportManagement, setShowReportManagement] = useState(false);
+  const [guildReports, setGuildReports] = useState<AdminGuildReportsResponse | null>(null);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+  const [reportDeleteConfirm, setReportDeleteConfirm] = useState<{ id: string; code: string; fightCount: number } | null>(null);
 
   // Add Guild modal
   const [showAddGuildModal, setShowAddGuildModal] = useState(false);
@@ -529,6 +540,46 @@ export default function AdminPage() {
       setVerifyResult(result);
     } catch (error) {
       console.error("Failed to verify reports:", error);
+    }
+  };
+
+  // Handler for opening report management modal
+  const handleManageReports = async (guildId: string) => {
+    setReportsLoading(true);
+    setShowReportManagement(true);
+    setGuildReports(null);
+    setReportDeleteConfirm(null);
+    try {
+      const data = await getAdminGuildReports(guildId);
+      setGuildReports(data);
+    } catch (error) {
+      console.error("Failed to fetch guild reports:", error);
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  // Handler for deleting a report
+  const handleDeleteReport = async (guildId: string, reportId: string) => {
+    setDeletingReportId(reportId);
+    try {
+      const result = await deleteAdminReport(guildId, reportId);
+      setTriggerMessage({ type: "success", text: result.message });
+      // Refresh the reports list
+      const data = await getAdminGuildReports(guildId);
+      setGuildReports(data);
+      // Also refresh the guild detail to update counts
+      const detail = await getAdminGuildDetail(guildId);
+      setSelectedGuild(detail);
+      setReportDeleteConfirm(null);
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to delete report",
+      });
+    } finally {
+      setDeletingReportId(null);
     }
   };
 
@@ -3271,6 +3322,9 @@ export default function AdminPage() {
                         <button onClick={() => handleVerifyReports(selectedGuild.id)} className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700">
                           Verify Reports
                         </button>
+                        <button onClick={() => handleManageReports(selectedGuild.id)} className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700">
+                          Manage Reports
+                        </button>
                         <button onClick={() => handleQueueRescan(selectedGuild.id, selectedGuild.name)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                           {selectedGuild.wclStatus === "not_found" ? "Rescan via Raider.IO" : "Queue Full Rescan"}
                         </button>
@@ -3342,6 +3396,164 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div className="text-center py-8 text-red-400">Failed to load guild details</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Report Management Modal */}
+        {showReportManagement && selectedGuild && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60 p-4">
+            <div className="bg-gray-800 rounded-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-700 sticky top-0 bg-gray-800 z-10">
+                <h2 className="text-xl font-bold text-white">
+                  Reports — {selectedGuild.name}
+                  {guildReports && <span className="ml-2 text-gray-400 text-base font-normal">({guildReports.totalReports} total)</span>}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowReportManagement(false);
+                    setGuildReports(null);
+                    setReportDeleteConfirm(null);
+                  }}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-4">
+                {reportsLoading ? (
+                  <div className="text-center py-8 text-gray-400">Loading reports...</div>
+                ) : guildReports ? (
+                  guildReports.raids.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">No reports found for this guild.</div>
+                  ) : (
+                    <div className="space-y-6">
+                      {guildReports.raids.map((raidGroup) => (
+                        <div key={raidGroup.zoneId} className="border border-gray-700 rounded-lg overflow-hidden">
+                          {/* Raid Header */}
+                          <div className="bg-gray-700 px-4 py-3 flex items-center justify-between">
+                            <h3 className="text-white font-semibold">{raidGroup.raidName}</h3>
+                            <span className="text-gray-400 text-sm">{raidGroup.reports.length} reports</span>
+                          </div>
+
+                          {/* Reports Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-gray-700/50 text-gray-400 text-left">
+                                  <th className="px-4 py-2">Report Code</th>
+                                  <th className="px-4 py-2">Date</th>
+                                  <th className="px-4 py-2 text-center">Fights</th>
+                                  <th className="px-4 py-2 text-center">Normal</th>
+                                  <th className="px-4 py-2 text-center">Heroic</th>
+                                  <th className="px-4 py-2 text-center">Mythic</th>
+                                  <th className="px-4 py-2 text-right">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {raidGroup.reports.map((report) => {
+                                  const normalFights = report.fightsByDifficulty["3"];
+                                  const heroicFights = report.fightsByDifficulty["4"];
+                                  const mythicFights = report.fightsByDifficulty["5"];
+                                  const reportDate = new Date(report.startTime).toLocaleDateString("en-GB", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  });
+                                  const isConfirming = reportDeleteConfirm?.id === report.id;
+                                  const isDeleting = deletingReportId === report.id;
+
+                                  return (
+                                    <tr key={report.id} className="border-t border-gray-700 hover:bg-gray-700/30">
+                                      <td className="px-4 py-2">
+                                        <a
+                                          href={`https://www.warcraftlogs.com/reports/${report.code}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-amber-400 hover:text-amber-300 underline"
+                                        >
+                                          {report.code}
+                                        </a>
+                                      </td>
+                                      <td className="px-4 py-2 text-gray-300">{reportDate}</td>
+                                      <td className="px-4 py-2 text-center text-white">{report.fightCount}</td>
+                                      <td className="px-4 py-2 text-center">
+                                        {normalFights ? (
+                                          <span className="text-green-400">
+                                            {normalFights.kills}/{normalFights.total}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-600">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2 text-center">
+                                        {heroicFights ? (
+                                          <span className="text-blue-400">
+                                            {heroicFights.kills}/{heroicFights.total}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-600">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2 text-center">
+                                        {mythicFights ? (
+                                          <span className="text-purple-400">
+                                            {mythicFights.kills}/{mythicFights.total}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-600">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2 text-right">
+                                        {isConfirming ? (
+                                          <div className="flex items-center justify-end gap-2">
+                                            <span className="text-red-400 text-xs">Delete {report.fightCount} fights?</span>
+                                            <button
+                                              onClick={() => handleDeleteReport(selectedGuild.id, report.id)}
+                                              disabled={isDeleting}
+                                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:opacity-50"
+                                            >
+                                              {isDeleting ? "..." : "Yes"}
+                                            </button>
+                                            <button
+                                              onClick={() => setReportDeleteConfirm(null)}
+                                              className="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-500"
+                                            >
+                                              No
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            onClick={() =>
+                                              setReportDeleteConfirm({
+                                                id: report.id,
+                                                code: report.code,
+                                                fightCount: report.fightCount,
+                                              })
+                                            }
+                                            className="px-2 py-1 bg-red-900/50 text-red-400 text-xs rounded hover:bg-red-900 hover:text-red-300"
+                                          >
+                                            Delete
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="text-center py-8 text-red-400">Failed to load reports.</div>
                 )}
               </div>
             </div>

@@ -25,10 +25,6 @@ interface RankingTableWrapperProps {
     currentPage: number;
     pageSize: number;
   };
-  jumpTo?: {
-    rank: number;
-    wclCanonicalCharacterId: number;
-  } | null;
   onFiltersChange?: (filters: {
     encounterId?: number;
     classId?: number | null;
@@ -528,7 +524,7 @@ function RoleSelector({ selectedRole, allRolesLabel, onChange }: RoleSelectorPro
   );
 }
 
-export function RankingTableWrapper({ data, bosses, partitionOptions = [], showPartitionSelector = true, loading = false, error = null, pagination, jumpTo, onFiltersChange }: RankingTableWrapperProps) {
+export function RankingTableWrapper({ data, bosses, partitionOptions = [], showPartitionSelector = true, loading = false, error = null, pagination, onFiltersChange }: RankingTableWrapperProps) {
   const t = useTranslations("characterRankingsPage");
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
@@ -537,30 +533,11 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
   const [searchValue, setSearchValue] = useState("");
   const [guildSearchValue, setGuildSearchValue] = useState("");
   const [selectedRole, setSelectedRole] = useState<"dps" | "healer" | "tank" | null>(null);
-  const [highlightedCharacterId, setHighlightedCharacterId] = useState<number | null>(null);
   const searchInitializedRef = useRef(false);
   const guildSearchInitializedRef = useRef(false);
   const searchDebounceRef = useRef<number | null>(null);
   const guildSearchDebounceRef = useRef<number | null>(null);
-  const jumpClearRef = useRef(false);
   const applyFiltersRef = useRef<(overrides?: Partial<RankingFilters>) => void>(() => undefined);
-
-  // When a jumpTo response arrives, clear the search input and highlight the character
-  useEffect(() => {
-    if (jumpTo) {
-      setHighlightedCharacterId(jumpTo.wclCanonicalCharacterId);
-      // Clear search without triggering the debounced search effect
-      jumpClearRef.current = true;
-      setSearchValue("");
-    } else {
-      setHighlightedCharacterId(null);
-    }
-  }, [jumpTo]);
-
-  // Clear highlight when user interacts (pagination, filter changes)
-  const clearHighlight = useCallback(() => {
-    setHighlightedCharacterId(null);
-  }, []);
 
   const applyFilters = useCallback(
     (overrides: Partial<RankingFilters> = {}) => {
@@ -586,12 +563,6 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
   useEffect(() => {
     if (!searchInitializedRef.current) {
       searchInitializedRef.current = true;
-      return;
-    }
-
-    // Skip debounce when search was cleared by a jump-to response
-    if (jumpClearRef.current) {
-      jumpClearRef.current = false;
       return;
     }
 
@@ -701,7 +672,6 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
       window.clearTimeout(guildSearchDebounceRef.current);
       guildSearchDebounceRef.current = null;
     }
-    clearHighlight();
     applyFilters({ page });
   };
 
@@ -718,12 +688,6 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
       t,
     });
   }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, selectedRole, t]);
-
-  // Find the index of the highlighted character in the current page data
-  const highlightIndex = useMemo(() => {
-    if (!highlightedCharacterId) return -1;
-    return data.findIndex((r) => r.character.wclCanonicalCharacterId === highlightedCharacterId);
-  }, [data, highlightedCharacterId]);
 
   const title = selectedBoss ? `${t("titleForBoss")} ${selectedBoss.name}` : t("titleAllStars");
 
@@ -811,7 +775,6 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
         pagination={pagination}
         onPageChange={handlePageChange}
         getRank={(row: CharacterRankingRow) => row.rank}
-        highlightIndex={highlightIndex}
         expandedContent={!selectedBoss && bosses.length > 0 ? (row: CharacterRankingRow) => <MobileBossScores row={row} bosses={bosses} selectedSpec={selectedSpec} /> : undefined}
       />
     </div>

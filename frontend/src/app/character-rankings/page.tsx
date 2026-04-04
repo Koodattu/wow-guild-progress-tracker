@@ -55,7 +55,6 @@ export default function CharacterRankingsPage() {
     currentPage: 1,
     pageSize: 100,
   };
-  const jumpTo = rankingsData?.jumpTo ?? null;
   const loading = optionsLoading || rankingsLoading;
   const error = optionsError?.message ?? rankingsError?.message ?? null;
 
@@ -110,7 +109,6 @@ export default function CharacterRankingsPage() {
         loading={loading}
         error={error}
         pagination={pagination}
-        jumpTo={jumpTo}
         onFiltersChange={(newFilters) => {
           setFilters((prev) => ({ ...prev, ...newFilters }));
         }}

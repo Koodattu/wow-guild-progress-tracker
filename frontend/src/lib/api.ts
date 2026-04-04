@@ -77,6 +77,8 @@ import {
   DeleteCharacterResponse,
   UserPickemEntry,
   AdminRaidOption,
+  AdminGuildReportsResponse,
+  AdminDeleteReportResponse,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -801,10 +803,6 @@ export const api = {
       currentPage: number;
       pageSize: number;
     };
-    jumpTo?: {
-      rank: number;
-      wclCanonicalCharacterId: number;
-    };
   }> {
     const response = await fetch(`${API_URL}/api/character-rankings${queryString}`);
     if (!response.ok) {
@@ -1261,5 +1259,25 @@ export async function verifyGuildReports(guildId: string): Promise<VerifyReports
     credentials: "include",
   });
   if (!response.ok) throw new Error("Failed to verify guild reports");
+  return response.json();
+}
+
+export async function getAdminGuildReports(guildId: string): Promise<AdminGuildReportsResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/reports`, {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to fetch guild reports");
+  return response.json();
+}
+
+export async function deleteAdminReport(guildId: string, reportId: string): Promise<AdminDeleteReportResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/reports/${reportId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to delete report");
+  }
   return response.json();
 }
