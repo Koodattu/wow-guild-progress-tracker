@@ -1230,8 +1230,90 @@ class CharacterService {
 
     // ── Optional filters ─────────────────────────────────────────────
     if (classId !== undefined) baseQuery.classID = classId;
-    if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
     if (normalizedRole !== undefined) baseQuery.role = normalizedRole;
+
+    // ── AllStars + spec filter: special in-memory path ───────────────
+    // The leaderboard stores one entry per character (best spec per boss in bossScores).
+    // Filtering by specName on the top-level field is unreliable because specName is
+    // chosen by $first (arbitrary). Instead, find entries where bossScores contains a
+    // non-zero score for the requested spec, filter bossScores in memory, and recompute
+    // the spec-specific allStars total.
+    if (encounterId === undefined && normalizedSpecName !== undefined) {
+      const specQuery = {
+        ...baseQuery,
+        bossScores: { $elemMatch: { specName: normalizedSpecName, points: { $gt: 0 } } },
+      };
+
+      const allSpecEntries = await CharacterLeaderboard.find(specQuery).lean() as any[];
+
+      for (const e of allSpecEntries) {
+        e.bossScores = (e.bossScores ?? []).filter((bs: any) => bs.specName === normalizedSpecName && bs.points > 0);
+        e.allStarsPoints = e.bossScores.reduce((sum: number, bs: any) => sum + (bs.points ?? 0), 0);
+        e.score = e.allStarsPoints;
+      }
+
+      allSpecEntries.sort((a: any, b: any) => b.score - a.score || (a.name ?? "").localeCompare(b.name ?? ""));
+
+      let displayEntries = allSpecEntries;
+      if (partialNameRegex) displayEntries = displayEntries.filter((e: any) => partialNameRegex.test(e.name ?? ""));
+      if (partialGuildNameRegex) displayEntries = displayEntries.filter((e: any) => partialGuildNameRegex!.test(e.guildName ?? ""));
+
+      const specTotalRanked = allSpecEntries.length;
+      const specTotalItems = displayEntries.length;
+      const specPage = Math.max(page, 1);
+      const specSkip = (specPage - 1) * safeLimit;
+      const pageEntries = displayEntries.slice(specSkip, specSkip + safeLimit);
+
+      const rankMap = new Map(allSpecEntries.map((e: any, i: number) => [e, i + 1]));
+
+      const data: CharacterRankingRow[] = pageEntries.map((e: any) => {
+        const guild = e.guildName && e.guildRealm ? { name: e.guildName, realm: e.guildRealm } : null;
+        const row: CharacterRankingRow = {
+          rank: rankMap.get(e) ?? 0,
+          character: {
+            wclCanonicalCharacterId: e.wclCanonicalCharacterId,
+            name: e.name,
+            realm: e.realm,
+            region: e.region,
+            classID: e.classID,
+            guild,
+          },
+          context: {
+            zoneId: e.zoneId,
+            difficulty: e.difficulty,
+            metric: e.metric ?? "dps",
+            partition: e.sourcePartition || e.partition,
+            encounterId: null,
+            specName: normalizedSpecName,
+            role: e.role,
+            ilvl: e.ilvl,
+          },
+          score: { type: "allStars", value: e.score },
+          stats: {
+            allStars: { points: e.allStarsPoints, possiblePoints: e.allStarsPossiblePoints },
+            rankPercent: e.rankPercent,
+            medianPercent: e.medianPercent,
+          },
+          updatedAt: e.updatedAt ? new Date(e.updatedAt).toISOString() : undefined,
+        };
+        if (e.bossScores?.length > 0) (row as any).bossScores = e.bossScores;
+        return row;
+      });
+
+      return {
+        data,
+        pagination: {
+          totalItems: specTotalItems,
+          totalRankedItems: specTotalRanked,
+          totalPages: Math.ceil(specTotalItems / safeLimit),
+          currentPage: specPage,
+          pageSize: safeLimit,
+        },
+      };
+    }
+
+    // Boss leaderboard or allStars without spec filter — use stored specName directly
+    if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
 
     // Total ranked items (before any name filter)
     const totalRankedItems = await CharacterLeaderboard.countDocuments(baseQuery);

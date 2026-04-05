@@ -704,13 +704,13 @@ class BackgroundGuildProcessor {
       await queueItem.updateProgress(0, 0, 0, totalFights);
 
       let fightsProcessed = 0;
-      let totalCharactersSaved = 0;
+      const seenCanonicalIDs = new Set<string>();
 
       for (const fight of mythicKills) {
         // Check rate limit before each API call
         if (!rateLimitService.canProceedBackground()) {
           guildLog.info(`[CharacterRescan] Rate limit threshold reached, pausing...`);
-          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed);
+          await queueItem.updateProgress(fightsProcessed, seenCanonicalIDs.size, fightsProcessed);
           await queueItem.pause();
           await rateLimitService.waitForReset();
           await queueItem.resume();
@@ -719,7 +719,7 @@ class BackgroundGuildProcessor {
 
         if (this.isPaused) {
           guildLog.info(`[CharacterRescan] Manually paused at fight ${fightsProcessed}/${totalFights}`);
-          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed);
+          await queueItem.updateProgress(fightsProcessed, seenCanonicalIDs.size, fightsProcessed);
           await queueItem.pause();
           return;
         }
@@ -740,11 +740,11 @@ class BackgroundGuildProcessor {
               guildName,
               guildRealm,
             });
+            seenCanonicalIDs.add(char.canonicalID);
           }
 
-          totalCharactersSaved += rankedChars.length;
           fightsProcessed++;
-          await queueItem.updateProgress(fightsProcessed, totalCharactersSaved, fightsProcessed, totalFights);
+          await queueItem.updateProgress(fightsProcessed, seenCanonicalIDs.size, fightsProcessed, totalFights);
 
           // Delay between API calls
           await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
@@ -757,7 +757,7 @@ class BackgroundGuildProcessor {
       }
 
       await queueItem.markCompleted();
-      guildLog.info(`[CharacterRescan] Completed: ${fightsProcessed} fights processed, ${totalCharactersSaved} characters saved`);
+      guildLog.info(`[CharacterRescan] Completed: ${fightsProcessed} fights processed, ${seenCanonicalIDs.size} unique characters saved`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       guildLog.error(`[CharacterRescan] Fatal error: ${errorMessage}`);

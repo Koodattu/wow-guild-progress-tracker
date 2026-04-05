@@ -747,7 +747,7 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
           </div>
 
           {/* Metric Selector */}
-          <div className="min-w-[100px]">
+          <div className="min-w-[120px]">
             <MetricSelector selectedMetric={selectedMetric} onChange={handleMetricChange} />
           </div>
 
