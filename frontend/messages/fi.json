@@ -555,7 +555,6 @@
     "placeholderAllBosses": "Kaikki pomot",
     "placeholderAllPatches": "Kaikki päivitykset",
     "allClasses": "Kaikki luokat",
-    "allRoles": "Kaikki roolit",
     "searchPlaceholder": "Hae hahmoa",
     "searchGuildPlaceholder": "Hae kiltaa",
     "columnRank": "Sija",
@@ -563,6 +562,7 @@
     "columnGuild": "Kilta",
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
+    "columnHps": "HPS",
     "columnScore": "Pisteet"
   }
 }

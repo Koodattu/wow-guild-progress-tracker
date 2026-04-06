@@ -42,6 +42,7 @@ export interface ICharacterLeaderboard extends Document {
   specName: string;
   bestSpecName: string;
   role: "dps" | "healer" | "tank";
+  metric: "dps" | "hps";
   ilvl: number;
 
   // Primary sort key
@@ -98,6 +99,7 @@ const CharacterLeaderboardSchema: Schema = new Schema(
     specName: { type: String, required: true },
     bestSpecName: { type: String, default: "" },
     role: { type: String, enum: ["dps", "healer", "tank"], required: true },
+    metric: { type: String, enum: ["dps", "hps"], required: true, default: "dps", index: true },
     ilvl: { type: Number, default: 0 },
 
     score: { type: Number, required: true },
@@ -124,7 +126,7 @@ const CharacterLeaderboardSchema: Schema = new Schema(
 );
 
 // ── Unique constraint ──────────────────────────────────────────────
-CharacterLeaderboardSchema.index({ zoneId: 1, difficulty: 1, type: 1, encounterId: 1, partition: 1, wclCanonicalCharacterId: 1 }, { unique: true });
+CharacterLeaderboardSchema.index({ zoneId: 1, difficulty: 1, type: 1, encounterId: 1, partition: 1, metric: 1, wclCanonicalCharacterId: 1 }, { unique: true });
 
 // ── Primary leaderboard query (no optional filters) ────────────────
 CharacterLeaderboardSchema.index({
@@ -133,6 +135,7 @@ CharacterLeaderboardSchema.index({
   type: 1,
   encounterId: 1,
   partition: 1,
+  metric: 1,
   score: -1,
 });
 

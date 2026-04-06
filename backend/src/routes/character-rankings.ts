@@ -9,6 +9,7 @@ import cacheService from "../services/cache.service";
 const router = Router();
 
 const ALLOWED_ROLES = new Set(["dps", "healer", "tank"] as const);
+const ALLOWED_METRICS = new Set(["dps", "hps"] as const);
 const MYTHIC_DIFFICULTY = 5;
 
 const parseNumberQuery = (value: unknown): number | undefined => {
@@ -134,6 +135,9 @@ router.get("/", async (req: Request, res: Response) => {
     const roleRaw = parseStringQuery(req.query.role)?.toLowerCase();
     const role = roleRaw as "dps" | "healer" | "tank" | undefined;
 
+    const metricRaw = parseStringQuery(req.query.metric)?.toLowerCase() ?? "dps";
+    const metric = metricRaw as "dps" | "hps";
+
     if (encounterId !== undefined && !Number.isFinite(encounterId)) {
       return res.status(400).json({ error: "Invalid encounterId" });
     }
@@ -152,6 +156,9 @@ router.get("/", async (req: Request, res: Response) => {
     if (role !== undefined && !ALLOWED_ROLES.has(role)) {
       return res.status(400).json({ error: "Invalid role" });
     }
+    if (!ALLOWED_METRICS.has(metric)) {
+      return res.status(400).json({ error: "Invalid metric" });
+    }
     if (characterName !== undefined && characterName.length > 64) {
       return res.status(400).json({ error: "Invalid characterName" });
     }
@@ -165,6 +172,7 @@ router.get("/", async (req: Request, res: Response) => {
       classId,
       specName,
       role,
+      metric,
       partition,
       page,
       limit,
