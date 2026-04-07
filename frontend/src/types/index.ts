@@ -1221,6 +1221,7 @@ export interface AdminRaidOption {
   id: number;
   name: string;
   isCurrent: boolean;
+  partitions: { id: number; name: string }[];
 }
 
 // Detailed Guild Info for Admin
@@ -1382,6 +1383,31 @@ export interface DeleteCharacterResponse {
       realm: string;
     };
     rankings: number;
+  };
+}
+
+export interface DeleteCharacterRankingsPreviewResponse {
+  raid: { id: number; name: string };
+  partition: { id: number; name: string };
+  willBeDeleted: {
+    rankings: number;
+    leaderboardEntries: number;
+    leaderboardAllPartitionsEntries: number;
+  };
+  totalDocuments: number;
+  warning: string;
+}
+
+export interface DeleteCharacterRankingsResponse {
+  success: boolean;
+  message: string;
+  deleted: {
+    raid: { id: number; name: string };
+    partition: { id: number; name: string };
+    rankings: number;
+    leaderboardEntries: number;
+    leaderboardAllPartitionsEntries: number;
+    total: number;
   };
 }
 

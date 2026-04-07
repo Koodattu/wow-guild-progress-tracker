@@ -75,6 +75,8 @@ import {
   UpdateGuildInput,
   UpdateGuildResponse,
   DeleteCharacterResponse,
+  DeleteCharacterRankingsPreviewResponse,
+  DeleteCharacterRankingsResponse,
   UserPickemEntry,
   AdminRaidOption,
   AdminGuildReportsResponse,
@@ -602,6 +604,27 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to delete character");
+    }
+    return response.json();
+  },
+
+  async getAdminCharacterRankingsDeletePreview(zoneId: number, partition: number): Promise<DeleteCharacterRankingsPreviewResponse> {
+    const response = await fetch(`${API_URL}/api/admin/character-rankings/delete-preview?zoneId=${zoneId}&partition=${partition}`, { credentials: "include" });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to fetch deletion preview");
+    }
+    return response.json();
+  },
+
+  async deleteAdminCharacterRankings(zoneId: number, partition: number): Promise<DeleteCharacterRankingsResponse> {
+    const response = await fetch(`${API_URL}/api/admin/character-rankings?zoneId=${zoneId}&partition=${partition}&confirm=true`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete character rankings");
     }
     return response.json();
   },

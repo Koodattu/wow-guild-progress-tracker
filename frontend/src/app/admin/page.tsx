@@ -65,6 +65,7 @@ import {
   AdminCharacter,
   AdminCharacterStats,
   AdminRaidOption,
+  DeleteCharacterRankingsPreviewResponse,
   TaskLogEntry,
   TaskLogStats,
   AdminGuildReportsResponse,
@@ -229,6 +230,13 @@ export default function AdminPage() {
   const [deleteGuildPreview, setDeleteGuildPreview] = useState<DeleteGuildPreviewResponse | null>(null);
   const [deleteGuildLoading, setDeleteGuildLoading] = useState(false);
   const [guildToDelete, setGuildToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  // Delete Character Rankings
+  const [deleteRankingsRaidId, setDeleteRankingsRaidId] = useState<string>("");
+  const [deleteRankingsPartition, setDeleteRankingsPartition] = useState<string>("");
+  const [deleteRankingsPreview, setDeleteRankingsPreview] = useState<DeleteCharacterRankingsPreviewResponse | null>(null);
+  const [deleteRankingsLoading, setDeleteRankingsLoading] = useState(false);
+  const [showDeleteRankingsConfirm, setShowDeleteRankingsConfirm] = useState(false);
 
   // Pickem form state
   const [pickemForm, setPickemForm] = useState({
@@ -1442,6 +1450,154 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* Delete Rankings by Raid & Partition */}
+            <div className="bg-gray-800 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <span>🗑️</span> Delete Rankings by Raid &amp; Partition
+              </h3>
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Raid</label>
+                  <select
+                    value={deleteRankingsRaidId}
+                    onChange={(e) => {
+                      setDeleteRankingsRaidId(e.target.value);
+                      setDeleteRankingsPartition("");
+                      setDeleteRankingsPreview(null);
+                      setShowDeleteRankingsConfirm(false);
+                    }}
+                    className="bg-gray-700 text-white rounded-lg px-3 py-2 min-w-60"
+                  >
+                    <option value="">Select raid...</option>
+                    {adminRaids.map((raid) => (
+                      <option key={raid.id} value={raid.id}>
+                        {raid.name} {raid.isCurrent ? "(Current)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Partition</label>
+                  <select
+                    value={deleteRankingsPartition}
+                    onChange={(e) => {
+                      setDeleteRankingsPartition(e.target.value);
+                      setDeleteRankingsPreview(null);
+                      setShowDeleteRankingsConfirm(false);
+                    }}
+                    disabled={!deleteRankingsRaidId}
+                    className="bg-gray-700 text-white rounded-lg px-3 py-2 min-w-[200px] disabled:opacity-50"
+                  >
+                    <option value="">Select partition...</option>
+                    {deleteRankingsRaidId &&
+                      adminRaids
+                        .find((r) => r.id === Number(deleteRankingsRaidId))
+                        ?.partitions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                  </select>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!deleteRankingsRaidId || !deleteRankingsPartition) return;
+                    setDeleteRankingsLoading(true);
+                    try {
+                      const preview = await api.getAdminCharacterRankingsDeletePreview(Number(deleteRankingsRaidId), Number(deleteRankingsPartition));
+                      setDeleteRankingsPreview(preview);
+                      setShowDeleteRankingsConfirm(false);
+                    } catch (error) {
+                      setTriggerMessage({
+                        type: "error",
+                        text: error instanceof Error ? error.message : "Failed to load preview",
+                      });
+                    } finally {
+                      setDeleteRankingsLoading(false);
+                    }
+                  }}
+                  disabled={!deleteRankingsRaidId || !deleteRankingsPartition || deleteRankingsLoading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {deleteRankingsLoading ? "Loading..." : "Preview"}
+                </button>
+              </div>
+
+              {/* Preview Results */}
+              {deleteRankingsPreview && (
+                <div className="mt-4 bg-gray-900 rounded-lg p-4">
+                  <h4 className="text-white font-medium mb-3">
+                    {deleteRankingsPreview.raid.name} — {deleteRankingsPreview.partition.name}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <div className="bg-gray-800 rounded p-3">
+                      <span className="text-gray-400 text-sm">Raw Rankings</span>
+                      <p className="text-xl font-bold text-red-400">{deleteRankingsPreview.willBeDeleted.rankings.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-800 rounded p-3">
+                      <span className="text-gray-400 text-sm">Leaderboard (Partition)</span>
+                      <p className="text-xl font-bold text-red-400">{deleteRankingsPreview.willBeDeleted.leaderboardEntries.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-800 rounded p-3">
+                      <span className="text-gray-400 text-sm">Leaderboard (All Partitions)</span>
+                      <p className="text-xl font-bold text-amber-400">{deleteRankingsPreview.willBeDeleted.leaderboardAllPartitionsEntries.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Total: <span className="text-white font-bold">{deleteRankingsPreview.totalDocuments.toLocaleString()}</span> documents will be deleted. All-partitions
+                    leaderboard entries will be rebuilt on next nightly cycle.
+                  </p>
+
+                  {!showDeleteRankingsConfirm ? (
+                    <button
+                      onClick={() => setShowDeleteRankingsConfirm(true)}
+                      disabled={deleteRankingsPreview.totalDocuments === 0}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      Delete Rankings
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="text-red-400 font-medium">Are you sure?</span>
+                      <button
+                        onClick={async () => {
+                          setDeleteRankingsLoading(true);
+                          try {
+                            const result = await api.deleteAdminCharacterRankings(Number(deleteRankingsRaidId), Number(deleteRankingsPartition));
+                            setTriggerMessage({ type: "success", text: result.message });
+                            setDeleteRankingsPreview(null);
+                            setShowDeleteRankingsConfirm(false);
+                            setDeleteRankingsRaidId("");
+                            setDeleteRankingsPartition("");
+                            // Refresh character stats
+                            const charStatsData = await api.getAdminCharacterStats();
+                            setCharacterStats(charStatsData);
+                          } catch (error) {
+                            setTriggerMessage({
+                              type: "error",
+                              text: error instanceof Error ? error.message : "Failed to delete rankings",
+                            });
+                          } finally {
+                            setDeleteRankingsLoading(false);
+                          }
+                        }}
+                        disabled={deleteRankingsLoading}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                      >
+                        {deleteRankingsLoading ? "Deleting..." : "Yes, Delete"}
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteRankingsConfirm(false)}
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Search + Refresh Rankings Button */}
             <div className="flex items-center gap-3 mb-4">
@@ -3520,10 +3676,7 @@ export default function AdminPage() {
                                             >
                                               {isDeleting ? "..." : "Yes"}
                                             </button>
-                                            <button
-                                              onClick={() => setReportDeleteConfirm(null)}
-                                              className="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-500"
-                                            >
+                                            <button onClick={() => setReportDeleteConfirm(null)} className="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-500">
                                               No
                                             </button>
                                           </div>

@@ -2696,7 +2696,9 @@ class GuildService {
       // Clear existing progress for this raid/difficulty if it exists
       const existingProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
       if (existingProgress && (existingProgress.bossesDefeated > 0 || existingProgress.bosses.length > 0)) {
-        guildLog.info(`Clearing stale ${difficulty} progress for ${raidData.name} (had ${existingProgress.bossesDefeated} defeated, ${existingProgress.bosses.length} bosses tracked)`);
+        guildLog.info(
+          `Clearing stale ${difficulty} progress for ${raidData.name} (had ${existingProgress.bossesDefeated} defeated, ${existingProgress.bosses.length} bosses tracked)`,
+        );
         existingProgress.bosses = [];
         existingProgress.bossesDefeated = 0;
         existingProgress.totalTimeSpent = 0;
@@ -3636,10 +3638,11 @@ class GuildService {
         },
       },
       // Stage 4: Add sort rank field (mythic rank preferred, then heroic)
+      // Heroic-only guilds get a large offset so they always sort below all mythic-progressed guilds
       {
         $addFields: {
           sortRank: {
-            $ifNull: ["$mythicProgress.guildRank", { $ifNull: ["$heroicProgress.guildRank", 999] }],
+            $ifNull: ["$mythicProgress.guildRank", { $ifNull: [{ $add: ["$heroicProgress.guildRank", 10000] }, 99999] }],
           },
         },
       },

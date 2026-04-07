@@ -9,6 +9,7 @@ import TierList from "../models/TierList";
 import Raid from "../models/Raid";
 import Character from "../models/Character";
 import Ranking from "../models/Ranking";
+import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import Pickem from "../models/Pickem";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import { CLASSES } from "../config/classes";
@@ -623,10 +624,7 @@ router.get("/guilds/:guildId/reports", async (req: Request, res: Response) => {
     }
 
     // Fetch reports and raid metadata in parallel
-    const [reports, raids] = await Promise.all([
-      Report.find({ guildId: guild._id }).lean(),
-      Raid.find({}).lean(),
-    ]);
+    const [reports, raids] = await Promise.all([Report.find({ guildId: guild._id }).lean(), Raid.find({}).lean()]);
 
     const raidMap = new Map(raids.map((r) => [r.id, r.name]));
 
@@ -733,9 +731,7 @@ router.delete("/guilds/:guildId/reports/:reportId", async (req: Request, res: Re
 
     await Report.deleteOne({ _id: report._id });
 
-    logger.info(
-      `Deleted report ${report.code} and ${fightDeleteResult.deletedCount} fights for guild ${guild.name}`,
-    );
+    logger.info(`Deleted report ${report.code} and ${fightDeleteResult.deletedCount} fights for guild ${guild.name}`);
 
     res.json({
       success: true,
@@ -1878,7 +1874,7 @@ router.get("/raids", async (req: Request, res: Response) => {
   try {
     const { TRACKED_RAIDS, CURRENT_RAID_IDS } = await import("../config/guilds");
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
-      .select("id name slug expansion")
+      .select("id name slug expansion partitions")
       .sort({ id: -1 })
       .lean();
 
@@ -1887,6 +1883,10 @@ router.get("/raids", async (req: Request, res: Response) => {
         id: r.id,
         name: r.name,
         isCurrent: CURRENT_RAID_IDS.includes(r.id),
+        partitions: (r.partitions || []).map((p: { id: number; name: string }) => ({
+          id: p.id,
+          name: p.name,
+        })),
       })),
     });
   } catch (error) {
@@ -2282,6 +2282,105 @@ router.delete("/characters/:characterId", async (req: Request, res: Response) =>
   } catch (error) {
     logger.error("Error deleting character:", error);
     res.status(500).json({ error: "Failed to delete character" });
+  }
+});
+
+// ============================================================
+// CHARACTER RANKINGS MANAGEMENT
+// ============================================================
+
+// Preview character rankings deletion for a specific raid and partition
+router.get("/character-rankings/delete-preview", async (req: Request, res: Response) => {
+  try {
+    const zoneId = parseInt(req.query.zoneId as string);
+    const partition = parseInt(req.query.partition as string);
+
+    if (!zoneId || !partition || isNaN(zoneId) || isNaN(partition)) {
+      return res.status(400).json({ error: "Valid zoneId and partition are required" });
+    }
+
+    const raid = await Raid.findOne({ id: zoneId }).select("name partitions").lean();
+    if (!raid) {
+      return res.status(404).json({ error: "Raid not found" });
+    }
+
+    const partitionInfo = raid.partitions?.find((p: { id: number; name: string }) => p.id === partition);
+
+    const [rankingsCount, leaderboardPartitionCount, leaderboardAllPartitionsCount] = await Promise.all([
+      Ranking.countDocuments({ zoneId, partition }),
+      CharacterLeaderboard.countDocuments({ zoneId, partition }),
+      CharacterLeaderboard.countDocuments({ zoneId, partition: null }),
+    ]);
+
+    res.json({
+      raid: { id: zoneId, name: raid.name },
+      partition: { id: partition, name: partitionInfo?.name || `Partition ${partition}` },
+      willBeDeleted: {
+        rankings: rankingsCount,
+        leaderboardEntries: leaderboardPartitionCount,
+        leaderboardAllPartitionsEntries: leaderboardAllPartitionsCount,
+      },
+      totalDocuments: rankingsCount + leaderboardPartitionCount + leaderboardAllPartitionsCount,
+      warning:
+        "This will delete all character rankings and leaderboard entries for this raid and partition. The 'all partitions' leaderboard entries will also be removed and rebuilt on next nightly cycle.",
+    });
+  } catch (error) {
+    logger.error("Error fetching character rankings delete preview:", error);
+    res.status(500).json({ error: "Failed to fetch deletion preview" });
+  }
+});
+
+// Delete character rankings for a specific raid and partition
+router.delete("/character-rankings", async (req: Request, res: Response) => {
+  try {
+    const zoneId = parseInt(req.query.zoneId as string);
+    const partition = parseInt(req.query.partition as string);
+    const confirm = req.query.confirm === "true";
+
+    if (!zoneId || !partition || isNaN(zoneId) || isNaN(partition)) {
+      return res.status(400).json({ error: "Valid zoneId and partition are required" });
+    }
+
+    if (!confirm) {
+      return res.status(400).json({ error: "Confirmation required. Add ?confirm=true to proceed." });
+    }
+
+    const raid = await Raid.findOne({ id: zoneId }).select("name partitions").lean();
+    if (!raid) {
+      return res.status(404).json({ error: "Raid not found" });
+    }
+
+    const partitionInfo = raid.partitions?.find((p: { id: number; name: string }) => p.id === partition);
+
+    const [rankingsResult, leaderboardPartitionResult, leaderboardAllPartitionsResult] = await Promise.all([
+      Ranking.deleteMany({ zoneId, partition }),
+      CharacterLeaderboard.deleteMany({ zoneId, partition }),
+      CharacterLeaderboard.deleteMany({ zoneId, partition: null }),
+    ]);
+
+    const totalDeleted = rankingsResult.deletedCount + leaderboardPartitionResult.deletedCount + leaderboardAllPartitionsResult.deletedCount;
+
+    logger.info(
+      `Admin deleted character rankings for ${raid.name} partition ${partitionInfo?.name || partition}. ` +
+        `Removed: ${rankingsResult.deletedCount} rankings, ${leaderboardPartitionResult.deletedCount} leaderboard entries, ` +
+        `${leaderboardAllPartitionsResult.deletedCount} all-partitions leaderboard entries`,
+    );
+
+    res.json({
+      success: true,
+      message: `Deleted ${totalDeleted} documents for ${raid.name} - ${partitionInfo?.name || `Partition ${partition}`}`,
+      deleted: {
+        raid: { id: zoneId, name: raid.name },
+        partition: { id: partition, name: partitionInfo?.name || `Partition ${partition}` },
+        rankings: rankingsResult.deletedCount,
+        leaderboardEntries: leaderboardPartitionResult.deletedCount,
+        leaderboardAllPartitionsEntries: leaderboardAllPartitionsResult.deletedCount,
+        total: totalDeleted,
+      },
+    });
+  } catch (error) {
+    logger.error("Error deleting character rankings:", error);
+    res.status(500).json({ error: "Failed to delete character rankings" });
   }
 });
 
