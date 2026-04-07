@@ -2693,6 +2693,16 @@ class GuildService {
 
     if (fights.length === 0) {
       guildLog.info(`No ${difficulty} fights found for ${raidData.name}`);
+      // Clear existing progress for this raid/difficulty if it exists
+      const existingProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
+      if (existingProgress && (existingProgress.bossesDefeated > 0 || existingProgress.bosses.length > 0)) {
+        guildLog.info(`Clearing stale ${difficulty} progress for ${raidData.name} (had ${existingProgress.bossesDefeated} defeated, ${existingProgress.bosses.length} bosses tracked)`);
+        existingProgress.bosses = [];
+        existingProgress.bossesDefeated = 0;
+        existingProgress.totalTimeSpent = 0;
+        existingProgress.lastUpdated = new Date();
+        guild.markModified("progress");
+      }
       return;
     }
 
@@ -2746,6 +2756,16 @@ class GuildService {
 
     if (filteredFights.length === 0) {
       guildLog.info(`No ${difficulty} fights remaining after date filtering for ${raidData.name}`);
+      // Clear existing progress for this raid/difficulty if it exists
+      const existingProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
+      if (existingProgress && (existingProgress.bossesDefeated > 0 || existingProgress.bosses.length > 0)) {
+        guildLog.info(`Clearing stale ${difficulty} progress for ${raidData.name} after date filtering`);
+        existingProgress.bosses = [];
+        existingProgress.bossesDefeated = 0;
+        existingProgress.totalTimeSpent = 0;
+        existingProgress.lastUpdated = new Date();
+        guild.markModified("progress");
+      }
       return;
     }
 
@@ -3037,6 +3057,27 @@ class GuildService {
         // New boss progress
         guildLog.info(`Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
         raidProgress.bosses.push(bossData);
+      }
+    }
+
+    // Reset bosses that exist in progress but have no fights in the current data
+    // This handles the case where reports/fights were deleted
+    for (const boss of raidProgress.bosses) {
+      if (validBossIds.has(boss.bossId) && !bossDataMap.has(boss.bossId)) {
+        guildLog.info(`Resetting stale boss progress: ${boss.bossName} (ID: ${boss.bossId}) - no ${difficulty} fights found`);
+        boss.kills = 0;
+        boss.bestPercent = 100;
+        boss.pullCount = 0;
+        boss.timeSpent = 0;
+        boss.pullHistory = [];
+        boss.firstKillTime = undefined;
+        boss.firstKillReportCode = undefined;
+        boss.firstKillFightId = undefined;
+        boss.killOrder = undefined;
+        boss.bestPullPhase = undefined;
+        boss.bestPullReportCode = undefined;
+        boss.bestPullFightId = undefined;
+        boss.lastUpdated = new Date();
       }
     }
 
