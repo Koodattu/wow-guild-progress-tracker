@@ -1385,6 +1385,21 @@ class GuildService {
         effectiveKills: number;
       }>;
 
+      // Clear stale guildRank for guilds that have a progress entry but didn't qualify
+      // (e.g. 0 effective kills). Without this, old ranks persist in the database.
+      const rankedGuildIds = new Set(guildProgressPairs.map((pair) => pair.guild._id.toString()));
+      const unrankedGuilds = guilds.filter((guild) => {
+        if (rankedGuildIds.has(guild._id.toString())) return false;
+        const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
+        return progress && progress.guildRank != null;
+      });
+      for (const guild of unrankedGuilds) {
+        const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty)!;
+        progress.guildRank = null as any;
+        await guild.save();
+        logger.info(`Cleared stale ${difficulty} guildRank for ${guild.name}`);
+      }
+
       if (guildProgressPairs.length === 0) {
         logger.info(`No guilds with progress for raid ${raidId} ${difficulty}, skipping ranking`);
         continue;
