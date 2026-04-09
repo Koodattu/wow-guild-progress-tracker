@@ -403,7 +403,7 @@ export default function RaidAnalyticsPage() {
       )}
 
       {/* All raids view */}
-      {!dataLoading && allAnalytics && allAnalytics.length > 0 && (
+      {!dataLoading && selectedRaidId === null && allAnalytics && allAnalytics.length > 0 && (
         <div className="space-y-4">
           <div className="text-sm text-gray-500">
             {t("showingOverallStatsForAllRaids")} ({allAnalytics.length} raids)
