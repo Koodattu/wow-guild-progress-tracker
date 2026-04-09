@@ -13,6 +13,12 @@ export function formatTime(seconds: number): string {
   return `${minutes}m`;
 }
 
+// Get Twitch stream thumbnail URL from channel name
+// Twitch provides thumbnails at: https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-{width}x{height}.jpg
+export function getTwitchThumbnailUrl(channelName: string, width: number = 440, height: number = 248): string {
+  return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${channelName.toLowerCase()}-${width}x${height}.jpg`;
+}
+
 // Get the full icon URL from filename
 export function getIconUrl(iconFilename: string | undefined): string | undefined {
   if (!iconFilename) return undefined;

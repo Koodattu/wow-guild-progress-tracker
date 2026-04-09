@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { LiveStreamer } from "@/types";
 import { useLiveStreamers } from "@/lib/queries";
-import { formatPhaseDisplay, formatPercent } from "@/lib/utils";
+import { formatPhaseDisplay, formatPercent, getTwitchThumbnailUrl } from "@/lib/utils";
 
 // Extend Window interface to include Twitch
 declare global {
@@ -11,6 +11,76 @@ declare global {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Twitch: any;
   }
+}
+
+interface StreamerCardProps {
+  streamer: LiveStreamer;
+  isSelected: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+  extraInfo?: React.ReactNode;
+}
+
+function StreamerCard({ streamer, isSelected, onToggle, disabled, extraInfo }: StreamerCardProps) {
+  return (
+    <button
+      onClick={onToggle}
+      onMouseDown={(e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
+        }
+      }}
+      className={`rounded-lg border-2 transition-all hover:scale-[1.02] cursor-pointer flex overflow-hidden ${
+        isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
+      }`}
+      disabled={disabled}
+    >
+      {/* Thumbnail */}
+      <div className="relative w-[100px] md:w-[120px] shrink-0 bg-gray-900">
+        <img src={getTwitchThumbnailUrl(streamer.channelName, 320, 180)} alt={streamer.channelName} className="w-full h-full object-cover" loading="lazy" />
+        <span className="absolute bottom-0.5 left-0.5 bg-red-600 text-white text-[9px] font-bold px-1 rounded uppercase leading-tight">Live</span>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center">
+        <div className="flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-3.5 md:w-3.5 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+          </svg>
+          <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap truncate">{streamer.channelName}</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-gray-400 truncate mt-0.5">
+          <span className="truncate">
+            {streamer.guild.parent_guild ? (
+              <>
+                <span className="font-bold">{streamer.guild.name}</span>
+                {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+              </>
+            ) : (
+              <>
+                <span className="font-bold">{streamer.guild.name}</span>
+                {`-${streamer.guild.realm}`}
+              </>
+            )}
+          </span>
+          {extraInfo}
+        </div>
+      </div>
+
+      {/* +/- button */}
+      <div className="flex items-center pr-2">
+        <div
+          className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold ${
+            isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
+          }`}
+        >
+          {isSelected ? "−" : "+"}
+        </div>
+      </div>
+    </button>
+  );
 }
 
 export default function LivestreamsPage() {
@@ -476,50 +546,14 @@ export default function LivestreamsPage() {
                   const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
                   return (
-                    <button
+                    <StreamerCard
                       key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
-                      onClick={() => toggleStreamer(streamer)}
-                      onMouseDown={(e) => {
-                        // Middle click to open in new tab
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
-                        }
-                      }}
-                      className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
-                        isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                      }`}
+                      streamer={streamer}
+                      isSelected={isSelected}
+                      onToggle={() => toggleStreamer(streamer)}
                       disabled={!isSelected && selectedStreamers.length >= 6}
-                    >
-                      <div className="flex items-center gap-1.5 md:gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
-                        </svg>
-                        <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                        <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
-                          {streamer.guild.parent_guild ? (
-                            <>
-                              <span className="font-bold">{streamer.guild.name}</span>
-                              {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-bold">{streamer.guild.name}</span>
-                              {`-${streamer.guild.realm}`}
-                            </>
-                          )}
-                        </span>
-                        {streamer.gameName && <span className="hidden md:inline text-xs text-blue-400 whitespace-nowrap">{streamer.gameName}</span>}
-                        <div
-                          className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
-                            isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
-                          }`}
-                        >
-                          {isSelected ? "−" : "+"}
-                        </div>
-                      </div>
-                    </button>
+                      extraInfo={streamer.gameName ? <span className="text-xs text-blue-400 whitespace-nowrap truncate">{streamer.gameName}</span> : undefined}
+                    />
                   );
                 })}
               </div>
@@ -539,57 +573,23 @@ export default function LivestreamsPage() {
                     const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
                     return (
-                      <button
+                      <StreamerCard
                         key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
-                        onClick={() => toggleStreamer(streamer)}
-                        onMouseDown={(e) => {
-                          // Middle click to open in new tab
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
-                          }
-                        }}
-                        className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
-                          isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                        }`}
+                        streamer={streamer}
+                        isSelected={isSelected}
+                        onToggle={() => toggleStreamer(streamer)}
                         disabled={!isSelected && selectedStreamers.length >= 6}
-                      >
-                        <div className="flex items-center gap-1.5 md:gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
-                          </svg>
-                          <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                          <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
-                            {streamer.guild.parent_guild ? (
-                              <>
-                                <span className="font-bold">{streamer.guild.name}</span>
-                                {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
-                              </>
-                            ) : (
-                              <>
-                                <span className="font-bold">{streamer.guild.name}</span>
-                                {`-${streamer.guild.realm}`}
-                              </>
-                            )}
-                          </span>
-                          {streamer.bestPull && (
-                            <span className="hidden md:inline text-xs text-orange-400 whitespace-nowrap">
+                        extraInfo={
+                          streamer.bestPull ? (
+                            <span className="text-xs text-orange-400 whitespace-nowrap truncate">
                               {streamer.bestPull.pullCount} pulls,{" "}
                               {streamer.bestPull.bestPullPhase?.displayString
                                 ? formatPhaseDisplay(streamer.bestPull.bestPullPhase.displayString)
                                 : formatPercent(streamer.bestPull.bestPercent)}
                             </span>
-                          )}
-                          <div
-                            className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
-                              isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
-                            }`}
-                          >
-                            {isSelected ? "−" : "+"}
-                          </div>
-                        </div>
-                      </button>
+                          ) : undefined
+                        }
+                      />
                     );
                   })}
                 </div>
@@ -605,49 +605,13 @@ export default function LivestreamsPage() {
                   const isSelected = selectedStreamers.some((s) => s.channelName === streamer.channelName);
 
                   return (
-                    <button
+                    <StreamerCard
                       key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
-                      onClick={() => toggleStreamer(streamer)}
-                      onMouseDown={(e) => {
-                        // Middle click to open in new tab
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          window.open(`https://www.twitch.tv/${streamer.channelName}`, "_blank");
-                        }
-                      }}
-                      className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer ${
-                        isSelected ? "bg-purple-600/20 border-purple-500" : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                      }`}
+                      streamer={streamer}
+                      isSelected={isSelected}
+                      onToggle={() => toggleStreamer(streamer)}
                       disabled={!isSelected && selectedStreamers.length >= 6}
-                    >
-                      <div className="flex items-center gap-1.5 md:gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-4 md:w-4 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
-                        </svg>
-                        <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap">{streamer.channelName}</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                        <span className="hidden md:inline text-xs text-gray-400 whitespace-nowrap">
-                          {streamer.guild.parent_guild ? (
-                            <>
-                              <span className="font-bold">{streamer.guild.name}</span>
-                              {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-bold">{streamer.guild.name}</span>
-                              {`-${streamer.guild.realm}`}
-                            </>
-                          )}
-                        </span>
-                        <div
-                          className={`shrink-0 w-5 h-5 md:w-6 md:h-6 rounded flex items-center justify-center text-base md:text-lg font-bold md:ml-2 ${
-                            isSelected ? "bg-purple-600 text-white" : "bg-gray-700 text-gray-400"
-                          }`}
-                        >
-                          {isSelected ? "−" : "+"}
-                        </div>
-                      </div>
-                    </button>
+                    />
                   );
                 })}
               </div>
