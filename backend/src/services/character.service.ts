@@ -337,8 +337,12 @@ class CharacterService {
         const remaining = MAX_WCL_REQUESTS_PER_RUN - processedCount;
         const batchSize = Math.min(BATCH_SIZE, remaining);
 
+        // Exclude already-processed characters so the query returns fresh ones
+        const batchFilter =
+          processedCharacterIds.size > 0 ? { ...eligibleFilter, _id: { $nin: Array.from(processedCharacterIds).map((id) => new mongoose.Types.ObjectId(id)) } } : eligibleFilter;
+
         const eligibleChars = await Character.aggregate([
-          { $match: eligibleFilter },
+          { $match: batchFilter },
           {
             $sort: {
               lastMythicSeenAt: -1,
@@ -596,9 +600,7 @@ class CharacterService {
             if (healerSpecSlugs.length > 0) {
               if (rateLimitService.getPercentUsed() >= RATE_LIMIT_PAUSE_PERCENT) {
                 const resetMs = rateLimitService.getTimeUntilReset();
-                logger.info(
-                  `[CharacterRankings] Rate limit at ${rateLimitService.getPercentUsed().toFixed(1)}%, pausing for ${Math.ceil(resetMs / 1000)}s before HPS query`,
-                );
+                logger.info(`[CharacterRankings] Rate limit at ${rateLimitService.getPercentUsed().toFixed(1)}%, pausing for ${Math.ceil(resetMs / 1000)}s before HPS query`);
                 await rateLimitService.waitForReset();
                 logger.info(`[CharacterRankings] Rate limit reset, resuming`);
               }
@@ -784,6 +786,10 @@ class CharacterService {
             await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (error) {
             logger.error(`[CharacterRankings] Error checking rankings for ${char.name} (${char.realm}):`, error);
+            // Set a short cooldown so errored characters don't block subsequent batches
+            await Character.findByIdAndUpdate(char._id, {
+              nextEligibleRefreshAt: new Date(Date.now() + 1 * 60 * 60 * 1000),
+            }).catch(() => {});
           }
         }
 
@@ -818,7 +824,6 @@ class CharacterService {
       // Discover distinct encounters, partitions, and metrics in the current tier
       const encounterIds: number[] = await Ranking.distinct("encounter.id", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
       const partitions: number[] = await Ranking.distinct("partition", { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY });
-
 
       logger.info(`[Leaderboard] Found ${encounterIds.length} encounters, ${partitions.length} partitions`);
 
@@ -1244,7 +1249,7 @@ class CharacterService {
         bossScores: { $elemMatch: { specName: normalizedSpecName, points: { $gt: 0 } } },
       };
 
-      const allSpecEntries = await CharacterLeaderboard.find(specQuery).lean() as any[];
+      const allSpecEntries = (await CharacterLeaderboard.find(specQuery).lean()) as any[];
 
       for (const e of allSpecEntries) {
         e.bossScores = (e.bossScores ?? []).filter((bs: any) => bs.specName === normalizedSpecName && bs.points > 0);
