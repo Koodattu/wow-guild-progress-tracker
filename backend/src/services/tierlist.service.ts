@@ -84,6 +84,9 @@ class TierListService {
         const raidDataList: GuildRaidData[] = [];
 
         for (const raidId of TRACKED_RAIDS) {
+          // Skip if guild is excluded from this raid tier
+          if (guild.excludedRaidIds?.includes(raidId)) continue;
+
           const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic");
           const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
 

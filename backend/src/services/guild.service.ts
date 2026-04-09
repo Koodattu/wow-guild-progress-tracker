@@ -1339,11 +1339,27 @@ class GuildService {
     logger.info(`Calculating guild rankings for raid ${raidId}...`);
 
     // Get all guilds (need documents to save, so no .lean())
-    const guilds = await Guild.find();
+    // Exclude guilds that have this raid in their excludedRaidIds
+    const guilds = await Guild.find({ excludedRaidIds: { $ne: raidId } });
 
     if (guilds.length === 0) {
       logger.info("No guilds found, skipping ranking calculation");
       return;
+    }
+
+    // Also clear guildRank for guilds excluded from this raid
+    const excludedGuilds = await Guild.find({ excludedRaidIds: raidId });
+    for (const guild of excludedGuilds) {
+      let needsSave = false;
+      for (const progress of guild.progress) {
+        if (progress.raidId === raidId && progress.guildRank != null) {
+          progress.guildRank = null as any;
+          needsSave = true;
+        }
+      }
+      if (needsSave) {
+        await guild.save();
+      }
     }
 
     // Look up raid slug for matching official progress from Raider.IO
@@ -3599,8 +3615,10 @@ class GuildService {
     // Use aggregation pipeline to filter, project, and sort at database level
     const guilds = await Guild.aggregate([
       // Stage 1: Match only guilds that have progress for this raid with at least 1 boss kill
+      // Also exclude guilds that have this raid in their excludedRaidIds
       {
         $match: {
+          excludedRaidIds: { $ne: raidId },
           progress: {
             $elemMatch: {
               raidId: raidId,

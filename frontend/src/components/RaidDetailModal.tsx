@@ -15,6 +15,7 @@ interface RaidDetailModalProps {
   selectedRaidId: number | null;
   raids: RaidInfo[];
   bosses: Boss[];
+  loading?: boolean;
 }
 
 // Sub-component that fetches and renders pull history charts when a boss is expanded.
@@ -65,7 +66,7 @@ function BossPullHistoryContent({
   );
 }
 
-export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses }: RaidDetailModalProps) {
+export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses, loading }: RaidDetailModalProps) {
   const [expandedBosses, setExpandedBosses] = useState<Set<string>>(new Set());
 
   const toggleBossExpanded = (bossId: number, difficulty: "mythic" | "heroic") => {
@@ -390,7 +391,31 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         </div>
 
         <div className="px-2 md:px-6 py-4 md:py-6">
-          {guild.progress.length > 0 && selectedRaidId ? (
+          {loading ? (
+            <div className="space-y-6">
+              {[0, 1].map((section) => (
+                <div key={section} className="animate-pulse">
+                  <div className="h-6 md:h-7 w-48 bg-gray-700 rounded mb-3 md:mb-4" />
+                  <div className="flex gap-4 md:gap-6 mb-3 md:mb-4">
+                    <div className="h-4 w-24 bg-gray-800 rounded" />
+                    <div className="h-4 w-20 bg-gray-800 rounded" />
+                  </div>
+                  <div className="space-y-2">
+                    {[0, 1, 2, 3, 4].map((row) => (
+                      <div key={row} className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 md:p-3">
+                        <div className="w-4 h-4 bg-gray-700 rounded" />
+                        <div className="w-7 h-7 md:w-8 md:h-8 bg-gray-700 rounded" />
+                        <div className="h-4 flex-1 bg-gray-700 rounded" />
+                        <div className="h-4 w-10 bg-gray-700 rounded" />
+                        <div className="h-4 w-10 bg-gray-700 rounded" />
+                        <div className="h-4 w-12 bg-gray-700 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : guild.progress.length > 0 && selectedRaidId ? (
             (() => {
               // Filter progress for only the selected raid
               const raidProgress = guild.progress.filter((p) => p.raidId === selectedRaidId);

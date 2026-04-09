@@ -1025,6 +1025,11 @@ class UpdateScheduler {
         }
       }
 
+      // Invalidate streamer caches so the next request reflects the updated statuses immediately.
+      // Without this, stale "live" data would persist in cache for up to 2 minutes after DB update.
+      await cacheService.invalidate(cacheService.getLiveStreamersKey());
+      await cacheService.invalidate(cacheService.getHomeKey());
+
       logger.info(`[Hot/Twitch] Completed stream status update`);
       await taskTracker.complete(taskId);
     } catch (error) {
@@ -1080,6 +1085,10 @@ class UpdateScheduler {
           },
         );
       }
+
+      // Invalidate streamer caches so clients immediately see all streams as offline.
+      await cacheService.invalidate(cacheService.getLiveStreamersKey());
+      await cacheService.invalidate(cacheService.getHomeKey());
 
       logger.info("[Off/Twitch] All streams marked as offline");
     } catch (error) {

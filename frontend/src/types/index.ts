@@ -1246,11 +1246,13 @@ export interface AdminGuildDetail {
   rioStatus?: "active" | "not_found" | "unknown";
   lastRioUpdate?: string;
   progress: Array<{
+    raidId: number;
     raidName: string;
     difficulty: string;
     bossesDefeated: number;
     totalBosses: number;
   }>;
+  excludedRaidIds: number[];
   reportCount: number;
   fightCount: number;
   queueStatus: {
@@ -1356,6 +1358,17 @@ export interface UpdateGuildInput {
   parent_guild?: string | null;
   streamers?: string[];
   activityStatus?: "active" | "inactive";
+}
+
+// Toggle Guild Raid Exclusion Response
+export interface ToggleGuildRaidExclusionResponse {
+  success: boolean;
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+  };
+  excludedRaidIds: number[];
 }
 
 // Update Guild Response

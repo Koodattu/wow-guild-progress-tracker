@@ -6,6 +6,7 @@ import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 import Raid from "../models/Raid";
 import Event from "../models/Event";
+import Guild from "../models/Guild";
 
 /**
  * Cache Warming Service
@@ -86,6 +87,23 @@ class CacheWarmerService {
         return;
       }
 
+      // Enrich events with live streamer data - must match what the home route handler produces.
+      const guildIds = [...new Set(events.map((e: any) => String(e.guildId)))];
+      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
+      const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
+      for (const g of eventGuilds) {
+        const liveStreamers = (g.streamers || []).filter((s: any) => s.isLive).map((s: any) => s.channelName);
+        guildMap.set(String(g._id), { realm: g.realm, liveStreamers });
+      }
+      const enrichedEvents = events.map((event: any) => {
+        const guildData = guildMap.get(String(event.guildId));
+        return {
+          ...event,
+          guildRealm: event.guildRealm || guildData?.realm,
+          liveStreamers: guildData?.liveStreamers || [],
+        };
+      });
+
       // guilds are already sorted by unified guildRank via the aggregation pipeline
 
       const response = {
@@ -101,7 +119,7 @@ class CacheWarmerService {
           ends: (raidDatesDoc as any)?.ends,
         },
         guilds: guilds,
-        events: events,
+        events: enrichedEvents,
       };
 
       await cacheService.set(cacheService.getHomeKey(), response, cacheService.CURRENT_RAID_TTL);

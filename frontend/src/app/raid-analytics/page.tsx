@@ -26,6 +26,25 @@ function formatDate(dateString: string): string {
   });
 }
 
+// If raidEnd is a placeholder (>1 year from raidStart), clamp weekly data to current week
+function clampWeeklyProgression(weeklyData: WeeklyProgressionEntry[], raidStart?: string, raidEnd?: string): WeeklyProgressionEntry[] {
+  if (!weeklyData || weeklyData.length === 0 || !raidStart || !raidEnd) return weeklyData;
+
+  const startDate = new Date(raidStart);
+  const endDate = new Date(raidEnd);
+  const oneYearFromStart = new Date(startDate);
+  oneYearFromStart.setFullYear(oneYearFromStart.getFullYear() + 1);
+
+  if (endDate <= oneYearFromStart) return weeklyData; // date looks real, no clamping
+
+  // Placeholder end date — cap at the week containing today
+  const now = new Date();
+  const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+  const weeksElapsed = Math.max(1, Math.floor((now.getTime() - startDate.getTime()) / MS_PER_WEEK) + 1);
+
+  return weeklyData.slice(0, weeksElapsed);
+}
+
 // Generate gradient colors for chart bars
 function getColor(index: number, total: number): string {
   const hue = 200 + (index / Math.max(total - 1, 1)) * 60; // Blue to cyan
@@ -151,16 +170,20 @@ function StatsSection({
   timeDistribution,
   weeklyProgression,
   progressionLabel,
+  raidStart,
+  raidEnd,
 }: {
   pullDistribution?: Distribution;
   timeDistribution?: Distribution;
   weeklyProgression?: WeeklyProgressionEntry[];
   progressionLabel: string;
+  raidStart?: string;
+  raidEnd?: string;
 }) {
   // Handle undefined or missing distribution data
   const safePullDistribution = pullDistribution?.buckets ?? [];
   const safeTimeDistribution = timeDistribution?.buckets ?? [];
-  const safeWeeklyProgression = weeklyProgression ?? [];
+  const safeWeeklyProgression = clampWeeklyProgression(weeklyProgression ?? [], raidStart, raidEnd);
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -310,6 +333,8 @@ export default function RaidAnalyticsPage() {
               timeDistribution={analytics.overall.timeDistribution}
               weeklyProgression={analytics.overall.weeklyProgression}
               progressionLabel={t("clearProgression")}
+              raidStart={analytics.raidStart}
+              raidEnd={analytics.raidEnd}
             />
           </div>
 
@@ -360,6 +385,8 @@ export default function RaidAnalyticsPage() {
                               timeDistribution={boss.timeDistribution}
                               weeklyProgression={boss.weeklyProgression}
                               progressionLabel={t("killProgression")}
+                              raidStart={analytics.raidStart}
+                              raidEnd={analytics.raidEnd}
                             />
                           </>
                         ) : (
@@ -430,6 +457,8 @@ export default function RaidAnalyticsPage() {
                   timeDistribution={raidAnalytics.overall.timeDistribution}
                   weeklyProgression={raidAnalytics.overall.weeklyProgression}
                   progressionLabel={t("clearProgression")}
+                  raidStart={raidAnalytics.raidStart}
+                  raidEnd={raidAnalytics.raidEnd}
                 />
               </div>
             </div>

@@ -74,6 +74,7 @@ import {
   DeleteGuildResponse,
   UpdateGuildInput,
   UpdateGuildResponse,
+  ToggleGuildRaidExclusionResponse,
   DeleteCharacterResponse,
   DeleteCharacterRankingsPreviewResponse,
   DeleteCharacterRankingsResponse,
@@ -592,6 +593,20 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || "Failed to update guild");
+    }
+    return response.json();
+  },
+
+  async toggleGuildRaidExclusion(guildId: string, raidId: number, excluded: boolean): Promise<ToggleGuildRaidExclusionResponse> {
+    const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/excluded-raids`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ raidId, excluded }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to toggle raid exclusion");
     }
     return response.json();
   },

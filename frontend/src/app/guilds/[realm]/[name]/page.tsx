@@ -55,6 +55,7 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [bossesForSelectedRaid, setBossesForSelectedRaid] = useState<Boss[]>([]);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
 
@@ -95,35 +96,43 @@ export default function GuildProfilePage({ params }: PageProps) {
     }
   }, [loading, guildSummary, initialLoadComplete, searchParams]);
 
-  // Handle raid click - fetch full progress for that raid (imperative)
+  // Handle raid click - open modal immediately with loading state, then fetch data
   const handleRaidClick = useCallback(
     async (raidId: number) => {
       if (!guildSummary) return;
 
+      // Open modal immediately with minimal data
+      const minimalGuild: Guild = {
+        _id: guildSummary._id,
+        name: guildSummary.name,
+        realm: guildSummary.realm,
+        region: guildSummary.region,
+        faction: guildSummary.faction,
+        isCurrentlyRaiding: guildSummary.isCurrentlyRaiding,
+        lastFetched: guildSummary.lastFetched,
+        progress: [],
+      };
+
+      setModalError(null);
+      setSelectedGuildDetail(minimalGuild);
+      setBossesForSelectedRaid([]);
+      setSelectedRaidId(raidId);
+      updateURL(raidId);
+      setModalLoading(true);
+
       try {
-        setModalError(null);
-        // Fetch boss progress for this specific raid and bosses list
         const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(realm, name, raidId), api.getBosses(raidId)]);
 
-        // Create a detailed guild object for the modal
-        const detailedGuild: Guild = {
-          _id: guildSummary._id,
-          name: guildSummary.name,
-          realm: guildSummary.realm,
-          region: guildSummary.region,
-          faction: guildSummary.faction,
-          isCurrentlyRaiding: guildSummary.isCurrentlyRaiding,
-          lastFetched: guildSummary.lastFetched,
+        setSelectedGuildDetail({
+          ...minimalGuild,
           progress: bossProgress,
-        };
-
-        setSelectedGuildDetail(detailedGuild);
+        });
         setBossesForSelectedRaid(bosses);
-        setSelectedRaidId(raidId);
-        updateURL(raidId);
+        setModalLoading(false);
       } catch (err) {
         console.error("Error fetching raid details:", err);
         setModalError("Failed to load raid details.");
+        setModalLoading(false);
       }
     },
     [guildSummary, realm, name, updateURL],
@@ -159,6 +168,7 @@ export default function GuildProfilePage({ params }: PageProps) {
     setSelectedGuildDetail(null);
     setSelectedRaidId(null);
     setBossesForSelectedRaid([]);
+    setModalLoading(false);
     updateURL(null);
   }, [updateURL]);
 
@@ -769,7 +779,14 @@ export default function GuildProfilePage({ params }: PageProps) {
 
         {/* Raid Detail Modal */}
         {selectedGuildDetail && selectedRaidId && (
-          <RaidDetailModal guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
+          <RaidDetailModal
+            guild={selectedGuildDetail}
+            onClose={handleCloseModal}
+            selectedRaidId={selectedRaidId}
+            raids={raids}
+            bosses={bossesForSelectedRaid}
+            loading={modalLoading}
+          />
         )}
       </div>
     </main>

@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { useRaids, useEvents, useGuilds, useRaidDates } from "@/lib/queries";
+import { useRaids, useEventsPaginated, useGuilds, useRaidDates } from "@/lib/queries";
+import { useEventFiltersFromCookies } from "@/lib/useEventFilters";
 import GuildTable from "@/components/GuildTable";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
@@ -17,6 +18,7 @@ function HomeContent() {
 
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Modal state for raid detail
   const [selectedGuildDetail, setSelectedGuildDetail] = useState<Guild | null>(null);
@@ -27,7 +29,9 @@ function HomeContent() {
 
   // ─── React Query hooks ──────────────────────────────────────────────────────
   const { data: raids = [], isLoading: raidsLoading, error: raidsError } = useRaids();
-  const { data: events = [], error: eventsError } = useEvents(5);
+  const eventFilters = useEventFiltersFromCookies();
+  const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters);
+  const events = eventsData?.events ?? [];
   const { data: guilds = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined);
   const { data: raidDates, error: raidDatesError } = useRaidDates(selectedRaidId);
 
@@ -93,29 +97,38 @@ function HomeContent() {
     async (guild: GuildListItem) => {
       if (!selectedRaidId) return;
 
+      // Open modal immediately with empty progress
+      const placeholderGuild: Guild = {
+        _id: guild._id,
+        name: guild.name,
+        realm: guild.realm,
+        region: guild.region,
+        faction: guild.faction,
+        warcraftlogsId: guild.warcraftlogsId,
+        crest: guild.crest,
+        parent_guild: guild.parent_guild,
+        isCurrentlyRaiding: guild.isCurrentlyRaiding,
+        lastFetched: guild.lastFetched,
+        progress: [],
+      };
+
+      setModalError(null);
+      setSelectedGuildDetail(placeholderGuild);
+      setModalLoading(true);
+
       try {
-        setModalError(null);
         const [bossProgress, bosses] = await Promise.all([api.getGuildBossProgressByRealmName(guild.realm, guild.name, selectedRaidId), api.getBosses(selectedRaidId)]);
 
-        const detailedGuild: Guild = {
-          _id: guild._id,
-          name: guild.name,
-          realm: guild.realm,
-          region: guild.region,
-          faction: guild.faction,
-          warcraftlogsId: guild.warcraftlogsId,
-          crest: guild.crest,
-          parent_guild: guild.parent_guild,
-          isCurrentlyRaiding: guild.isCurrentlyRaiding,
-          lastFetched: guild.lastFetched,
+        setSelectedGuildDetail({
+          ...placeholderGuild,
           progress: bossProgress,
-        };
-
-        setSelectedGuildDetail(detailedGuild);
+        });
         setBossesForSelectedRaid(bosses);
       } catch (err) {
         console.error("Error fetching raid details:", err);
         setModalError("Failed to load raid details.");
+      } finally {
+        setModalLoading(false);
       }
     },
     [selectedRaidId],
@@ -126,6 +139,7 @@ function HomeContent() {
     setSelectedGuildDetail(null);
     setBossesForSelectedRaid([]);
     setModalError(null);
+    setModalLoading(false);
   }, []);
 
   // Handle raid selection change
@@ -150,15 +164,15 @@ function HomeContent() {
 
   return (
     <main className="text-white min-h-screen">
+      {/* Events Feed - full width */}
+      {events.length > 0 && (
+        <div className="px-3 md:px-4 mb-2">
+          <HorizontalEventsFeed events={events} />
+        </div>
+      )}
+
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}
-
-        {/* Events Feed at the top */}
-        {events.length > 0 && (
-          <div className="mb-2">
-            <HorizontalEventsFeed events={events} />
-          </div>
-        )}
 
         {/* Integrated Raid Selector + Guild Leaderboard */}
         <div>
@@ -168,7 +182,14 @@ function HomeContent() {
 
         {/* Raid Detail Modal */}
         {selectedGuildDetail && selectedRaidId && (
-          <RaidDetailModal guild={selectedGuildDetail} onClose={handleCloseModal} selectedRaidId={selectedRaidId} raids={raids} bosses={bossesForSelectedRaid} />
+          <RaidDetailModal
+            guild={selectedGuildDetail}
+            onClose={handleCloseModal}
+            selectedRaidId={selectedRaidId}
+            raids={raids}
+            bosses={bossesForSelectedRaid}
+            loading={modalLoading}
+          />
         )}
       </div>
     </main>

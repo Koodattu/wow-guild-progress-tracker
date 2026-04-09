@@ -3458,19 +3458,68 @@ export default function AdminPage() {
                       <div>
                         <h4 className="text-white font-medium mb-2">Raid Progress</h4>
                         <div className="space-y-2">
-                          {selectedGuild.progress.map((p, i) => (
-                            <div key={i} className="flex items-center justify-between bg-gray-700 rounded p-2">
-                              <span className="text-white">
-                                {p.raidName} ({p.difficulty})
-                              </span>
-                              <span className="text-gray-300">
-                                {p.bossesDefeated}/{p.totalBosses}
-                              </span>
-                            </div>
-                          ))}
+                          {selectedGuild.progress.map((p, i) => {
+                            const isExcluded = selectedGuild.excludedRaidIds?.includes(p.raidId);
+                            return (
+                              <div key={i} className={`flex items-center justify-between bg-gray-700 rounded p-2 ${isExcluded ? "opacity-50" : ""}`}>
+                                <span className="text-white">
+                                  {p.raidName} ({p.difficulty})
+                                </span>
+                                <span className="text-gray-300">
+                                  {p.bossesDefeated}/{p.totalBosses}
+                                  {isExcluded && <span className="ml-2 text-red-400 text-xs">(excluded)</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
+
+                    {/* Raid Tier Exclusions */}
+                    <div>
+                      <h4 className="text-white font-medium mb-2">Raid Tier Exclusions</h4>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Excluded raids will hide this guild from progress rankings, tier lists, and timetables for that tier.
+                      </p>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {adminRaids.map((raid) => {
+                          const isExcluded = selectedGuild.excludedRaidIds?.includes(raid.id);
+                          return (
+                            <div key={raid.id} className="flex items-center justify-between bg-gray-700 rounded p-2">
+                              <span className={`text-sm ${isExcluded ? "text-red-400" : "text-white"}`}>
+                                {raid.name}
+                                {raid.isCurrent && <span className="ml-1 text-amber-400 text-xs">(current)</span>}
+                              </span>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const result = await api.toggleGuildRaidExclusion(selectedGuild.id, raid.id, !isExcluded);
+                                    setSelectedGuild({ ...selectedGuild, excludedRaidIds: result.excludedRaidIds });
+                                    setTriggerMessage({
+                                      type: "success",
+                                      text: `${raid.name}: ${!isExcluded ? "excluded" : "included"} for ${selectedGuild.name}`,
+                                    });
+                                    setTimeout(() => setTriggerMessage(null), 5000);
+                                  } catch (error) {
+                                    setTriggerMessage({
+                                      type: "error",
+                                      text: error instanceof Error ? error.message : "Failed to toggle exclusion",
+                                    });
+                                    setTimeout(() => setTriggerMessage(null), 5000);
+                                  }
+                                }}
+                                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                  isExcluded ? "bg-red-600 text-white hover:bg-red-700" : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                                }`}
+                              >
+                                {isExcluded ? "Excluded" : "Included"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
                     {/* Verify Reports Section */}
                     <div className="border-t border-gray-700 pt-4">

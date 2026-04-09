@@ -352,6 +352,7 @@ router.get("/guilds/:guildId", async (req: Request, res: Response) => {
       rioStatus: guild.rioStatus || "unknown",
       lastRioUpdate: guild.lastRioUpdate,
       progress: guild.progress || [],
+      excludedRaidIds: guild.excludedRaidIds || [],
       reportCount,
       fightCount,
       queueStatus: queueItem
@@ -987,6 +988,59 @@ router.put("/guilds/:guildId", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error("Error updating guild:", error);
     res.status(500).json({ error: "Failed to update guild" });
+  }
+});
+
+// Toggle a raid tier exclusion for a guild
+// When a guild is excluded from a raid tier, it is hidden from progress, tier lists, rankings, etc.
+router.put("/guilds/:guildId/excluded-raids", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+    const { raidId, excluded } = req.body;
+
+    if (typeof raidId !== "number" || typeof excluded !== "boolean") {
+      return res.status(400).json({ error: "raidId (number) and excluded (boolean) are required" });
+    }
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    // Verify the raid exists
+    const raid = await Raid.findOne({ id: raidId }).lean();
+    if (!raid) {
+      return res.status(404).json({ error: "Raid not found" });
+    }
+
+    const currentExcluded = guild.excludedRaidIds || [];
+
+    if (excluded) {
+      // Add raid to exclusion list (if not already there)
+      if (!currentExcluded.includes(raidId)) {
+        guild.excludedRaidIds = [...currentExcluded, raidId];
+      }
+    } else {
+      // Remove raid from exclusion list
+      guild.excludedRaidIds = currentExcluded.filter((id) => id !== raidId);
+    }
+
+    await guild.save();
+
+    logger.info(`Admin toggled raid exclusion for guild ${guild.name}-${guild.realm}: raid ${raidId} (${raid.name}) excluded=${excluded}`);
+
+    res.json({
+      success: true,
+      guild: {
+        id: guild._id.toString(),
+        name: guild.name,
+        realm: guild.realm,
+      },
+      excludedRaidIds: guild.excludedRaidIds || [],
+    });
+  } catch (error) {
+    logger.error("Error updating guild raid exclusions:", error);
+    res.status(500).json({ error: "Failed to update guild raid exclusions" });
   }
 });
 

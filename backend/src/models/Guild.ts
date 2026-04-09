@@ -122,6 +122,8 @@ export interface IGuild extends Document {
   isCurrentlyRaiding: boolean;
   lastLogEndTime?: Date; // End time of the most recent log (for activity tracking)
   activityStatus?: "active" | "inactive"; // active = logs within 30 days, inactive = no logs for 30+ days
+  // Raid tier IDs to exclude this guild from (hidden from progress, tier lists, rankings, etc.)
+  excludedRaidIds?: number[];
   wclStatus?: "active" | "not_found" | "unclaimed" | "unknown"; // Tracks whether the guild exists on WarcraftLogs
   wclStatusUpdatedAt?: Date; // When the WCL status was last checked/updated
   wclNotFoundCount?: number; // Consecutive "guild not found" errors count
@@ -256,6 +258,7 @@ const GuildSchema: Schema = new Schema(
     isCurrentlyRaiding: { type: Boolean, default: false },
     lastLogEndTime: { type: Date }, // End time of the most recent log
     activityStatus: { type: String, enum: ["active", "inactive"], default: "active" }, // Track guild activity
+    excludedRaidIds: [{ type: Number }], // Raid tier IDs to exclude this guild from
     wclStatus: { type: String, enum: ["active", "not_found", "unclaimed", "unknown"], default: "unknown" }, // Tracks whether the guild exists on WarcraftLogs
     wclStatusUpdatedAt: { type: Date }, // When the WCL status was last checked/updated
     wclNotFoundCount: { type: Number, default: 0 }, // Consecutive "guild not found" errors count
