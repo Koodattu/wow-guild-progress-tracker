@@ -42,8 +42,9 @@ function StreamerCard({ streamer, isSelected, onToggle, disabled, extraInfo }: S
         <span className="absolute bottom-0.5 left-0.5 bg-red-600 text-white text-[9px] font-bold px-1 rounded uppercase leading-tight">Live</span>
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center">
+      {/* Info - 3 rows */}
+      <div className="flex-1 min-w-0 px-2 py-1 flex flex-col justify-center">
+        {/* Row 1: Channel name */}
         <div className="flex items-center gap-1.5">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:h-3.5 md:w-3.5 text-purple-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
@@ -51,22 +52,22 @@ function StreamerCard({ streamer, isSelected, onToggle, disabled, extraInfo }: S
           <span className="font-bold text-white text-xs md:text-sm whitespace-nowrap truncate">{streamer.channelName}</span>
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-gray-400 truncate mt-0.5">
-          <span className="truncate">
-            {streamer.guild.parent_guild ? (
-              <>
-                <span className="font-bold">{streamer.guild.name}</span>
-                {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
-              </>
-            ) : (
-              <>
-                <span className="font-bold">{streamer.guild.name}</span>
-                {`-${streamer.guild.realm}`}
-              </>
-            )}
-          </span>
-          {extraInfo}
+        {/* Row 2: Guild - Realm */}
+        <div className="text-xs text-gray-400 truncate mt-0.5">
+          {streamer.guild.parent_guild ? (
+            <>
+              <span className="font-bold">{streamer.guild.name}</span>
+              {` (${streamer.guild.parent_guild}-${streamer.guild.realm})`}
+            </>
+          ) : (
+            <>
+              <span className="font-bold">{streamer.guild.name}</span>
+              {`-${streamer.guild.realm}`}
+            </>
+          )}
         </div>
+        {/* Row 3: Category or progress */}
+        {extraInfo && <div className="mt-0.5 truncate">{extraInfo}</div>}
       </div>
 
       {/* +/- button */}
