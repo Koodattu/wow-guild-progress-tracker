@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Event } from "@/types";
 import { getTimeAgo } from "@/lib/utils";
-import EventMessage from "@/components/EventMessage";
+import EventMessage, { WatchButton } from "@/components/EventMessage";
 
 interface EventsFeedProps {
   events: Event[];
@@ -45,7 +45,10 @@ export default function EventsFeed({ events, maxDisplay, showHeader = true }: Ev
                   </div>
                   <p className="text-gray-500 text-xs mt-1">{event.raidName}</p>
                 </div>
-                <span className="text-xs text-gray-500 whitespace-nowrap">{getTimeAgo(event.timestamp)}</span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">{getTimeAgo(event.timestamp)}</span>
+                  <WatchButton event={event} />
+                </div>
               </div>
             </div>
           ))}

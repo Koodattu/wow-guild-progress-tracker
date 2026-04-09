@@ -39,21 +39,18 @@ function BossName({ event }: { event: Event }) {
   );
 }
 
-// "Watch Live" link that opens the livestreams page with this guild's live streamers pre-selected
-function WatchLive({ event }: { event: Event }) {
+// "Watch" link - exported for use in card layouts, renders nothing if no live streamers
+export function WatchButton({ event }: { event: Event }) {
   if (!event.liveStreamers || event.liveStreamers.length === 0) return null;
   const streamsParam = event.liveStreamers.join(",");
   return (
-    <>
-      {" "}
-      <Link
-        href={`/livestreams?streams=${encodeURIComponent(streamsParam)}`}
-        className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors font-semibold align-middle"
-      >
-        <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-        Watch Live
-      </Link>
-    </>
+    <Link
+      href={`/livestreams?streams=${encodeURIComponent(streamsParam)}`}
+      className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors font-semibold text-xs"
+    >
+      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+      Watch
+    </Link>
   );
 }
 
@@ -67,7 +64,7 @@ export default function EventMessage({ event, showDifficulty = false }: { event:
     return (
       <span>
         <GuildName event={event} /> defeated <BossName event={event} />
-        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}!<WatchLive event={event} />
+        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}!
       </span>
     );
   }
@@ -77,7 +74,7 @@ export default function EventMessage({ event, showDifficulty = false }: { event:
     return (
       <span>
         <GuildName event={event} /> reached {progressText} on <BossName event={event} />
-        {diffSuffix}!<WatchLive event={event} />
+        {diffSuffix}!
       </span>
     );
   }
@@ -99,14 +96,12 @@ export default function EventMessage({ event, showDifficulty = false }: { event:
         <span>
           <GuildName event={event} /> failed to improve on <BossName event={event} />
           {diffSuffix} ({percent.toFixed(1)}%) during their raid.
-          <WatchLive event={event} />
         </span>
       );
     }
     return (
       <span>
         <GuildName event={event} /> had no progress during their raid.
-        <WatchLive event={event} />
       </span>
     );
   }
@@ -116,7 +111,7 @@ export default function EventMessage({ event, showDifficulty = false }: { event:
     return (
       <span>
         <GuildName event={event} /> re-killed <BossName event={event} />
-        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}!<WatchLive event={event} />
+        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}!
       </span>
     );
   }
@@ -124,7 +119,6 @@ export default function EventMessage({ event, showDifficulty = false }: { event:
   return (
     <span>
       <GuildName event={event} /> - <BossName event={event} />
-      <WatchLive event={event} />
     </span>
   );
 }

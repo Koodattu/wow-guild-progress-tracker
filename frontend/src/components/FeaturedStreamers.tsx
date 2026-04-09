@@ -1,18 +1,37 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LiveStreamer } from "@/types";
 import { useLiveStreamers } from "@/lib/queries";
 import { getTwitchThumbnailUrl, formatPhaseDisplay, formatPercent } from "@/lib/utils";
 
-const MAX_FEATURED = 5;
+const MAX_FEATURED = 7;
 
 export default function FeaturedStreamers() {
   const { data: liveStreamers } = useLiveStreamers();
   const router = useRouter();
+  const [visibleCount, setVisibleCount] = useState(3);
 
-  // Pick up to 5 random WoW-playing streamers
+  // Adjust visible count based on screen width (1-7 streams)
+  useEffect(() => {
+    const updateVisibleCount = () => {
+      const w = window.innerWidth;
+      if (w < 480) setVisibleCount(1);
+      else if (w < 640) setVisibleCount(2);
+      else if (w < 768) setVisibleCount(3);
+      else if (w < 1024) setVisibleCount(4);
+      else if (w < 1280) setVisibleCount(5);
+      else if (w < 1536) setVisibleCount(6);
+      else setVisibleCount(7);
+    };
+
+    updateVisibleCount();
+    window.addEventListener("resize", updateVisibleCount);
+    return () => window.removeEventListener("resize", updateVisibleCount);
+  }, []);
+
+  // Pick up to MAX_FEATURED random WoW-playing streamers
   const featured = useMemo(() => {
     if (!liveStreamers) return [];
     const wowStreamers = liveStreamers.filter((s) => s.isPlayingWoW);
@@ -27,6 +46,8 @@ export default function FeaturedStreamers() {
     return shuffled.slice(0, MAX_FEATURED);
   }, [liveStreamers]);
 
+  const displayStreamers = featured.slice(0, visibleCount);
+
   if (featured.length === 0) return null;
 
   const handleClick = (streamer: LiveStreamer) => {
@@ -35,12 +56,12 @@ export default function FeaturedStreamers() {
 
   return (
     <div className="px-3 md:px-4 mb-3">
-      <div className="flex justify-center gap-2 md:gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        {featured.map((streamer) => (
+      <div className="flex justify-center gap-2 md:gap-3">
+        {displayStreamers.map((streamer) => (
           <button
             key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
             onClick={() => handleClick(streamer)}
-            className="relative shrink-0 w-[200px] md:w-60 aspect-video rounded-lg overflow-hidden group cursor-pointer border border-gray-700/50 hover:border-purple-500/60 transition-all hover:scale-[1.02]"
+            className="relative flex-1 min-w-0 aspect-video rounded-lg overflow-hidden group cursor-pointer border border-gray-700/50 hover:border-purple-500/60 transition-all hover:scale-[1.02]"
           >
             {/* Thumbnail */}
             <img
