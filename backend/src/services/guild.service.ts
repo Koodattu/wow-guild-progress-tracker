@@ -1362,114 +1362,137 @@ class GuildService {
       });
     };
 
-    // Calculate rankings for both difficulties
-    for (const difficulty of ["mythic", "heroic"] as const) {
-      // Collect all guild progress for this raid and difficulty
-      // Include guilds that have either WCL log progress OR official progress from Raider.IO
-      const guildProgressPairs = guilds
-        .map((guild) => {
-          const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
-          const official = findOfficialProgress(guild);
-          const officialKills = difficulty === "mythic" ? (official?.mythicBossesKilled ?? 0) : (official?.heroicBossesKilled ?? 0);
-          const logKills = progress?.bossesDefeated ?? 0;
-          const effectiveKills = Math.max(logKills, officialKills);
+    // Unified ranking: rank all guilds together across both difficulties.
+    // Each guild gets ONE guildRank stored on its highest-difficulty progress entry.
+    // Mythic progress always outranks heroic-only progress.
+    type RankEntry = {
+      guild: IGuild;
+      progress: IRaidProgress; // The progress entry where guildRank will be stored
+      effectiveKills: number; // Combined effective kills for ranking
+      difficulty: "mythic" | "heroic"; // Which difficulty this guild is ranked by
+    };
 
-          if (effectiveKills > 0 && progress) {
-            return { guild, progress, effectiveKills };
-          }
-          return null;
-        })
-        .filter((pair) => pair !== null) as Array<{
-        guild: IGuild;
-        progress: IRaidProgress;
-        effectiveKills: number;
-      }>;
+    const rankEntries: RankEntry[] = [];
 
-      // Clear stale guildRank for guilds that have a progress entry but didn't qualify
-      // (e.g. 0 effective kills). Without this, old ranks persist in the database.
-      const rankedGuildIds = new Set(guildProgressPairs.map((pair) => pair.guild._id.toString()));
-      const unrankedGuilds = guilds.filter((guild) => {
-        if (rankedGuildIds.has(guild._id.toString())) return false;
-        const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty);
-        return progress && progress.guildRank != null;
-      });
-      for (const guild of unrankedGuilds) {
-        const progress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === difficulty)!;
-        progress.guildRank = null as any;
-        await guild.save();
-        logger.info(`Cleared stale ${difficulty} guildRank for ${guild.name}`);
+    for (const guild of guilds) {
+      const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic");
+      const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic");
+      const official = findOfficialProgress(guild);
+
+      const mythicOfficialKills = official?.mythicBossesKilled ?? 0;
+      const mythicLogKills = mythicProgress?.bossesDefeated ?? 0;
+      const effectiveMythicKills = Math.max(mythicLogKills, mythicOfficialKills);
+
+      const heroicOfficialKills = official?.heroicBossesKilled ?? 0;
+      const heroicLogKills = heroicProgress?.bossesDefeated ?? 0;
+      const effectiveHeroicKills = Math.max(heroicLogKills, heroicOfficialKills);
+
+      if (effectiveMythicKills > 0 && mythicProgress) {
+        // Guild has mythic progress — rank by mythic, store guildRank on mythic entry
+        rankEntries.push({ guild, progress: mythicProgress, effectiveKills: effectiveMythicKills, difficulty: "mythic" });
+      } else if (effectiveHeroicKills > 0 && heroicProgress) {
+        // Guild is heroic-only — rank by heroic, store guildRank on heroic entry
+        rankEntries.push({ guild, progress: heroicProgress, effectiveKills: effectiveHeroicKills, difficulty: "heroic" });
       }
-
-      if (guildProgressPairs.length === 0) {
-        logger.info(`No guilds with progress for raid ${raidId} ${difficulty}, skipping ranking`);
-        continue;
-      }
-
-      // Sort guilds according to ranking rules
-      const sortedPairs = guildProgressPairs.sort((a, b) => {
-        // Rule 1: Most effective boss kills first (max of WCL logs and Raider.IO official)
-        if (a.effectiveKills !== b.effectiveKills) {
-          return b.effectiveKills - a.effectiveKills; // Higher is better
-        }
-
-        // Rule 2: Best pull progress on current (next unkilled) boss
-        // This takes priority over world rank because world rank reflects the rank
-        // at the time of the LAST kill, not current progression on the next boss.
-        // Use effectiveKills to find the current boss — when RaiderIO shows more kills
-        // than WCL logs, the "next boss" is at index effectiveKills, not the first
-        // WCL-unkilled boss.
-        const aCurrentBoss = a.progress.bosses[a.effectiveKills] ?? a.progress.bosses.find((boss) => boss.kills === 0);
-        const bCurrentBoss = b.progress.bosses[b.effectiveKills] ?? b.progress.bosses.find((boss) => boss.kills === 0);
-
-        // Only compare pull progress when both guilds have meaningful pull data (pullCount > 0).
-        // If a guild has no WCL pull data on the current boss (e.g. progress is from RaiderIO only),
-        // skip this rule and fall through to world rank comparison.
-        const aHasPullData = aCurrentBoss && aCurrentBoss.pullCount > 0;
-        const bHasPullData = bCurrentBoss && bCurrentBoss.pullCount > 0;
-
-        if (aHasPullData && bHasPullData) {
-          const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
-          const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
-
-          if (aFightCompletion !== bFightCompletion) {
-            return aFightCompletion - bFightCompletion; // Lower is better
-          }
-
-          const aBossHealth = aCurrentBoss.bestPullPhase?.bossHealth ?? aCurrentBoss.bestPercent ?? 100;
-          const bBossHealth = bCurrentBoss.bestPullPhase?.bossHealth ?? bCurrentBoss.bestPercent ?? 100;
-
-          if (aBossHealth !== bBossHealth) {
-            return aBossHealth - bBossHealth; // Lower is better
-          }
-        } else if (aHasPullData !== bHasPullData) {
-          // Guild with pull data on the current boss ranks higher than one without
-          return aHasPullData ? -1 : 1;
-        }
-
-        // Rule 3: World rank (from WCL API or Raider.IO fallback)
-        const aWorldRank = a.progress.worldRank ?? Infinity;
-        const bWorldRank = b.progress.worldRank ?? Infinity;
-        if (aWorldRank !== bWorldRank) {
-          return aWorldRank - bWorldRank; // Lower is better
-        }
-
-        // Final tiebreaker: alphabetically by guild name
-        return a.guild.name.localeCompare(b.guild.name);
-      });
-
-      // Assign ranks
-      sortedPairs.forEach((pair, index) => {
-        pair.progress.guildRank = index + 1;
-      });
-
-      // Save all guilds with updated ranks
-      for (const pair of sortedPairs) {
-        await yieldToEventLoop();
-        await pair.guild.save();
-      }
-
-      logger.info(`Ranked ${sortedPairs.length} guilds for raid ${raidId} ${difficulty}`);
     }
+
+    // Clear stale guildRank from progress entries that won't receive a new rank.
+    // This covers: heroic entries of mythic-ranked guilds, mythic entries of heroic-only guilds
+    // with old stale ranks, and guilds that dropped out of ranking entirely.
+    const rankedGuildIds = new Set(rankEntries.map((e) => e.guild._id.toString()));
+    for (const guild of guilds) {
+      let needsSave = false;
+      for (const progress of guild.progress) {
+        if (progress.raidId !== raidId) continue;
+        const isRankedEntry =
+          rankedGuildIds.has(guild._id.toString()) && rankEntries.some((e) => e.guild._id.toString() === guild._id.toString() && e.progress.difficulty === progress.difficulty);
+        if (!isRankedEntry && progress.guildRank != null) {
+          progress.guildRank = null as any;
+          needsSave = true;
+        }
+      }
+      if (needsSave) {
+        await guild.save();
+      }
+    }
+
+    if (rankEntries.length === 0) {
+      logger.info(`No guilds with progress for raid ${raidId}, skipping ranking`);
+      return;
+    }
+
+    // Sort all guilds together in a single unified ranking.
+    // Mythic guilds always rank above heroic-only guilds.
+    const sortedEntries = rankEntries.sort((a, b) => {
+      // Rule 0: Mythic always beats heroic-only
+      if (a.difficulty !== b.difficulty) {
+        return a.difficulty === "mythic" ? -1 : 1;
+      }
+
+      // Rule 1: Most effective boss kills first (max of WCL logs and Raider.IO official)
+      if (a.effectiveKills !== b.effectiveKills) {
+        return b.effectiveKills - a.effectiveKills; // Higher is better
+      }
+
+      // Rule 2: Best pull progress on current (next unkilled) boss
+      // This takes priority over world rank because world rank reflects the rank
+      // at the time of the LAST kill, not current progression on the next boss.
+      // Use effectiveKills to find the current boss — when RaiderIO shows more kills
+      // than WCL logs, the "next boss" is at index effectiveKills, not the first
+      // WCL-unkilled boss.
+      const aCurrentBoss = a.progress.bosses[a.effectiveKills] ?? a.progress.bosses.find((boss) => boss.kills === 0);
+      const bCurrentBoss = b.progress.bosses[b.effectiveKills] ?? b.progress.bosses.find((boss) => boss.kills === 0);
+
+      // Only compare pull progress when both guilds have meaningful pull data (pullCount > 0).
+      // If a guild has no WCL pull data on the current boss (e.g. progress is from RaiderIO only),
+      // skip this rule and fall through to world rank comparison.
+      const aHasPullData = aCurrentBoss && aCurrentBoss.pullCount > 0;
+      const bHasPullData = bCurrentBoss && bCurrentBoss.pullCount > 0;
+
+      if (aHasPullData && bHasPullData) {
+        const aFightCompletion = aCurrentBoss.bestPullPhase?.fightCompletion ?? aCurrentBoss.bestPercent ?? 100;
+        const bFightCompletion = bCurrentBoss.bestPullPhase?.fightCompletion ?? bCurrentBoss.bestPercent ?? 100;
+
+        if (aFightCompletion !== bFightCompletion) {
+          return aFightCompletion - bFightCompletion; // Lower is better
+        }
+
+        const aBossHealth = aCurrentBoss.bestPullPhase?.bossHealth ?? aCurrentBoss.bestPercent ?? 100;
+        const bBossHealth = bCurrentBoss.bestPullPhase?.bossHealth ?? bCurrentBoss.bestPercent ?? 100;
+
+        if (aBossHealth !== bBossHealth) {
+          return aBossHealth - bBossHealth; // Lower is better
+        }
+      } else if (aHasPullData !== bHasPullData) {
+        // Guild with pull data on the current boss ranks higher than one without
+        return aHasPullData ? -1 : 1;
+      }
+
+      // Rule 3: World rank (from WCL API or Raider.IO fallback)
+      const aWorldRank = a.progress.worldRank ?? Infinity;
+      const bWorldRank = b.progress.worldRank ?? Infinity;
+      if (aWorldRank !== bWorldRank) {
+        return aWorldRank - bWorldRank; // Lower is better
+      }
+
+      // Final tiebreaker: alphabetically by guild name
+      return a.guild.name.localeCompare(b.guild.name);
+    });
+
+    // Assign unified ranks (1-based, continuous across all guilds)
+    sortedEntries.forEach((entry, index) => {
+      entry.progress.guildRank = index + 1;
+    });
+
+    // Save all guilds with updated ranks
+    for (const entry of sortedEntries) {
+      await yieldToEventLoop();
+      await entry.guild.save();
+    }
+
+    const mythicCount = sortedEntries.filter((e) => e.difficulty === "mythic").length;
+    const heroicCount = sortedEntries.filter((e) => e.difficulty === "heroic").length;
+    logger.info(`Ranked ${sortedEntries.length} guilds for raid ${raidId} (${mythicCount} mythic, ${heroicCount} heroic-only)`);
   }
 
   // Fetch reports for a guild and process both Mythic and Heroic from the same data
@@ -3621,10 +3644,11 @@ class GuildService {
           },
         },
       },
-      // Stage 3: Add computed fields for sorting
+      // Stage 3: Add computed field for sorting — find the unified guildRank.
+      // The ranking algorithm stores guildRank on the highest-difficulty progress entry:
+      // mythic entry for guilds with mythic kills, heroic entry for heroic-only guilds.
       {
         $addFields: {
-          // Get mythic progress for sorting
           mythicProgress: {
             $arrayElemAt: [
               {
@@ -3637,7 +3661,6 @@ class GuildService {
               0,
             ],
           },
-          // Get heroic progress for sorting (fallback)
           heroicProgress: {
             $arrayElemAt: [
               {
@@ -3652,12 +3675,11 @@ class GuildService {
           },
         },
       },
-      // Stage 4: Add sort rank field (mythic rank preferred, then heroic)
-      // Heroic-only guilds get a large offset so they always sort below all mythic-progressed guilds
+      // Stage 4: Extract the unified guildRank (stored on whichever difficulty entry has it)
       {
         $addFields: {
           sortRank: {
-            $ifNull: ["$mythicProgress.guildRank", { $ifNull: [{ $add: ["$heroicProgress.guildRank", 10000] }, 99999] }],
+            $ifNull: ["$mythicProgress.guildRank", { $ifNull: ["$heroicProgress.guildRank", 99999] }],
           },
         },
       },

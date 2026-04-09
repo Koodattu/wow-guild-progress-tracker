@@ -86,8 +86,7 @@ class CacheWarmerService {
         return;
       }
 
-      // guilds are already sorted by guildRank via the aggregation pipeline
-      // (mythic rank preferred, falls back to heroic rank via $ifNull)
+      // guilds are already sorted by unified guildRank via the aggregation pipeline
 
       const response = {
         raid: {
