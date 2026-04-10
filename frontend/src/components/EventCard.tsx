@@ -63,16 +63,10 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
             <EventMessage event={event} />
           </div>
         </div>
-        <div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500 truncate">{event.raidName}</span>
-            <span className="text-gray-500 whitespace-nowrap ml-2">{getTimeAgo(event.timestamp)}</span>
-          </div>
-          {event.liveStreamers && event.liveStreamers.length > 0 && (
-            <div className="flex justify-center mt-2">
-              <WatchButton event={event} />
-            </div>
-          )}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-500 truncate">{event.raidName}</span>
+          <WatchButton event={event} />
+          <span className="text-gray-500 whitespace-nowrap ml-2">{getTimeAgo(event.timestamp)}</span>
         </div>
       </div>
     </div>

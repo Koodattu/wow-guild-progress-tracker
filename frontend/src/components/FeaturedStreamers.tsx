@@ -61,7 +61,7 @@ export default function FeaturedStreamers() {
           <button
             key={`${streamer.guild.name}-${streamer.guild.realm}-${streamer.channelName}`}
             onClick={() => handleClick(streamer)}
-            className="relative flex-1 min-w-0 aspect-video rounded-lg overflow-hidden group cursor-pointer border border-gray-700/50 hover:border-purple-500/60 transition-all hover:scale-[1.02]"
+            className="relative shrink-0 w-[200px] md:w-60 max-w-60 aspect-video rounded-lg overflow-hidden group cursor-pointer border border-gray-700/50 hover:border-purple-500/60 transition-all hover:scale-[1.02]"
           >
             {/* Thumbnail */}
             <img
