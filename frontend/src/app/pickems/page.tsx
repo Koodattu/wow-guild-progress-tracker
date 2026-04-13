@@ -10,6 +10,7 @@ import { Combobox } from "@headlessui/react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { PickemStatistics } from "@/components/PickemStatistics";
 
 // Guild autocomplete using Headless UI Combobox
 function GuildAutocomplete({
@@ -1119,6 +1120,15 @@ export default function PickemsPage() {
               )}
             </div>
           </div>
+
+          {/* Prediction Statistics - only after voting ends */}
+          {!pickemDetails.isVotingOpen && pickemDetails.leaderboard.length >= 2 && (
+            <PickemStatistics
+              leaderboard={pickemDetails.leaderboard}
+              guildCount={pickemDetails.guildCount || 10}
+              type={pickemDetails.type}
+            />
+          )}
         </div>
       ) : null}
     </div>
