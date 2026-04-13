@@ -853,6 +853,7 @@ class CharacterService {
                 partition: part,
                 "encounter.id": encId,
                 bestAmount: { $ne: 0 },
+                metric: { $ne: null },
               },
             },
             { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
@@ -920,7 +921,7 @@ class CharacterService {
 
         // Boss + all partitions (best per character per metric across partitions)
         const bestPerChar = await Ranking.aggregate([
-          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, "encounter.id": encId } },
+          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, "encounter.id": encId, metric: { $ne: null } } },
           { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
           {
             $group: {
@@ -989,7 +990,7 @@ class CharacterService {
       // ── AllStars leaderboards (per partition × per metric) ────────────
       for (const part of partitions) {
         const allStarsAgg = await Ranking.aggregate([
-          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, partition: part } },
+          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, partition: part, metric: { $ne: null } } },
           { $sort: { "allStars.points": -1 } },
           {
             $group: {
@@ -1081,7 +1082,7 @@ class CharacterService {
 
       // ── AllStars + all partitions (best per boss per metric across partitions) ─
       const allStarsAllPartitions = await Ranking.aggregate([
-        { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY } },
+        { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, metric: { $ne: null } } },
         { $sort: { "allStars.points": -1, partition: -1 } },
         {
           $group: {
@@ -1170,20 +1171,34 @@ class CharacterService {
         });
       }
 
+      // ── Deduplicate entries by unique key ──────────────────────────
+      const deduped = new Map<string, (typeof entries)[0]>();
+      for (const e of entries) {
+        const key = `${e.zoneId}|${e.difficulty}|${e.type}|${e.encounterId}|${e.partition}|${e.metric}|${e.wclCanonicalCharacterId}`;
+        const existing = deduped.get(key);
+        if (!existing || e.score > existing.score) {
+          deduped.set(key, e);
+        }
+      }
+      const dedupedEntries = Array.from(deduped.values());
+
       // ── Atomic swap: drop old data, insert new ─────────────────────
-      logger.info(`[Leaderboard] Inserting ${entries.length} leaderboard entries...`);
+      logger.info(`[Leaderboard] Inserting ${dedupedEntries.length} leaderboard entries (deduped from ${entries.length})...`);
+
+      // Sync indexes to drop any stale indexes that no longer match the schema
+      await CharacterLeaderboard.syncIndexes();
       await CharacterLeaderboard.deleteMany({ zoneId: CURRENT_TIER_ID });
 
-      if (entries.length > 0) {
+      if (dedupedEntries.length > 0) {
         // Insert in batches of 5000 to avoid memory pressure
         const BATCH = 5000;
-        for (let i = 0; i < entries.length; i += BATCH) {
-          await CharacterLeaderboard.insertMany(entries.slice(i, i + BATCH), { ordered: false });
+        for (let i = 0; i < dedupedEntries.length; i += BATCH) {
+          await CharacterLeaderboard.insertMany(dedupedEntries.slice(i, i + BATCH), { ordered: false });
         }
       }
 
       const duration = Math.round((Date.now() - startTime) / 1000);
-      logger.info(`[Leaderboard] Build completed: ${entries.length} entries in ${duration}s`);
+      logger.info(`[Leaderboard] Build completed: ${dedupedEntries.length} entries in ${duration}s`);
     } catch (error) {
       logger.error("[Leaderboard] Build failed:", error);
       throw error;
