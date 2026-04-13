@@ -146,6 +146,7 @@ export interface LiveStreamer {
     realm: string;
     region: string;
     parent_guild?: string;
+    isCurrentlyRaiding: boolean;
   };
   bestPull?: {
     bossName: string;

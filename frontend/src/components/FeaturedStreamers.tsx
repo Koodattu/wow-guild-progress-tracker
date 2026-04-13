@@ -34,7 +34,7 @@ export default function FeaturedStreamers() {
   // Pick up to MAX_FEATURED random WoW-playing streamers
   const featured = useMemo(() => {
     if (!liveStreamers) return [];
-    const wowStreamers = liveStreamers.filter((s) => s.isPlayingWoW);
+    const wowStreamers = liveStreamers.filter((s) => s.isPlayingWoW && s.guild.isCurrentlyRaiding);
     if (wowStreamers.length <= MAX_FEATURED) return wowStreamers;
 
     // Fisher-Yates shuffle, pick first MAX_FEATURED

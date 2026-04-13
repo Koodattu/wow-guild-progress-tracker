@@ -204,6 +204,38 @@ function getPrizeForPlace(prizeConfig: PrizeConfig, place: number): number {
   return Math.round((prizeConfig.goldPool * tier.percentage) / 100);
 }
 
+// Compute tie-aware ranks and split prizes for tied users.
+// Users with the same totalPoints share the same rank and split
+// the combined prize money for the positions they occupy.
+function computeLeaderboardRanksAndPrizes(leaderboard: LeaderboardEntry[], prizeConfig: PrizeConfig | undefined, prizeEnabled: boolean): { rank: number; prize: number }[] {
+  const result: { rank: number; prize: number }[] = [];
+  let i = 0;
+  while (i < leaderboard.length) {
+    // Find the group of users tied at the same totalPoints
+    let j = i;
+    while (j < leaderboard.length && leaderboard[j].totalPoints === leaderboard[i].totalPoints) {
+      j++;
+    }
+    const tiedCount = j - i;
+    const rank = i + 1; // all tied users share this rank
+
+    // Sum the prizes for positions i+1 through j (the positions this tied group occupies)
+    let combinedPrize = 0;
+    if (prizeEnabled && prizeConfig) {
+      for (let pos = i + 1; pos <= j; pos++) {
+        combinedPrize += getPrizeForPlace(prizeConfig, pos);
+      }
+    }
+    const splitPrize = tiedCount > 0 ? Math.round(combinedPrize / tiedCount) : 0;
+
+    for (let k = i; k < j; k++) {
+      result.push({ rank, prize: splitPrize });
+    }
+    i = j;
+  }
+  return result;
+}
+
 // Prize pool display banner component
 function PrizePoolBanner({ prizeConfig }: { prizeConfig: PrizeConfig }) {
   if (!prizeConfig.enabled || prizeConfig.goldPool <= 0) return null;
@@ -1033,51 +1065,56 @@ export default function PickemsPage() {
                 <p className="text-gray-400 text-sm">{t("noParticipants")}</p>
               ) : (
                 <div className="space-y-2">
-                  {pickemDetails.leaderboard.map((entry, index) => {
-                    const prize = detailPrizeEnabled && pickemDetails.prizeConfig ? getPrizeForPlace(pickemDetails.prizeConfig, index + 1) : 0;
+                  {(() => {
+                    const ranksAndPrizes = computeLeaderboardRanksAndPrizes(pickemDetails.leaderboard, pickemDetails.prizeConfig, !!detailPrizeEnabled);
+                    return pickemDetails.leaderboard.map((entry, index) => {
+                      const { rank, prize } = ranksAndPrizes[index];
 
-                    return (
-                      <div
-                        key={entry.username}
-                        className={`rounded-lg ${
-                          isUnfinalizedRwf
-                            ? "bg-gray-700/30"
-                            : index === 0
-                              ? "bg-yellow-900/30 border border-yellow-700/50"
-                              : index === 1
-                                ? "bg-gray-700/50 border border-gray-600/50"
-                                : index === 2
-                                  ? "bg-orange-900/30 border border-orange-700/50"
-                                  : "bg-gray-700/30"
-                        }`}
-                      >
-                        <details className="group">
-                          <summary className="p-2.5 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-gray-400 w-5 shrink-0">{isUnfinalizedRwf ? "—" : index + 1}</span>
-                              <img src={entry.avatarUrl} alt={entry.username} className="w-6 h-6 rounded-full shrink-0" />
-                              <span className="text-white font-medium truncate text-sm flex-1 min-w-0">{entry.username}</span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {detailPrizeEnabled && prize > 0 && !isUnfinalizedRwf && (
-                                  <span className="text-amber-400 text-xs font-semibold bg-amber-900/30 px-1.5 py-0.5 rounded">🪙 {prize.toLocaleString()}g</span>
-                                )}
-                                <span className={`text-base font-bold ${isUnfinalizedRwf ? "text-gray-500" : "text-blue-400"}`}>{isUnfinalizedRwf ? "—" : entry.totalPoints}</span>
+                      return (
+                        <div
+                          key={entry.username}
+                          className={`rounded-lg ${
+                            isUnfinalizedRwf
+                              ? "bg-gray-700/30"
+                              : rank === 1
+                                ? "bg-yellow-900/30 border border-yellow-700/50"
+                                : rank === 2
+                                  ? "bg-gray-700/50 border border-gray-600/50"
+                                  : rank === 3
+                                    ? "bg-orange-900/30 border border-orange-700/50"
+                                    : "bg-gray-700/30"
+                          }`}
+                        >
+                          <details className="group">
+                            <summary className="p-2.5 cursor-pointer list-none hover:bg-gray-700/20 rounded-lg transition-colors">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-gray-400 w-5 shrink-0">{isUnfinalizedRwf ? "—" : rank}</span>
+                                <img src={entry.avatarUrl} alt={entry.username} className="w-6 h-6 rounded-full shrink-0" />
+                                <span className="text-white font-medium truncate text-sm flex-1 min-w-0">{entry.username}</span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {detailPrizeEnabled && prize > 0 && !isUnfinalizedRwf && (
+                                    <span className="text-amber-400 text-xs font-semibold bg-amber-900/30 px-1.5 py-0.5 rounded">🪙 {prize.toLocaleString()}g</span>
+                                  )}
+                                  <span className={`text-base font-bold ${isUnfinalizedRwf ? "text-gray-500" : "text-blue-400"}`}>
+                                    {isUnfinalizedRwf ? "—" : entry.totalPoints}
+                                  </span>
+                                </div>
                               </div>
+                            </summary>
+                            <div className="px-2.5 pb-2.5 pt-1 grid grid-cols-1 gap-0.5 text-xs border-t border-gray-700/50 mt-1.5">
+                              {entry.predictions.map((pred) => (
+                                <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-0.5 min-w-0">
+                                  <span className="text-gray-500 shrink-0">#{pred.predictedRank}:</span>
+                                  <span className="truncate flex-1">{pred.guildName}</span>
+                                  {!isUnfinalizedRwf && <PointsBadge points={pred.points} />}
+                                </div>
+                              ))}
                             </div>
-                          </summary>
-                          <div className="px-2.5 pb-2.5 pt-1 grid grid-cols-1 gap-0.5 text-xs border-t border-gray-700/50 mt-1.5">
-                            {entry.predictions.map((pred) => (
-                              <div key={`${pred.guildName}-${pred.predictedRank}`} className="flex items-center gap-1 text-gray-300 py-0.5 min-w-0">
-                                <span className="text-gray-500 shrink-0">#{pred.predictedRank}:</span>
-                                <span className="truncate flex-1">{pred.guildName}</span>
-                                {!isUnfinalizedRwf && <PointsBadge points={pred.points} />}
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      </div>
-                    );
-                  })}
+                          </details>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>

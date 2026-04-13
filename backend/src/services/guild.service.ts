@@ -4150,7 +4150,7 @@ class GuildService {
       const guilds = await Guild.find({
         streamers: { $exists: true, $ne: [] },
       })
-        .select("name realm region progress streamers")
+        .select("name realm region progress streamers isCurrentlyRaiding")
         .lean();
 
       const liveStreamers: any[] = [];
@@ -4191,6 +4191,7 @@ class GuildService {
                 realm: guild.realm,
                 region: guild.region,
                 parent_guild: guild.parent_guild,
+                isCurrentlyRaiding: guild.isCurrentlyRaiding ?? false,
               },
               bestPull: bestPull,
             });
