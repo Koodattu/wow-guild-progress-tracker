@@ -5,6 +5,7 @@ import Report from "../models/Report";
 import Fight from "../models/Fight";
 import TierList from "../models/TierList";
 import GuildProcessingQueue from "../models/GuildProcessingQueue";
+import WorldRankHistory from "../models/WorldRankHistory";
 import { BossIcon } from "../models/Achievement";
 import wclService from "./warcraftlogs.service";
 import blizzardService from "./blizzard.service";
@@ -853,6 +854,44 @@ class GuildService {
     }
   }
 
+  // Record a world rank snapshot if the rank has changed from the most recent entry.
+  // Only records for current raid tier to avoid unbounded growth.
+  private async recordWorldRankSnapshot(guildId: mongoose.Types.ObjectId, raidId: number, progress: IRaidProgress): Promise<void> {
+    if (!CURRENT_RAID_IDS.includes(raidId)) return;
+    if (progress.worldRank == null) return;
+
+    const latest = await WorldRankHistory.findOne({ guildId, raidId }, { worldRank: 1, wclWorldRank: 1, rioWorldRank: 1 }, { sort: { recordedAt: -1 }, lean: true });
+
+    // Skip if nothing changed
+    if (
+      latest &&
+      latest.worldRank === progress.worldRank &&
+      latest.wclWorldRank === (progress.wclWorldRank ?? undefined) &&
+      latest.rioWorldRank === (progress.rioWorldRank ?? undefined)
+    ) {
+      return;
+    }
+
+    await WorldRankHistory.create({
+      guildId,
+      raidId,
+      worldRank: progress.worldRank,
+      wclWorldRank: progress.wclWorldRank,
+      rioWorldRank: progress.rioWorldRank,
+      recordedAt: new Date(),
+    });
+  }
+
+  // Get world rank history for a guild and raid
+  async getWorldRankHistory(guildId: mongoose.Types.ObjectId, raidId: number): Promise<{ worldRank: number; wclWorldRank?: number; rioWorldRank?: number; recordedAt: Date }[]> {
+    const entries = await WorldRankHistory.find(
+      { guildId, raidId },
+      { worldRank: 1, wclWorldRank: 1, rioWorldRank: 1, recordedAt: 1, _id: 0 },
+      { sort: { recordedAt: 1 }, lean: true },
+    );
+    return entries;
+  }
+
   // Compute the best (lowest) world rank from WCL and RaiderIO sources, and set the display fields
   private computeBestWorldRank(progress: IRaidProgress): void {
     const wclRank = progress.wclWorldRank;
@@ -966,6 +1005,12 @@ class GuildService {
     }
 
     await guild.save();
+
+    // Record rank snapshots for current raid tier (after save so guild._id is available)
+    for (const raidProgress of raidsWithProgress) {
+      await this.recordWorldRankSnapshot(guild._id as mongoose.Types.ObjectId, raidProgress.raidId, raidProgress);
+    }
+
     guildLog.info("World rankings updated and saved");
   }
 
@@ -1086,6 +1131,16 @@ class GuildService {
     }
 
     await guild.save();
+
+    // Record rank snapshots for current raid tier (after save so guild._id is available)
+    for (const { raidId, mythicProgress, heroicProgress } of raidsToUpdate) {
+      // Use mythic progress preferentially since both have the same worldRank
+      const progressForSnapshot = mythicProgress || heroicProgress;
+      if (progressForSnapshot) {
+        await this.recordWorldRankSnapshot(guild._id as mongoose.Types.ObjectId, raidId, progressForSnapshot);
+      }
+    }
+
     guildLog.info("World ranks updated for target raids");
   }
 
@@ -3797,12 +3852,13 @@ class GuildService {
 
   // Get detailed boss progress for a specific raid by realm and name (returns only progress array)
   // Excludes pullHistory to reduce payload size
-  async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<any[] | null> {
+  // For current raid tier, also includes worldRankHistory for the modal chart
+  async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<{ progress: any[]; worldRankHistory?: any[] } | null> {
     const guild = await Guild.findOne({
       name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
       realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
     })
-      .select("progress")
+      .select("_id progress")
       .lean();
 
     if (!guild) {
@@ -3820,7 +3876,13 @@ class GuildService {
         }),
       }));
 
-    return raidProgress;
+    // Include world rank history only for current raid tier
+    let worldRankHistory: any[] | undefined;
+    if (CURRENT_RAID_IDS.includes(raidId)) {
+      worldRankHistory = await this.getWorldRankHistory(guild._id as mongoose.Types.ObjectId, raidId);
+    }
+
+    return { progress: raidProgress, worldRankHistory };
   }
 
   // Get pull history for a specific boss (on-demand fetching)

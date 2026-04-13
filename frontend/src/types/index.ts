@@ -223,6 +223,18 @@ export interface GuildSummary {
   tierScores?: GuildTierScores | null; // Tier list scores for this guild
 }
 
+export interface WorldRankHistoryEntry {
+  worldRank: number;
+  wclWorldRank?: number;
+  rioWorldRank?: number;
+  recordedAt: string;
+}
+
+export interface GuildBossProgressResponse {
+  progress: RaidProgress[];
+  worldRankHistory?: WorldRankHistoryEntry[];
+}
+
 // Full guild info with detailed boss progress (for detail view)
 export interface Guild {
   _id: string;
@@ -236,6 +248,7 @@ export interface Guild {
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgress[];
+  worldRankHistory?: WorldRankHistoryEntry[];
 }
 
 export interface Event {

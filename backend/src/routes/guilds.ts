@@ -139,13 +139,13 @@ router.get(
       const name = decodeURIComponent(req.params.name);
       const raidId = parseInt(req.params.raidId);
 
-      const bossProgress = await guildService.getGuildBossProgressForRaidByRealmName(realm, name, raidId);
+      const result = await guildService.getGuildBossProgressForRaidByRealmName(realm, name, raidId);
 
-      if (!bossProgress) {
+      if (!result) {
         return res.status(404).json({ error: "Guild not found" });
       }
 
-      res.json(bossProgress);
+      res.json(result);
     } catch (error) {
       logger.error("Error fetching guild boss progress:", error);
       res.status(500).json({ error: "Failed to fetch guild boss progress" });

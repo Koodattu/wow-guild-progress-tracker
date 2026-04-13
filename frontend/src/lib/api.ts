@@ -11,6 +11,7 @@ import {
   Boss,
   RaidDates,
   RaidProgress,
+  GuildBossProgressResponse,
   GuildSchedule,
   LiveStreamer,
   TierList,
@@ -118,7 +119,7 @@ export const api = {
     return response.json();
   },
 
-  async getGuildBossProgressByRealmName(realm: string, name: string, raidId: number): Promise<RaidProgress[]> {
+  async getGuildBossProgressByRealmName(realm: string, name: string, raidId: number): Promise<GuildBossProgressResponse> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`);

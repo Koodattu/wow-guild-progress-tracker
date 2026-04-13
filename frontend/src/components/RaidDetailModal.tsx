@@ -1,13 +1,77 @@
 "use client";
 
 import React, { useState } from "react";
-import { Guild, RaidProgress, BossProgress, RaidInfo, Boss } from "@/types";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
 import PullProgressChart from "./PullProgressChart";
 import PhaseDistributionChart from "./PhaseDistributionChart";
 import { useBossPullHistory } from "@/lib/queries";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+
+// Collapsible chart showing world rank history over time
+function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!history || history.length < 2) return null;
+
+  const chartData = history.map((entry) => ({
+    date: new Date(entry.recordedAt).getTime(),
+    worldRank: entry.worldRank,
+    wclWorldRank: entry.wclWorldRank,
+    rioWorldRank: entry.rioWorldRank,
+  }));
+
+  // For world rank, lower is better — invert the Y axis
+  const ranks = chartData.map((d) => d.worldRank);
+  const minRank = Math.min(...ranks);
+  const maxRank = Math.max(...ranks);
+  // Add some breathing room to the domain
+  const domainMin = Math.max(1, minRank - Math.max(1, Math.floor((maxRank - minRank) * 0.1)));
+  const domainMax = maxRank + Math.max(1, Math.floor((maxRank - minRank) * 0.1));
+
+  const formatDate = (timestamp: number) => {
+    const d = new Date(timestamp);
+    return d.toLocaleDateString("fi-FI", { day: "numeric", month: "numeric" });
+  };
+
+  return (
+    <div className="mb-4">
+      <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
+        <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        World Rank History
+        <span className="text-xs text-gray-500">
+          (#{minRank} → #{ranks[ranks.length - 1]})
+        </span>
+      </button>
+      {expanded && (
+        <div className="mt-2 border border-gray-700 rounded-lg bg-gray-800/50 p-2 md:p-4">
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="date" type="number" domain={["dataMin", "dataMax"]} tickFormatter={formatDate} tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" />
+              <YAxis reversed domain={[domainMin, domainMax]} tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" width={40} tickFormatter={(v: number) => `#${v}`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1F2937", border: "1px solid #374151", borderRadius: "0.5rem" }}
+                labelStyle={{ color: "#9CA3AF" }}
+                labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleDateString("fi-FI", { day: "numeric", month: "numeric", year: "numeric" })}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: any, name: any) => {
+                  const label = name === "worldRank" ? "World Rank" : name === "wclWorldRank" ? "WCL Rank" : "RIO Rank";
+                  return [`#${value}`, label];
+                }}
+              />
+              <Line type="stepAfter" dataKey="worldRank" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#F59E0B" }} activeDot={{ r: 5 }} name="worldRank" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface RaidDetailModalProps {
   guild: Guild;
@@ -391,6 +455,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         </div>
 
         <div className="px-2 md:px-6 py-4 md:py-6">
+          {!loading && guild.worldRankHistory && guild.worldRankHistory.length >= 2 && <WorldRankHistorySection history={guild.worldRankHistory} />}
           {loading ? (
             <div className="space-y-6">
               {[0, 1].map((section) => (
