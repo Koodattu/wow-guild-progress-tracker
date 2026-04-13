@@ -104,7 +104,28 @@ function buildPositionDistributions(leaderboard: LeaderboardEntry[], guildCount:
   return distributions;
 }
 
-function buildPieSlices(entries: { guild: string; count: number; percentage: number }[]): PieSlice[] {
+const OTHERS_COLOR = "#6B7280";
+
+function buildGuildColorMap(leaderboard: LeaderboardEntry[]): Map<string, string> {
+  const guildTotalPicks = new Map<string, number>();
+  for (const entry of leaderboard) {
+    for (const pred of entry.predictions) {
+      guildTotalPicks.set(pred.guildName, (guildTotalPicks.get(pred.guildName) || 0) + 1);
+    }
+  }
+
+  const sorted = Array.from(guildTotalPicks.entries()).sort((a, b) => b[1] - a[1]);
+  const colorMap = new Map<string, string>();
+  sorted.forEach(([guild], i) => {
+    colorMap.set(guild, COLORS[i % COLORS.length]);
+  });
+  return colorMap;
+}
+
+function buildPieSlices(
+  entries: { guild: string; count: number; percentage: number }[],
+  colorMap: Map<string, string>
+): PieSlice[] {
   const mainEntries: { label: string; count: number; percentage: number }[] = [];
   let othersCount = 0;
   let othersPercentage = 0;
@@ -123,7 +144,7 @@ function buildPieSlices(entries: { guild: string; count: number; percentage: num
   }
 
   let currentAngle = -90;
-  return mainEntries.map((item, index) => {
+  return mainEntries.map((item) => {
     const angle = (item.percentage / 100) * 360;
     const startAngle = currentAngle;
     const endAngle = currentAngle + angle;
@@ -133,7 +154,7 @@ function buildPieSlices(entries: { guild: string; count: number; percentage: num
       ...item,
       startAngle,
       endAngle,
-      color: COLORS[index % COLORS.length],
+      color: colorMap.get(item.label) || OTHERS_COLOR,
     };
   });
 }
@@ -157,8 +178,8 @@ function createPieSlice(startAngle: number, endAngle: number, r: number) {
   return `M ${PIE_CENTER} ${PIE_CENTER} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
 }
 
-function PositionPieChart({ distribution }: { distribution: PositionDistribution }) {
-  const slices = useMemo(() => buildPieSlices(distribution.entries), [distribution.entries]);
+function PositionPieChart({ distribution, colorMap }: { distribution: PositionDistribution; colorMap: Map<string, string> }) {
+  const slices = useMemo(() => buildPieSlices(distribution.entries, colorMap), [distribution.entries, colorMap]);
   const legendEntries = useMemo(() => distribution.entries.slice(0, 5), [distribution.entries]);
 
   const isSingleSlice = slices.length === 1 && slices[0].percentage >= 99.9;
@@ -186,9 +207,9 @@ function PositionPieChart({ distribution }: { distribution: PositionDistribution
       </svg>
 
       <div className="w-full space-y-1">
-        {legendEntries.map((entry, i) => (
+        {legendEntries.map((entry) => (
           <div key={entry.guild} className="flex items-center gap-1.5 text-xs text-gray-300">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorMap.get(entry.guild) || OTHERS_COLOR }} />
             <span className="truncate flex-1 min-w-0">{entry.guild}</span>
             <span className="text-gray-500 shrink-0">{entry.count}</span>
           </div>
@@ -200,6 +221,8 @@ function PositionPieChart({ distribution }: { distribution: PositionDistribution
 
 export function PickemStatistics({ leaderboard, guildCount, type }: PickemStatisticsProps) {
   const [expanded, setExpanded] = useState(false);
+
+  const guildColorMap = useMemo(() => buildGuildColorMap(leaderboard), [leaderboard]);
 
   const combinations = useMemo(() => buildCombinations(leaderboard, guildCount), [leaderboard, guildCount]);
 
@@ -239,6 +262,7 @@ export function PickemStatistics({ leaderboard, guildCount, type }: PickemStatis
                       {combo.guilds.map((guild, pos) => (
                         <div key={pos} className="flex items-center gap-2 text-xs">
                           <span className="text-gray-500 w-4 text-right shrink-0">{pos + 1}.</span>
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: guildColorMap.get(guild) || OTHERS_COLOR }} />
                           <span className="text-gray-200 truncate">{guild}</span>
                         </div>
                       ))}
@@ -253,7 +277,7 @@ export function PickemStatistics({ leaderboard, guildCount, type }: PickemStatis
             <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Pick Distribution by Position</h4>
             <div className={`grid gap-3 ${gridCols}`}>
               {positionDistributions.map((dist) => (
-                <PositionPieChart key={dist.position} distribution={dist} />
+                <PositionPieChart key={dist.position} distribution={dist} colorMap={guildColorMap} />
               ))}
             </div>
           </div>

@@ -480,7 +480,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
                 </div>
               ))}
             </div>
-          ) : guild.progress.length > 0 && selectedRaidId ? (
+          ) : guild.progress?.length > 0 && selectedRaidId ? (
             (() => {
               // Filter progress for only the selected raid
               const raidProgress = guild.progress.filter((p) => p.raidId === selectedRaidId);
