@@ -908,6 +908,7 @@ export interface CreatePickemInput {
   type?: PickemType;
   raidIds?: number[];
   guildCount?: number;
+  finalRankingsCount?: number;
   votingStart: string;
   votingEnd: string;
   active?: boolean;
@@ -921,6 +922,7 @@ export interface UpdatePickemInput {
   type?: PickemType;
   raidIds?: number[];
   guildCount?: number;
+  finalRankingsCount?: number;
   votingStart?: string;
   votingEnd?: string;
   active?: boolean;

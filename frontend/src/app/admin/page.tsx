@@ -245,6 +245,7 @@ export default function AdminPage() {
     type: "regular" as PickemType,
     raidIds: [] as number[],
     guildCount: 10,
+    finalRankingsCount: 0,
     votingStart: "",
     votingEnd: "",
     active: true,
@@ -1741,6 +1742,7 @@ export default function AdminPage() {
                     type: "regular",
                     raidIds: [],
                     guildCount: 10,
+                    finalRankingsCount: 0,
                     votingStart: "",
                     votingEnd: "",
                     active: true,
@@ -1788,6 +1790,7 @@ export default function AdminPage() {
                             type: pickemForm.type,
                             raidIds: pickemForm.type === "regular" ? pickemForm.raidIds : [],
                             guildCount: pickemForm.guildCount,
+                            finalRankingsCount: pickemForm.finalRankingsCount,
                             votingStart: pickemForm.votingStart,
                             votingEnd: pickemForm.votingEnd,
                             active: pickemForm.active,
@@ -1876,6 +1879,24 @@ export default function AdminPage() {
                       />
                       <p className="text-xs text-gray-500 mt-1">{t("pickems.form.guildCountHelp")}</p>
                     </div>
+
+                    {/* Finalization Guild Count - only for RWF */}
+                    {pickemForm.type === "rwf" && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Finalization Guild Count</label>
+                        <input
+                          type="number"
+                          value={pickemForm.finalRankingsCount}
+                          onChange={(e) => setPickemForm({ ...pickemForm, finalRankingsCount: parseInt(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          min="0"
+                          max="25"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          How many guilds admin must provide when finalizing (e.g. 10). Set to 0 to use guild count. Scoring uses all finalized guilds.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Raid Selection - only for regular type */}
                     {pickemForm.type === "regular" && (
@@ -2389,6 +2410,7 @@ export default function AdminPage() {
                                   type: pickem.type || "regular",
                                   raidIds: pickem.raidIds,
                                   guildCount: pickem.guildCount || 10,
+                                  finalRankingsCount: pickem.finalRankingsCount || 0,
                                   votingStart: new Date(pickem.votingStart).toISOString().slice(0, 16),
                                   votingEnd: new Date(pickem.votingEnd).toISOString().slice(0, 16),
                                   active: pickem.active,
