@@ -18,6 +18,7 @@ class PickemService {
         if (!existing) {
           const type = seedData.type || "regular";
           const guildCount = seedData.guildCount ?? 10;
+          const finalRankingsCount = seedData.finalRankingsCount ?? 0;
 
           await Pickem.create({
             pickemId: seedData.pickemId,
@@ -25,6 +26,7 @@ class PickemService {
             type,
             raidIds: seedData.raidIds || [],
             guildCount,
+            finalRankingsCount,
             votingStart: seedData.votingStart,
             votingEnd: seedData.votingEnd,
             active: seedData.active,
@@ -74,6 +76,7 @@ class PickemService {
     type?: PickemType;
     raidIds?: number[];
     guildCount?: number;
+    finalRankingsCount?: number;
     votingStart: Date;
     votingEnd: Date;
     active?: boolean;
@@ -83,6 +86,7 @@ class PickemService {
   }): Promise<IPickem> {
     const type = data.type || "regular";
     const guildCount = data.guildCount ?? 10;
+    const finalRankingsCount = data.finalRankingsCount ?? 0;
 
     const pickem = await Pickem.create({
       pickemId: data.pickemId,
@@ -90,6 +94,7 @@ class PickemService {
       type,
       raidIds: data.raidIds || [],
       guildCount,
+      finalRankingsCount,
       votingStart: data.votingStart,
       votingEnd: data.votingEnd,
       active: data.active ?? true,
@@ -111,6 +116,7 @@ class PickemService {
       type?: PickemType;
       raidIds?: number[];
       guildCount?: number;
+      finalRankingsCount?: number;
       votingStart?: Date;
       votingEnd?: Date;
       active?: boolean;
@@ -126,6 +132,7 @@ class PickemService {
     if (data.type !== undefined) pickem.type = data.type;
     if (data.raidIds !== undefined) pickem.raidIds = data.raidIds;
     if (data.guildCount !== undefined) pickem.guildCount = data.guildCount;
+    if (data.finalRankingsCount !== undefined) pickem.finalRankingsCount = data.finalRankingsCount;
     if (data.votingStart !== undefined) pickem.votingStart = data.votingStart;
     if (data.votingEnd !== undefined) pickem.votingEnd = data.votingEnd;
     if (data.active !== undefined) pickem.active = data.active;
@@ -212,9 +219,10 @@ class PickemService {
       return { success: false, error: `Invalid guilds in rankings: ${invalidGuilds.join(", ")}` };
     }
 
-    // Validate ranking count matches guildCount
-    if (finalRankings.length !== pickem.guildCount) {
-      return { success: false, error: `Expected ${pickem.guildCount} guilds in rankings, got ${finalRankings.length}` };
+    // Validate ranking count matches finalRankingsCount (or guildCount if not configured)
+    const expectedCount = pickem.finalRankingsCount || pickem.guildCount;
+    if (finalRankings.length !== expectedCount) {
+      return { success: false, error: `Expected ${expectedCount} guilds in rankings, got ${finalRankings.length}` };
     }
 
     // Validate no duplicate guilds

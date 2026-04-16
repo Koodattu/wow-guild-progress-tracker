@@ -35,6 +35,7 @@ export interface IPickem extends Document {
   type: PickemType; // Type of pickem: "regular" for Finnish guilds, "rwf" for Race to World First
   raidIds: number[]; // Array of raid IDs included in this pickem (only used for regular type)
   guildCount: number; // Number of guilds to predict (10 for regular, 5 for rwf)
+  finalRankingsCount: number; // Number of guilds required for finalization (e.g., 10 for RWF) — defaults to guildCount if not set
   votingStart: Date; // When voting opens
   votingEnd: Date; // When voting closes
   active: boolean; // Whether this pickem is visible/active
@@ -125,6 +126,7 @@ const PickemSchema = new Schema<IPickem>(
       default: [],
     },
     guildCount: { type: Number, required: true, default: 10 },
+    finalRankingsCount: { type: Number, required: false, default: 0 },
     votingStart: { type: Date, required: true },
     votingEnd: { type: Date, required: true },
     active: { type: Boolean, required: true, default: true },

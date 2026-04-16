@@ -2177,7 +2177,7 @@ export default function AdminPage() {
             {showFinalizeModal &&
               finalizingPickem &&
               (() => {
-                const requiredCount = finalizingPickem.guildCount || 10;
+                const requiredCount = finalizingPickem.finalRankingsCount || finalizingPickem.guildCount || 10;
                 const availableGuilds = allRwfGuilds.filter((g) => !finalizationRankings.includes(g));
                 const filteredAvailable = finalizeSearch ? availableGuilds.filter((g) => g.toLowerCase().includes(finalizeSearch.toLowerCase())) : availableGuilds;
 
@@ -3479,9 +3479,7 @@ export default function AdminPage() {
                     {/* Raid Tier Exclusions */}
                     <div>
                       <h4 className="text-white font-medium mb-2">Raid Tier Exclusions</h4>
-                      <p className="text-xs text-gray-500 mb-3">
-                        Excluded raids will hide this guild from progress rankings, tier lists, and timetables for that tier.
-                      </p>
+                      <p className="text-xs text-gray-500 mb-3">Excluded raids will hide this guild from progress rankings, tier lists, and timetables for that tier.</p>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {adminRaids.map((raid) => {
                           const isExcluded = selectedGuild.excludedRaidIds?.includes(raid.id);

@@ -780,6 +780,7 @@ export interface PickemSummary {
   type: PickemType;
   raidIds: number[];
   guildCount: number;
+  finalRankingsCount: number;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
@@ -846,6 +847,7 @@ export interface PickemDetails {
   type: PickemType;
   raidIds: number[];
   guildCount: number;
+  finalRankingsCount: number;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
@@ -874,6 +876,7 @@ export interface AdminPickem {
   type: PickemType;
   raidIds: number[];
   guildCount: number;
+  finalRankingsCount: number;
   votingStart: string;
   votingEnd: string;
   active: boolean;

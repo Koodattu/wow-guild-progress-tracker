@@ -1385,4 +1385,8 @@ export const PICK_EM_RWF_GUILDS = [
   "Exposed",
   "End Myth (燃烧之刃)",
   "Wave",
+  "JSUUG",
+  "Identity",
+  "Mate",
+  "Banhammer",
 ];

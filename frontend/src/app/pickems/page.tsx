@@ -901,8 +901,10 @@ export default function PickemsPage() {
             </div>
           )}
 
-          {/* Main Content Grid - 3 columns for regular, 2 for RWF */}
-          <div className={`grid grid-cols-1 gap-4 ${pickemDetails.type !== "rwf" ? "xl:grid-cols-[1fr_minmax(280px,340px)_1fr]" : "lg:grid-cols-2"}`}>
+          {/* Main Content Grid - 3 columns for regular or finalized RWF, 2 for unfinalized RWF */}
+          <div
+            className={`grid grid-cols-1 gap-4 ${pickemDetails.type !== "rwf" || (pickemDetails.type === "rwf" && pickemDetails.finalized) ? "xl:grid-cols-[1fr_minmax(280px,340px)_1fr]" : "lg:grid-cols-2"}`}
+          >
             {/* Column 1: Prediction Form */}
             <div className="space-y-4">
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -1011,7 +1013,42 @@ export default function PickemsPage() {
               </div>
             )}
 
-            {/* Column 3 (or 2 for RWF): Leaderboard */}
+            {/* Column 2 for finalized RWF: Final Rankings (Top 10) */}
+            {pickemDetails.type === "rwf" && pickemDetails.finalized && pickemDetails.guildRankings.length > 0 && (
+              <div className="bg-gray-800 rounded-lg p-3 border border-gray-700 self-start">
+                <h3 className="text-base font-semibold text-white mb-2">Final Rankings</h3>
+                <p className="text-xs text-gray-400 mb-2">Top {pickemDetails.guildRankings.length} — used for scoring</p>
+                <div className="space-y-1">
+                  {pickemDetails.guildRankings.map((guild) => {
+                    const medals = ["🥇", "🥈", "🥉"];
+                    const isPredicted = pickemDetails.userPredictions?.some((p) => p.guildName === guild.name);
+                    return (
+                      <div
+                        key={`${guild.name}-${guild.realm}`}
+                        className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg ${
+                          guild.rank <= pickemDetails.guildCount ? "bg-gray-700/60" : "bg-gray-700/30"
+                        } ${isPredicted ? "ring-1 ring-blue-500/40" : ""}`}
+                      >
+                        <span className="w-7 text-center shrink-0">
+                          {guild.rank <= 3 ? <span className="text-base">{medals[guild.rank - 1]}</span> : <span className="text-xs font-bold text-gray-400">{guild.rank}</span>}
+                        </span>
+                        <span className={`text-sm font-medium truncate ${guild.rank <= pickemDetails.guildCount ? "text-white" : "text-gray-400"}`}>{guild.name}</span>
+                        {isPredicted && <span className="ml-auto text-xs text-blue-400 shrink-0">picked</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                {pickemDetails.guildRankings.length > pickemDetails.guildCount && (
+                  <div className="mt-2 pt-2 border-t border-gray-700">
+                    <p className="text-xs text-gray-500">
+                      Guilds ranked {pickemDetails.guildCount + 1}–{pickemDetails.guildRankings.length} still award partial points for nearby predictions.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Column 3 (or 2 for unfinalized RWF): Leaderboard */}
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 self-start">
               {/* Scoring Info */}
               <div className="bg-gray-750 rounded-lg overflow-hidden border border-gray-700 mb-3">
@@ -1052,8 +1089,15 @@ export default function PickemsPage() {
                       </p>
                     )}
                     <p>
-                      • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} pts:</strong> 5+ off or not in top {pickemDetails?.guildCount || 10}
+                      • <strong className="text-gray-500">{scoringConfig.offByFiveOrMore} pts:</strong> 5+ off or not in top{" "}
+                      {pickemDetails?.finalRankingsCount || pickemDetails?.guildCount || 10}
                     </p>
+                    {pickemDetails?.type === "rwf" && (pickemDetails?.finalRankingsCount || 0) > pickemDetails.guildCount && (
+                      <p className="mt-2 text-blue-400 text-xs">
+                        You predict {pickemDetails.guildCount} guilds, but scoring uses the top {pickemDetails.finalRankingsCount} finalized rankings — nearby misses still earn
+                        points.
+                      </p>
+                    )}
                     {isUnfinalizedRwf && <p className="mt-2 text-purple-400 font-medium">RWF scores are calculated when the race ends and admin finalizes the results.</p>}
                   </div>
                 )}
@@ -1123,11 +1167,7 @@ export default function PickemsPage() {
 
           {/* Prediction Statistics - only after voting ends */}
           {!pickemDetails.isVotingOpen && pickemDetails.leaderboard.length >= 2 && (
-            <PickemStatistics
-              leaderboard={pickemDetails.leaderboard}
-              guildCount={pickemDetails.guildCount || 10}
-              type={pickemDetails.type}
-            />
+            <PickemStatistics leaderboard={pickemDetails.leaderboard} guildCount={pickemDetails.guildCount || 10} type={pickemDetails.type} />
           )}
         </div>
       ) : null}
