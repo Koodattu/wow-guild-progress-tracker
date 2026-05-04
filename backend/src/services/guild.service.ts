@@ -3667,6 +3667,9 @@ class GuildService {
   // Get all guilds with progress filtered by raidId (minimal data for leaderboard)
   // Optimized with MongoDB aggregation pipeline for better performance
   async getAllGuildsForRaid(raidId: number): Promise<any[]> {
+    const raid = await Raid.findOne({ id: raidId }).lean();
+    const raidSlug = raid?.slug?.toLowerCase();
+
     // Use aggregation pipeline to filter, project, and sort at database level
     const guilds = await Guild.aggregate([
       // Stage 1: Match only guilds that have progress for this raid with at least 1 boss kill
@@ -3807,6 +3810,9 @@ class GuildService {
       // Check if any streamers are live
       const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
 
+      // Filter officialProgress to only include the requested raid
+      const filteredOfficialProgress = raidSlug ? guildObj.officialProgress?.filter((op: any) => op.raidTierSlug?.toLowerCase() === raidSlug) || [] : [];
+
       // Return minimal guild structure
       return {
         _id: guildObj._id,
@@ -3821,7 +3827,7 @@ class GuildService {
         isStreaming: isStreaming,
         lastFetched: guildObj.lastFetched,
         progress: minimalProgress,
-        officialProgress: guildObj.officialProgress || [],
+        officialProgress: filteredOfficialProgress,
         scheduleDisplay: scheduleSummary,
       };
     });
