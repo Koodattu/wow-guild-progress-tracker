@@ -15,6 +15,7 @@ interface GuildRaidData {
   raidName: string;
   // Heroic data
   heroicBossesDefeated: number;
+  heroicWclBossesDefeated: number;
   heroicTotalBosses: number;
   heroicWorldRank: number | null;
   heroicGuildRank: number | null;
@@ -22,6 +23,7 @@ interface GuildRaidData {
   heroicTimeSpent: number;
   // Mythic data
   mythicBossesDefeated: number;
+  mythicWclBossesDefeated: number;
   mythicTotalBosses: number;
   mythicWorldRank: number | null;
   mythicGuildRank: number | null;
@@ -102,9 +104,13 @@ class TierListService {
 
           const raidName = heroicProgress?.raidName || mythicProgress?.raidName || `Raid ${raidId}`;
 
-          // Calculate total pulls from bosses array
+          // Calculate total pulls and WCL verified bosses from bosses array
           const heroicTotalPulls = heroicProgress?.bosses.reduce((sum, boss) => sum + boss.pullCount, 0) || 0;
           const mythicTotalPulls = mythicProgress?.bosses.reduce((sum, boss) => sum + boss.pullCount, 0) || 0;
+
+          // A boss is considered WCL-backed if it has a firstKillReportCode or essentially any verifiable WCL kill data
+          const heroicWclBossesDefeated = heroicProgress?.bosses.filter((b) => b.kills > 0 && b.firstKillReportCode).length || 0;
+          const mythicWclBossesDefeated = mythicProgress?.bosses.filter((b) => b.kills > 0 && b.firstKillReportCode).length || 0;
 
           raidDataList.push({
             guildId,
@@ -116,12 +122,14 @@ class TierListService {
             raidId,
             raidName,
             heroicBossesDefeated: heroicProgress?.bossesDefeated || 0,
+            heroicWclBossesDefeated,
             heroicTotalBosses: heroicProgress?.totalBosses || 0,
             heroicWorldRank: heroicProgress?.worldRank || null,
             heroicGuildRank: heroicProgress?.guildRank || null,
             heroicTotalPulls,
             heroicTimeSpent: heroicProgress?.totalTimeSpent || 0,
             mythicBossesDefeated: mythicProgress?.bossesDefeated || 0,
+            mythicWclBossesDefeated,
             mythicTotalBosses: mythicProgress?.totalBosses || 0,
             mythicWorldRank: mythicProgress?.worldRank || null,
             mythicGuildRank: mythicProgress?.guildRank || null,
@@ -412,15 +420,16 @@ class TierListService {
     let heroicEfficiencyScore = 0;
     let mythicEfficiencyScore = 0;
     let efficiencyScore = 0;
-    const hasHeroicEfficiency = guildData.heroicBossesDefeated > 0;
-    const hasMythicEfficiency = guildData.mythicBossesDefeated > 0;
+    // For efficiency, ONLY count WCL-backed bosses since time/pull values originate purely from WCL logs
+    const hasHeroicEfficiency = guildData.heroicWclBossesDefeated > 0;
+    const hasMythicEfficiency = guildData.mythicWclBossesDefeated > 0;
 
     if (hasHeroicEfficiency || hasMythicEfficiency) {
       const EFFICIENCY_K = 3;
 
       // --- Step 1: Compute achievement credit for this guild ---
-      const heroicProgress = heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.heroicBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
-      const mythicProgress = mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.mythicBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
+      const heroicProgress = heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.heroicWclBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
+      const mythicProgress = mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.mythicWclBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
       const achievement = heroicProgress * this.HEROIC_WEIGHT + mythicProgress * this.MYTHIC_WEIGHT;
 
       // Store per-difficulty progress for debugging
@@ -433,9 +442,9 @@ class TierListService {
 
       for (const g of allGuildsData) {
         const gHeroicProg =
-          g.heroicBossesDefeated > 0 && heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.heroicBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
+          g.heroicWclBossesDefeated > 0 && heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.heroicWclBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
         const gMythicProg =
-          g.mythicBossesDefeated > 0 && mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.mythicBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
+          g.mythicWclBossesDefeated > 0 && mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.mythicWclBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
         const gAchievement = gHeroicProg * this.HEROIC_WEIGHT + gMythicProg * this.MYTHIC_WEIGHT;
 
         if (gAchievement <= 0) continue;
