@@ -410,6 +410,8 @@
         "typeRwfHelp": "Käyttäjät veikkaavat top 5 RWF-killat ennalta määritetystä listasta",
         "guildCount": "Veikkausten määrä",
         "guildCountHelp": "Kuinka monta kiltaa käyttäjien tulee veikattava",
+        "scoreOutOfRangeGuilds": "Pisteytä veikkausrajan ulkopuoliset killat",
+        "scoreOutOfRangeGuildsHelp": "Kun asetus on päällä, tavalliset veikkaukset antavat osapisteitä jos veikattu kilta sijoittuu juuri veikkausrajan ulkopuolelle, esimerkiksi 10. veikkaus sijoittuu 11.",
         "raids": "Valitse raidit",
         "votingStart": "Äänestys alkaa",
         "votingEnd": "Äänestys päättyy",

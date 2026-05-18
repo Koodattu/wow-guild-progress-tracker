@@ -36,6 +36,7 @@ export interface IPickem extends Document {
   raidIds: number[]; // Array of raid IDs included in this pickem (only used for regular type)
   guildCount: number; // Number of guilds to predict (10 for regular, 5 for rwf)
   finalRankingsCount: number; // Number of guilds required for finalization (e.g., 10 for RWF) — defaults to guildCount if not set
+  scoreOutOfRangeGuilds: boolean; // For regular pickems, award points for picked guilds ranked beyond guildCount
   votingStart: Date; // When voting opens
   votingEnd: Date; // When voting closes
   active: boolean; // Whether this pickem is visible/active
@@ -127,6 +128,7 @@ const PickemSchema = new Schema<IPickem>(
     },
     guildCount: { type: Number, required: true, default: 10 },
     finalRankingsCount: { type: Number, required: false, default: 0 },
+    scoreOutOfRangeGuilds: { type: Boolean, required: true, default: false },
     votingStart: { type: Date, required: true },
     votingEnd: { type: Date, required: true },
     active: { type: Boolean, required: true, default: true },

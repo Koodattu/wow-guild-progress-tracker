@@ -51,6 +51,7 @@ router.get(
         raidIds: p.raidIds,
         guildCount: p.guildCount || 10,
         finalRankingsCount: p.finalRankingsCount || 0,
+        scoreOutOfRangeGuilds: p.scoreOutOfRangeGuilds ?? false,
         votingStart: p.votingStart,
         votingEnd: p.votingEnd,
         isVotingOpen: now >= new Date(p.votingStart) && now <= new Date(p.votingEnd),
@@ -209,6 +210,7 @@ router.get("/:pickemId", async (req: Request, res: Response) => {
       raidIds: pickem.raidIds,
       guildCount,
       finalRankingsCount: pickem.finalRankingsCount || 0,
+      scoreOutOfRangeGuilds: pickem.scoreOutOfRangeGuilds ?? false,
       votingStart: pickem.votingStart,
       votingEnd: pickem.votingEnd,
       isVotingOpen,
@@ -616,6 +618,8 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
 
   // For unfinalized RWF pickems, don't calculate scores - everyone gets 0
   const isUnfinalizedRwf = pickem.type === "rwf" && !pickem.finalized;
+  const scoreOutOfRangeGuilds = pickem.type === "regular" && (pickem.scoreOutOfRangeGuilds ?? false);
+  const scoredRankLimit = pickem.guildCount || 10;
 
   // Calculate scores for each user
   const leaderboard: {
@@ -646,13 +650,21 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
       actualRank: number | null;
       points: number;
     }[] = [];
+    const streakPredictions: {
+      guildName: string;
+      realm: string;
+      predictedRank: number;
+      actualRank: number | null;
+    }[] = [];
 
     for (const pred of entry.predictions) {
       const key = `${pred.guildName}-${pred.realm}`;
       const actualRank = actualRankMap.get(key) ?? null;
+      const isScoringEligibleRank = actualRank !== null && (pickem.type === "rwf" || scoreOutOfRangeGuilds || actualRank <= scoredRankLimit);
+      const scoringActualRank = isScoringEligibleRank ? actualRank : null;
 
-      // Only award points if guild is in top 50 (has a rank)
-      const points = actualRank !== null && !isUnfinalizedRwf ? calculatePickemPoints(pred.position, actualRank, pickem.scoringConfig) : 0;
+      // Regular pickems only score beyond the predicted range when explicitly enabled.
+      const points = scoringActualRank !== null && !isUnfinalizedRwf ? calculatePickemPoints(pred.position, scoringActualRank, pickem.scoringConfig) : 0;
       positionPoints += points;
 
       predictionResults.push({
@@ -662,10 +674,16 @@ async function getPickemLeaderboard(pickemId: string, guildRankings: { rank: num
         actualRank,
         points,
       });
+      streakPredictions.push({
+        guildName: pred.guildName,
+        realm: pred.realm,
+        predictedRank: pred.position,
+        actualRank: scoringActualRank,
+      });
     }
 
     // Calculate streak bonus (skip for unfinalized RWF)
-    const { totalBonus: streakBonus, streaks } = isUnfinalizedRwf ? { totalBonus: 0, streaks: [] } : calculateStreakBonus(predictionResults, pickem.streakConfig);
+    const { totalBonus: streakBonus, streaks } = isUnfinalizedRwf ? { totalBonus: 0, streaks: [] } : calculateStreakBonus(streakPredictions, pickem.streakConfig);
 
     // Sort predictions by predicted rank
     predictionResults.sort((a, b) => a.predictedRank - b.predictedRank);

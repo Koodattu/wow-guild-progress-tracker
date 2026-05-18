@@ -781,6 +781,7 @@ export interface PickemSummary {
   raidIds: number[];
   guildCount: number;
   finalRankingsCount: number;
+  scoreOutOfRangeGuilds: boolean;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
@@ -848,6 +849,7 @@ export interface PickemDetails {
   raidIds: number[];
   guildCount: number;
   finalRankingsCount: number;
+  scoreOutOfRangeGuilds: boolean;
   votingStart: string;
   votingEnd: string;
   isVotingOpen: boolean;
@@ -877,6 +879,7 @@ export interface AdminPickem {
   raidIds: number[];
   guildCount: number;
   finalRankingsCount: number;
+  scoreOutOfRangeGuilds: boolean;
   votingStart: string;
   votingEnd: string;
   active: boolean;
@@ -909,6 +912,7 @@ export interface CreatePickemInput {
   raidIds?: number[];
   guildCount?: number;
   finalRankingsCount?: number;
+  scoreOutOfRangeGuilds?: boolean;
   votingStart: string;
   votingEnd: string;
   active?: boolean;
@@ -923,6 +927,7 @@ export interface UpdatePickemInput {
   raidIds?: number[];
   guildCount?: number;
   finalRankingsCount?: number;
+  scoreOutOfRangeGuilds?: boolean;
   votingStart?: string;
   votingEnd?: string;
   active?: boolean;

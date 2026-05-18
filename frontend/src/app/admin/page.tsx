@@ -246,6 +246,7 @@ export default function AdminPage() {
     raidIds: [] as number[],
     guildCount: 10,
     finalRankingsCount: 0,
+    scoreOutOfRangeGuilds: false,
     votingStart: "",
     votingEnd: "",
     active: true,
@@ -1743,6 +1744,7 @@ export default function AdminPage() {
                     raidIds: [],
                     guildCount: 10,
                     finalRankingsCount: 0,
+                    scoreOutOfRangeGuilds: false,
                     votingStart: "",
                     votingEnd: "",
                     active: true,
@@ -1791,6 +1793,7 @@ export default function AdminPage() {
                             raidIds: pickemForm.type === "regular" ? pickemForm.raidIds : [],
                             guildCount: pickemForm.guildCount,
                             finalRankingsCount: pickemForm.finalRankingsCount,
+                            scoreOutOfRangeGuilds: pickemForm.type === "regular" ? pickemForm.scoreOutOfRangeGuilds : false,
                             votingStart: pickemForm.votingStart,
                             votingEnd: pickemForm.votingEnd,
                             active: pickemForm.active,
@@ -1855,6 +1858,7 @@ export default function AdminPage() {
                             ...pickemForm,
                             type: newType,
                             guildCount: 10,
+                            scoreOutOfRangeGuilds: newType === "regular" ? pickemForm.scoreOutOfRangeGuilds : false,
                             raidIds: newType === "rwf" ? [] : pickemForm.raidIds,
                           });
                         }}
@@ -1920,6 +1924,25 @@ export default function AdminPage() {
                               {raid.name}
                             </label>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extended regular scoring - only for regular type */}
+                    {pickemForm.type === "regular" && (
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          id="scoreOutOfRangeGuilds"
+                          checked={pickemForm.scoreOutOfRangeGuilds}
+                          onChange={(e) => setPickemForm({ ...pickemForm, scoreOutOfRangeGuilds: e.target.checked })}
+                          className="mt-1 rounded border-gray-500"
+                        />
+                        <div>
+                          <label htmlFor="scoreOutOfRangeGuilds" className="text-sm text-gray-300">
+                            {t("pickems.form.scoreOutOfRangeGuilds")}
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">{t("pickems.form.scoreOutOfRangeGuildsHelp")}</p>
                         </div>
                       </div>
                     )}
@@ -2411,6 +2434,7 @@ export default function AdminPage() {
                                   raidIds: pickem.raidIds,
                                   guildCount: pickem.guildCount || 10,
                                   finalRankingsCount: pickem.finalRankingsCount || 0,
+                                  scoreOutOfRangeGuilds: pickem.scoreOutOfRangeGuilds ?? false,
                                   votingStart: new Date(pickem.votingStart).toISOString().slice(0, 16),
                                   votingEnd: new Date(pickem.votingEnd).toISOString().slice(0, 16),
                                   active: pickem.active,

@@ -14,6 +14,7 @@ import Pickem from "../models/Pickem";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import { CLASSES } from "../config/classes";
 import pickemService from "../services/pickem.service";
+import cacheService from "../services/cache.service";
 import rateLimitService from "../services/rate-limit.service";
 import backgroundGuildProcessor from "../services/background-guild-processor.service";
 import GuildProcessingQueue, { ProcessingStatus } from "../models/GuildProcessingQueue";
@@ -1342,7 +1343,7 @@ router.get("/pickems/:pickemId", async (req: Request, res: Response) => {
 // Create a new pickem
 router.post("/pickems", async (req: Request, res: Response) => {
   try {
-    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig, prizeConfig, type, guildCount } = req.body;
+    const { pickemId, name, raidIds, votingStart, votingEnd, active, scoringConfig, streakConfig, prizeConfig, type, guildCount, finalRankingsCount, scoreOutOfRangeGuilds } = req.body;
 
     // Determine pickem type (default to 'regular' for backwards compatibility)
     const pickemType = type === "rwf" ? "rwf" : "regular";
@@ -1384,6 +1385,11 @@ router.post("/pickems", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "guildCount must be a number between 1 and 25" });
     }
 
+    const finalFinalRankingsCount = finalRankingsCount ?? 0;
+    if (typeof finalFinalRankingsCount !== "number" || finalFinalRankingsCount < 0 || finalFinalRankingsCount > 25) {
+      return res.status(400).json({ error: "finalRankingsCount must be a number between 0 and 25" });
+    }
+
     const pickem = await pickemService.createPickem({
       pickemId,
       name,
@@ -1396,6 +1402,8 @@ router.post("/pickems", async (req: Request, res: Response) => {
       prizeConfig,
       type: pickemType,
       guildCount: finalGuildCount,
+      finalRankingsCount: finalFinalRankingsCount,
+      scoreOutOfRangeGuilds: pickemType === "regular" ? scoreOutOfRangeGuilds === true : false,
     });
 
     res.status(201).json(pickem);
@@ -1439,11 +1447,25 @@ router.put("/pickems/:pickemId", async (req: Request, res: Response) => {
       }
     }
 
+    if (updates.finalRankingsCount !== undefined) {
+      if (typeof updates.finalRankingsCount !== "number" || updates.finalRankingsCount < 0 || updates.finalRankingsCount > 25) {
+        return res.status(400).json({ error: "finalRankingsCount must be a number between 0 and 25" });
+      }
+    }
+
+    if (updates.scoreOutOfRangeGuilds !== undefined && typeof updates.scoreOutOfRangeGuilds !== "boolean") {
+      return res.status(400).json({ error: "scoreOutOfRangeGuilds must be a boolean" });
+    }
+
     const pickem = await pickemService.updatePickem(pickemId, updates);
 
     if (!pickem) {
       return res.status(404).json({ error: "Pickem not found" });
     }
+
+    await cacheService.invalidate(cacheService.getPickemLeaderboardKey(pickemId));
+    await cacheService.invalidate(cacheService.getPickemRankingsKey(pickemId));
+    await cacheService.invalidate("pickems:list");
 
     res.json(pickem);
   } catch (error) {

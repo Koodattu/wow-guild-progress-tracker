@@ -13,6 +13,7 @@ export interface PickemSeedData {
   raidIds?: number[]; // Required for regular type, optional for rwf
   guildCount?: number; // Number of guilds to predict (defaults to 10 for regular, 5 for rwf)
   finalRankingsCount?: number; // Number of guilds required for finalization — defaults to guildCount if not set
+  scoreOutOfRangeGuilds?: boolean; // For regular pickems, score picked guilds ranked beyond guildCount
   votingStart: Date;
   votingEnd: Date;
   active: boolean;

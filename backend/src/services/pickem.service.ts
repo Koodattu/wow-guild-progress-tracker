@@ -19,6 +19,7 @@ class PickemService {
           const type = seedData.type || "regular";
           const guildCount = seedData.guildCount ?? 10;
           const finalRankingsCount = seedData.finalRankingsCount ?? 0;
+          const scoreOutOfRangeGuilds = seedData.scoreOutOfRangeGuilds ?? false;
 
           await Pickem.create({
             pickemId: seedData.pickemId,
@@ -27,6 +28,7 @@ class PickemService {
             raidIds: seedData.raidIds || [],
             guildCount,
             finalRankingsCount,
+            scoreOutOfRangeGuilds,
             votingStart: seedData.votingStart,
             votingEnd: seedData.votingEnd,
             active: seedData.active,
@@ -77,6 +79,7 @@ class PickemService {
     raidIds?: number[];
     guildCount?: number;
     finalRankingsCount?: number;
+    scoreOutOfRangeGuilds?: boolean;
     votingStart: Date;
     votingEnd: Date;
     active?: boolean;
@@ -87,6 +90,7 @@ class PickemService {
     const type = data.type || "regular";
     const guildCount = data.guildCount ?? 10;
     const finalRankingsCount = data.finalRankingsCount ?? 0;
+    const scoreOutOfRangeGuilds = data.scoreOutOfRangeGuilds ?? false;
 
     const pickem = await Pickem.create({
       pickemId: data.pickemId,
@@ -95,6 +99,7 @@ class PickemService {
       raidIds: data.raidIds || [],
       guildCount,
       finalRankingsCount,
+      scoreOutOfRangeGuilds,
       votingStart: data.votingStart,
       votingEnd: data.votingEnd,
       active: data.active ?? true,
@@ -117,6 +122,7 @@ class PickemService {
       raidIds?: number[];
       guildCount?: number;
       finalRankingsCount?: number;
+      scoreOutOfRangeGuilds?: boolean;
       votingStart?: Date;
       votingEnd?: Date;
       active?: boolean;
@@ -133,6 +139,7 @@ class PickemService {
     if (data.raidIds !== undefined) pickem.raidIds = data.raidIds;
     if (data.guildCount !== undefined) pickem.guildCount = data.guildCount;
     if (data.finalRankingsCount !== undefined) pickem.finalRankingsCount = data.finalRankingsCount;
+    if (data.scoreOutOfRangeGuilds !== undefined) pickem.scoreOutOfRangeGuilds = data.scoreOutOfRangeGuilds;
     if (data.votingStart !== undefined) pickem.votingStart = data.votingStart;
     if (data.votingEnd !== undefined) pickem.votingEnd = data.votingEnd;
     if (data.active !== undefined) pickem.active = data.active;
