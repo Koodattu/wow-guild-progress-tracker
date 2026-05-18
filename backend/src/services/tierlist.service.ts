@@ -404,19 +404,11 @@ class TierListService {
 
     // === CALCULATE EFFICIENCY SCORE ===
     // Efficiency measures how effectively a guild clears bosses relative to time and effort.
+    // Score each difficulty independently, then apply the same heroic/mythic weights as speed.
+    // This prevents heroic-only clears from gaining unweighted ratio credit against mythic progression.
     //
-    // Key insight: heroic + mythic progress are combined into a single "achievement credit"
-    // BEFORE comparing against time/pulls. This avoids the flaw of comparing time-per-progress
-    // ratios across guilds at different progression levels (a 1-kill guild that spent 10 minutes
-    // should NOT beat a 5-kill guild that spent 4 hours on harder content).
-    //
-    // Achievement credit: heroicProgress * 0.2 + mythicProgress * 0.8 (mythic worth 4× heroic)
-    // Credit-per-time: achievement / totalTime (higher = better, more credit per second)
-    // Credit-per-pull: achievement / totalPulls (higher = better, more credit per pull)
-    //
-    // Final: creditPerTime 50% + creditPerPull 25% + achievement 25%
-    // The achievement component ensures guilds with more kills rank higher even if
-    // their time ratio is similar. Credit-per-time is the primary differentiator.
+    // Per difficulty: creditPerTime 50% + creditPerPull 25% + progress 25%.
+    // Final: heroicEfficiency * 0.2 + mythicEfficiency * 0.8.
     let heroicEfficiencyScore = 0;
     let mythicEfficiencyScore = 0;
     let efficiencyScore = 0;
@@ -427,59 +419,79 @@ class TierListService {
     if (hasHeroicEfficiency || hasMythicEfficiency) {
       const EFFICIENCY_K = 3;
 
-      // --- Step 1: Compute achievement credit for this guild ---
-      const heroicProgress = heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.heroicWclBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
-      const mythicProgress = mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(guildData.mythicWclBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
-      const achievement = heroicProgress * this.HEROIC_WEIGHT + mythicProgress * this.MYTHIC_WEIGHT;
+      const calculateDifficultyEfficiencyScore = (
+        bossesDefeated: number,
+        totalBosses: number,
+        timeSpent: number,
+        totalPulls: number,
+        getBossesDefeated: (data: GuildRaidData) => number,
+        getTimeSpent: (data: GuildRaidData) => number,
+        getTotalPulls: (data: GuildRaidData) => number,
+      ): number => {
+        if (bossesDefeated <= 0 || totalBosses <= 0) return 0;
 
-      // Store per-difficulty progress for debugging
-      heroicEfficiencyScore = Math.round(heroicProgress);
-      mythicEfficiencyScore = Math.round(mythicProgress);
+        const progress = this.calculateExponentialProgressScore(bossesDefeated, totalBosses, EFFICIENCY_K);
+        const creditPerTimeValues: number[] = [];
+        const creditPerPullValues: number[] = [];
 
-      // --- Step 2: Compute credit-per-time and credit-per-pull for ALL guilds ---
-      const creditPerTimeValues: number[] = [];
-      const creditPerPullValues: number[] = [];
+        for (const g of allGuildsData) {
+          const gBossesDefeated = getBossesDefeated(g);
+          if (gBossesDefeated <= 0) continue;
 
-      for (const g of allGuildsData) {
-        const gHeroicProg =
-          g.heroicWclBossesDefeated > 0 && heroicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.heroicWclBossesDefeated, heroicTotalBosses, EFFICIENCY_K) : 0;
-        const gMythicProg =
-          g.mythicWclBossesDefeated > 0 && mythicTotalBosses > 0 ? this.calculateExponentialProgressScore(g.mythicWclBossesDefeated, mythicTotalBosses, EFFICIENCY_K) : 0;
-        const gAchievement = gHeroicProg * this.HEROIC_WEIGHT + gMythicProg * this.MYTHIC_WEIGHT;
+          const gProgress = this.calculateExponentialProgressScore(gBossesDefeated, totalBosses, EFFICIENCY_K);
+          const gTimeSpent = getTimeSpent(g);
+          const gTotalPulls = getTotalPulls(g);
 
-        if (gAchievement <= 0) continue;
+          if (gTimeSpent > 0) creditPerTimeValues.push(gProgress / gTimeSpent);
+          if (gTotalPulls > 0) creditPerPullValues.push(gProgress / gTotalPulls);
+        }
 
-        const gTotalTime = g.heroicTimeSpent + g.mythicTimeSpent;
-        const gTotalPulls = g.heroicTotalPulls + g.mythicTotalPulls;
+        const minCPT = creditPerTimeValues.length > 0 ? Math.min(...creditPerTimeValues) : 0;
+        const maxCPT = creditPerTimeValues.length > 0 ? Math.max(...creditPerTimeValues) : 1;
+        const minCPP = creditPerPullValues.length > 0 ? Math.min(...creditPerPullValues) : 0;
+        const maxCPP = creditPerPullValues.length > 0 ? Math.max(...creditPerPullValues) : 1;
 
-        if (gTotalTime > 0) creditPerTimeValues.push(gAchievement / gTotalTime);
-        if (gTotalPulls > 0) creditPerPullValues.push(gAchievement / gTotalPulls);
+        let creditPerTimeScore = 0;
+        if (timeSpent > 0) {
+          creditPerTimeScore = this.interpolateScoreAscending(progress / timeSpent, minCPT, maxCPT);
+        }
+
+        let creditPerPullScore = 0;
+        if (totalPulls > 0) {
+          creditPerPullScore = this.interpolateScoreAscending(progress / totalPulls, minCPP, maxCPP);
+        }
+
+        return Math.round(creditPerTimeScore * 0.5 + creditPerPullScore * 0.25 + progress * 0.25);
+      };
+
+      heroicEfficiencyScore = calculateDifficultyEfficiencyScore(
+        guildData.heroicWclBossesDefeated,
+        heroicTotalBosses,
+        guildData.heroicTimeSpent,
+        guildData.heroicTotalPulls,
+        (data) => data.heroicWclBossesDefeated,
+        (data) => data.heroicTimeSpent,
+        (data) => data.heroicTotalPulls,
+      );
+
+      mythicEfficiencyScore = calculateDifficultyEfficiencyScore(
+        guildData.mythicWclBossesDefeated,
+        mythicTotalBosses,
+        guildData.mythicTimeSpent,
+        guildData.mythicTotalPulls,
+        (data) => data.mythicWclBossesDefeated,
+        (data) => data.mythicTimeSpent,
+        (data) => data.mythicTotalPulls,
+      );
+
+      if (hasHeroicEfficiency && hasMythicEfficiency) {
+        efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT + mythicEfficiencyScore * this.MYTHIC_WEIGHT;
+      } else if (hasHeroicEfficiency) {
+        efficiencyScore = heroicEfficiencyScore * this.HEROIC_WEIGHT;
+      } else if (hasMythicEfficiency) {
+        efficiencyScore = mythicEfficiencyScore * this.MYTHIC_WEIGHT;
       }
 
-      const minCPT = creditPerTimeValues.length > 0 ? Math.min(...creditPerTimeValues) : 0;
-      const maxCPT = creditPerTimeValues.length > 0 ? Math.max(...creditPerTimeValues) : 1;
-      const minCPP = creditPerPullValues.length > 0 ? Math.min(...creditPerPullValues) : 0;
-      const maxCPP = creditPerPullValues.length > 0 ? Math.max(...creditPerPullValues) : 1;
-
-      // --- Step 3: Score this guild's credit-per-time and credit-per-pull ---
-      const totalTime = guildData.heroicTimeSpent + guildData.mythicTimeSpent;
-      const totalPulls = guildData.heroicTotalPulls + guildData.mythicTotalPulls;
-
-      let creditPerTimeScore = 0;
-      if (totalTime > 0 && achievement > 0) {
-        creditPerTimeScore = this.interpolateScoreAscending(achievement / totalTime, minCPT, maxCPT);
-      }
-
-      let creditPerPullScore = 0;
-      if (totalPulls > 0 && achievement > 0) {
-        creditPerPullScore = this.interpolateScoreAscending(achievement / totalPulls, minCPP, maxCPP);
-      }
-
-      // --- Step 4: Combine ---
-      // Credit-per-time 50%: primary differentiator (how fast did you achieve your progress?)
-      // Credit-per-pull 25%: secondary (how many attempts per achievement?)
-      // Achievement 25%: ensures guilds with more kills rank higher at similar ratios
-      efficiencyScore = Math.round(creditPerTimeScore * 0.5 + creditPerPullScore * 0.25 + achievement * 0.25);
       efficiencyScore = Math.max(this.MIN_SCORE, Math.min(this.MAX_SCORE, efficiencyScore));
     }
 
