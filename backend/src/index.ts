@@ -260,7 +260,8 @@ async function runBackgroundInitialization(): Promise<void> {
     await guildService.initializeGuilds();
   });
 
-  // Sync guild config data (parent_guild and streamers)
+  // Sync guild config data that remains config-owned.
+  // Streamers are seeded for new guilds only and then managed in the admin panel.
   await runStartupTask("Sync guild config data", async () => {
     await guildService.syncGuildConfigData();
   });

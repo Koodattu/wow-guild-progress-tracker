@@ -1,4 +1,5 @@
 import Guild, { IGuild, IRaidProgress, IBossProgress, IOfficialRaidProgress } from "../models/Guild";
+import type { IStreamer } from "../models/Streamer";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
@@ -24,6 +25,19 @@ import { yieldToEventLoop } from "../utils/yield";
 class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
+
+  private formatConfigStreamers(streamers: string[] = []): IStreamer[] {
+    return streamers
+      .map((channelName) => channelName.trim().toLowerCase())
+      .filter(Boolean)
+      .map((channelName) => ({
+        channelName,
+        isLive: false,
+        isPlayingWoW: false,
+        gameName: undefined,
+        lastChecked: undefined,
+      }));
+  }
 
   async refreshRaidPartitions(raidIds: number[] = CURRENT_RAID_IDS): Promise<void> {
     if (raidIds.length === 0) return;
@@ -488,6 +502,7 @@ class GuildService {
           faction,
           crest: crestData,
           parent_guild: guildConfig.parent_guild,
+          streamers: this.formatConfigStreamers(guildConfig.streamers),
           progress: [],
         });
         logger.info(`Created guild: ${guildConfig.name} - ${guildConfig.realm}`);
@@ -534,10 +549,11 @@ class GuildService {
     logger.info(`Guild initialization complete: ${newGuildsCount} new guilds queued, ${existingGuildsCount} existing guilds`);
   }
 
-  // Sync guild config data (parent_guild and streamers) from config to database
-  // This runs on startup to ensure config changes are reflected in the database
+  // Sync guild config data from config to database.
+  // Streamers are only seeded when a guild is first created; after that, the
+  // database/admin panel owns the streamer list.
   async syncGuildConfigData(): Promise<void> {
-    logger.info("Syncing guild config data (parent_guild, streamers)...");
+    logger.info("Syncing guild config data (parent_guild only; existing streamers are preserved)...");
 
     const rawGuilds = process.env.NODE_ENV === "production" ? GUILDS_PROD : GUILDS_DEV;
     const guildsToTrack = filterUniqueGuilds(rawGuilds);
@@ -558,40 +574,12 @@ class GuildService {
         // Check if we need to update parent_guild
         const needsParentUpdate = guild.parent_guild !== guildConfig.parent_guild;
 
-        // Check if we need to update streamers
-        let needsStreamersUpdate = false;
-        const configStreamers = guildConfig.streamers || [];
-        const existingStreamers = guild.streamers || [];
-
-        // Compare streamer arrays
-        if (configStreamers.length !== existingStreamers.length) {
-          needsStreamersUpdate = true;
-        } else {
-          const existingChannelNames = new Set(existingStreamers.map((s) => s.channelName.toLowerCase()));
-          const configChannelNames = new Set(configStreamers.map((s) => s.toLowerCase()));
-
-          // Check if sets are equal
-          needsStreamersUpdate = configChannelNames.size !== existingChannelNames.size || ![...configChannelNames].every((name) => existingChannelNames.has(name));
-        }
-
         // Update if needed
-        if (needsParentUpdate || needsStreamersUpdate) {
+        if (needsParentUpdate) {
           const updates: any = {};
 
-          if (needsParentUpdate) {
-            updates.parent_guild = guildConfig.parent_guild;
-            logger.info(`  ${guild.name}: Updating parent_guild to "${guildConfig.parent_guild || "none"}"`);
-          }
-
-          if (needsStreamersUpdate) {
-            // Convert config streamers to streamer objects
-            updates.streamers = configStreamers.map((channelName) => ({
-              channelName: channelName.toLowerCase(),
-              isLive: false,
-              lastChecked: undefined,
-            }));
-            logger.info(`  ${guild.name}: Updating streamers to [${configStreamers.join(", ")}]`);
-          }
+          updates.parent_guild = guildConfig.parent_guild;
+          logger.info(`  ${guild.name}: Updating parent_guild to "${guildConfig.parent_guild || "none"}"`);
 
           await Guild.updateOne(
             {
