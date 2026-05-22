@@ -403,14 +403,24 @@ async function getGuildRankingsForPickem(raidIds: number[]) {
 }
 
 /**
+ * Minimal guild shape needed by regular pickem scoring.
+ */
+interface GuildMapEntry {
+  name: string;
+  realm: string;
+  parent_guild: string | null;
+  progressByRaid: Map<number, any>;
+}
+
+/**
  * Build guild rankings from pre-warmed progress cache data.
  * The cached data from getAllGuildsForRaid already contains:
  * - name, realm, parent_guild
  * - progress[].difficulty, progress[].bossesDefeated, progress[].totalBosses, progress[].lastKillTime
  */
-function buildRankingsFromCachedProgress(cachedGuildsByRaid: Map<number, any[]>, raidIds: number[]) {
+async function buildRankingsFromCachedProgress(cachedGuildsByRaid: Map<number, any[]>, raidIds: number[]) {
   // Collect all guilds across all raids, deduplicating by name+realm
-  const guildMap = new Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>();
+  const guildMap = new Map<string, GuildMapEntry>();
 
   for (const raidId of raidIds) {
     const guilds = cachedGuildsByRaid.get(raidId) || [];
@@ -432,7 +442,52 @@ function buildRankingsFromCachedProgress(cachedGuildsByRaid: Map<number, any[]>,
     }
   }
 
+  await addMissingParentGuilds(guildMap);
+
   return consolidateAndRankGuilds(guildMap, raidIds);
+}
+
+/**
+ * The progress cache only contains guilds that have raid progress. A parent guild
+ * can be absent while one of its child teams has progress, so fetch missing
+ * parent metadata before family consolidation.
+ */
+async function addMissingParentGuilds(guildMap: Map<string, GuildMapEntry>) {
+  const parentNames = new Set<string>();
+  const knownParentNames = new Set<string>();
+
+  for (const guild of guildMap.values()) {
+    if (guild.parent_guild) {
+      parentNames.add(guild.parent_guild);
+    } else {
+      knownParentNames.add(guild.name);
+    }
+  }
+
+  const missingParentNames = [...parentNames].filter((parentName) => !knownParentNames.has(parentName));
+  if (missingParentNames.length === 0) {
+    return;
+  }
+
+  const parents = await Guild.find(
+    {
+      name: { $in: missingParentNames },
+      $or: [{ parent_guild: null }, { parent_guild: "" }, { parent_guild: { $exists: false } }],
+    },
+    { name: 1, realm: 1, parent_guild: 1 },
+  ).lean();
+
+  for (const parent of parents) {
+    const key = `${parent.name}-${parent.realm}`;
+    if (!guildMap.has(key)) {
+      guildMap.set(key, {
+        name: parent.name,
+        realm: parent.realm,
+        parent_guild: parent.parent_guild || null,
+        progressByRaid: new Map(),
+      });
+    }
+  }
 }
 
 /**
@@ -441,7 +496,7 @@ function buildRankingsFromCachedProgress(cachedGuildsByRaid: Map<number, any[]>,
 async function buildRankingsFromDB(raidIds: number[]) {
   const guilds = await Guild.find({}, { name: 1, realm: 1, parent_guild: 1, progress: 1 }).lean();
 
-  const guildMap = new Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>();
+  const guildMap = new Map<string, GuildMapEntry>();
 
   for (const guild of guilds) {
     const key = `${guild.name}-${guild.realm}`;
@@ -469,7 +524,7 @@ async function buildRankingsFromDB(raidIds: number[]) {
  * Shared logic: consolidate parent/child guilds and rank them.
  * Used by both cached and DB-fallback paths.
  */
-function consolidateAndRankGuilds(guildMap: Map<string, { name: string; realm: string; parent_guild: string | null; progressByRaid: Map<number, any> }>, raidIds: number[]) {
+function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds: number[]) {
   // Build parent/child relationships
   const childToParentName = new Map<string, string>();
   const parentGuildInfo = new Map<string, { name: string; realm: string }>();
