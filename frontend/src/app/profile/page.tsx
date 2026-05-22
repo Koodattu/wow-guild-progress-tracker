@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
-import { WoWCharacter, UserProfile, UserPickemEntry } from "@/types";
+import { WoWCharacter, UserProfile, UserPickemEntry, StreamerSettings } from "@/types";
 import Link from "next/link";
 import { FaBattleNet } from "react-icons/fa";
 import { FaTwitch } from "react-icons/fa";
@@ -52,9 +52,16 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const hasTriggeredRefresh = useRef(false);
 
+  // Streamer listing state
+  const [streamerSettings, setStreamerSettings] = useState<StreamerSettings | null>(null);
+  const [isLoadingStreamerSettings, setIsLoadingStreamerSettings] = useState(false);
+  const [isSavingStreamerSettings, setIsSavingStreamerSettings] = useState(false);
+  const [selectedStreamerGuildId, setSelectedStreamerGuildId] = useState("");
+
   // Pickems state
   const [userPickems, setUserPickems] = useState<UserPickemEntry[]>([]);
   const [isLoadingPickems, setIsLoadingPickems] = useState(false);
+  const [expandedPickemIds, setExpandedPickemIds] = useState<Set<string>>(new Set());
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -72,13 +79,28 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const refreshStreamerSettings = useCallback(async () => {
+    try {
+      setIsLoadingStreamerSettings(true);
+      const settings = await api.getStreamerSettings();
+      setStreamerSettings(settings);
+      setSelectedStreamerGuildId(settings.selectedGuildId ?? "");
+    } catch (error) {
+      console.error("Failed to fetch streamer settings:", error);
+      setStreamerSettings(null);
+      setSelectedStreamerGuildId("");
+    } finally {
+      setIsLoadingStreamerSettings(false);
+    }
+  }, []);
+
   // Initial profile load
   useEffect(() => {
     if (!isAuthLoading && authUser) {
       setIsLoadingProfile(true);
-      refreshProfile().finally(() => setIsLoadingProfile(false));
+      Promise.all([refreshProfile(), refreshStreamerSettings()]).finally(() => setIsLoadingProfile(false));
     }
-  }, [isAuthLoading, authUser, refreshProfile]);
+  }, [isAuthLoading, authUser, refreshProfile, refreshStreamerSettings]);
 
   // Fetch user's pickem entries
   useEffect(() => {
@@ -115,10 +137,12 @@ export default function ProfilePage() {
     if (connected === "twitch") {
       setMessage({ type: "success", text: t("twitchConnected") });
       refreshProfile();
+      refreshStreamerSettings();
       router.replace("/profile");
     } else if (connected === "battlenet") {
       setMessage({ type: "success", text: t("battlenetConnected") });
       refreshProfile();
+      refreshStreamerSettings();
       router.replace("/profile");
     } else if (error) {
       let errorText = t("connectionError");
@@ -134,7 +158,7 @@ export default function ProfilePage() {
       setMessage({ type: "error", text: errorText });
       router.replace("/profile");
     }
-  }, [searchParams, t, refreshProfile, router]);
+  }, [searchParams, t, refreshProfile, refreshStreamerSettings, router]);
 
   // Clear message after 5 seconds
   useEffect(() => {
@@ -168,6 +192,7 @@ export default function ProfilePage() {
       setIsDisconnectingTwitch(true);
       await api.disconnectTwitch();
       await refreshProfile();
+      await refreshStreamerSettings();
       setMessage({ type: "success", text: t("twitchDisconnected") });
     } catch (error) {
       console.error("Failed to disconnect Twitch:", error);
@@ -194,6 +219,7 @@ export default function ProfilePage() {
       setIsDisconnectingBattleNet(true);
       await api.disconnectBattleNet();
       await refreshProfile();
+      await refreshStreamerSettings();
       setMessage({ type: "success", text: t("battlenetDisconnected") });
     } catch (error) {
       console.error("Failed to disconnect Battle.net:", error);
@@ -213,6 +239,7 @@ export default function ProfilePage() {
       setIsRefreshingCharacters(true);
       await api.refreshWoWCharacters();
       await refreshProfile();
+      await refreshStreamerSettings();
 
       // Always fetch the full character list after refresh (for dialog updates)
       // This ensures the dialog gets updated enriched data even if opened during refresh
@@ -233,7 +260,7 @@ export default function ProfilePage() {
     } finally {
       setIsRefreshingCharacters(false);
     }
-  }, [isRefreshingCharacters, refreshProfile, t]);
+  }, [isRefreshingCharacters, refreshProfile, refreshStreamerSettings, t]);
 
   const handleRefreshTwitch = async () => {
     try {
@@ -266,6 +293,7 @@ export default function ProfilePage() {
       setIsSavingCharacters(true);
       await api.updateCharacterSelection(selectedIds);
       await refreshProfile();
+      await refreshStreamerSettings();
       setMessage({ type: "success", text: t("charactersSaved") });
       setShowCharacterDialog(false);
     } catch (error) {
@@ -313,6 +341,34 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSaveStreamerSettings = async () => {
+    try {
+      setIsSavingStreamerSettings(true);
+      const settings = await api.updateStreamerSettings(selectedStreamerGuildId || null);
+      setStreamerSettings(settings);
+      setSelectedStreamerGuildId(settings.selectedGuildId ?? "");
+      setMessage({ type: "success", text: settings.selectedGuildId ? t("streamerSettingsSaved") : t("streamerSettingsRemoved") });
+    } catch (error) {
+      console.error("Failed to update streamer settings:", error);
+      const errorMessage = error instanceof Error ? error.message : t("streamerSettingsError");
+      setMessage({ type: "error", text: errorMessage });
+    } finally {
+      setIsSavingStreamerSettings(false);
+    }
+  };
+
+  const togglePickemExpanded = (pickemId: string) => {
+    setExpandedPickemIds((current) => {
+      const next = new Set(current);
+      if (next.has(pickemId)) {
+        next.delete(pickemId);
+      } else {
+        next.add(pickemId);
+      }
+      return next;
+    });
+  };
+
   const getClassColor = (className: string): string => {
     return CLASS_COLORS[className] || "#FFFFFF";
   };
@@ -355,18 +411,27 @@ export default function ProfilePage() {
 
         {/* Profile Card */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          {/* Discord Profile Section */}
-          <div className="flex items-center gap-6 mb-6">
-            <img src={profile.discord.avatarUrl} alt={profile.discord.username} className="w-24 h-24 rounded-full border-4 border-indigo-500" />
-            <div>
-              <h2 className="text-2xl font-bold text-white">{profile.discord.username}</h2>
-              <p className="text-gray-400">{t("discordAccount")}</p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <img src={profile.discord.avatarUrl} alt={profile.discord.username} className="w-16 h-16 rounded-full border-2 border-indigo-500" />
+              <div className="min-w-0">
+                <h2 className="text-2xl font-bold text-white truncate">{profile.discord.username}</h2>
+              </div>
             </div>
+            <button onClick={logout} className="shrink-0 flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {t("logout")}
+            </button>
           </div>
 
-          {/* Account Info */}
-          <div className="border-t border-gray-700 pt-6 space-y-4">
-            <div>
+          <div className="border-t border-gray-700 pt-4 mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-gray-900/40 rounded-md border border-gray-700 px-4 py-3">
               <label className="text-sm text-gray-400">{t("memberSince")}</label>
               <p className="text-white">
                 {new Date(profile.createdAt).toLocaleDateString(undefined, {
@@ -376,7 +441,7 @@ export default function ProfilePage() {
                 })}
               </p>
             </div>
-            <div>
+            <div className="bg-gray-900/40 rounded-md border border-gray-700 px-4 py-3">
               <label className="text-sm text-gray-400">{t("lastLogin")}</label>
               <p className="text-white">
                 {new Date(profile.lastLoginAt).toLocaleDateString(undefined, {
@@ -388,20 +453,6 @@ export default function ProfilePage() {
                 })}
               </p>
             </div>
-          </div>
-
-          {/* Actions */}
-          <div className="border-t border-gray-700 pt-6 mt-6">
-            <button onClick={logout} className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {t("logout")}
-            </button>
           </div>
         </div>
 
@@ -592,6 +643,64 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* Guild Streamer Listing */}
+        <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <div className="mb-5">
+            <h3 className="text-xl font-bold text-white">{t("streamerListing")}</h3>
+            <p className="text-gray-400 text-sm mt-2">{t("streamerListingDescription")}</p>
+          </div>
+
+          {isLoadingStreamerSettings ? (
+            <div className="text-gray-400 py-4">Loading...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div className={`rounded-md border px-3 py-2 ${streamerSettings?.requirements.hasTwitch ? "border-green-700 bg-green-950/30" : "border-gray-700 bg-gray-900/40"}`}>
+                  <div className="text-xs text-gray-400">{t("linkTwitch")}</div>
+                  <div className={streamerSettings?.requirements.hasTwitch ? "text-green-300 text-sm font-medium" : "text-gray-500 text-sm"}>{streamerSettings?.requirements.hasTwitch ? t("connected") : t("notConnected")}</div>
+                </div>
+                <div className={`rounded-md border px-3 py-2 ${streamerSettings?.requirements.hasBattleNet ? "border-green-700 bg-green-950/30" : "border-gray-700 bg-gray-900/40"}`}>
+                  <div className="text-xs text-gray-400">{t("linkBattleNet")}</div>
+                  <div className={streamerSettings?.requirements.hasBattleNet ? "text-green-300 text-sm font-medium" : "text-gray-500 text-sm"}>{streamerSettings?.requirements.hasBattleNet ? t("connected") : t("notConnected")}</div>
+                </div>
+                <div className={`rounded-md border px-3 py-2 ${streamerSettings?.requirements.hasSelectedCharacter ? "border-green-700 bg-green-950/30" : "border-gray-700 bg-gray-900/40"}`}>
+                  <div className="text-xs text-gray-400">{t("manageCharacters")}</div>
+                  <div className={streamerSettings?.requirements.hasSelectedCharacter ? "text-green-300 text-sm font-medium" : "text-gray-500 text-sm"}>
+                    {streamerSettings?.requirements.hasSelectedCharacter ? t("charactersSelected") : t("noCharactersSelected")}
+                  </div>
+                </div>
+              </div>
+
+              {streamerSettings && streamerSettings.eligibleGuilds.length > 0 ? (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <select
+                    value={selectedStreamerGuildId}
+                    onChange={(event) => setSelectedStreamerGuildId(event.target.value)}
+                    className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">{t("doNotShowAsStreamer")}</option>
+                    {streamerSettings.eligibleGuilds.map((guild) => (
+                      <option key={guild.id} value={guild.id}>
+                        {guild.name} - {guild.realm}
+                        {guild.parent_guild ? ` (${guild.parent_guild})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleSaveStreamerSettings}
+                    disabled={isSavingStreamerSettings || selectedStreamerGuildId === (streamerSettings.selectedGuildId ?? "")}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingStreamerSettings ? t("saving") : t("saveStreamerSettings")}
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-900/40 border border-gray-700 rounded-md px-4 py-3 text-gray-400 text-sm">{t("streamerListingUnavailable")}</div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* My Pickems Section */}
         <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
           <h3 className="text-xl font-bold text-white mb-4">{t("myPickems")}</h3>
@@ -604,58 +713,70 @@ export default function ProfilePage() {
             <div className="space-y-4">
               {userPickems.map((entry) => (
                 <div key={entry.pickemId} className="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h4 className="text-white font-medium">{entry.pickemName ?? entry.pickemId}</h4>
-                      {entry.type && <span className="text-xs text-gray-400 uppercase">{entry.type}</span>}
-                    </div>
-                    <Link href={`/pickems/${entry.pickemId}`} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <button onClick={() => togglePickemExpanded(entry.pickemId)} className="flex items-center gap-3 min-w-0 text-left">
+                      <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedPickemIds.has(entry.pickemId) ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <div className="min-w-0">
+                        <h4 className="text-white font-medium truncate">{entry.pickemName ?? entry.pickemId}</h4>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          {entry.type && <span className="uppercase">{entry.type}</span>}
+                          <span>{t("predictionsCount", { count: entry.predictions.length })}</span>
+                        </div>
+                      </div>
+                    </button>
+                    <Link href={`/pickems/${entry.pickemId}`} className="shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors text-sm">
                       {t("viewPickem")}
                     </Link>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-400 border-b border-gray-600">
-                          <th className="text-left py-1 pr-4">{t("position")}</th>
-                          <th className="text-left py-1">{t("guild")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {entry.predictions
-                          .sort((a, b) => a.position - b.position)
-                          .map((pred) => (
-                            <tr key={pred.position} className="border-b border-gray-700/50">
-                              <td className="py-1.5 pr-4 text-yellow-400 font-medium">#{pred.position}</td>
-                              <td className="py-1.5 text-white">
-                                {pred.guildName}
-                                {pred.realm && pred.realm !== "RWF" && <span className="text-gray-400 text-xs ml-1">-{pred.realm}</span>}
-                              </td>
+                  {expandedPickemIds.has(entry.pickemId) && (
+                    <>
+                      <div className="overflow-x-auto mt-4">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-gray-400 border-b border-gray-600">
+                              <th className="text-left py-1 pr-4">{t("position")}</th>
+                              <th className="text-left py-1">{t("guild")}</th>
                             </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {[...entry.predictions]
+                              .sort((a, b) => a.position - b.position)
+                              .map((pred) => (
+                                <tr key={pred.position} className="border-b border-gray-700/50">
+                                  <td className="py-1.5 pr-4 text-yellow-400 font-medium">#{pred.position}</td>
+                                  <td className="py-1.5 text-white">
+                                    {pred.guildName}
+                                    {pred.realm && pred.realm !== "RWF" && <span className="text-gray-400 text-xs ml-1">-{pred.realm}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
 
-                  <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                    <span>
-                      {t("submittedAt")}{" "}
-                      {new Date(entry.submittedAt).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                    <span>
-                      {t("updatedAt")}{" "}
-                      {new Date(entry.updatedAt).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                  </div>
+                      <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                        <span>
+                          {t("submittedAt")}{" "}
+                          {new Date(entry.submittedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                        <span>
+                          {t("updatedAt")}{" "}
+                          {new Date(entry.updatedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

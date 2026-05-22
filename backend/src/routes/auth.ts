@@ -6,6 +6,8 @@ import battlenetAuthService from "../services/battlenet-auth.service";
 import logger from "../utils/logger";
 import User, { IUser } from "../models/User";
 import Pickem from "../models/Pickem";
+import Guild from "../models/Guild";
+import cacheService from "../services/cache.service";
 
 // Extend express-session types
 declare module "express-session" {
@@ -16,6 +18,17 @@ declare module "express-session" {
 
 const router = Router();
 
+const STREAMER_UPDATE_COOLDOWN_MS = 10 * 1000;
+const streamerUpdateTimestamps = new Map<string, number>();
+
+interface EligibleStreamerGuild {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+}
+
 /**
  * Helper function to get authenticated user from session
  */
@@ -25,6 +38,187 @@ async function getAuthenticatedUser(req: Request): Promise<IUser | null> {
     return null;
   }
   return discordService.getUserFromSession(userId);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function getEligibleStreamerGuilds(user: IUser): Promise<EligibleStreamerGuild[]> {
+  if (!user.twitch || !user.battlenet) {
+    return [];
+  }
+
+  const selectedGuildPairs = user.battlenet.characters
+    .filter((character) => character.selected && !character.inactive && character.guild)
+    .map((character) => ({
+      name: character.guild!.trim(),
+      realm: (character.guildRealm || character.realm).trim(),
+    }))
+    .filter((pair) => pair.name.length > 0 && pair.realm.length > 0);
+
+  const uniquePairs = Array.from(new Map(selectedGuildPairs.map((pair) => [`${pair.name.toLowerCase()}-${pair.realm.toLowerCase()}`, pair])).values());
+
+  if (uniquePairs.length === 0) {
+    return [];
+  }
+
+  const guilds = await Guild.find({
+    $or: uniquePairs.map((pair) => ({
+      name: { $regex: new RegExp(`^${escapeRegex(pair.name)}$`, "i") },
+      realm: { $regex: new RegExp(`^${escapeRegex(pair.realm)}$`, "i") },
+    })),
+  })
+    .select("_id name realm region parent_guild")
+    .lean();
+
+  return guilds.map((guild: any) => ({
+    id: guild._id.toString(),
+    name: guild.name,
+    realm: guild.realm,
+    region: guild.region,
+    parent_guild: guild.parent_guild,
+  }));
+}
+
+async function getSelectedStreamerGuildId(channelName: string, eligibleGuilds: EligibleStreamerGuild[]): Promise<string | null> {
+  const activeGuilds = await Guild.find({ "streamers.channelName": channelName }).select("_id").lean();
+  if (activeGuilds.length === 0) {
+    return null;
+  }
+
+  const eligibleIds = new Set(eligibleGuilds.map((guild) => guild.id));
+  const selectedGuild = activeGuilds.find((guild: any) => eligibleIds.has(guild._id.toString()));
+  return selectedGuild ? selectedGuild._id.toString() : null;
+}
+
+async function invalidateStreamerGuildCaches(guilds: EligibleStreamerGuild[]): Promise<void> {
+  const uniqueGuilds = Array.from(new Map(guilds.map((guild) => [guild.id, guild])).values());
+
+  await Promise.all(uniqueGuilds.map((guild) => cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name)));
+  await cacheService.invalidateCurrentRaidCaches();
+}
+
+async function removeStreamerChannel(channelName: string): Promise<void> {
+  const affectedGuilds = await Guild.find({ "streamers.channelName": channelName }).select("_id name realm region parent_guild").lean();
+
+  if (affectedGuilds.length === 0) {
+    return;
+  }
+
+  await Guild.updateMany({ "streamers.channelName": channelName }, { $pull: { streamers: { channelName } } });
+
+  await invalidateStreamerGuildCaches(
+    affectedGuilds.map((guild: any) => ({
+      id: guild._id.toString(),
+      name: guild.name,
+      realm: guild.realm,
+      region: guild.region,
+      parent_guild: guild.parent_guild,
+    })),
+  );
+}
+
+async function updateUserStreamerGuild(user: IUser, guildId: string | null): Promise<{ selectedGuildId: string | null; eligibleGuilds: EligibleStreamerGuild[] }> {
+  if (!user.twitch) {
+    throw new Error("Twitch account is required");
+  }
+
+  if (!user.battlenet) {
+    throw new Error("Battle.net account is required");
+  }
+
+  const channelName = user.twitch.login.trim().toLowerCase();
+  const eligibleGuilds = await getEligibleStreamerGuilds(user);
+  const targetGuild = guildId ? eligibleGuilds.find((guild) => guild.id === guildId) : null;
+
+  if (guildId && !targetGuild) {
+    throw new Error("You must select a tracked guild from one of your selected characters");
+  }
+
+  const affectedGuilds = await Guild.find({ "streamers.channelName": channelName }).select("_id name realm region parent_guild").lean();
+
+  await Guild.updateMany(
+    {
+      "streamers.channelName": channelName,
+      ...(guildId ? { _id: { $ne: guildId } } : {}),
+    },
+    { $pull: { streamers: { channelName } } },
+  );
+
+  if (guildId) {
+    await Guild.updateOne(
+      { _id: guildId, "streamers.channelName": { $ne: channelName } },
+      {
+        $push: {
+          streamers: {
+            channelName,
+            isLive: false,
+            isPlayingWoW: false,
+            gameName: undefined,
+            lastChecked: undefined,
+          },
+        },
+      },
+    );
+  }
+
+  await invalidateStreamerGuildCaches([
+    ...affectedGuilds.map((guild: any) => ({
+      id: guild._id.toString(),
+      name: guild.name,
+      realm: guild.realm,
+      region: guild.region,
+      parent_guild: guild.parent_guild,
+    })),
+    ...(targetGuild ? [targetGuild] : []),
+  ]);
+
+  return {
+    selectedGuildId: guildId,
+    eligibleGuilds,
+  };
+}
+
+async function sanitizeUserStreamerGuild(user: IUser): Promise<void> {
+  if (!user.twitch) {
+    return;
+  }
+
+  const channelName = user.twitch.login.trim().toLowerCase();
+
+  if (!user.battlenet) {
+    await removeStreamerChannel(channelName);
+    return;
+  }
+
+  const eligibleGuilds = await getEligibleStreamerGuilds(user);
+  const activeGuilds = await Guild.find({ "streamers.channelName": channelName }).select("_id name realm region parent_guild").lean();
+  if (activeGuilds.length === 0) {
+    return;
+  }
+
+  const eligibleIds = new Set(eligibleGuilds.map((guild) => guild.id));
+  const selectedGuild = activeGuilds.find((guild: any) => eligibleIds.has(guild._id.toString()));
+
+  if (!selectedGuild) {
+    await removeStreamerChannel(channelName);
+    return;
+  }
+
+  const extraGuilds = activeGuilds.filter((guild: any) => guild._id.toString() !== selectedGuild._id.toString());
+  if (extraGuilds.length > 0) {
+    await Guild.updateMany({ _id: { $in: extraGuilds.map((guild: any) => guild._id) } }, { $pull: { streamers: { channelName } } });
+    await invalidateStreamerGuildCaches(
+      extraGuilds.map((guild: any) => ({
+        id: guild._id.toString(),
+        name: guild.name,
+        realm: guild.realm,
+        region: guild.region,
+        parent_guild: guild.parent_guild,
+      })),
+    );
+  }
 }
 
 // State store for OAuth state validation (prevents CSRF)
@@ -320,7 +514,11 @@ router.post("/twitch/disconnect", async (req: Request, res: Response) => {
       await twitchAuthService.revokeToken(user.twitch.accessToken);
     }
 
+    const channelName = user.twitch?.login?.trim().toLowerCase();
     await twitchAuthService.disconnectTwitchAccount(user._id.toString());
+    if (channelName) {
+      await removeStreamerChannel(channelName);
+    }
     res.json({ success: true });
   } catch (error) {
     logger.error("Error disconnecting Twitch:", error);
@@ -407,7 +605,11 @@ router.post("/battlenet/disconnect", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
+    const channelName = user.twitch?.login?.trim().toLowerCase();
     await battlenetAuthService.disconnectBattleNetAccount(user._id.toString());
+    if (channelName) {
+      await removeStreamerChannel(channelName);
+    }
     res.json({ success: true });
   } catch (error) {
     logger.error("Error disconnecting Battle.net:", error);
@@ -463,6 +665,7 @@ router.post("/battlenet/characters", async (req: Request, res: Response) => {
     }
 
     const updatedUser = await battlenetAuthService.updateCharacterSelection(user._id.toString(), characterIds);
+    await sanitizeUserStreamerGuild(updatedUser);
 
     // Return only selected characters with minimal fields
     const selectedCharacters =
@@ -498,11 +701,89 @@ router.post("/battlenet/characters/refresh", async (req: Request, res: Response)
     }
 
     const characters = await battlenetAuthService.refreshCharacters(user._id.toString());
+    const updatedUser = await getAuthenticatedUser(req);
+    if (updatedUser) {
+      await sanitizeUserStreamerGuild(updatedUser);
+    }
 
     res.json({ characters });
   } catch (error) {
     logger.error("Error refreshing characters:", error);
     res.status(500).json({ error: "Failed to refresh characters" });
+  }
+});
+
+router.get("/me/streamer-settings", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    await sanitizeUserStreamerGuild(user);
+
+    const eligibleGuilds = await getEligibleStreamerGuilds(user);
+    const selectedGuildId = user.twitch ? await getSelectedStreamerGuildId(user.twitch.login.trim().toLowerCase(), eligibleGuilds) : null;
+
+    res.json({
+      selectedGuildId,
+      eligibleGuilds,
+      requirements: {
+        hasTwitch: Boolean(user.twitch),
+        hasBattleNet: Boolean(user.battlenet),
+        hasSelectedCharacter: Boolean(user.battlenet?.characters.some((character) => character.selected)),
+        hasEligibleGuild: eligibleGuilds.length > 0,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching streamer settings:", error);
+    res.status(500).json({ error: "Failed to fetch streamer settings" });
+  }
+});
+
+router.post("/me/streamer-settings", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const now = Date.now();
+    const userId = user._id.toString();
+    const lastUpdateAt = streamerUpdateTimestamps.get(userId) || 0;
+    const retryAfterMs = STREAMER_UPDATE_COOLDOWN_MS - (now - lastUpdateAt);
+
+    if (retryAfterMs > 0) {
+      return res.status(429).json({
+        error: "Please wait before updating streamer settings again",
+        retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
+      });
+    }
+
+    const { guildId } = req.body;
+    if (guildId !== null && typeof guildId !== "string") {
+      return res.status(400).json({ error: "guildId must be a guild id string or null" });
+    }
+
+    streamerUpdateTimestamps.set(userId, now);
+
+    const result = await updateUserStreamerGuild(user, guildId);
+
+    res.json({
+      success: true,
+      ...result,
+      requirements: {
+        hasTwitch: true,
+        hasBattleNet: true,
+        hasSelectedCharacter: Boolean(user.battlenet?.characters.some((character) => character.selected)),
+        hasEligibleGuild: result.eligibleGuilds.length > 0,
+      },
+    });
+  } catch (error) {
+    logger.error("Error updating streamer settings:", error);
+    const message = error instanceof Error ? error.message : "Failed to update streamer settings";
+    const statusCode = message.includes("required") || message.includes("selected characters") ? 400 : 500;
+    res.status(statusCode).json({ error: message });
   }
 });
 

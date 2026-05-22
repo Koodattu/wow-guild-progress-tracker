@@ -31,6 +31,7 @@ import {
   AnalyticsErrors,
   AuthUser,
   UserProfile,
+  StreamerSettings,
   WoWCharacter,
   AdminUsersResponse,
   AdminUserPickemsResponse,
@@ -421,6 +422,30 @@ export const api = {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to delete account");
+  },
+
+  async getStreamerSettings(): Promise<StreamerSettings> {
+    const response = await fetch(`${API_URL}/api/auth/me/streamer-settings`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch streamer settings");
+    return response.json();
+  },
+
+  async updateStreamerSettings(guildId: string | null): Promise<StreamerSettings & { success: boolean }> {
+    const response = await fetch(`${API_URL}/api/auth/me/streamer-settings`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ guildId }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to update streamer settings" }));
+      throw new Error(errorData.error || "Failed to update streamer settings");
+    }
+    return response.json();
   },
 
   // Twitch account connection

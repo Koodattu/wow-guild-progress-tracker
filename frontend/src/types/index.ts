@@ -607,6 +607,25 @@ export interface UserProfile {
   lastLoginAt: string;
 }
 
+export interface StreamerGuildOption {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+}
+
+export interface StreamerSettings {
+  selectedGuildId: string | null;
+  eligibleGuilds: StreamerGuildOption[];
+  requirements: {
+    hasTwitch: boolean;
+    hasBattleNet: boolean;
+    hasSelectedCharacter: boolean;
+    hasEligibleGuild: boolean;
+  };
+}
+
 // Alias for backwards compatibility
 export type User = AuthUser;
 

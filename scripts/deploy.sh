@@ -13,6 +13,7 @@ LOCK_TIMEOUT=1200
 # --- BACKUP CONFIGURATION ---
 BACKUP_DIR="$HOME/wow-backups"
 DB_CONTAINER_NAME="wow-prog-db"
+NGINX_CONTAINER_NAME="wow-prog-nginx"
 RETENTION_DAYS=7
 MAX_BACKUPS=5
 # ----------------------------
@@ -133,6 +134,12 @@ deploy() {
     log "Building and starting containers..."
     COMPOSE_HTTP_TIMEOUT=720 DOCKER_CLIENT_TIMEOUT=720 docker compose -f "$COMPOSE_FILE" up --build -d || {
         error "Failed to build and start containers"
+        exit 1
+    }
+
+    log "Restarting nginx container..."
+    docker restart "$NGINX_CONTAINER_NAME" > /dev/null || {
+        error "Failed to restart nginx container '$NGINX_CONTAINER_NAME'"
         exit 1
     }
 
