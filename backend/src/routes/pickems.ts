@@ -525,6 +525,24 @@ async function buildRankingsFromDB(raidIds: number[]) {
  * Used by both cached and DB-fallback paths.
  */
 function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds: number[]) {
+  const useSingleRaidRanking = raidIds.length === 1;
+
+  const readNumber = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+  const getCurrentBossSignals = (raidProgress: any, effectiveKills: number) => {
+    const bosses = Array.isArray(raidProgress?.bosses) ? raidProgress.bosses : [];
+    const currentBoss = bosses[effectiveKills] ?? bosses.find((boss: any) => boss.kills === 0);
+    const pullCount = readNumber(raidProgress?.currentBossPulls) ?? readNumber(currentBoss?.pullCount) ?? 0;
+    const bestPullPhase = raidProgress?.bestPullPhase ?? currentBoss?.bestPullPhase;
+    const bestPercent = readNumber(raidProgress?.bestPullPercent) ?? readNumber(currentBoss?.bestPercent);
+
+    return {
+      hasPullData: pullCount > 0,
+      fightCompletion: readNumber(bestPullPhase?.fightCompletion) ?? bestPercent ?? 100,
+      bossHealth: readNumber(bestPullPhase?.bossHealth) ?? bestPercent ?? 100,
+    };
+  };
+
   // Build parent/child relationships
   const childToParentName = new Map<string, string>();
   const parentGuildInfo = new Map<string, { name: string; realm: string }>();
@@ -553,19 +571,32 @@ function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds:
     totalBosses: number;
     lastKillTime: Date | null;
     isComplete: boolean;
+    guildRank: number | null;
+    hasPullData: boolean;
+    fightCompletion: number;
+    bossHealth: number;
+    worldRank: number | null;
   }
 
   const allProgress: GuildProgressEntry[] = [];
+
+  type SortableGuildProgress = Omit<GuildProgressEntry, "parentName">;
 
   for (const [key, guild] of guildMap) {
     let totalKilled = 0;
     let totalBosses = 0;
     let lastKillTime: Date | null = null;
+    let guildRank: number | null = null;
+    let hasPullData = false;
+    let fightCompletion = 100;
+    let bossHealth = 100;
+    let worldRank: number | null = null;
 
     for (const raidId of raidIds) {
       const raidProgress = guild.progressByRaid.get(raidId);
       if (raidProgress) {
-        totalKilled += raidProgress.bossesDefeated || 0;
+        const bossesDefeated = raidProgress.bossesDefeated || 0;
+        totalKilled += bossesDefeated;
         totalBosses += raidProgress.totalBosses || 0;
 
         // Use lastKillTime from the cached progress data
@@ -574,6 +605,15 @@ function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds:
           if (!lastKillTime || killTime > lastKillTime) {
             lastKillTime = killTime;
           }
+        }
+
+        if (useSingleRaidRanking) {
+          guildRank = readNumber(raidProgress.guildRank);
+          worldRank = readNumber(raidProgress.worldRank);
+          const currentBossSignals = getCurrentBossSignals(raidProgress, bossesDefeated);
+          hasPullData = currentBossSignals.hasPullData;
+          fightCompletion = currentBossSignals.fightCompletion;
+          bossHealth = currentBossSignals.bossHealth;
         }
       }
     }
@@ -588,8 +628,43 @@ function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds:
       totalBosses,
       lastKillTime,
       isComplete: totalKilled === totalBosses && totalBosses > 0,
+      guildRank,
+      hasPullData,
+      fightCompletion,
+      bossHealth,
+      worldRank,
     });
   }
+
+  const compareGuildProgress = (a: SortableGuildProgress, b: SortableGuildProgress) => {
+    if (useSingleRaidRanking) {
+      const aGuildRank = a.guildRank ?? Infinity;
+      const bGuildRank = b.guildRank ?? Infinity;
+      if (aGuildRank !== bGuildRank) return aGuildRank - bGuildRank;
+    }
+
+    if (b.totalBossesKilled !== a.totalBossesKilled) return b.totalBossesKilled - a.totalBossesKilled;
+
+    if (useSingleRaidRanking) {
+      if (a.hasPullData && b.hasPullData) {
+        if (a.fightCompletion !== b.fightCompletion) return a.fightCompletion - b.fightCompletion;
+        if (a.bossHealth !== b.bossHealth) return a.bossHealth - b.bossHealth;
+      } else if (a.hasPullData !== b.hasPullData) {
+        return a.hasPullData ? -1 : 1;
+      }
+
+      const aWorldRank = a.worldRank ?? Infinity;
+      const bWorldRank = b.worldRank ?? Infinity;
+      if (aWorldRank !== bWorldRank) return aWorldRank - bWorldRank;
+
+      return a.name.localeCompare(b.name);
+    }
+
+    if (a.lastKillTime && b.lastKillTime) return a.lastKillTime.getTime() - b.lastKillTime.getTime();
+    if (a.lastKillTime && !b.lastKillTime) return -1;
+    if (!a.lastKillTime && b.lastKillTime) return 1;
+    return 0;
+  };
 
   // Group guilds into families
   const guildFamilies = new Map<string, GuildProgressEntry[]>();
@@ -616,16 +691,15 @@ function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds:
     totalBosses: number;
     lastKillTime: Date | null;
     isComplete: boolean;
+    guildRank: number | null;
+    hasPullData: boolean;
+    fightCompletion: number;
+    bossHealth: number;
+    worldRank: number | null;
   }[] = [];
 
   for (const [familyKey, members] of guildFamilies) {
-    members.sort((a, b) => {
-      if (b.totalBossesKilled !== a.totalBossesKilled) return b.totalBossesKilled - a.totalBossesKilled;
-      if (a.lastKillTime && b.lastKillTime) return a.lastKillTime.getTime() - b.lastKillTime.getTime();
-      if (a.lastKillTime && !b.lastKillTime) return -1;
-      if (!a.lastKillTime && b.lastKillTime) return 1;
-      return 0;
-    });
+    members.sort(compareGuildProgress);
 
     const best = members[0];
     const parent = parentGuildInfo.get(familyKey);
@@ -637,17 +711,17 @@ function consolidateAndRankGuilds(guildMap: Map<string, GuildMapEntry>, raidIds:
       totalBosses: best.totalBosses,
       lastKillTime: best.lastKillTime,
       isComplete: best.isComplete,
+      guildRank: best.guildRank,
+      hasPullData: best.hasPullData,
+      fightCompletion: best.fightCompletion,
+      bossHealth: best.bossHealth,
+      worldRank: best.worldRank,
     });
   }
 
-  // Sort: most bosses killed desc, then earliest last kill time asc
-  consolidatedProgress.sort((a, b) => {
-    if (b.totalBossesKilled !== a.totalBossesKilled) return b.totalBossesKilled - a.totalBossesKilled;
-    if (a.lastKillTime && b.lastKillTime) return a.lastKillTime.getTime() - b.lastKillTime.getTime();
-    if (a.lastKillTime && !b.lastKillTime) return -1;
-    if (!a.lastKillTime && b.lastKillTime) return 1;
-    return 0;
-  });
+  // Single-raid pickems should mirror the progress leaderboard order.
+  // Multi-raid pickems keep the legacy combined boss-kill + kill-time sort.
+  consolidatedProgress.sort(compareGuildProgress);
 
   return consolidatedProgress.slice(0, 50).map((g, index) => ({
     rank: index + 1,

@@ -62,6 +62,10 @@ class CacheWarmerService {
       }
     }
 
+    // Pickem rankings and scores are derived from progress caches, so they
+    // must be rebuilt after progress data changes.
+    await cacheService.invalidatePattern(/^pickems:(rankings|leaderboard):/);
+
     logger.info(`[Cache Warmer] Progress caches warmed`);
   }
 
@@ -246,6 +250,9 @@ class CacheWarmerService {
 
       // Also warm home page
       await this.warmHomeCacheData();
+
+      // Pickem rankings and scores are derived from current raid progress.
+      await cacheService.invalidatePattern(/^pickems:(rankings|leaderboard):/);
 
       logger.info("[Cache Warmer] Current raid caches warmed");
     } catch (error) {
