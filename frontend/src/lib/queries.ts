@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { EventFilters } from "@/types";
 
-// ─── Query Key Factory ───────────────────────────────────────────────────────
+// Query Key Factory
 // Centralized query keys for cache management and invalidation.
 
 export const queryKeys = {
@@ -50,9 +50,12 @@ export const queryKeys = {
     detail: (raidId: number) => ["raidAnalytics", "detail", raidId] as const,
     all: ["raidAnalytics", "all"] as const,
   },
+  compare: {
+    raid: (raidId: number) => ["compare", "raid", raidId] as const,
+  },
 } as const;
 
-// ─── Home ────────────────────────────────────────────────────────────────────
+// Home
 
 export function useHomeData() {
   return useQuery({
@@ -62,7 +65,7 @@ export function useHomeData() {
   });
 }
 
-// ─── Guilds ──────────────────────────────────────────────────────────────────
+// Guilds
 
 export function useGuilds(raidId?: number) {
   return useQuery({
@@ -120,7 +123,7 @@ export function useLiveStreamers() {
   });
 }
 
-// ─── Events ──────────────────────────────────────────────────────────────────
+// Events
 
 export function useEventsPaginated(page: number, limit: number = 50, filters?: EventFilters) {
   return useQuery({
@@ -145,7 +148,7 @@ export function useGuildEventsByRealmName(realm: string, name: string, limit: nu
   });
 }
 
-// ─── Raids ───────────────────────────────────────────────────────────────────
+// Raids
 
 export function useRaids() {
   return useQuery({
@@ -172,7 +175,7 @@ export function useRaidDates(raidId: number | null) {
   });
 }
 
-// ─── Tier Lists ──────────────────────────────────────────────────────────────
+// Tier Lists
 
 export function useTierListRaids() {
   return useQuery({
@@ -198,7 +201,7 @@ export function useTierListForRaid(raidId: number | null) {
   });
 }
 
-// ─── Pickems ─────────────────────────────────────────────────────────────────
+// Pickems
 
 export function usePickemsGuilds(raidType: string) {
   return useQuery({
@@ -208,7 +211,7 @@ export function usePickemsGuilds(raidType: string) {
   });
 }
 
-// ─── Character Rankings ──────────────────────────────────────────────────────
+// Character Rankings
 
 export function useCharacterRankingOptions() {
   return useQuery({
@@ -226,7 +229,7 @@ export function useCharacterRankings(query: string, enabled: boolean = true) {
   });
 }
 
-// ─── Raid Analytics ──────────────────────────────────────────────────────────
+// Raid Analytics
 
 export function useRaidAnalyticsRaids() {
   return useQuery({
@@ -249,5 +252,15 @@ export function useAllRaidAnalytics(enabled: boolean) {
     queryKey: queryKeys.raidAnalytics.all,
     queryFn: () => api.getAllRaidAnalytics(),
     enabled,
+  });
+}
+
+// Compare
+
+export function useRaidCompare(raidId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.compare.raid(raidId!),
+    queryFn: () => api.getRaidCompare(raidId!),
+    enabled: raidId !== null && raidId > 0,
   });
 }

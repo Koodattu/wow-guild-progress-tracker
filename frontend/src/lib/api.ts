@@ -84,6 +84,7 @@ import {
   AdminRaidOption,
   AdminGuildReportsResponse,
   AdminDeleteReportResponse,
+  RaidCompare,
 } from "@/types";
 
 // For client-side: use NEXT_PUBLIC_API_URL (browser requests)
@@ -912,6 +913,18 @@ export const api = {
     const response = await fetch(`${API_URL}/api/raid-analytics/all`);
     if (!response.ok) {
       throw new Error("Failed to fetch all raid analytics");
+    }
+    return response.json();
+  },
+
+  // ============================================================================
+  // RAID COMPARE
+  // ============================================================================
+
+  async getRaidCompare(raidId: number): Promise<RaidCompare> {
+    const response = await fetch(`${API_URL}/api/compare/${raidId}`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch raid compare data");
     }
     return response.json();
   },

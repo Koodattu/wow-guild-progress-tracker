@@ -113,7 +113,7 @@ class CacheService {
    * Keys that should be prioritized for in-memory caching
    * These patterns are checked first and less likely to be evicted
    */
-  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/];
+  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^compare:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/];
 
   // ============================================================================
   // STALE-WHILE-REVALIDATE TRACKING
@@ -723,6 +723,13 @@ class CacheService {
   }
 
   /**
+   * Get cache key for compare page by raid.
+   */
+  getCompareKey(raidId: number): string {
+    return `compare:raid:${raidId}`;
+  }
+
+  /**
    * Get cache key for guilds list by raid.
    */
   getGuildsKey(raidId: number): string {
@@ -930,6 +937,11 @@ class CacheService {
       if (this.warmers.has(progressKey)) {
         await this.refreshCache(progressKey, this.warmers.get(progressKey)!);
       }
+
+      const compareKey = this.getCompareKey(raidId);
+      if (this.warmers.has(compareKey)) {
+        await this.refreshCache(compareKey, this.warmers.get(compareKey)!);
+      }
     }
 
     logger.info("[Refresh] Full guild cache refresh complete");
@@ -960,6 +972,11 @@ class CacheService {
       const guildsKey = this.getGuildsKey(raidId);
       if (this.warmers.has(guildsKey)) {
         await this.refreshCache(guildsKey, this.warmers.get(guildsKey)!);
+      }
+
+      const compareKey = this.getCompareKey(raidId);
+      if (this.warmers.has(compareKey)) {
+        await this.refreshCache(compareKey, this.warmers.get(compareKey)!);
       }
     }
 
@@ -992,6 +1009,7 @@ class CacheService {
     await this.invalidatePattern(/^home:/);
     await this.invalidatePattern(/^guild:/);
     await this.invalidatePattern(/^progress:/);
+    await this.invalidatePattern(/^compare:/);
     logger.info("All guild-related caches invalidated (including older raids)");
   }
 
@@ -1012,6 +1030,7 @@ class CacheService {
     for (const raidId of CURRENT_RAID_IDS) {
       await this.invalidate(this.getProgressKey(raidId));
       await this.invalidate(this.getGuildsKey(raidId));
+      await this.invalidate(this.getCompareKey(raidId));
     }
     await this.invalidate(this.getHomeKey());
     await this.invalidate(this.getLiveStreamersKey());
@@ -1263,6 +1282,13 @@ class CacheService {
     if (key.startsWith("progress:")) {
       // Extract raid ID and determine TTL
       const match = key.match(/progress:raid:(\d+)/);
+      if (match) {
+        const raidId = parseInt(match[1]);
+        return this.getTTLForRaid(raidId);
+      }
+    }
+    if (key.startsWith("compare:")) {
+      const match = key.match(/compare:raid:(\d+)/);
       if (match) {
         const raidId = parseInt(match[1]);
         return this.getTTLForRaid(raidId);

@@ -39,6 +39,10 @@ const getPageMetadata = (pathname: string, locale: "en" | "fi") => {
       title: isEnglish ? "Guilds" : "Killat",
       description: isEnglish ? "Browse all Finnish WoW guilds and their raid progression." : "Selaa kaikkia suomalaisia WoW-kiltoja ja niiden raid-edistymistä.",
     },
+    "/compare": {
+      title: isEnglish ? "Compare" : "Vertailu",
+      description: isEnglish ? "Compare Finnish WoW guild raid metrics by raid tier." : "Vertaile suomalaisten WoW-kiltojen raid-mittareita raidikohtaisesti.",
+    },
     "/events": {
       title: isEnglish ? "Events" : "Tapahtumat",
       description: isEnglish ? "Latest boss kills and raid events from Finnish WoW guilds." : "Viimeisimmät boss-tapit ja raid-tapahtumat suomalaisilta WoW-killoilta.",

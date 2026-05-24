@@ -102,6 +102,12 @@ export default function Navigation() {
                   {t("allGuilds")}
                 </Link>
                 <Link
+                  href="/compare"
+                  className={`text-sm font-medium transition-colors ${isActive("/compare") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                >
+                  {t("compare")}
+                </Link>
+                <Link
                   href="/character-rankings"
                   className={`text-sm font-medium transition-colors ${isActive("/character-rankings") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
@@ -412,6 +418,14 @@ export default function Navigation() {
                 }`}
               >
                 {t("allGuilds")}
+              </Link>
+              <Link
+                href="/compare"
+                className={`block px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive("/compare") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                {t("compare")}
               </Link>
               <Link
                 href="/character-rankings"

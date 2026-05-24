@@ -1,5 +1,6 @@
 import cacheService from "./cache.service";
 import guildService from "./guild.service";
+import compareService from "./compare.service";
 import tierListService from "./tierlist.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
@@ -31,7 +32,7 @@ class CacheWarmerService {
 
     try {
       // Warm caches in priority order (most important first)
-      await Promise.all([this.warmProgressCaches(), this.warmHomeCacheData(), this.warmGuildListCaches()]);
+      await Promise.all([this.warmProgressCaches(), this.warmCompareCaches(), this.warmHomeCacheData(), this.warmGuildListCaches()]);
 
       // Warm tier lists and analytics (can take longer)
       await Promise.all([this.warmTierListCaches(), this.warmRaidAnalyticsCaches()]);
@@ -67,6 +68,30 @@ class CacheWarmerService {
     await cacheService.invalidatePattern(/^pickems:(rankings|leaderboard):/);
 
     logger.info(`[Cache Warmer] Progress caches warmed`);
+  }
+
+  /**
+   * Warm compare caches for all tracked raids.
+   */
+  async warmCompareCaches(): Promise<void> {
+    logger.info(`[Cache Warmer] Warming compare caches for ${TRACKED_RAIDS.length} raids...`);
+
+    for (const raidId of TRACKED_RAIDS) {
+      try {
+        const key = cacheService.getCompareKey(raidId);
+        const data = await compareService.getRaidCompare(raidId);
+        if (!data) {
+          continue;
+        }
+        const ttl = cacheService.getTTLForRaid(raidId);
+        await cacheService.set(key, data, ttl);
+        logger.debug(`[Cache Warmer] Compare cache warmed for raid ${raidId}`);
+      } catch (error) {
+        logger.error(`[Cache Warmer] Failed to warm compare cache for raid ${raidId}:`, error);
+      }
+    }
+
+    logger.info(`[Cache Warmer] Compare caches warmed`);
   }
 
   /**
@@ -246,6 +271,12 @@ class CacheWarmerService {
         const key = cacheService.getProgressKey(raidId);
         const data = await guildService.getAllGuildsForRaid(raidId);
         await cacheService.set(key, data, cacheService.CURRENT_RAID_TTL);
+
+        const compareKey = cacheService.getCompareKey(raidId);
+        const compareData = await compareService.getRaidCompare(raidId);
+        if (compareData) {
+          await cacheService.set(compareKey, compareData, cacheService.CURRENT_RAID_TTL);
+        }
       }
 
       // Also warm home page

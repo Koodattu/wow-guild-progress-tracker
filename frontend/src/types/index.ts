@@ -1128,6 +1128,53 @@ export interface RaidAnalyticsListItem {
 }
 
 // ============================================================
+// RAID COMPARE TYPES
+// ============================================================
+
+export interface CompareBossInfo {
+  id: number;
+  name: string;
+  iconUrl?: string;
+}
+
+export interface CompareGuildBossMetric {
+  bossId: number;
+  pulls: number;
+  timeSpent: number;
+  kills: number;
+  firstKillTime?: string;
+}
+
+export interface CompareGuildMetric {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  parentGuild?: string;
+  guildRank?: number;
+  worldRank?: number;
+  wclWorldRank?: number;
+  rioWorldRank?: number;
+  totalPulls: number;
+  totalTimeSpent: number;
+  bossesDefeated: number;
+  totalBosses: number;
+  bosses: CompareGuildBossMetric[];
+}
+
+export interface RaidCompare {
+  raid: {
+    id: number;
+    name: string;
+    iconUrl?: string;
+    bosses: CompareBossInfo[];
+  };
+  difficulty: "mythic";
+  guilds: CompareGuildMetric[];
+  generatedAt: string;
+}
+
+// ============================================================
 // RATE LIMIT & PROCESSING QUEUE TYPES
 // ============================================================
 
