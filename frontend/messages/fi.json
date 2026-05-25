@@ -583,6 +583,7 @@
     "lowerIsBetter": "Pienempi on parempi",
     "combatPullsSubtitle": "Kaikki lokitetut myyttiset bossiyritykset",
     "combatTimeSubtitle": "Lokitettu taistelussa vietetty aika",
+    "totalEffort": "Kokonaispanos",
     "bossPulls": "Yritykset tappoon",
     "bossTime": "Aika tappoon",
     "killedGuildsOnly": "Vain bossin tappaneet killat",

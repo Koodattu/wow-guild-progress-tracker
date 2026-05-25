@@ -583,6 +583,7 @@
     "lowerIsBetter": "Lower is better",
     "combatPullsSubtitle": "All logged Mythic boss pulls",
     "combatTimeSubtitle": "Logged in-combat pull time",
+    "totalEffort": "Total Effort",
     "bossPulls": "Pulls to Kill",
     "bossTime": "Time to Kill",
     "killedGuildsOnly": "Killed guilds only",

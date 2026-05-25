@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import IconImage from "@/components/IconImage";
 import RaidSelector from "@/components/RaidSelector";
 import { useRaidCompare, useRaids } from "@/lib/queries";
@@ -13,7 +14,14 @@ type ViewMode = "table" | "visual";
 type MetricEntry = {
   guild: CompareGuildMetric;
   value: number;
-  muted?: boolean;
+};
+
+type MetricOption = {
+  id: string;
+  label: string;
+  subtitle?: string;
+  entries: MetricEntry[];
+  valueFormatter: (value: number) => string;
 };
 
 function formatTime(seconds: number): string {
@@ -38,30 +46,52 @@ function bossMetric(guild: CompareGuildMetric, bossId: number) {
   return guild.bosses.find((boss) => boss.bossId === bossId);
 }
 
-function MetricCompareCard({
+function getGuildColor(rank?: number): string {
+  if (rank === 1) return "#facc15";
+  if (rank === 2) return "#d1d5db";
+  if (rank === 3) return "#fb923c";
+  return "#60a5fa";
+}
+
+function MetricScatterChart({
   title,
   subtitle,
   entries,
   valueFormatter,
   emptyLabel,
+  iconUrl,
+  iconAlt,
 }: {
   title: string;
   subtitle?: string;
   entries: MetricEntry[];
   valueFormatter: (value: number) => string;
   emptyLabel: string;
+  iconUrl?: string;
+  iconAlt?: string;
 }) {
-  const visibleEntries = entries.filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
+  const visibleEntries = entries.filter((entry) => Number.isFinite(entry.value) && entry.value > 0).sort((a, b) => a.value - b.value);
   const values = visibleEntries.map((entry) => entry.value);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
-  const range = max - min;
+  const lanes = 5;
+  const chartData = visibleEntries.map((entry, index) => ({
+    ...entry,
+    value: entry.value,
+    lane: (index % lanes) + 1,
+    guildName: entry.guild.name,
+    realm: entry.guild.realm,
+    guildRank: entry.guild.guildRank,
+  }));
 
   return (
     <section className="bg-gray-900/60 border border-gray-800/70 rounded p-4">
       <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-4">
-        <div>
-          <h3 className="text-base font-bold text-white">{title}</h3>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {iconUrl && <IconImage iconFilename={iconUrl} alt={iconAlt ?? title} width={28} height={28} className="rounded" />}
+            <h3 className="text-base font-bold text-white truncate">{title}</h3>
+          </div>
           {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
         </div>
         {visibleEntries.length > 0 && (
@@ -74,29 +104,90 @@ function MetricCompareCard({
       {visibleEntries.length === 0 ? (
         <div className="text-sm text-gray-500 py-8 text-center">{emptyLabel}</div>
       ) : (
-        <div className="space-y-3">
-          {visibleEntries.map((entry) => {
-            const position = range === 0 ? 50 : ((entry.value - min) / range) * 100;
+        <div className="h-[180px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+              <CartesianGrid stroke="#374151" strokeDasharray="3 3" opacity={0.35} vertical={true} horizontal={false} />
+              <XAxis
+                type="number"
+                dataKey="value"
+                domain={[0, max]}
+                tick={{ fill: "#9ca3af", fontSize: 11 }}
+                tickFormatter={(value) => valueFormatter(Number(value))}
+                stroke="#4b5563"
+              />
+              <YAxis type="number" dataKey="lane" domain={[0, lanes + 1]} hide />
+              <Tooltip
+                cursor={{ stroke: "#64748b", strokeDasharray: "3 3" }}
+                content={({ active, payload }) => {
+                  const point = payload?.[0]?.payload;
+                  if (!active || !point) return null;
 
-            return (
-              <div key={`${entry.guild.id}-${title}`} className={entry.muted ? "opacity-60" : ""}>
-                <div className="grid gap-2 sm:grid-cols-[190px_1fr_96px] sm:items-center">
-                  <Link href={guildHref(entry.guild)} className="min-w-0 text-sm font-medium text-gray-200 hover:text-blue-300 transition-colors truncate">
-                    <span className="text-gray-500 mr-2">#{entry.guild.guildRank ?? "-"}</span>
-                    {entry.guild.name}
-                  </Link>
-                  <div className="relative h-7">
-                    <div className="absolute left-0 right-0 top-1/2 h-px bg-gray-700" />
-                    <div className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-400 shadow-[0_0_0_4px_rgba(96,165,250,0.12)]" style={{ left: `${position}%` }} />
-                  </div>
-                  <div className="text-sm tabular-nums text-gray-300 sm:text-right">{valueFormatter(entry.value)}</div>
-                </div>
-              </div>
-            );
-          })}
+                  return (
+                    <div className="rounded border border-gray-700 bg-gray-950 px-3 py-2 text-xs shadow-xl">
+                      <div className="font-semibold text-white">
+                        #{point.guildRank ?? "-"} {point.guildName}
+                      </div>
+                      <div className="text-gray-500">{point.realm}</div>
+                      <div className="mt-1 text-blue-300">{valueFormatter(point.value)}</div>
+                    </div>
+                  );
+                }}
+              />
+              <Scatter data={chartData}>
+                {chartData.map((entry) => (
+                  <Cell key={entry.guild.id} fill={getGuildColor(entry.guild.guildRank)} stroke="#0f172a" strokeWidth={1.5} />
+                ))}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
         </div>
       )}
     </section>
+  );
+}
+
+function MetricToggleChart({
+  title,
+  iconUrl,
+  iconAlt,
+  options,
+  emptyLabel,
+}: {
+  title: string;
+  iconUrl?: string;
+  iconAlt?: string;
+  options: MetricOption[];
+  emptyLabel: string;
+}) {
+  const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
+  const selected = options.find((option) => option.id === selectedId) ?? options[0];
+
+  if (!selected) return null;
+
+  return (
+    <div className="relative">
+      <div className="absolute right-4 top-4 z-10 flex rounded bg-gray-950/80 border border-gray-800 p-1">
+        {options.map((option) => (
+          <button
+            key={option.id}
+            onClick={() => setSelectedId(option.id)}
+            className={`px-2.5 py-1 text-xs rounded transition-colors ${selected.id === option.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <MetricScatterChart
+        title={title}
+        iconUrl={iconUrl}
+        iconAlt={iconAlt}
+        subtitle={selected.subtitle}
+        entries={selected.entries}
+        valueFormatter={selected.valueFormatter}
+        emptyLabel={emptyLabel}
+      />
+    </div>
   );
 }
 
@@ -112,8 +203,15 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
             <th className="px-3 py-3 text-right font-semibold">{t("totalPulls")}</th>
             <th className="px-3 py-3 text-right font-semibold">{t("combatTime")}</th>
             {compare.raid.bosses.map((boss) => (
-              <th key={boss.id} colSpan={2} className="border-l border-gray-800 px-3 py-3 text-center font-semibold">
-                <span className="whitespace-nowrap">{boss.name}</span>
+              <th key={boss.id} colSpan={2} className="border-l border-gray-800 px-2 py-2 text-center font-semibold" title={boss.name}>
+                <span className="flex justify-center">
+                  {boss.iconUrl ? (
+                    <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={28} height={28} className="rounded" />
+                  ) : (
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded bg-gray-800 text-[10px] text-gray-400">{boss.name.slice(0, 2)}</span>
+                  )}
+                </span>
+                <span className="sr-only">{boss.name}</span>
               </th>
             ))}
           </tr>
@@ -235,26 +333,32 @@ export default function ComparePage() {
             <CompareTable compare={compare} t={t} />
           ) : (
             <div className="space-y-5">
-              <div className="grid gap-4 xl:grid-cols-3">
-                <MetricCompareCard
+              <div className="space-y-4">
+                <MetricScatterChart
                   title={t("worldRank")}
                   subtitle={t("lowerIsBetter")}
                   entries={sortedGuilds.map((guild) => ({ guild, value: guild.worldRank ?? 0 }))}
                   valueFormatter={(value) => `#${formatNumber(value)}`}
                   emptyLabel={t("noMetricData")}
                 />
-                <MetricCompareCard
-                  title={t("totalPulls")}
-                  subtitle={t("combatPullsSubtitle")}
-                  entries={sortedGuilds.map((guild) => ({ guild, value: guild.totalPulls }))}
-                  valueFormatter={formatNumber}
-                  emptyLabel={t("noMetricData")}
-                />
-                <MetricCompareCard
-                  title={t("combatTime")}
-                  subtitle={t("combatTimeSubtitle")}
-                  entries={sortedGuilds.map((guild) => ({ guild, value: guild.totalTimeSpent }))}
-                  valueFormatter={formatTime}
+                <MetricToggleChart
+                  title={t("totalEffort")}
+                  options={[
+                    {
+                      id: "pulls",
+                      label: t("pulls"),
+                      subtitle: t("combatPullsSubtitle"),
+                      entries: sortedGuilds.map((guild) => ({ guild, value: guild.totalPulls })),
+                      valueFormatter: formatNumber,
+                    },
+                    {
+                      id: "time",
+                      label: t("time"),
+                      subtitle: t("combatTimeSubtitle"),
+                      entries: sortedGuilds.map((guild) => ({ guild, value: guild.totalTimeSpent })),
+                      valueFormatter: formatTime,
+                    },
+                  ]}
                   emptyLabel={t("noMetricData")}
                 />
               </div>
@@ -266,28 +370,29 @@ export default function ComparePage() {
                     .filter(({ metric }) => (metric?.kills ?? 0) > 0);
 
                   return (
-                    <section key={boss.id} className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        {boss.iconUrl && <IconImage iconFilename={boss.iconUrl} alt={boss.name} width={28} height={28} className="rounded" />}
-                        <h2 className="text-lg font-bold text-white">{boss.name}</h2>
-                      </div>
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        <MetricCompareCard
-                          title={t("bossPulls")}
-                          subtitle={t("killedGuildsOnly")}
-                          entries={killedEntries.map(({ guild, metric }) => ({ guild, value: metric?.pulls ?? 0 }))}
-                          valueFormatter={formatNumber}
-                          emptyLabel={t("noBossKills")}
-                        />
-                        <MetricCompareCard
-                          title={t("bossTime")}
-                          subtitle={t("killedGuildsOnly")}
-                          entries={killedEntries.map(({ guild, metric }) => ({ guild, value: metric?.timeSpent ?? 0 }))}
-                          valueFormatter={formatTime}
-                          emptyLabel={t("noBossKills")}
-                        />
-                      </div>
-                    </section>
+                    <MetricToggleChart
+                      key={boss.id}
+                      title={boss.name}
+                      iconUrl={boss.iconUrl}
+                      iconAlt={boss.name}
+                      options={[
+                        {
+                          id: "pulls",
+                          label: t("pulls"),
+                          subtitle: t("killedGuildsOnly"),
+                          entries: killedEntries.map(({ guild, metric }) => ({ guild, value: metric?.pulls ?? 0 })),
+                          valueFormatter: formatNumber,
+                        },
+                        {
+                          id: "time",
+                          label: t("time"),
+                          subtitle: t("killedGuildsOnly"),
+                          entries: killedEntries.map(({ guild, metric }) => ({ guild, value: metric?.timeSpent ?? 0 })),
+                          valueFormatter: formatTime,
+                        },
+                      ]}
+                      emptyLabel={t("noBossKills")}
+                    />
                   );
                 })}
               </div>
