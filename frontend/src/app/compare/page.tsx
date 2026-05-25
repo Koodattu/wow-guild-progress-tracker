@@ -1,12 +1,15 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
+import GuildCrest from "@/components/GuildCrest";
 import IconImage from "@/components/IconImage";
 import RaidSelector from "@/components/RaidSelector";
 import { useRaidCompare, useRaids } from "@/lib/queries";
+import { getLeaderboardRankColor, getWorldRankColor } from "@/lib/utils";
 import { CompareGuildMetric, RaidCompare } from "@/types";
 
 type ViewMode = "table" | "visual";
@@ -22,6 +25,15 @@ type MetricOption = {
   subtitle?: string;
   entries: MetricEntry[];
   valueFormatter: (value: number) => string;
+};
+
+type MetricPointShapeProps = {
+  cx?: number;
+  cy?: number;
+  fill?: string;
+  payload?: {
+    guildName: string;
+  };
 };
 
 function formatTime(seconds: number): string {
@@ -51,6 +63,21 @@ function getGuildColor(rank?: number): string {
   if (rank === 2) return "#d1d5db";
   if (rank === 3) return "#fb923c";
   return "#60a5fa";
+}
+
+function compactGuildName(name: string): string {
+  return name.length > 14 ? `${name.slice(0, 13)}...` : name;
+}
+
+function MetricPointShape({ cx = 0, cy = 0, fill = "#60a5fa", payload }: MetricPointShapeProps) {
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={5.5} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
+      <text x={cx} y={cy + 18} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
+        {payload?.guildName ? compactGuildName(payload.guildName) : ""}
+      </text>
+    </g>
+  );
 }
 
 function MetricScatterChart({
@@ -104,9 +131,9 @@ function MetricScatterChart({
       {visibleEntries.length === 0 ? (
         <div className="text-sm text-gray-500 py-8 text-center">{emptyLabel}</div>
       ) : (
-        <div className="h-[180px]">
+        <div className="h-[220px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 18, bottom: 8, left: 4 }}>
+            <ScatterChart margin={{ top: 8, right: 18, bottom: 36, left: 4 }}>
               <CartesianGrid stroke="#374151" strokeDasharray="3 3" opacity={0.35} vertical={true} horizontal={false} />
               <XAxis
                 type="number"
@@ -134,7 +161,7 @@ function MetricScatterChart({
                   );
                 }}
               />
-              <Scatter data={chartData}>
+              <Scatter data={chartData} shape={(props: MetricPointShapeProps) => <MetricPointShape {...props} />}>
                 {chartData.map((entry) => (
                   <Cell key={entry.guild.id} fill={getGuildColor(entry.guild.guildRank)} stroke="#0f172a" strokeWidth={1.5} />
                 ))}
@@ -153,12 +180,14 @@ function MetricToggleChart({
   iconAlt,
   options,
   emptyLabel,
+  actions,
 }: {
   title: string;
   iconUrl?: string;
   iconAlt?: string;
   options: MetricOption[];
   emptyLabel: string;
+  actions?: ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
   const selected = options.find((option) => option.id === selectedId) ?? options[0];
@@ -167,16 +196,19 @@ function MetricToggleChart({
 
   return (
     <div className="relative">
-      <div className="absolute right-4 top-4 z-10 flex rounded bg-gray-950/80 border border-gray-800 p-1">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            onClick={() => setSelectedId(option.id)}
-            className={`px-2.5 py-1 text-xs rounded transition-colors ${selected.id === option.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="absolute right-4 top-4 z-10 flex flex-wrap items-center justify-end gap-3">
+        {actions}
+        <div className="flex rounded bg-gray-950/80 border border-gray-800 p-1">
+          {options.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setSelectedId(option.id)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors ${selected.id === option.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
       <MetricScatterChart
         title={title}
@@ -237,13 +269,22 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
           {compare.guilds.map((guild) => (
             <tr key={guild.id} className="border-t border-gray-800/80 hover:bg-gray-900/50">
               <td className="sticky left-0 z-10 bg-gray-950 px-3 py-3">
-                <Link href={guildHref(guild)} className="font-medium text-white hover:text-blue-300 transition-colors">
-                  {guild.name}
-                </Link>
-                <div className="text-xs text-gray-500">{guild.realm}</div>
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 shrink-0">
+                    <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
+                  </div>
+                  <div className="min-w-0">
+                    <Link href={guildHref(guild)} className="block truncate font-medium text-white hover:text-blue-300 transition-colors">
+                      {guild.name}
+                    </Link>
+                    <div className="truncate text-xs text-gray-500">{guild.parentGuild ? `${guild.parentGuild} - ` : ""}{guild.realm}</div>
+                  </div>
+                </div>
               </td>
-              <td className="px-3 py-3 text-right tabular-nums text-gray-300">#{guild.guildRank ?? "-"}</td>
-              <td className="px-3 py-3 text-right tabular-nums text-gray-300">{guild.worldRank ? `#${formatNumber(guild.worldRank)}` : "-"}</td>
+              <td className={`px-3 py-3 text-right tabular-nums font-semibold ${guild.guildRank ? getLeaderboardRankColor(guild.guildRank) : "text-gray-500"}`}>{guild.guildRank ?? "-"}</td>
+              <td className="px-3 py-3 text-right tabular-nums font-semibold" style={{ color: guild.worldRank ? getWorldRankColor(guild.worldRank) : "var(--rank-gray)" }}>
+                {guild.worldRank ? formatNumber(guild.worldRank) : "-"}
+              </td>
               <td className="px-3 py-3 text-right tabular-nums text-gray-300">{formatNumber(guild.totalPulls)}</td>
               <td className="px-3 py-3 text-right tabular-nums text-gray-300">{formatTime(guild.totalTimeSpent)}</td>
               {compare.raid.bosses.map((boss) => {
@@ -273,6 +314,7 @@ export default function ComparePage() {
   const t = useTranslations("comparePage");
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("visual");
+  const [showAllTotalEffort, setShowAllTotalEffort] = useState(false);
   const { data: raids = [], isLoading: raidsLoading } = useRaids();
   const { data: compare, isLoading: compareLoading, error } = useRaidCompare(selectedRaidId);
 
@@ -285,6 +327,11 @@ export default function ComparePage() {
   const sortedGuilds = useMemo(() => {
     return [...(compare?.guilds ?? [])].sort((a, b) => (a.guildRank ?? 99999) - (b.guildRank ?? 99999));
   }, [compare?.guilds]);
+
+  const totalEffortGuilds = useMemo(() => {
+    if (showAllTotalEffort) return sortedGuilds;
+    return sortedGuilds.filter((guild) => guild.totalBosses > 0 && guild.bossesDefeated >= guild.totalBosses);
+  }, [showAllTotalEffort, sortedGuilds]);
 
   const loading = raidsLoading || (selectedRaidId !== null && compareLoading);
 
@@ -343,19 +390,30 @@ export default function ComparePage() {
                 />
                 <MetricToggleChart
                   title={t("totalEffort")}
+                  actions={
+                    <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950/80 px-2.5 py-1 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={showAllTotalEffort}
+                        onChange={(event) => setShowAllTotalEffort(event.target.checked)}
+                        className="h-3.5 w-3.5 accent-blue-600"
+                      />
+                      <span>{t("showAllGuilds")}</span>
+                    </label>
+                  }
                   options={[
                     {
                       id: "pulls",
                       label: t("pulls"),
                       subtitle: t("combatPullsSubtitle"),
-                      entries: sortedGuilds.map((guild) => ({ guild, value: guild.totalPulls })),
+                      entries: totalEffortGuilds.map((guild) => ({ guild, value: guild.totalPulls })),
                       valueFormatter: formatNumber,
                     },
                     {
                       id: "time",
                       label: t("time"),
                       subtitle: t("combatTimeSubtitle"),
-                      entries: sortedGuilds.map((guild) => ({ guild, value: guild.totalTimeSpent })),
+                      entries: totalEffortGuilds.map((guild) => ({ guild, value: guild.totalTimeSpent })),
                       valueFormatter: formatTime,
                     },
                   ]}

@@ -1,5 +1,6 @@
 import Guild from "../models/Guild";
 import Raid from "../models/Raid";
+import { IGuildCrest } from "../models/Guild";
 
 export interface CompareBossInfo {
   id: number;
@@ -20,6 +21,8 @@ export interface CompareGuildMetric {
   name: string;
   realm: string;
   region: string;
+  faction?: string;
+  crest?: IGuildCrest;
   parentGuild?: string;
   guildRank?: number;
   worldRank?: number;
@@ -76,6 +79,8 @@ class CompareService {
           name: 1,
           realm: 1,
           region: 1,
+          faction: 1,
+          crest: 1,
           parent_guild: 1,
           mythicProgress: {
             $arrayElemAt: [
@@ -128,6 +133,8 @@ class CompareService {
         name: guild.name,
         realm: guild.realm,
         region: guild.region,
+        faction: guild.faction,
+        crest: guild.crest,
         parentGuild: guild.parent_guild,
         guildRank: progress.guildRank,
         worldRank: progress.worldRank,

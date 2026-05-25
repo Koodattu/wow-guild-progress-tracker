@@ -1150,6 +1150,8 @@ export interface CompareGuildMetric {
   name: string;
   realm: string;
   region: string;
+  faction?: string;
+  crest?: GuildCrest;
   parentGuild?: string;
   guildRank?: number;
   worldRank?: number;
