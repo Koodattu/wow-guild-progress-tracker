@@ -27,6 +27,13 @@ type MetricOption = {
   valueFormatter: (value: number) => string;
 };
 
+type SortDirection = "asc" | "desc";
+
+type SortState = {
+  key: string;
+  direction: SortDirection;
+} | null;
+
 type MetricPointShapeProps = {
   cx?: number;
   cy?: number;
@@ -56,6 +63,52 @@ function guildHref(guild: CompareGuildMetric): string {
 
 function bossMetric(guild: CompareGuildMetric, bossId: number) {
   return guild.bosses.find((boss) => boss.bossId === bossId);
+}
+
+function defaultGuildCompare(a: CompareGuildMetric, b: CompareGuildMetric): number {
+  const rankCompare = (a.guildRank ?? 99999) - (b.guildRank ?? 99999);
+  if (rankCompare !== 0) return rankCompare;
+  return a.name.localeCompare(b.name);
+}
+
+function getTableSortValue(guild: CompareGuildMetric, key: string): string | number | null {
+  if (key === "guild") return guild.name.toLowerCase();
+  if (key === "rank") return guild.guildRank ?? null;
+  if (key === "worldRank") return guild.worldRank ?? null;
+  if (key === "totalPulls") return guild.totalPulls > 0 ? guild.totalPulls : null;
+  if (key === "totalTime") return guild.totalTimeSpent > 0 ? guild.totalTimeSpent : null;
+
+  const bossMatch = key.match(/^boss:(\d+):(pulls|time)$/);
+  if (!bossMatch) return null;
+
+  const boss = bossMetric(guild, Number(bossMatch[1]));
+  const value = bossMatch[2] === "pulls" ? boss?.pulls : boss?.timeSpent;
+  return value && value > 0 ? value : null;
+}
+
+function sortGuildsForTable(guilds: CompareGuildMetric[], sort: SortState): CompareGuildMetric[] {
+  if (!sort) return guilds;
+
+  return [...guilds].sort((a, b) => {
+    const aValue = getTableSortValue(a, sort.key);
+    const bValue = getTableSortValue(b, sort.key);
+    const aMissing = aValue === null || aValue === undefined || aValue === "";
+    const bMissing = bValue === null || bValue === undefined || bValue === "";
+
+    if (aMissing && bMissing) return defaultGuildCompare(a, b);
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+
+    let result = 0;
+    if (typeof aValue === "string" && typeof bValue === "string") {
+      result = aValue.localeCompare(bValue);
+    } else {
+      result = Number(aValue) - Number(bValue);
+    }
+
+    if (result === 0) return defaultGuildCompare(a, b);
+    return sort.direction === "asc" ? result : -result;
+  });
 }
 
 function getGuildColor(rank?: number): string {
@@ -224,16 +277,61 @@ function MetricToggleChart({
 }
 
 function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<typeof useTranslations> }) {
+  const [sort, setSort] = useState<SortState>(null);
+  const sortedGuilds = useMemo(() => sortGuildsForTable(compare.guilds, sort), [compare.guilds, sort]);
+
+  const toggleSort = (key: string) => {
+    setSort((current) => {
+      if (current?.key !== key) return { key, direction: "asc" };
+      if (current.direction === "asc") return { key, direction: "desc" };
+      return null;
+    });
+  };
+
+  const SortableHeader = ({
+    sortKey,
+    children,
+    className = "",
+  }: {
+    sortKey: string;
+    children: ReactNode;
+    className?: string;
+  }) => {
+    const isActive = sort?.key === sortKey;
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className={`inline-flex w-full items-center gap-1 transition-colors hover:text-white ${className}`}
+        aria-sort={isActive ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      >
+        <span>{children}</span>
+        {isActive && <span className="text-[10px] normal-case text-blue-300">{sort.direction}</span>}
+      </button>
+    );
+  };
+
   return (
     <div className="overflow-x-auto border border-gray-800 rounded bg-gray-950/40">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr className="bg-gray-900 text-xs uppercase text-gray-400">
-            <th className="sticky left-0 z-20 bg-gray-900 px-3 py-3 text-left font-semibold">{t("guild")}</th>
-            <th className="px-3 py-3 text-right font-semibold">{t("rank")}</th>
-            <th className="px-3 py-3 text-right font-semibold">{t("worldRank")}</th>
-            <th className="px-3 py-3 text-right font-semibold">{t("totalPulls")}</th>
-            <th className="px-3 py-3 text-right font-semibold">{t("combatTime")}</th>
+            <th className="sticky left-0 z-20 bg-gray-900 px-3 py-3 text-left font-semibold">
+              <SortableHeader sortKey="guild">{t("guild")}</SortableHeader>
+            </th>
+            <th className="px-3 py-3 text-right font-semibold">
+              <SortableHeader sortKey="rank" className="justify-end">{t("rank")}</SortableHeader>
+            </th>
+            <th className="px-3 py-3 text-right font-semibold">
+              <SortableHeader sortKey="worldRank" className="justify-end">{t("worldRank")}</SortableHeader>
+            </th>
+            <th className="px-3 py-3 text-right font-semibold">
+              <SortableHeader sortKey="totalPulls" className="justify-end">{t("totalPulls")}</SortableHeader>
+            </th>
+            <th className="px-3 py-3 text-right font-semibold">
+              <SortableHeader sortKey="totalTime" className="justify-end">{t("combatTime")}</SortableHeader>
+            </th>
             {compare.raid.bosses.map((boss) => (
               <th key={boss.id} colSpan={2} className="border-l border-gray-800 px-2 py-2 text-center font-semibold" title={boss.name}>
                 <span className="flex justify-center">
@@ -256,19 +354,19 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
             {compare.raid.bosses.map((boss) => (
               <Fragment key={boss.id}>
                 <th key={`${boss.id}-pulls`} className="border-l border-gray-800 px-3 py-2 text-right font-medium">
-                  {t("pulls")}
+                  <SortableHeader sortKey={`boss:${boss.id}:pulls`} className="justify-end">{t("pulls")}</SortableHeader>
                 </th>
                 <th key={`${boss.id}-time`} className="px-3 py-2 text-right font-medium">
-                  {t("time")}
+                  <SortableHeader sortKey={`boss:${boss.id}:time`} className="justify-end">{t("time")}</SortableHeader>
                 </th>
               </Fragment>
             ))}
           </tr>
         </thead>
         <tbody>
-          {compare.guilds.map((guild) => (
-            <tr key={guild.id} className="border-t border-gray-800/80 hover:bg-gray-900/50">
-              <td className="sticky left-0 z-10 bg-gray-950 px-3 py-3">
+          {sortedGuilds.map((guild) => (
+            <tr key={guild.id} className="group border-t border-gray-800/80 hover:bg-gray-900/50">
+              <td className="sticky left-0 z-10 bg-gray-950 px-3 py-3 transition-colors group-hover:bg-gray-900">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 shrink-0">
                     <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
