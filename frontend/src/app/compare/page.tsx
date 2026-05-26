@@ -119,16 +119,12 @@ function getGuildColor(rank?: number): string {
   return "#60a5fa";
 }
 
-function compactGuildName(name: string): string {
-  return name.length > 14 ? `${name.slice(0, 13)}...` : name;
-}
-
 function MetricPointShape({ cx = 0, cy = 0, fill = "#60a5fa", payload }: MetricPointShapeProps) {
   return (
     <g>
       <circle cx={cx} cy={cy} r={5.5} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
       <text x={cx} y={cy + 14} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
-        {payload?.guildName ? compactGuildName(payload.guildName) : ""}
+        {payload?.guildName ?? ""}
       </text>
       <text x={cx} y={cy + 25} textAnchor="middle" fill="#93c5fd" fontSize={10}>
         {payload?.valueLabel ?? ""}
