@@ -119,14 +119,13 @@ function getGuildColor(rank?: number): string {
   return "#60a5fa";
 }
 
-function MetricPointShape({ cx = 0, cy = 0, fill = "#60a5fa", payload }: MetricPointShapeProps) {
+function MetricPointShape({ cx = 0, cy = 0, payload }: MetricPointShapeProps) {
   return (
     <g>
-      <circle cx={cx} cy={cy} r={5.5} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
-      <text x={cx} y={cy + 14} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
+      <text x={cx} y={cy - 3} textAnchor="middle" fill="#e5e7eb" fontSize={10} fontWeight={600} stroke="#0f172a" strokeWidth={3} paintOrder="stroke">
         {payload?.guildName ?? ""}
       </text>
-      <text x={cx} y={cy + 25} textAnchor="middle" fill="#93c5fd" fontSize={10}>
+      <text x={cx} y={cy + 9} textAnchor="middle" fill="#93c5fd" fontSize={10} stroke="#0f172a" strokeWidth={3} paintOrder="stroke">
         {payload?.valueLabel ?? ""}
       </text>
     </g>
