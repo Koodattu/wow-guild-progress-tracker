@@ -40,6 +40,7 @@ type MetricPointShapeProps = {
   fill?: string;
   payload?: {
     guildName: string;
+    valueLabel: string;
   };
 };
 
@@ -126,8 +127,11 @@ function MetricPointShape({ cx = 0, cy = 0, fill = "#60a5fa", payload }: MetricP
   return (
     <g>
       <circle cx={cx} cy={cy} r={5.5} fill={fill} stroke="#0f172a" strokeWidth={1.5} />
-      <text x={cx} y={cy + 18} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
+      <text x={cx} y={cy + 14} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
         {payload?.guildName ? compactGuildName(payload.guildName) : ""}
+      </text>
+      <text x={cx} y={cy + 25} textAnchor="middle" fill="#93c5fd" fontSize={10}>
+        {payload?.valueLabel ?? ""}
       </text>
     </g>
   );
@@ -154,10 +158,13 @@ function MetricScatterChart({
   const values = visibleEntries.map((entry) => entry.value);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
+  const domainPadding = Math.max(max * 0.08, 1);
+  const axisMax = max + domainPadding;
   const lanes = 5;
   const chartData = visibleEntries.map((entry, index) => ({
     ...entry,
     value: entry.value,
+    valueLabel: valueFormatter(entry.value),
     lane: (index % lanes) + 1,
     guildName: entry.guild.name,
     realm: entry.guild.realm,
@@ -184,16 +191,17 @@ function MetricScatterChart({
       {visibleEntries.length === 0 ? (
         <div className="text-sm text-gray-500 py-8 text-center">{emptyLabel}</div>
       ) : (
-        <div className="h-[220px]">
+        <div className="h-[230px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 18, bottom: 36, left: 4 }}>
+            <ScatterChart margin={{ top: 8, right: 40, bottom: 48, left: 40 }}>
               <CartesianGrid stroke="#374151" strokeDasharray="3 3" opacity={0.35} vertical={true} horizontal={false} />
               <XAxis
                 type="number"
                 dataKey="value"
-                domain={[0, max]}
+                domain={[-domainPadding, axisMax]}
+                ticks={[0, max]}
                 tick={{ fill: "#9ca3af", fontSize: 11 }}
-                tickFormatter={(value) => valueFormatter(Number(value))}
+                tickFormatter={(value) => (Number(value) === 0 ? "0" : valueFormatter(Number(value)))}
                 stroke="#4b5563"
               />
               <YAxis type="number" dataKey="lane" domain={[0, lanes + 1]} hide />
