@@ -1312,6 +1312,31 @@ export const TRACKED_RAIDS = [
 // Raider.IO expansion IDs to query (newest to oldest)
 export const RAIDER_IO_EXPANSION_IDS = [11, 10, 9, 8, 7, 6];
 
+// WarcraftLogs zone ID -> Raider.IO raid slug.
+// Raider.IO only exposes retail raid static data from Legion onward.
+export const RAID_RIO_SLUG_OVERRIDES: Record<number, string> = {
+  46: "tier-mn-1",
+  44: "manaforge-omega",
+  42: "liberation-of-undermine",
+  38: "nerubar-palace",
+  35: "amirdrassil-the-dreams-hope",
+  33: "aberrus-the-shadowed-crucible",
+  31: "vault-of-the-incarnates",
+  29: "sepulcher-of-the-first-ones",
+  28: "sanctum-of-domination",
+  26: "castle-nathria",
+  24: "nyalotha-the-waking-city",
+  23: "the-eternal-palace",
+  22: "crucible-of-storms",
+  21: "battle-of-dazaralor",
+  19: "uldir",
+  17: "antorus-the-burning-throne",
+  13: "tomb-of-sargeras",
+  12: "trial-of-valor",
+  11: "the-nighthold",
+  10: "the-emerald-nightmare",
+};
+
 // Current raids that are actively being tracked for updates
 // Multiple raids can be current at the same time during expansion transitions
 export const CURRENT_RAID_IDS = [TRACKED_RAIDS[0]];

@@ -14,7 +14,7 @@ import raiderIOService from "./raiderio.service";
 import type { RaiderIORaidDifficultyRankings } from "./raiderio.service";
 import cacheService from "./cache.service";
 import backgroundGuildProcessor from "./background-guild-processor.service";
-import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES } from "../config/guilds";
+import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES, RAID_RIO_SLUG_OVERRIDES } from "../config/guilds";
 import { filterUniqueGuilds } from "../utils/filterUniqueGuilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
@@ -93,6 +93,7 @@ class GuildService {
         } else {
           logger.info("All tracked raids already exist in database, skipping zone fetch");
           await this.refreshRaidPartitions();
+          await this.ensureRaidRioSlugs();
           return;
         }
       } else {
@@ -216,7 +217,12 @@ class GuildService {
 
             // Find matching Raider.IO data
             const raidSlug = zoneData.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-            const raiderIOMatch = raiderIOService.findRaidMatch(raidDatesMap, zoneData.name, raidSlug);
+            const rioSlugOverride = RAID_RIO_SLUG_OVERRIDES[zoneId];
+            const raiderIOMatch = rioSlugOverride ? raidDatesMap.get(rioSlugOverride.toLowerCase()) : raiderIOService.findRaidMatch(raidDatesMap, zoneData.name, raidSlug);
+
+            if (rioSlugOverride && !raiderIOMatch) {
+              logger.warn(`[RIO Slugs] Configured override "${rioSlugOverride}" for ${zoneData.name} was not found in Raider.IO static data`);
+            }
 
             // Prepare update object with icons
             const updateData: any = {
@@ -317,12 +323,15 @@ class GuildService {
 
       for (const raid of missingRioSlug) {
         const raidSlug = raid.slug || raid.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-        const rioMatch = raiderIOService.findRaidMatch(rioRaidMap, raid.name, raidSlug);
+        const rioSlugOverride = RAID_RIO_SLUG_OVERRIDES[raid.id];
+        const rioMatch = rioSlugOverride ? rioRaidMap.get(rioSlugOverride.toLowerCase()) : raiderIOService.findRaidMatch(rioRaidMap, raid.name, raidSlug);
 
         if (rioMatch) {
           raid.rioSlug = rioMatch.slug;
           await raid.save();
           logger.info(`[RIO Slugs] Set rioSlug for "${raid.name}": ${rioMatch.slug}`);
+        } else if (rioSlugOverride) {
+          logger.warn(`[RIO Slugs] Override "${rioSlugOverride}" for tracked raid "${raid.name}" was not found in RIO static data`);
         } else {
           logger.warn(`[RIO Slugs] No RIO match found for tracked raid "${raid.name}" (slug: ${raidSlug})`);
         }
@@ -929,27 +938,31 @@ class GuildService {
     // Group by raidId to avoid duplicate API calls for the same raid
     const raidIds = [...new Set(raidsWithProgress.map((p) => p.raidId))];
 
-    // --- WarcraftLogs: fetch world rank per raid ---
-    for (const raidId of raidIds) {
-      try {
-        const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
-        const raidName = raidEntries[0].raidName;
-        guildLog.info(`Fetching WCL world rank for ${raidName}...`);
+    if (guild.wclStatus === "not_found") {
+      guildLog.info("Skipping WCL world ranks because guild is marked not_found on WarcraftLogs");
+    } else {
+      // --- WarcraftLogs: fetch world rank per raid ---
+      for (const raidId of raidIds) {
+        try {
+          const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
+          const raidName = raidEntries[0].raidName;
+          guildLog.info(`Fetching WCL world rank for ${raidName}...`);
 
-        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
-        const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
+          const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
+          const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
-        if (worldRank?.number) {
-          for (const raidProgress of raidEntries) {
-            raidProgress.wclWorldRank = worldRank.number;
-            raidProgress.wclWorldRankColor = worldRank.color;
+          if (worldRank?.number) {
+            for (const raidProgress of raidEntries) {
+              raidProgress.wclWorldRank = worldRank.number;
+              raidProgress.wclWorldRankColor = worldRank.color;
+            }
+            guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
+          } else {
+            guildLog.info(`${raidName}: No WCL world rank data`);
           }
-          guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
-        } else {
-          guildLog.info(`${raidName}: No WCL world rank data`);
+        } catch (error) {
+          guildLog.error(`Error fetching WCL world rank for raidId ${raidId}:`, error);
         }
-      } catch (error) {
-        guildLog.error(`Error fetching WCL world rank for raidId ${raidId}:`, error);
       }
     }
 
@@ -964,7 +977,7 @@ class GuildService {
           if (!raidData) continue;
 
           const raidEntries = raidsWithProgress.filter((p) => p.raidId === raidId);
-          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug);
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug || RAID_RIO_SLUG_OVERRIDES[raidData.id]);
           if (!diffRankings) {
             guildLog.info(`${raidData.name}: No matching Raider.IO rankings found`);
             continue;
@@ -1040,7 +1053,20 @@ class GuildService {
       }
 
       const hasCompletedMythic = mythicProgress && mythicProgress.bossesDefeated >= raidData.bosses.length;
-      if (hasCompletedMythic) {
+      const hasExistingWorldRank = Boolean(
+        mythicProgress?.worldRank ||
+          mythicProgress?.wclWorldRank ||
+          mythicProgress?.rioWorldRank ||
+          heroicProgress?.worldRank ||
+          heroicProgress?.wclWorldRank ||
+          heroicProgress?.rioWorldRank,
+      );
+      const hasWclWorldRank = Boolean(mythicProgress?.wclWorldRank || heroicProgress?.wclWorldRank);
+      const hasRioWorldRank = Boolean(mythicProgress?.rioWorldRank || heroicProgress?.rioWorldRank);
+      const rioSupported = Boolean(raidData.rioSlug || RAID_RIO_SLUG_OVERRIDES[raidData.id]);
+      const missingSupportedSourceRank = !hasWclWorldRank || (rioSupported && !hasRioWorldRank);
+
+      if (hasCompletedMythic && hasExistingWorldRank && !missingSupportedSourceRank) {
         guildLog.info(`Has completed raid ${raidId} mythic (${mythicProgress.bossesDefeated}/${raidData.bosses.length}), world rank is final - skipping update`);
         continue;
       }
@@ -1054,28 +1080,32 @@ class GuildService {
       return;
     }
 
-    // --- WarcraftLogs: fetch world rank per raid ---
-    for (const { raidId, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
-      try {
-        guildLog.info(`Fetching WCL world rank for ${raidName}...`);
-        const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
-        const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
+    if (guild.wclStatus === "not_found") {
+      guildLog.info("Skipping WCL world ranks because guild is marked not_found on WarcraftLogs");
+    } else {
+      // --- WarcraftLogs: fetch world rank per raid ---
+      for (const { raidId, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
+        try {
+          guildLog.info(`Fetching WCL world rank for ${raidName}...`);
+          const result = await wclService.getGuildZoneRanking(guild.name, guild.realm.toLowerCase().replace(/\s+/g, "-"), guild.region.toLowerCase(), raidId);
+          const worldRank = result.guildData?.guild?.zoneRanking?.progress?.worldRank;
 
-        if (worldRank?.number) {
-          if (mythicProgress) {
-            mythicProgress.wclWorldRank = worldRank.number;
-            mythicProgress.wclWorldRankColor = worldRank.color;
+          if (worldRank?.number) {
+            if (mythicProgress) {
+              mythicProgress.wclWorldRank = worldRank.number;
+              mythicProgress.wclWorldRankColor = worldRank.color;
+            }
+            if (heroicProgress) {
+              heroicProgress.wclWorldRank = worldRank.number;
+              heroicProgress.wclWorldRankColor = worldRank.color;
+            }
+            guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
+          } else {
+            guildLog.info(`${raidName}: No WCL world rank data`);
           }
-          if (heroicProgress) {
-            heroicProgress.wclWorldRank = worldRank.number;
-            heroicProgress.wclWorldRankColor = worldRank.color;
-          }
-          guildLog.info(`${raidName}: WCL World Rank #${worldRank.number} (${worldRank.color})`);
-        } else {
-          guildLog.info(`${raidName}: No WCL world rank data`);
+        } catch (error) {
+          guildLog.error(`Error fetching WCL world rank for raid ${raidId}:`, error);
         }
-      } catch (error) {
-        guildLog.error(`Error fetching WCL world rank for raid ${raidId}:`, error);
       }
     }
 
@@ -1086,7 +1116,7 @@ class GuildService {
 
       if (rioRankings) {
         for (const { raidData, mythicProgress, heroicProgress, raidName } of raidsToUpdate) {
-          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug);
+          const diffRankings = this.findRaiderIORaidRankings(rioRankings, raidData.slug, raidData.name, raidData.rioSlug || RAID_RIO_SLUG_OVERRIDES[raidData.id]);
           if (!diffRankings) {
             guildLog.info(`${raidName}: No matching Raider.IO rankings found`);
             continue;
@@ -1297,7 +1327,7 @@ class GuildService {
           const raidData = trackedRaids.find((r) => r.id === raidProgress.raidId);
           if (!raidData) continue;
 
-          const diffRankings = this.findRaiderIORaidRankings(rankings, raidData.slug, raidData.name, raidData.rioSlug);
+          const diffRankings = this.findRaiderIORaidRankings(rankings, raidData.slug, raidData.name, raidData.rioSlug || RAID_RIO_SLUG_OVERRIDES[raidData.id]);
           if (!diffRankings) continue;
 
           const rank = raidProgress.difficulty === "mythic" ? diffRankings.mythic?.world : diffRankings.heroic?.world;
@@ -1334,8 +1364,12 @@ class GuildService {
   private findRaidForRIOTierSlug(tierSlug: string, raids: IRaid[]): IRaid | undefined {
     const normalized = tierSlug.toLowerCase();
 
-    // Check stored rioSlug first (most reliable — set during raid sync from RIO static data)
-    let match = raids.find((r) => r.rioSlug?.toLowerCase() === normalized);
+    // Explicit WCL zone ID -> RIO slug mapping handles known provider naming differences.
+    let match = raids.find((r) => RAID_RIO_SLUG_OVERRIDES[r.id]?.toLowerCase() === normalized);
+    if (match) return match;
+
+    // Check stored rioSlug first (most reliable after raid sync/backfill)
+    match = raids.find((r) => r.rioSlug?.toLowerCase() === normalized);
     if (match) return match;
 
     // Exact WCL slug match

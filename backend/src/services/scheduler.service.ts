@@ -838,8 +838,8 @@ class UpdateScheduler {
     const taskId = await taskTracker.start("Update World Ranks", { raidIds });
 
     try {
-      // Get all guilds (excluding guilds not found on WCL)
-      const guilds = await Guild.find({ wclStatus: { $ne: "not_found" } });
+      // Get all guilds. WCL-not-found guilds still may have Raider.IO rankings to refresh.
+      const guilds = await Guild.find();
 
       if (guilds.length === 0) {
         logger.info("[Nightly/WorldRanks] No guilds to update");

@@ -58,6 +58,11 @@ function formatNumber(value?: number): string {
   return value.toLocaleString("en-US");
 }
 
+function formatChartNumber(value?: number): string {
+  if (!value) return "-";
+  return String(Math.round(value));
+}
+
 function guildHref(guild: CompareGuildMetric): string {
   return `/guilds/${encodeURIComponent(guild.realm)}/${encodeURIComponent(guild.name)}`;
 }
@@ -119,13 +124,62 @@ function getGuildColor(rank?: number): string {
   return "#60a5fa";
 }
 
+function assignClusteredLanes(entries: MetricEntry[], lanes: number): Array<MetricEntry & { lane: number }> {
+  if (entries.length === 0) return [];
+
+  const values = entries.map((entry) => entry.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const clusterGap = Math.max((max - min) * 0.065, 1);
+  const primaryLanes = [2, 4, 6, 8, 10, 12].filter((lane) => lane <= lanes);
+  const secondaryLanes = [1, 3, 5, 7, 9, 11].filter((lane) => lane <= lanes);
+
+  const laneSequenceForCluster = (clusterIndex: number) => {
+    const first = clusterIndex % 2 === 0 ? primaryLanes : secondaryLanes;
+    const second = clusterIndex % 2 === 0 ? secondaryLanes : primaryLanes;
+    return [...first, ...second];
+  };
+
+  const result: Array<MetricEntry & { lane: number }> = [];
+  let currentCluster: MetricEntry[] = [];
+  let previousValue = entries[0].value;
+  let clusterIndex = 0;
+
+  const flushCluster = () => {
+    const sequence = laneSequenceForCluster(clusterIndex);
+    currentCluster.forEach((entry, index) => {
+      result.push({
+        ...entry,
+        lane: sequence[index % sequence.length] ?? ((index % lanes) + 1),
+      });
+    });
+    currentCluster = [];
+    clusterIndex++;
+  };
+
+  for (const entry of entries) {
+    if (currentCluster.length > 0 && entry.value - previousValue > clusterGap) {
+      flushCluster();
+    }
+
+    currentCluster.push(entry);
+    previousValue = entry.value;
+  }
+
+  if (currentCluster.length > 0) {
+    flushCluster();
+  }
+
+  return result;
+}
+
 function MetricPointShape({ cx = 0, cy = 0, payload }: MetricPointShapeProps) {
   return (
     <g>
       <text x={cx} y={cy - 3} textAnchor="middle" fill="#e5e7eb" fontSize={10} fontWeight={600} stroke="#0f172a" strokeWidth={3} paintOrder="stroke">
         {payload?.guildName ?? ""}
       </text>
-      <text x={cx} y={cy + 9} textAnchor="middle" fill="#93c5fd" fontSize={10} stroke="#0f172a" strokeWidth={3} paintOrder="stroke">
+      <text x={cx} y={cy + 9} textAnchor="middle" fill="#93c5fd" fontSize={10} fontWeight={700} stroke="#0f172a" strokeWidth={3} paintOrder="stroke">
         {payload?.valueLabel ?? ""}
       </text>
     </g>
@@ -155,12 +209,13 @@ function MetricScatterChart({
   const max = values.length ? Math.max(...values) : 0;
   const domainPadding = Math.max(max * 0.025, 0.5);
   const axisMax = max + domainPadding;
-  const lanes = 6;
-  const chartData = visibleEntries.map((entry, index) => ({
+  const lanes = 12;
+  const laneEntries = assignClusteredLanes(visibleEntries, lanes);
+  const chartData = laneEntries.map((entry) => ({
     ...entry,
     value: entry.value,
     valueLabel: valueFormatter(entry.value),
-    lane: (index % lanes) + 1,
+    lane: entry.lane,
     guildName: entry.guild.name,
     realm: entry.guild.realm,
     guildRank: entry.guild.guildRank,
@@ -487,7 +542,7 @@ export default function ComparePage() {
                   title={t("worldRank")}
                   subtitle={t("lowerIsBetter")}
                   entries={sortedGuilds.map((guild) => ({ guild, value: guild.worldRank ?? 0 }))}
-                  valueFormatter={formatNumber}
+                  valueFormatter={formatChartNumber}
                   emptyLabel={t("noMetricData")}
                 />
                 <MetricToggleChart
@@ -509,7 +564,7 @@ export default function ComparePage() {
                       label: t("pulls"),
                       subtitle: t("combatPullsSubtitle"),
                       entries: totalEffortGuilds.map((guild) => ({ guild, value: guild.totalPulls })),
-                      valueFormatter: formatNumber,
+                      valueFormatter: formatChartNumber,
                     },
                     {
                       id: "time",
@@ -541,7 +596,7 @@ export default function ComparePage() {
                           label: t("pulls"),
                           subtitle: t("killedGuildsOnly"),
                           entries: killedEntries.map(({ guild, metric }) => ({ guild, value: metric?.pulls ?? 0 })),
-                          valueFormatter: formatNumber,
+                          valueFormatter: formatChartNumber,
                         },
                         {
                           id: "time",
