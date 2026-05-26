@@ -154,9 +154,9 @@ function MetricScatterChart({
   const values = visibleEntries.map((entry) => entry.value);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
-  const domainPadding = Math.max(max * 0.08, 1);
+  const domainPadding = Math.max(max * 0.025, 0.5);
   const axisMax = max + domainPadding;
-  const lanes = 5;
+  const lanes = 6;
   const chartData = visibleEntries.map((entry, index) => ({
     ...entry,
     value: entry.value,
@@ -187,9 +187,9 @@ function MetricScatterChart({
       {visibleEntries.length === 0 ? (
         <div className="text-sm text-gray-500 py-8 text-center">{emptyLabel}</div>
       ) : (
-        <div className="h-[230px]">
+        <div className="h-[235px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 40, bottom: 48, left: 40 }}>
+            <ScatterChart margin={{ top: 10, right: 18, bottom: 14, left: 18 }}>
               <CartesianGrid stroke="#374151" strokeDasharray="3 3" opacity={0.35} vertical={true} horizontal={false} />
               <XAxis
                 type="number"
@@ -199,6 +199,7 @@ function MetricScatterChart({
                 tick={{ fill: "#9ca3af", fontSize: 11 }}
                 tickFormatter={(value) => (Number(value) === 0 ? "0" : valueFormatter(Number(value)))}
                 stroke="#4b5563"
+                height={24}
               />
               <YAxis type="number" dataKey="lane" domain={[0, lanes + 1]} hide />
               <Tooltip
@@ -487,7 +488,7 @@ export default function ComparePage() {
                   title={t("worldRank")}
                   subtitle={t("lowerIsBetter")}
                   entries={sortedGuilds.map((guild) => ({ guild, value: guild.worldRank ?? 0 }))}
-                  valueFormatter={(value) => `#${formatNumber(value)}`}
+                  valueFormatter={formatNumber}
                   emptyLabel={t("noMetricData")}
                 />
                 <MetricToggleChart
