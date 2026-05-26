@@ -581,6 +581,7 @@
     "guildCount": "{count} guilds",
     "noGuilds": "No guilds with Mythic progress for this raid yet.",
     "lowerIsBetter": "Lower is better",
+    "worldRankFilterSubtitle": "World rank 5000 or better by default",
     "combatPullsSubtitle": "All logged Mythic boss pulls",
     "combatTimeSubtitle": "Logged in-combat pull time",
     "totalEffort": "Total Effort",

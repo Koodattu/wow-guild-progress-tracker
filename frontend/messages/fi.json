@@ -581,6 +581,7 @@
     "guildCount": "{count} kiltaa",
     "noGuilds": "Talla raidilla ei ole viela myyttista edistymista.",
     "lowerIsBetter": "Pienempi on parempi",
+    "worldRankFilterSubtitle": "Oletuksena maailmansija 5000 tai parempi",
     "combatPullsSubtitle": "Kaikki lokitetut myyttiset bossiyritykset",
     "combatTimeSubtitle": "Lokitettu taistelussa vietetty aika",
     "totalEffort": "Kokonaispanos",

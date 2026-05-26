@@ -362,11 +362,15 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
       <button
         type="button"
         onClick={() => toggleSort(sortKey)}
-        className={`inline-flex w-full items-center gap-1 transition-colors hover:text-white ${className}`}
+        className={`inline-flex w-full cursor-pointer items-center gap-1 transition-colors hover:text-white ${className}`}
         aria-sort={isActive ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
       >
         <span>{children}</span>
-        {isActive && <span className="text-[10px] normal-case text-blue-300">{sort.direction}</span>}
+        {isActive && (
+          <svg className={`h-3 w-3 text-blue-300 ${sort.direction === "asc" ? "" : "rotate-180"}`} viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+            <path d="M6 2 2 7h8L6 2Z" />
+          </svg>
+        )}
       </button>
     );
   };
@@ -376,19 +380,19 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr className="bg-gray-900 text-xs uppercase text-gray-400">
-            <th className="sticky left-0 z-20 bg-gray-900 px-3 py-3 text-left font-semibold">
+            <th rowSpan={2} className="sticky left-0 z-20 bg-gray-900 px-3 pb-2 pt-3 text-left align-bottom font-semibold">
               <SortableHeader sortKey="guild">{t("guild")}</SortableHeader>
             </th>
-            <th className="px-3 py-3 text-right font-semibold">
+            <th rowSpan={2} className="px-3 pb-2 pt-3 text-right align-bottom font-semibold">
               <SortableHeader sortKey="rank" className="justify-end">{t("rank")}</SortableHeader>
             </th>
-            <th className="px-3 py-3 text-right font-semibold">
+            <th rowSpan={2} className="px-3 pb-2 pt-3 text-right align-bottom font-semibold">
               <SortableHeader sortKey="worldRank" className="justify-end">{t("worldRank")}</SortableHeader>
             </th>
-            <th className="px-3 py-3 text-right font-semibold">
+            <th rowSpan={2} className="px-3 pb-2 pt-3 text-right align-bottom font-semibold">
               <SortableHeader sortKey="totalPulls" className="justify-end">{t("totalPulls")}</SortableHeader>
             </th>
-            <th className="px-3 py-3 text-right font-semibold">
+            <th rowSpan={2} className="px-3 pb-2 pt-3 text-right align-bottom font-semibold">
               <SortableHeader sortKey="totalTime" className="justify-end">{t("combatTime")}</SortableHeader>
             </th>
             {compare.raid.bosses.map((boss) => (
@@ -405,11 +409,6 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
             ))}
           </tr>
           <tr className="bg-gray-900/80 text-[11px] uppercase text-gray-500">
-            <th className="sticky left-0 z-20 bg-gray-900/80 px-3 py-2" />
-            <th className="px-3 py-2" />
-            <th className="px-3 py-2" />
-            <th className="px-3 py-2" />
-            <th className="px-3 py-2" />
             {compare.raid.bosses.map((boss) => (
               <Fragment key={boss.id}>
                 <th key={`${boss.id}-pulls`} className="border-l border-gray-800 px-3 py-2 text-right font-medium">
@@ -425,7 +424,7 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
         <tbody>
           {sortedGuilds.map((guild) => (
             <tr key={guild.id} className="group border-t border-gray-800/80 hover:bg-gray-900/50">
-              <td className="sticky left-0 z-10 bg-gray-950 px-3 py-3 transition-colors group-hover:bg-gray-900">
+              <td className="sticky left-0 z-10 bg-gray-950 px-3 py-3 group-hover:bg-gray-900/50">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 shrink-0">
                     <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.25] origin-top-left" />
@@ -472,6 +471,7 @@ export default function ComparePage() {
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("visual");
   const [showAllTotalEffort, setShowAllTotalEffort] = useState(false);
+  const [showAllWorldRanks, setShowAllWorldRanks] = useState(false);
   const { data: raids = [], isLoading: raidsLoading } = useRaids();
   const { data: compare, isLoading: compareLoading, error } = useRaidCompare(selectedRaidId);
 
@@ -489,6 +489,11 @@ export default function ComparePage() {
     if (showAllTotalEffort) return sortedGuilds;
     return sortedGuilds.filter((guild) => guild.totalBosses > 0 && guild.bossesDefeated >= guild.totalBosses);
   }, [showAllTotalEffort, sortedGuilds]);
+
+  const worldRankGuilds = useMemo(() => {
+    if (showAllWorldRanks) return sortedGuilds;
+    return sortedGuilds.filter((guild) => guild.worldRank && guild.worldRank <= 5000);
+  }, [showAllWorldRanks, sortedGuilds]);
 
   const loading = raidsLoading || (selectedRaidId !== null && compareLoading);
 
@@ -538,11 +543,28 @@ export default function ComparePage() {
           ) : (
             <div className="space-y-5">
               <div className="space-y-4">
-                <MetricScatterChart
+                <MetricToggleChart
                   title={t("worldRank")}
-                  subtitle={t("lowerIsBetter")}
-                  entries={sortedGuilds.map((guild) => ({ guild, value: guild.worldRank ?? 0 }))}
-                  valueFormatter={formatChartNumber}
+                  actions={
+                    <label className="flex items-center gap-2 rounded border border-gray-800 bg-gray-950/80 px-2.5 py-1 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={showAllWorldRanks}
+                        onChange={(event) => setShowAllWorldRanks(event.target.checked)}
+                        className="h-3.5 w-3.5 accent-blue-600"
+                      />
+                      <span>{t("showAllGuilds")}</span>
+                    </label>
+                  }
+                  options={[
+                    {
+                      id: "rank",
+                      label: t("rank"),
+                      subtitle: t("worldRankFilterSubtitle"),
+                      entries: worldRankGuilds.map((guild) => ({ guild, value: guild.worldRank ?? 0 })),
+                      valueFormatter: formatChartNumber,
+                    },
+                  ]}
                   emptyLabel={t("noMetricData")}
                 />
                 <MetricToggleChart
