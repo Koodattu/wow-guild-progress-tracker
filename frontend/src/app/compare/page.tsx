@@ -124,8 +124,9 @@ function getGuildColor(rank?: number): string {
   return "#60a5fa";
 }
 
-function assignClusteredLanes(entries: MetricEntry[], lanes: number): Array<MetricEntry & { lane: number }> {
-  if (entries.length === 0) return [];
+function assignClusteredLanes(entries: MetricEntry[], lanes: number): Map<string, number> {
+  const laneByGuildId = new Map<string, number>();
+  if (entries.length === 0) return laneByGuildId;
 
   const values = entries.map((entry) => entry.value);
   const min = Math.min(...values);
@@ -140,7 +141,6 @@ function assignClusteredLanes(entries: MetricEntry[], lanes: number): Array<Metr
     return [...first, ...second];
   };
 
-  const result: Array<MetricEntry & { lane: number }> = [];
   let currentCluster: MetricEntry[] = [];
   let previousValue = entries[0].value;
   let clusterIndex = 0;
@@ -148,10 +148,7 @@ function assignClusteredLanes(entries: MetricEntry[], lanes: number): Array<Metr
   const flushCluster = () => {
     const sequence = laneSequenceForCluster(clusterIndex);
     currentCluster.forEach((entry, index) => {
-      result.push({
-        ...entry,
-        lane: sequence[index % sequence.length] ?? ((index % lanes) + 1),
-      });
+      laneByGuildId.set(entry.guild.id, sequence[index % sequence.length] ?? ((index % lanes) + 1));
     });
     currentCluster = [];
     clusterIndex++;
@@ -170,7 +167,7 @@ function assignClusteredLanes(entries: MetricEntry[], lanes: number): Array<Metr
     flushCluster();
   }
 
-  return result;
+  return laneByGuildId;
 }
 
 function MetricPointShape({ cx = 0, cy = 0, payload }: MetricPointShapeProps) {
@@ -203,19 +200,20 @@ function MetricScatterChart({
   iconUrl?: string;
   iconAlt?: string;
 }) {
-  const visibleEntries = entries.filter((entry) => Number.isFinite(entry.value) && entry.value > 0).sort((a, b) => a.value - b.value);
+  const visibleEntries = entries.filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
+  const valueSortedEntries = [...visibleEntries].sort((a, b) => a.value - b.value);
   const values = visibleEntries.map((entry) => entry.value);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
   const domainPadding = Math.max(max * 0.025, 0.5);
   const axisMax = max + domainPadding;
   const lanes = 12;
-  const laneEntries = assignClusteredLanes(visibleEntries, lanes);
-  const chartData = laneEntries.map((entry) => ({
+  const laneByGuildId = assignClusteredLanes(valueSortedEntries, lanes);
+  const chartData = visibleEntries.map((entry) => ({
     ...entry,
     value: entry.value,
     valueLabel: valueFormatter(entry.value),
-    lane: entry.lane,
+    lane: laneByGuildId.get(entry.guild.id) ?? 1,
     guildName: entry.guild.name,
     realm: entry.guild.realm,
     guildRank: entry.guild.guildRank,
