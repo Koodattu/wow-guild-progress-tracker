@@ -348,7 +348,7 @@ function RaceLabel({ entry, className = "w-24" }: { entry: RaceEntry; className?
 function ChuteGuildName({ entry, className }: { entry: RaceEntry; className: string }) {
   return (
     <div
-      className={`wrap-break-word text-[10px] font-medium leading-2.5 ${className}`}
+      className={`wrap-break-word text-[10px] font-semibold leading-[11px] ${className}`}
       style={{
         display: "-webkit-box",
         WebkitLineClamp: 2,
@@ -441,9 +441,8 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                   <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
                 </div>
-                <div className="mt-0.5 max-w-[63px] px-1 text-center text-[10px] font-semibold leading-3 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
-                  <ChuteGuildName entry={entry} className="text-emerald-100" />
-                  <div className="text-[9px] font-medium text-gray-300">0 pulls</div>
+                <div className="mt-0.5 max-w-[63px] px-1 text-center text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+                  <ChuteGuildName entry={entry} className="text-gray-100" />
                 </div>
               </div>
             ))}
@@ -477,7 +476,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
 
           <div className="relative bg-yellow-950/15">
             <div
-              className="absolute left-0 z-50 flex w-5 items-center justify-center rounded-sm border border-yellow-100/60 bg-black/80 text-[8px] font-bold uppercase tracking-wide text-yellow-100 shadow shadow-black/50"
+              className="absolute left-[-7] z-50 flex w-5 items-center justify-center rounded-sm border border-yellow-100/60 bg-black/80 text-[8px] font-bold uppercase tracking-wide text-yellow-100 shadow shadow-black/50"
               style={{ top: `${trackTop - 27}px`, height: "74px", writingMode: "vertical-rl", textOrientation: "mixed" }}
               aria-hidden="true"
             >
@@ -493,14 +492,14 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             {race.finished.map((entry, index) => (
               <div
                 key={entry.id}
-                className="absolute flex w-[63px] flex-col items-center"
+                className="absolute flex w-[66px] flex-col items-center"
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}
               >
                 <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                   <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + race.unfinished.length + index)} />
                 </div>
-                <div className="mt-0.5 max-w-[63px] px-1 text-center text-[10px] font-semibold leading-3 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+                <div className="mt-0.5 max-w-[66px] px-1 text-center text-[10px] font-semibold leading-1.5 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
                   <div>#{index + 1}</div>
                   <ChuteGuildName entry={entry} className="text-amber-100" />
                 </div>
