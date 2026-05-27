@@ -7,12 +7,14 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { setLocale, getLocale } from "@/lib/locale";
 import { useAuth } from "@/context/AuthContext";
+import { useHorseRaceMode } from "@/lib/horse-race-preferences";
 
 export default function Navigation() {
   const pathname = usePathname();
   const t = useTranslations("navigation");
   const tInfo = useTranslations("infoDialog");
   const { user, isLoading, login, logout } = useAuth();
+  const { mode: horseRaceMode, cycleMode: cycleHorseRaceMode } = useHorseRaceMode();
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -75,6 +77,16 @@ export default function Navigation() {
   const handleLanguageChange = (newLocale: "en" | "fi") => {
     setLocale(newLocale);
   };
+
+  const isFrontpage = pathname === "/";
+  const horseRaceModeLabel =
+    horseRaceMode === "crest"
+      ? t("horseRaceCrest")
+      : horseRaceMode === "japanese"
+        ? t("horseRaceJapanese")
+        : horseRaceMode === "uma"
+          ? t("horseRaceUma")
+          : t("horseRaceOff");
 
   return (
     <>
@@ -158,6 +170,22 @@ export default function Navigation() {
 
             {/* Right side buttons */}
             <div className="flex items-center gap-2 md:gap-3">
+              {isFrontpage && (
+                <button
+                  onClick={cycleHorseRaceMode}
+                  className="flex h-8 w-8 items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95"
+                  title={t("horseRaceToggleTitle")}
+                  aria-label={`${t("horseRaceToggleTitle")}: ${horseRaceModeLabel}`}
+                >
+                  <img
+                    src="/horse/racer.png"
+                    alt=""
+                    className={`h-7 w-7 shrink-0 object-contain transition-all ${horseRaceMode === "off" ? "grayscale opacity-55" : "opacity-100"}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              )}
+
               {/* Language Switcher - Always visible */}
               <div className="flex items-center gap-1 bg-gray-800 rounded-md p-1">
                 <button

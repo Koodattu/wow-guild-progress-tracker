@@ -19,7 +19,13 @@
     "twitch": "Twitch",
     "profile": "Profiili",
     "logout": "Kirjaudu ulos",
-    "adminPanel": "Hallintapaneeli"
+    "adminPanel": "Hallintapaneeli",
+    "horseRace": "Race",
+    "horseRaceToggleTitle": "Vaihda horse race -tilaa",
+    "horseRaceCrest": "Crest",
+    "horseRaceJapanese": "JPN",
+    "horseRaceUma": "Uma",
+    "horseRaceOff": "Pois"
   },
   "infoDialog": {
     "title": "Tietoa Sivustosta",

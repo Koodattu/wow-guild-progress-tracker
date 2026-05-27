@@ -10,6 +10,7 @@ import GuildTable from "@/components/GuildTable";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import FeaturedStreamers from "@/components/FeaturedStreamers";
+import HorseRace from "@/components/HorseRace";
 import RaidDetailModal from "@/components/RaidDetailModal";
 
 function HomeContent() {
@@ -175,6 +176,8 @@ function HomeContent() {
 
       {/* Featured Live Streamers */}
       <FeaturedStreamers />
+
+      <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={raids[0]?.id ?? null} />
 
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}

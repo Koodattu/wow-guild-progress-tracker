@@ -19,7 +19,13 @@
     "twitch": "Twitch",
     "profile": "Profile",
     "logout": "Log Out",
-    "adminPanel": "Admin Panel"
+    "adminPanel": "Admin Panel",
+    "horseRace": "Race",
+    "horseRaceToggleTitle": "Cycle horse race mode",
+    "horseRaceCrest": "Crests",
+    "horseRaceJapanese": "JPN",
+    "horseRaceUma": "Uma",
+    "horseRaceOff": "Off"
   },
   "infoDialog": {
     "title": "About This Site",
