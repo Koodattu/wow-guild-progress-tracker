@@ -140,7 +140,8 @@ function buildEntries(guilds: GuildListItem[], selectedRaidId: number) {
   }, []);
 
   const sortedEntries = entries.sort(compareRaceOrder);
-  const unfinished = sortedEntries.filter((entry) => !entry.isFinished);
+  const notStarted = sortedEntries.filter((entry) => !entry.isFinished && entry.progress.currentBossPulls <= 0);
+  const unfinished = sortedEntries.filter((entry) => !entry.isFinished && entry.progress.currentBossPulls > 0);
   const finished = sortedEntries.filter((entry) => entry.isFinished);
 
   const positionedUnfinished: RaceEntry[] = [];
@@ -178,6 +179,11 @@ function buildEntries(guilds: GuildListItem[], selectedRaidId: number) {
   }));
 
   return {
+    notStarted: notStarted.map((entry) => ({
+      ...entry,
+      displayProgress: 0,
+      labelPosition: "below" as const,
+    })),
     unfinished: assignLabelPositions(positionedUnfinished),
     finished: positionedFinished,
     maxStackDepth,
@@ -320,10 +326,6 @@ function getProgressLabel(entry: RaceEntry) {
   return entry.progress.bestPullPhase?.displayString ? formatPhaseDisplay(entry.progress.bestPullPhase.displayString) : formatPercent(entry.bossHealth);
 }
 
-function getShortName(entry: RaceEntry) {
-  return entry.name.length > 12 ? `${entry.name.slice(0, 11)}...` : entry.name;
-}
-
 function RaceLabel({ entry, className = "w-24" }: { entry: RaceEntry; className?: string }) {
   return (
     <div className={`${className} px-1 text-center text-[10px] font-semibold leading-[11px] text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]`}>
@@ -339,6 +341,22 @@ function RaceLabel({ entry, className = "w-24" }: { entry: RaceEntry; className?
         {entry.name}
       </div>
       <div className="text-[9px] font-medium text-amber-100">{getProgressLabel(entry)}</div>
+    </div>
+  );
+}
+
+function ChuteGuildName({ entry, className }: { entry: RaceEntry; className: string }) {
+  return (
+    <div
+      className={`wrap-break-word text-[10px] font-medium leading-2.5 ${className}`}
+      style={{
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+      }}
+    >
+      {entry.name}
     </div>
   );
 }
@@ -363,16 +381,17 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
   }, [mode]);
 
   const race = useMemo(() => {
-    if (!selectedRaidId || selectedRaidId !== currentRaidId) return { unfinished: [], finished: [], maxStackDepth: 1 };
+    if (!selectedRaidId || selectedRaidId !== currentRaidId) return { notStarted: [], unfinished: [], finished: [], maxStackDepth: 1 };
     return buildEntries(guilds, selectedRaidId);
   }, [currentRaidId, guilds, selectedRaidId]);
 
-  const entryCount = race.unfinished.length + race.finished.length;
+  const entryCount = race.notStarted.length + race.unfinished.length + race.finished.length;
 
   if (mode === "off" || entryCount === 0) return null;
 
+  const startWidth = Math.max(START_WIDTH, 28 + race.notStarted.length * FINISHED_SLOT_WIDTH);
   const finishWidth = Math.max(92, 28 + race.finished.length * FINISHED_SLOT_WIDTH);
-  const minWidth = START_WIDTH + MIN_TRACK_WIDTH + finishWidth;
+  const minWidth = startWidth + MIN_TRACK_WIDTH + finishWidth;
   const raceHeight = 112;
   const trackTop = Math.floor(raceHeight / 2) - 10;
   const markerTop = trackTop - 16;
@@ -393,9 +412,17 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
       <div className="relative z-10 w-full overflow-x-auto">
         <div
           className="grid overflow-hidden rounded-md border border-emerald-800/60 bg-[#20301f]/75"
-          style={{ gridTemplateColumns: `${START_WIDTH}px minmax(${MIN_TRACK_WIDTH}px, 1fr) ${finishWidth}px`, minWidth: `${minWidth}px`, height: `${raceHeight}px` }}
+          style={{ gridTemplateColumns: `${startWidth}px minmax(${MIN_TRACK_WIDTH}px, 1fr) ${finishWidth}px`, minWidth: `${minWidth}px`, height: `${raceHeight}px` }}
         >
-          <div className="relative">
+          <div className="relative bg-emerald-950/15">
+            {race.notStarted.length > 0 && (
+              <div
+                className="absolute left-2 right-0 h-5 rounded-l-full border-y border-l border-amber-700/70 bg-[#6f4526] shadow-inner shadow-black/50"
+                style={{ top: `${trackTop}px` }}
+              >
+                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-amber-200/35" />
+              </div>
+            )}
             <div
               className="absolute right-0 z-30 flex w-5 items-center justify-center rounded-sm border border-emerald-300/50 bg-black/70 text-[8px] font-bold uppercase tracking-wide text-emerald-100 shadow shadow-black/40"
               style={{ top: `${trackTop - 25}px`, height: "70px", writingMode: "vertical-rl", textOrientation: "mixed" }}
@@ -403,6 +430,23 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             >
               Start
             </div>
+
+            {race.notStarted.map((entry, index) => (
+              <div
+                key={entry.id}
+                className="absolute flex w-[63px] flex-col items-center"
+                style={{ right: `${26 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
+                title={`${entry.name}-${entry.realm}: 0 pulls`}
+              >
+                <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
+                  <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
+                </div>
+                <div className="mt-0.5 max-w-[63px] px-1 text-center text-[10px] font-semibold leading-3 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+                  <ChuteGuildName entry={entry} className="text-emerald-100" />
+                  <div className="text-[9px] font-medium text-gray-300">0 pulls</div>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="relative">
@@ -418,7 +462,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                   title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}
                 >
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
+                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + index)} />
                   </div>
                 </div>
                 <div
@@ -449,16 +493,16 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             {race.finished.map((entry, index) => (
               <div
                 key={entry.id}
-                className="absolute flex w-[52px] flex-col items-center"
+                className="absolute flex w-[63px] flex-col items-center"
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}
               >
                 <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                  <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.unfinished.length + index)} />
+                  <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + race.unfinished.length + index)} />
                 </div>
-                <div className="mt-0.5 max-w-[52px] px-1 text-center text-[10px] font-semibold leading-3 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+                <div className="mt-0.5 max-w-[63px] px-1 text-center text-[10px] font-semibold leading-3 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
                   <div>#{index + 1}</div>
-                  <div className="truncate text-[9px] font-medium text-amber-100">{getShortName(entry)}</div>
+                  <ChuteGuildName entry={entry} className="text-amber-100" />
                 </div>
               </div>
             ))}
