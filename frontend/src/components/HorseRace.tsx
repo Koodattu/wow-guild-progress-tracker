@@ -384,7 +384,11 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
     <section className="relative px-3 md:px-4 mb-2" aria-label="Final boss race">
       <div className="pointer-events-none absolute left-2 top-[-10%] z-0 flex -translate-y-1/2 items-center gap-1" aria-hidden="true">
         <img src="/yolobolt.png" alt="" className="h-[118px] w-auto object-contain opacity-95" />
-        <div className="-ml-2 mt-2 text-[11px] font-semibold leading-3 text-purple-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">Yolobolt&apos;s Horses</div>
+        <div className="-ml-6 mt-2 text-[11px] font-semibold leading-3 text-purple-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">Yolobolt&apos;s Horses</div>
+      </div>
+      <div className="pointer-events-none absolute right-2 top-[-10%] z-0 flex -translate-y-1/2 items-center gap-1" aria-hidden="true">
+        <div className="-mr-7 mt-2 text-[11px] font-semibold leading-3 z-20 text-cyan-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">LakuClap Lovewatching</div>
+        <img src="/lakuclap.png" alt="" className="h-40 w-auto object-contain opacity-95 z-10" />
       </div>
       <div className="relative z-10 w-full overflow-x-auto">
         <div
