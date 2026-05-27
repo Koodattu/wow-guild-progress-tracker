@@ -7,21 +7,30 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { setLocale, getLocale } from "@/lib/locale";
 import { useAuth } from "@/context/AuthContext";
-import { useHorseRaceMode } from "@/lib/horse-race-preferences";
+import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
+
+const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRaceCrest" | "horseRaceJapanese" | "horseRaceUma" | "horseRaceOff" }> = [
+  { mode: "crest", labelKey: "horseRaceCrest" },
+  { mode: "japanese", labelKey: "horseRaceJapanese" },
+  { mode: "uma", labelKey: "horseRaceUma" },
+  { mode: "off", labelKey: "horseRaceOff" },
+];
 
 export default function Navigation() {
   const pathname = usePathname();
   const t = useTranslations("navigation");
   const tInfo = useTranslations("infoDialog");
   const { user, isLoading, login, logout } = useAuth();
-  const { mode: horseRaceMode, cycleMode: cycleHorseRaceMode } = useHorseRaceMode();
+  const { mode: horseRaceMode, showCharacters: showHorseRaceCharacters, setMode: setHorseRaceMode, setShowCharacters: setShowHorseRaceCharacters } = useHorseRaceMode();
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isHorseRaceDropdownOpen, setIsHorseRaceDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState<"en" | "fi">("en");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const horseRaceDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,6 +40,7 @@ export default function Navigation() {
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsHorseRaceDropdownOpen(false);
   }, [pathname]);
 
   // Prevent body scroll when mobile menu is open
@@ -53,19 +63,22 @@ export default function Navigation() {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
+      if (horseRaceDropdownRef.current && !horseRaceDropdownRef.current.contains(event.target as Node)) {
+        setIsHorseRaceDropdownOpen(false);
+      }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setIsMobileMenuOpen(false);
       }
     };
 
-    if (isContactDropdownOpen || isUserDropdownOpen || isMobileMenuOpen) {
+    if (isContactDropdownOpen || isUserDropdownOpen || isHorseRaceDropdownOpen || isMobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isContactDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
+  }, [isContactDropdownOpen, isHorseRaceDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -171,19 +184,58 @@ export default function Navigation() {
             {/* Right side buttons */}
             <div className="flex items-center gap-2 md:gap-3">
               {isFrontpage && (
-                <button
-                  onClick={cycleHorseRaceMode}
-                  className="flex h-8 w-8 items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95"
-                  title={t("horseRaceToggleTitle")}
-                  aria-label={`${t("horseRaceToggleTitle")}: ${horseRaceModeLabel}`}
-                >
-                  <img
-                    src="/horse/racer.png"
-                    alt=""
-                    className={`h-7 w-7 shrink-0 object-contain transition-all ${horseRaceMode === "off" ? "grayscale opacity-55" : "opacity-100"}`}
-                    aria-hidden="true"
-                  />
-                </button>
+                <div className="relative" ref={horseRaceDropdownRef}>
+                  <button
+                    onClick={() => setIsHorseRaceDropdownOpen((isOpen) => !isOpen)}
+                    className="flex h-8 w-8 cursor-pointer items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                    title={t("horseRaceToggleTitle")}
+                    aria-label={`${t("horseRaceToggleTitle")}: ${horseRaceModeLabel}`}
+                    aria-expanded={isHorseRaceDropdownOpen}
+                  >
+                    <img
+                      src="/horse/racer.png"
+                      alt=""
+                      className={`h-7 w-7 shrink-0 object-contain transition-all ${horseRaceMode === "off" ? "grayscale opacity-55" : "opacity-100"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  {isHorseRaceDropdownOpen && (
+                    <div className="absolute left-1/2 z-50 mt-2 w-max min-w-56 -translate-x-1/2 rounded-md border border-gray-700 bg-gray-800 p-2 shadow-lg">
+                      <div className="flex overflow-hidden rounded border border-gray-700">
+                        {HORSE_RACE_MODE_OPTIONS.map((option) => (
+                          <button
+                            key={option.mode}
+                            onClick={() => setHorseRaceMode(option.mode)}
+                            className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                              horseRaceMode === option.mode ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
+                            }`}
+                          >
+                            {t(option.labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex w-full overflow-hidden rounded border border-gray-700">
+                        <button
+                          onClick={() => setShowHorseRaceCharacters(true)}
+                          className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            showHorseRaceCharacters ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
+                          }`}
+                        >
+                          {t("horseRaceCharacters")}
+                        </button>
+                        <button
+                          onClick={() => setShowHorseRaceCharacters(false)}
+                          className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            !showHorseRaceCharacters ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
+                          }`}
+                        >
+                          {t("horseRaceOff")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Language Switcher - Always visible */}

@@ -21,11 +21,12 @@
     "logout": "Kirjaudu ulos",
     "adminPanel": "Hallintapaneeli",
     "horseRace": "Race",
-    "horseRaceToggleTitle": "Vaihda horse race -tilaa",
-    "horseRaceCrest": "Crest",
-    "horseRaceJapanese": "JPN",
-    "horseRaceUma": "Uma",
-    "horseRaceOff": "Pois"
+    "horseRaceToggleTitle": "Horse race -asetukset",
+    "horseRaceCrest": "Crests",
+    "horseRaceJapanese": "Horses",
+    "horseRaceUma": "Umas",
+    "horseRaceOff": "Piilota",
+    "horseRaceCharacters": "Characters"
   },
   "infoDialog": {
     "title": "Tietoa Sivustosta",

@@ -1,28 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export const HORSE_RACE_MODES = ["crest", "japanese", "uma", "off"] as const;
 
 export type HorseRaceMode = (typeof HORSE_RACE_MODES)[number];
+export interface HorseRacePreferences {
+  mode: HorseRaceMode;
+  showCharacters: boolean;
+}
 
-const STORAGE_KEY = "horse-race-mode";
-const MODE_CHANGE_EVENT = "horse-race-mode-change";
+const MODE_STORAGE_KEY = "horse-race-mode";
+const CHARACTERS_STORAGE_KEY = "horse-race-show-characters";
+const PREFERENCES_CHANGE_EVENT = "horse-race-preferences-change";
 const DEFAULT_MODE: HorseRaceMode = "crest";
+const DEFAULT_SHOW_CHARACTERS = true;
+const DEFAULT_PREFERENCES: HorseRacePreferences = {
+  mode: DEFAULT_MODE,
+  showCharacters: DEFAULT_SHOW_CHARACTERS,
+};
 
 function isHorseRaceMode(value: string | null): value is HorseRaceMode {
   return HORSE_RACE_MODES.includes(value as HorseRaceMode);
 }
 
-function readStoredMode(): HorseRaceMode {
-  if (typeof window === "undefined") return DEFAULT_MODE;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return isHorseRaceMode(stored) ? stored : DEFAULT_MODE;
+function readStoredPreferences(): HorseRacePreferences {
+  if (typeof window === "undefined") return DEFAULT_PREFERENCES;
+
+  const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
+  const storedCharacters = window.localStorage.getItem(CHARACTERS_STORAGE_KEY);
+
+  return {
+    mode: isHorseRaceMode(storedMode) ? storedMode : DEFAULT_MODE,
+    showCharacters: storedCharacters === null ? DEFAULT_SHOW_CHARACTERS : storedCharacters === "true",
+  };
 }
 
-function writeStoredMode(mode: HorseRaceMode) {
-  window.localStorage.setItem(STORAGE_KEY, mode);
-  window.dispatchEvent(new CustomEvent<HorseRaceMode>(MODE_CHANGE_EVENT, { detail: mode }));
+function writeStoredPreferences(preferences: HorseRacePreferences) {
+  window.localStorage.setItem(MODE_STORAGE_KEY, preferences.mode);
+  window.localStorage.setItem(CHARACTERS_STORAGE_KEY, String(preferences.showCharacters));
+  window.dispatchEvent(new CustomEvent<HorseRacePreferences>(PREFERENCES_CHANGE_EVENT, { detail: preferences }));
 }
 
 export function getNextHorseRaceMode(mode: HorseRaceMode): HorseRaceMode {
@@ -31,47 +48,47 @@ export function getNextHorseRaceMode(mode: HorseRaceMode): HorseRaceMode {
 }
 
 export function useHorseRaceMode() {
-  const [mode, setModeState] = useState<HorseRaceMode>(DEFAULT_MODE);
-  const modeRef = useRef<HorseRaceMode>(DEFAULT_MODE);
+  const [preferences, setPreferencesState] = useState<HorseRacePreferences>(DEFAULT_PREFERENCES);
 
   useEffect(() => {
-    const storedMode = readStoredMode();
-    modeRef.current = storedMode;
-    setModeState(storedMode);
+    setPreferencesState(readStoredPreferences());
 
-    const handleModeChange = (event: Event) => {
-      const nextMode = (event as CustomEvent<HorseRaceMode>).detail;
-      modeRef.current = nextMode;
-      setModeState(nextMode);
+    const handlePreferencesChange = (event: Event) => {
+      setPreferencesState((event as CustomEvent<HorseRacePreferences>).detail);
     };
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY && isHorseRaceMode(event.newValue)) {
-        modeRef.current = event.newValue;
-        setModeState(event.newValue);
+      if (event.key === MODE_STORAGE_KEY || event.key === CHARACTERS_STORAGE_KEY) {
+        setPreferencesState(readStoredPreferences());
       }
     };
 
-    window.addEventListener(MODE_CHANGE_EVENT, handleModeChange);
+    window.addEventListener(PREFERENCES_CHANGE_EVENT, handlePreferencesChange);
     window.addEventListener("storage", handleStorageChange);
     return () => {
-      window.removeEventListener(MODE_CHANGE_EVENT, handleModeChange);
+      window.removeEventListener(PREFERENCES_CHANGE_EVENT, handlePreferencesChange);
       window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 
   const setMode = useCallback((nextMode: HorseRaceMode) => {
-    modeRef.current = nextMode;
-    setModeState(nextMode);
-    writeStoredMode(nextMode);
+    const nextPreferences = { ...readStoredPreferences(), mode: nextMode };
+    setPreferencesState(nextPreferences);
+    writeStoredPreferences(nextPreferences);
+  }, []);
+
+  const setShowCharacters = useCallback((showCharacters: boolean) => {
+    const nextPreferences = { ...readStoredPreferences(), showCharacters };
+    setPreferencesState(nextPreferences);
+    writeStoredPreferences(nextPreferences);
   }, []);
 
   const cycleMode = useCallback(() => {
-    const nextMode = getNextHorseRaceMode(modeRef.current);
-    modeRef.current = nextMode;
-    setModeState(nextMode);
-    writeStoredMode(nextMode);
+    const currentPreferences = readStoredPreferences();
+    const nextPreferences = { ...currentPreferences, mode: getNextHorseRaceMode(currentPreferences.mode) };
+    setPreferencesState(nextPreferences);
+    writeStoredPreferences(nextPreferences);
   }, []);
 
-  return { mode, setMode, cycleMode };
+  return { ...preferences, setMode, setShowCharacters, cycleMode };
 }
