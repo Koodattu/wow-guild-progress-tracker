@@ -306,8 +306,8 @@ function RacerSprite({ entry, mode, umaImage }: { entry: RaceEntry; mode: HorseR
 
   if (mode === "uma") {
     return (
-      <div className="h-10 w-10 shrink-0" aria-hidden="true">
-        <img src={`/uma/${umaImage}`} alt="" className="h-10 w-10 object-contain" />
+      <div className="h-12 w-12 shrink-0" aria-hidden="true">
+        <img src={`/uma/${umaImage}`} alt="" className="h-12 w-12 object-contain" />
       </div>
     );
   }
@@ -324,11 +324,11 @@ function getShortName(entry: RaceEntry) {
   return entry.name.length > 12 ? `${entry.name.slice(0, 11)}...` : entry.name;
 }
 
-function RaceLabel({ entry, className = "w-[96px]" }: { entry: RaceEntry; className?: string }) {
+function RaceLabel({ entry, className = "w-24" }: { entry: RaceEntry; className?: string }) {
   return (
     <div className={`${className} px-1 text-center text-[10px] font-semibold leading-[11px] text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]`}>
       <div
-        className="break-words"
+        className="wrap-break-word"
         style={{
           display: "-webkit-box",
           WebkitLineClamp: 2,
@@ -381,10 +381,14 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
   const getUmaImage = (index: number) => umaDeck[index % umaDeck.length];
 
   return (
-    <section className="px-3 md:px-4 mb-2" aria-label="Final boss race">
-      <div className="w-full overflow-x-auto">
+    <section className="relative px-3 md:px-4 mb-2" aria-label="Final boss race">
+      <div className="pointer-events-none absolute left-2 top-[-10%] z-0 flex -translate-y-1/2 items-center gap-1" aria-hidden="true">
+        <img src="/yolobolt.png" alt="" className="h-[118px] w-auto object-contain opacity-95" />
+        <div className="-ml-2 mt-2 text-[11px] font-semibold leading-3 text-purple-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">Yolobolt&apos;s Horses</div>
+      </div>
+      <div className="relative z-10 w-full overflow-x-auto">
         <div
-          className="grid overflow-hidden rounded-md border border-emerald-800/60 bg-[#20301f]"
+          className="grid overflow-hidden rounded-md border border-emerald-800/60 bg-[#20301f]/75"
           style={{ gridTemplateColumns: `${START_WIDTH}px minmax(${MIN_TRACK_WIDTH}px, 1fr) ${finishWidth}px`, minWidth: `${minWidth}px`, height: `${raceHeight}px` }}
         >
           <div className="relative">
@@ -414,7 +418,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                   </div>
                 </div>
                 <div
-                  className="absolute flex w-[96px] -translate-x-1/2 justify-center"
+                  className="absolute flex w-24 -translate-x-1/2 justify-center"
                   style={{ left: `${entry.displayProgress}%`, top: `${entry.labelPosition === "above" ? labelAboveTop : labelBelowTop}px`, zIndex: 40 + index }}
                 >
                   <RaceLabel entry={entry} />
@@ -431,7 +435,10 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             >
               Finish
             </div>
-            <div className="absolute left-0 right-2 h-5 rounded-r-full border-y border-r border-amber-700/70 bg-[#6f4526] shadow-inner shadow-black/50" style={{ top: `${trackTop}px` }}>
+            <div
+              className="absolute left-0 right-2 h-5 rounded-r-full border-y border-r border-amber-700/70 bg-[#6f4526] shadow-inner shadow-black/50"
+              style={{ top: `${trackTop}px` }}
+            >
               <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-amber-200/35" />
             </div>
 
