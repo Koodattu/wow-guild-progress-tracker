@@ -396,19 +396,21 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
 
     return (
       <div key={`${progress.raidId}-${progress.difficulty}`} className="mb-6 md:mb-8">
-        <h3 className={`text-lg md:text-xl font-bold mb-3 md:mb-4 ${getDifficultyColor(progress.difficulty)}`}>
-          {progress.raidName} - {progress.difficulty.charAt(0).toUpperCase() + progress.difficulty.slice(1)}
-        </h3>
-        <div className="mb-3 md:mb-4 flex gap-4 md:gap-6 text-sm md:text-base">
-          <div>
-            <span className="text-gray-400">Progress: </span>
-            <span className="text-white font-semibold">
-              {progress.bossesDefeated}/{progress.totalBosses}
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-400">Time: </span>
-            <span className="text-white font-semibold">{formatTime(progress.totalTimeSpent)}</span>
+        <div className="mb-3 md:mb-4 flex items-baseline justify-between gap-3">
+          <h3 className={`min-w-0 truncate text-lg md:text-xl font-bold ${getDifficultyColor(progress.difficulty)}`}>
+            {progress.raidName} - {progress.difficulty.charAt(0).toUpperCase() + progress.difficulty.slice(1)}
+          </h3>
+          <div className="flex shrink-0 gap-4 md:gap-6 text-sm md:text-base">
+            <div>
+              <span className="text-gray-400">Progress: </span>
+              <span className="text-white font-semibold">
+                {progress.bossesDefeated}/{progress.totalBosses}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-400">Time: </span>
+              <span className="text-white font-semibold">{formatTime(progress.totalTimeSpent)}</span>
+            </div>
           </div>
         </div>
         {/* Mobile card view */}
