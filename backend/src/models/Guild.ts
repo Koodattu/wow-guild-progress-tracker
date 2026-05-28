@@ -114,6 +114,7 @@ export interface IGuild extends Document {
   warcraftlogsId?: number; // WarcraftLogs guild ID
   iconUrl?: string;
   crest?: IGuildCrest;
+  horseRaceUmaImage?: string; // Optional reserved Uma image filename for the frontpage horse race
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   streamers?: IStreamer[]; // Twitch streamers associated with this guild
   progress: IRaidProgress[];
@@ -199,6 +200,7 @@ const GuildSchema: Schema = new Schema(
     faction: { type: String },
     warcraftlogsId: { type: Number }, // WarcraftLogs guild ID
     iconUrl: { type: String },
+    horseRaceUmaImage: { type: String },
     crest: {
       emblem: {
         id: { type: Number },
