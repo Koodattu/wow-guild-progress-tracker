@@ -8,20 +8,33 @@ export type HorseRaceMode = (typeof HORSE_RACE_MODES)[number];
 export interface HorseRacePreferences {
   mode: HorseRaceMode;
   showCharacters: boolean;
+  showBackground: boolean;
 }
 
 const MODE_STORAGE_KEY = "horse-race-mode";
 const CHARACTERS_STORAGE_KEY = "horse-race-show-characters";
+const BACKGROUND_STORAGE_KEY = "horse-race-show-background";
 const PREFERENCES_CHANGE_EVENT = "horse-race-preferences-change";
 const DEFAULT_MODE: HorseRaceMode = "crest";
 const DEFAULT_SHOW_CHARACTERS = true;
+const DEFAULT_SHOW_BACKGROUND = true;
+const FIRST_VISIT_MODES: HorseRaceMode[] = ["crest", "japanese", "uma"];
 const DEFAULT_PREFERENCES: HorseRacePreferences = {
   mode: DEFAULT_MODE,
   showCharacters: DEFAULT_SHOW_CHARACTERS,
+  showBackground: DEFAULT_SHOW_BACKGROUND,
 };
 
 function isHorseRaceMode(value: string | null): value is HorseRaceMode {
   return HORSE_RACE_MODES.includes(value as HorseRaceMode);
+}
+
+function getInitialMode(storedMode: string | null): HorseRaceMode {
+  if (isHorseRaceMode(storedMode)) return storedMode;
+
+  const randomMode = FIRST_VISIT_MODES[Math.floor(Math.random() * FIRST_VISIT_MODES.length)];
+  window.localStorage.setItem(MODE_STORAGE_KEY, randomMode);
+  return randomMode;
 }
 
 function readStoredPreferences(): HorseRacePreferences {
@@ -29,16 +42,29 @@ function readStoredPreferences(): HorseRacePreferences {
 
   const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
   const storedCharacters = window.localStorage.getItem(CHARACTERS_STORAGE_KEY);
+  const storedBackground = window.localStorage.getItem(BACKGROUND_STORAGE_KEY);
+  const showCharacters = storedCharacters === null ? DEFAULT_SHOW_CHARACTERS : storedCharacters === "true";
+  const showBackground = storedBackground === null ? DEFAULT_SHOW_BACKGROUND : storedBackground === "true";
+
+  if (storedCharacters === null) {
+    window.localStorage.setItem(CHARACTERS_STORAGE_KEY, String(showCharacters));
+  }
+
+  if (storedBackground === null) {
+    window.localStorage.setItem(BACKGROUND_STORAGE_KEY, String(showBackground));
+  }
 
   return {
-    mode: isHorseRaceMode(storedMode) ? storedMode : DEFAULT_MODE,
-    showCharacters: storedCharacters === null ? DEFAULT_SHOW_CHARACTERS : storedCharacters === "true",
+    mode: getInitialMode(storedMode),
+    showCharacters,
+    showBackground,
   };
 }
 
 function writeStoredPreferences(preferences: HorseRacePreferences) {
   window.localStorage.setItem(MODE_STORAGE_KEY, preferences.mode);
   window.localStorage.setItem(CHARACTERS_STORAGE_KEY, String(preferences.showCharacters));
+  window.localStorage.setItem(BACKGROUND_STORAGE_KEY, String(preferences.showBackground));
   window.dispatchEvent(new CustomEvent<HorseRacePreferences>(PREFERENCES_CHANGE_EVENT, { detail: preferences }));
 }
 
@@ -58,7 +84,7 @@ export function useHorseRaceMode() {
     };
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === MODE_STORAGE_KEY || event.key === CHARACTERS_STORAGE_KEY) {
+      if (event.key === MODE_STORAGE_KEY || event.key === CHARACTERS_STORAGE_KEY || event.key === BACKGROUND_STORAGE_KEY) {
         setPreferencesState(readStoredPreferences());
       }
     };
@@ -83,6 +109,12 @@ export function useHorseRaceMode() {
     writeStoredPreferences(nextPreferences);
   }, []);
 
+  const setShowBackground = useCallback((showBackground: boolean) => {
+    const nextPreferences = { ...readStoredPreferences(), showBackground };
+    setPreferencesState(nextPreferences);
+    writeStoredPreferences(nextPreferences);
+  }, []);
+
   const cycleMode = useCallback(() => {
     const currentPreferences = readStoredPreferences();
     const nextPreferences = { ...currentPreferences, mode: getNextHorseRaceMode(currentPreferences.mode) };
@@ -90,5 +122,5 @@ export function useHorseRaceMode() {
     writeStoredPreferences(nextPreferences);
   }, []);
 
-  return { ...preferences, setMode, setShowCharacters, cycleMode };
+  return { ...preferences, setMode, setShowCharacters, setShowBackground, cycleMode };
 }

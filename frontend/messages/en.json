@@ -26,7 +26,8 @@
     "horseRaceJapanese": "Horses",
     "horseRaceUma": "Umas",
     "horseRaceOff": "Hide",
-    "horseRaceCharacters": "Characters"
+    "horseRaceCharacters": "Characters",
+    "horseRaceBackground": "Background"
   },
   "infoDialog": {
     "title": "About This Site",

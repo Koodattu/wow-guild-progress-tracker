@@ -21,7 +21,14 @@ export default function Navigation() {
   const t = useTranslations("navigation");
   const tInfo = useTranslations("infoDialog");
   const { user, isLoading, login, logout } = useAuth();
-  const { mode: horseRaceMode, showCharacters: showHorseRaceCharacters, setMode: setHorseRaceMode, setShowCharacters: setShowHorseRaceCharacters } = useHorseRaceMode();
+  const {
+    mode: horseRaceMode,
+    showCharacters: showHorseRaceCharacters,
+    showBackground: showHorseRaceBackground,
+    setMode: setHorseRaceMode,
+    setShowCharacters: setShowHorseRaceCharacters,
+    setShowBackground: setShowHorseRaceBackground,
+  } = useHorseRaceMode();
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -228,6 +235,24 @@ export default function Navigation() {
                           onClick={() => setShowHorseRaceCharacters(false)}
                           className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
                             !showHorseRaceCharacters ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
+                          }`}
+                        >
+                          {t("horseRaceOff")}
+                        </button>
+                      </div>
+                      <div className="mt-2 flex w-full overflow-hidden rounded border border-gray-700">
+                        <button
+                          onClick={() => setShowHorseRaceBackground(true)}
+                          className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            showHorseRaceBackground ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
+                          }`}
+                        >
+                          {t("horseRaceBackground")}
+                        </button>
+                        <button
+                          onClick={() => setShowHorseRaceBackground(false)}
+                          className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            !showHorseRaceBackground ? "bg-blue-600 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-700 hover:text-white"
                           }`}
                         >
                           {t("horseRaceOff")}

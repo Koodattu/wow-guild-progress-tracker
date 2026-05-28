@@ -371,7 +371,7 @@ function shuffleUmaImages() {
 }
 
 export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: HorseRaceProps) {
-  const { mode, showCharacters } = useHorseRaceMode();
+  const { mode, showCharacters, showBackground } = useHorseRaceMode();
   const [umaDeck, setUmaDeck] = useState(() => shuffleUmaImages());
 
   useEffect(() => {
@@ -415,7 +415,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
       )}
       <div className="relative z-10 w-full overflow-x-auto">
         <div
-          className="grid overflow-hidden rounded-md border border-emerald-800/60 bg-[#20301f]/75"
+          className={`grid overflow-hidden rounded-md border border-emerald-800/60 ${showBackground ? "bg-[#20301f]/75" : "bg-transparent"}`}
           style={{ gridTemplateColumns: `${startWidth}px minmax(${MIN_TRACK_WIDTH}px, 1fr) ${finishWidth}px`, minWidth: `${minWidth}px`, height: `${raceHeight}px` }}
         >
           <div className="relative bg-emerald-950/15">
