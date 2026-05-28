@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import GuildCrest from "@/components/GuildCrest";
 import { formatPercent, formatPhaseDisplay } from "@/lib/utils";
 import { useHorseRaceMode, HorseRaceMode } from "@/lib/horse-race-preferences";
@@ -361,6 +362,23 @@ function ChuteGuildName({ entry, className }: { entry: RaceEntry; className: str
   );
 }
 
+function getGuildProfileHref(entry: RaceEntry) {
+  return `/guilds/${encodeURIComponent(entry.realm)}/${encodeURIComponent(entry.name)}`;
+}
+
+function RacerLink({ entry, children }: { entry: RaceEntry; children: ReactNode }) {
+  return (
+    <Link
+      href={getGuildProfileHref(entry)}
+      className="block cursor-pointer rounded-full transition-all duration-150 hover:scale-110 hover:drop-shadow-[0_0_8px_rgba(250,204,21,0.85)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-300"
+      title={`${entry.name}-${entry.realm}`}
+      aria-label={`Open ${entry.name}-${entry.realm} guild profile`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function shuffleUmaImages() {
   const images = [...UMA_IMAGES];
   for (let index = images.length - 1; index > 0; index -= 1) {
@@ -442,9 +460,11 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 style={{ right: `${26 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${entry.name}-${entry.realm}: 0 pulls`}
               >
-                <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                  <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
-                </div>
+                <RacerLink entry={entry}>
+                  <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
+                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
+                  </div>
+                </RacerLink>
                 <div className="mt-0.5 max-w-[63px] px-1 text-center text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
                   <ChuteGuildName entry={entry} className="text-gray-100" />
                 </div>
@@ -464,9 +484,11 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                   style={{ left: `${entry.displayProgress}%`, top: `${markerTop}px`, zIndex: 20 + index }}
                   title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}
                 >
-                  <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + index)} />
-                  </div>
+                  <RacerLink entry={entry}>
+                    <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
+                      <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + index)} />
+                    </div>
+                  </RacerLink>
                 </div>
                 <div
                   className="absolute flex w-24 -translate-x-1/2 justify-center"
@@ -500,9 +522,11 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}
               >
-                <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                  <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + race.unfinished.length + index)} />
-                </div>
+                <RacerLink entry={entry}>
+                  <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
+                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + race.unfinished.length + index)} />
+                  </div>
+                </RacerLink>
                 <div className="mt-0.5 max-w-[66px] px-1 text-center text-[10px] font-semibold leading-1.5 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
                   <div>#{index + 1}</div>
                   <ChuteGuildName entry={entry} className="text-amber-100" />
