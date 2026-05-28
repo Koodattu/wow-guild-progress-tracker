@@ -3,7 +3,8 @@ import type { IStreamer } from "../models/Streamer";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report from "../models/Report";
-import Fight from "../models/Fight";
+import Fight, { IFight } from "../models/Fight";
+import FightVodLink from "../models/FightVodLink";
 import TierList from "../models/TierList";
 import GuildProcessingQueue from "../models/GuildProcessingQueue";
 import WorldRankHistory from "../models/WorldRankHistory";
@@ -20,6 +21,7 @@ import mongoose from "mongoose";
 import logger, { getGuildLogger } from "../utils/logger";
 import Character from "../models/Character";
 import characterService from "./character.service";
+import fightVodService from "./fight-vod.service";
 import { yieldToEventLoop } from "../utils/yield";
 
 class GuildService {
@@ -2941,6 +2943,7 @@ class GuildService {
 
     // Track kill order - which boss was killed first, second, etc.
     const killOrderTracker: Array<{ encounterId: number; killTime: Date }> = [];
+    const vodCandidateFightsByBoss = new Map<number, IFight[]>();
 
     // FIRST PASS: Filter out duplicate fights
     // Create a map to track seen fight characteristics
@@ -3071,6 +3074,10 @@ class GuildService {
           phase: phaseShort,
           isKill: isKill,
         });
+
+        const vodCandidates = vodCandidateFightsByBoss.get(encounterId) || [];
+        vodCandidates.push(fight as IFight);
+        vodCandidateFightsByBoss.set(encounterId, vodCandidates);
       }
 
       if (isKill) {
@@ -3248,6 +3255,7 @@ class GuildService {
     guild.markModified("progress");
 
     guildLog.info(`Processed ${difficulty} progress: ${defeatedCount}/${raidData.bosses.length} bosses defeated, ${raidProgress.bosses.length} bosses tracked`);
+    await this.enqueueBestPullVodLinks(guild, raidProgress, vodCandidateFightsByBoss);
   }
 
   // Look up a boss icon filename from the BossIcon cache
@@ -3258,6 +3266,26 @@ class GuildService {
       return cachedIcon?.iconUrl || undefined;
     } catch {
       return undefined;
+    }
+  }
+
+  private async enqueueBestPullVodLinks(guild: IGuild, raidProgress: IRaidProgress, vodCandidateFightsByBoss: Map<number, IFight[]>): Promise<void> {
+    if (!guild.streamers || guild.streamers.length === 0 || vodCandidateFightsByBoss.size === 0) return;
+
+    for (const [bossId, fights] of vodCandidateFightsByBoss.entries()) {
+      const boss = raidProgress.bosses.find((entry) => entry.bossId === bossId);
+      if (!boss || fights.length === 0) continue;
+
+      const bestFights = [...fights]
+        .sort((a, b) => {
+          const aProgress = a.isKill ? 0 : a.fightPercentage || 0;
+          const bProgress = b.isKill ? 0 : b.fightPercentage || 0;
+          if (aProgress !== bProgress) return aProgress - bProgress;
+          return b.timestamp.getTime() - a.timestamp.getTime();
+        })
+        .slice(0, 5);
+
+      await fightVodService.enqueueForFights(guild, raidProgress, boss, bestFights);
     }
   }
 
@@ -4028,6 +4056,36 @@ class GuildService {
       if (bestPulls.length === 5) {
         break;
       }
+    }
+
+    if (bestPulls.length > 0) {
+      const vodLinks = await FightVodLink.find({
+        status: "resolved",
+        $or: bestPulls.map((pull) => ({
+          reportCode: pull.reportCode,
+          fightId: pull.fightId,
+        })),
+      })
+        .select("reportCode fightId channelName vodUrl offsetSeconds videoId -_id")
+        .lean();
+
+      const vodLinksByFight = new Map<string, any[]>();
+      vodLinks.forEach((link) => {
+        if (!link.vodUrl) return;
+        const key = `${link.reportCode}:${link.fightId}`;
+        const linksForFight = vodLinksByFight.get(key) || [];
+        linksForFight.push({
+          channelName: link.channelName,
+          url: link.vodUrl,
+          offsetSeconds: link.offsetSeconds || 0,
+          videoId: link.videoId,
+        });
+        vodLinksByFight.set(key, linksForFight);
+      });
+
+      bestPulls.forEach((pull) => {
+        pull.vodLinks = vodLinksByFight.get(`${pull.reportCode}:${pull.fightId}`) || [];
+      });
     }
 
     // Return both pull history and phase distribution

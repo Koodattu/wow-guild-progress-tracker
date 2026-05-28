@@ -32,6 +32,12 @@ export interface BossBestPull {
   fightPercentage: number;
   progressDisplay?: string;
   isKill: boolean;
+  vodLinks?: Array<{
+    channelName: string;
+    url: string;
+    offsetSeconds: number;
+    videoId?: string;
+  }>;
 }
 
 // Response from getBossPullHistory API

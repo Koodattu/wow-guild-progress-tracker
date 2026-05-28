@@ -2,13 +2,14 @@ import cron from "node-cron";
 import mongoose from "mongoose";
 import Guild from "../models/Guild";
 import guildService from "./guild.service";
-import twitchService from "./twitch.service";
+import twitchService, { StreamStatus } from "./twitch.service";
 import tierListService from "./tierlist.service";
 import characterService from "./character.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
 import taskTracker from "./task-tracker.service";
+import fightVodService from "./fight-vod.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 
@@ -17,6 +18,7 @@ const POLLING_ACTIVE_GUILDS_MS = parseInt(process.env.POLLING_ACTIVE_GUILDS_MINU
 const POLLING_RAIDING_GUILDS_MS = parseInt(process.env.POLLING_RAIDING_GUILDS_MINUTES || "3", 10) * 60 * 1000;
 const POLLING_OFF_HOURS_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
 const POLLING_TWITCH_MS = 15 * 60 * 1000; // 15 minutes
+const POLLING_FIGHT_VODS_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Yield to the event loop to prevent blocking.
@@ -41,11 +43,14 @@ class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
   private hotHoursRaidingInterval: NodeJS.Timeout | null = null;
   private hotHoursTwitchInterval: NodeJS.Timeout | null = null;
+  private fightVodResolverInterval: NodeJS.Timeout | null = null;
   private offHoursActiveInterval: NodeJS.Timeout | null = null;
   private offHoursDailyInterval: NodeJS.Timeout | null = null;
   private isUpdatingHotActive: boolean = false;
   private isUpdatingHotRaiding: boolean = false;
   private isUpdatingTwitchStreams: boolean = false;
+  private isResolvingFightVodLinks: boolean = false;
+  private isCleaningFightVodLinks: boolean = false;
   private isUpdatingOffActive: boolean = false;
   private isUpdatingOffInactive: boolean = false;
   private isUpdatingNightlyWorldRanks: boolean = false;
@@ -117,6 +122,14 @@ class UpdateScheduler {
       await this.updateTwitchStreamStatus();
     }, POLLING_TWITCH_MS);
 
+    this.fightVodResolverInterval = setInterval(async () => {
+      if (this.isResolvingFightVodLinks) {
+        logger.info("[FightVOD] Previous resolver run still in progress, skipping...");
+        return;
+      }
+      await this.resolveFightVodLinks();
+    }, POLLING_FIGHT_VODS_MS);
+
     // OFF HOURS - Active guilds: Check every hour
     this.offHoursActiveInterval = setInterval(async () => {
       if (this.isHotHours()) return; // Skip if hot hours
@@ -169,6 +182,21 @@ class UpdateScheduler {
           return;
         }
         await this.refetchRecentReportsForAllActiveGuilds();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Remove stale Twitch VOD references before normal reporting jobs.
+    cron.schedule(
+      "30 2 * * *",
+      async () => {
+        if (this.isCleaningFightVodLinks) {
+          logger.info("[Nightly/FightVODCleanup] Previous cleanup still in progress, skipping...");
+          return;
+        }
+        await this.cleanupExpiredFightVodLinks();
       },
       {
         timezone: "Europe/Helsinki",
@@ -304,7 +332,9 @@ class UpdateScheduler {
     logger.info("    * Active guilds: every 60 minutes");
     logger.info("    * Inactive guilds: once daily at 10:00");
     logger.info("    * Twitch streams: all marked offline");
+    logger.info("  - Fight VOD resolver: every 30 minutes");
     logger.info("  - Nightly jobs (Europe/Helsinki):");
+    logger.info("    * Fight VOD cleanup: daily at 02:30");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
     logger.info("    * Raider.IO guilds update: daily at 05:00");
@@ -500,6 +530,10 @@ class UpdateScheduler {
     if (this.hotHoursTwitchInterval) {
       clearInterval(this.hotHoursTwitchInterval);
       this.hotHoursTwitchInterval = null;
+    }
+    if (this.fightVodResolverInterval) {
+      clearInterval(this.fightVodResolverInterval);
+      this.fightVodResolverInterval = null;
     }
     if (this.offHoursActiveInterval) {
       clearInterval(this.offHoursActiveInterval);
@@ -944,6 +978,40 @@ class UpdateScheduler {
     }
   }
 
+  async resolveFightVodLinks(): Promise<void> {
+    this.isResolvingFightVodLinks = true;
+    const taskId = await taskTracker.start("Resolve Fight VOD Links");
+
+    try {
+      const result = await fightVodService.resolvePendingLinks();
+      if (result.checked > 0) {
+        logger.info(`[FightVOD] Checked ${result.checked} pending link(s), resolved ${result.resolved}, marked unavailable ${result.unavailable}`);
+      }
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[FightVOD] Resolver error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isResolvingFightVodLinks = false;
+    }
+  }
+
+  async cleanupExpiredFightVodLinks(): Promise<void> {
+    this.isCleaningFightVodLinks = true;
+    const taskId = await taskTracker.start("Cleanup Fight VOD Links");
+
+    try {
+      const deleted = await fightVodService.cleanupExpiredLinks();
+      logger.info(`[FightVOD] Deleted ${deleted} expired VOD link(s)`);
+      await taskTracker.complete(taskId, { deleted });
+    } catch (error) {
+      logger.error("[FightVOD] Cleanup error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isCleaningFightVodLinks = false;
+    }
+  }
+
   // HOT HOURS: Update Twitch stream status (every 15 minutes during 16:00-01:00)
   async updateTwitchStreamStatus(): Promise<void> {
     this.isUpdatingTwitchStreams = true;
@@ -992,12 +1060,26 @@ class UpdateScheduler {
         let hasChanges = false;
         const updatedStreamers = guild.streamers.map((streamer) => {
           const channelName = streamer.channelName.toLowerCase();
-          const status = streamStatus.get(channelName) || {
+          const status: StreamStatus = streamStatus.get(channelName) || {
             isLive: false,
             isPlayingWoW: false,
           };
+          const streamStartedAt = status.startedAt ? new Date(status.startedAt) : undefined;
+          const twitchUserId = status.twitchUserId || streamer.twitchUserId;
+          const currentStreamId = status.isLive ? status.streamId : undefined;
+          const wasLive = streamer.isLive;
+          const lastStreamId = status.isLive ? status.streamId || streamer.lastStreamId : streamer.lastStreamId || streamer.currentStreamId;
+          const lastStreamStartedAt = status.isLive ? streamStartedAt || streamer.lastStreamStartedAt : streamer.lastStreamStartedAt || streamer.streamStartedAt;
+          const lastStreamEndedAt = status.isLive ? undefined : wasLive ? now : streamer.lastStreamEndedAt;
+          const lastLiveAt = status.isLive ? now : streamer.lastLiveAt;
 
-          if (streamer.isLive !== status.isLive || streamer.isPlayingWoW !== status.isPlayingWoW) {
+          if (
+            streamer.isLive !== status.isLive ||
+            streamer.isPlayingWoW !== status.isPlayingWoW ||
+            streamer.twitchUserId !== twitchUserId ||
+            streamer.currentStreamId !== currentStreamId ||
+            (streamer.streamStartedAt?.getTime() || 0) !== (streamStartedAt?.getTime() || 0)
+          ) {
             hasChanges = true;
             logger.info(
               `  [${guild.name}] ${streamer.channelName}: ${streamer.isLive ? "live" : "offline"} → ${status.isLive ? "live" : "offline"}${
@@ -1011,6 +1093,13 @@ class UpdateScheduler {
             isLive: status.isLive,
             isPlayingWoW: status.isPlayingWoW,
             gameName: status.gameName,
+            twitchUserId,
+            currentStreamId,
+            streamStartedAt,
+            lastStreamId,
+            lastStreamStartedAt,
+            lastStreamEndedAt,
+            lastLiveAt,
             lastChecked: now,
           };
         });
@@ -1075,6 +1164,13 @@ class UpdateScheduler {
           isLive: false,
           isPlayingWoW: false,
           gameName: undefined,
+          twitchUserId: streamer.twitchUserId,
+          currentStreamId: undefined,
+          streamStartedAt: undefined,
+          lastStreamId: streamer.lastStreamId || streamer.currentStreamId,
+          lastStreamStartedAt: streamer.lastStreamStartedAt || streamer.streamStartedAt,
+          lastStreamEndedAt: streamer.isLive ? now : streamer.lastStreamEndedAt,
+          lastLiveAt: streamer.lastLiveAt,
           lastChecked: now,
         }));
 

@@ -101,27 +101,42 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Best pulls</div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {sortedPulls.map((pull) => (
-          <a
+          <div
             key={`${pull.reportCode}-${pull.fightId}`}
-            href={pull.url}
-            target="_blank"
-            rel="noopener noreferrer"
             onClick={(event) => event.stopPropagation()}
-            className="group rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-blue-500/70 hover:bg-gray-800/70"
-            title="View fight on Warcraft Logs"
+            className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className={`truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
-                <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
+            <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className={`truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+                  <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
+                </div>
+                <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />
               </div>
-              <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />
-            </div>
-            <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-400">
-              <span>{formatTime(pull.duration)}</span>
-              {!pull.isKill && <span>{formatPercent(pull.bossPercentage)} boss</span>}
-            </div>
-          </a>
+              <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-400">
+                <span>{formatTime(pull.duration)}</span>
+                {!pull.isKill && <span>{formatPercent(pull.bossPercentage)} boss</span>}
+              </div>
+            </a>
+            {pull.vodLinks && pull.vodLinks.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 border-t border-gray-700/70 pt-2">
+                {pull.vodLinks.map((vod) => (
+                  <a
+                    key={`${vod.channelName}-${vod.videoId || vod.url}`}
+                    href={vod.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-w-0 items-center gap-1 rounded bg-purple-600/20 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+                    title={`Watch ${vod.channelName} VOD`}
+                  >
+                    <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{vod.channelName}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>

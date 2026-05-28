@@ -26,10 +26,37 @@ interface TwitchStreamsResponse {
   data: TwitchStreamData[];
 }
 
+export interface TwitchVideoData {
+  id: string;
+  stream_id?: string;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  title: string;
+  description: string;
+  created_at: string;
+  published_at: string;
+  url: string;
+  thumbnail_url: string;
+  viewable: string;
+  view_count: number;
+  language: string;
+  type: "archive" | "highlight" | "upload";
+  duration: string;
+  muted_segments?: Array<{ duration: number; offset: number }> | null;
+}
+
+interface TwitchVideosResponse {
+  data: TwitchVideoData[];
+}
+
 export interface StreamStatus {
   isLive: boolean;
   isPlayingWoW: boolean;
   gameName?: string;
+  twitchUserId?: string;
+  streamId?: string;
+  startedAt?: string;
 }
 
 class TwitchService {
@@ -139,6 +166,9 @@ class TwitchService {
             isLive: true,
             isPlayingWoW: isPlayingWoW,
             gameName: stream.game_name,
+            twitchUserId: stream.user_id,
+            streamId: stream.id,
+            startedAt: stream.started_at,
           });
         }
       });
@@ -155,6 +185,35 @@ class TwitchService {
       channelNames.forEach((name) => statusMap.set(name.toLowerCase(), { isLive: false, isPlayingWoW: false }));
       return statusMap;
     }
+  }
+
+  async getRecentArchiveVideos(userId: string, first: number = 10): Promise<TwitchVideoData[]> {
+    if (!this.isEnabled()) {
+      return [];
+    }
+
+    const token = await this.getAccessToken();
+    const params = new URLSearchParams({
+      user_id: userId,
+      type: "archive",
+      sort: "time",
+      first: Math.min(Math.max(first, 1), 100).toString(),
+    });
+
+    logger.info(`[API REQUEST] GET https://api.twitch.tv/helix/videos?${params.toString()}`);
+    const response = await fetch(`https://api.twitch.tv/helix/videos?${params.toString()}`, {
+      headers: {
+        "Client-ID": this.clientId,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Twitch videos API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as TwitchVideosResponse;
+    return data.data || [];
   }
 }
 
