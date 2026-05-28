@@ -1,18 +1,34 @@
-FROM node:24-alpine
+# syntax=docker/dockerfile:1.7
 
+FROM node:24-alpine AS deps
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+FROM node:24-alpine AS build
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
 
 COPY . .
 
-# Build TypeScript
 RUN npm run build
+RUN npm prune --omit=dev
 
-# Set production environment
+FROM node:24-alpine AS runtime
+WORKDIR /app
+
 ENV NODE_ENV=production
 
+COPY package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
+
+RUN mkdir -p /app/logs /app/public/icons
+
 EXPOSE 3001
+EXPOSE 3002
 
 CMD ["npm", "start"]

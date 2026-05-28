@@ -3,8 +3,6 @@ services:
     image: mongo:7
     container_name: wow-prog-db
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     networks:
@@ -12,6 +10,7 @@ services:
 
   backend:
     build: ./backend
+    image: wow-guild-progress-tracker-backend:latest
     container_name: wow-prog-backend
     restart: unless-stopped
     env_file:
@@ -25,13 +24,13 @@ services:
     mem_limit: 1024m
     command: ["node", "--max-old-space-size=384", "dist/index.js"]
     volumes:
-      - ./data/images:/app/data/images
+      - ./data/icons:/app/public/icons
       - ./backend/logs:/app/logs
     networks:
       - app-network
 
   backend-worker:
-    build: ./backend
+    image: wow-guild-progress-tracker-backend:latest
     container_name: wow-prog-backend-worker
     restart: unless-stopped
     env_file:
@@ -47,7 +46,7 @@ services:
     command:
       ["nice", "-n", "15", "node", "--max-old-space-size=1024", "dist/index.js"]
     volumes:
-      - ./data/images:/app/data/images
+      - ./data/icons:/app/public/icons
       - ./backend/logs:/app/logs
     networks:
       - app-network
@@ -57,6 +56,7 @@ services:
       context: ./frontend
       args:
         - NEXT_PUBLIC_API_URL=https://suomiwow.vaarattu.tv
+    image: wow-guild-progress-tracker-frontend:latest
     container_name: wow-prog-frontend
     restart: unless-stopped
     environment:
