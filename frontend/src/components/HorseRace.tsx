@@ -400,7 +400,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
   const getUmaImage = (index: number) => umaDeck[index % umaDeck.length];
 
   return (
-    <section className="relative px-3 md:px-4 mb-2" aria-label="Final boss race">
+    <section className="relative mt-3 mb-2 hidden px-3 md:px-4 lg:block" aria-label="Final boss race">
       {showCharacters && (
         <>
           <div className="pointer-events-none absolute left-2 top-[-10%] z-0 flex -translate-y-1/2 items-center gap-1" aria-hidden="true">
@@ -415,7 +415,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
       )}
       <div className="relative z-10 w-full overflow-x-auto">
         <div
-          className={`grid overflow-hidden rounded-md border border-emerald-800/60 ${showBackground ? "bg-[#20301f]/75" : "bg-transparent"}`}
+          className={`grid overflow-hidden rounded-md ${showBackground ? "border border-emerald-800/60 bg-[#20301f]/75" : "border border-transparent bg-transparent"}`}
           style={{ gridTemplateColumns: `${startWidth}px minmax(${MIN_TRACK_WIDTH}px, 1fr) ${finishWidth}px`, minWidth: `${minWidth}px`, height: `${raceHeight}px` }}
         >
           <div className="relative bg-emerald-950/15">
