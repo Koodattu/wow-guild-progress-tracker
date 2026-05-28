@@ -180,6 +180,7 @@ export interface GuildListItem {
   isStreaming?: boolean; // Computed field: true if any streamer is live
   lastFetched?: string;
   progress: RaidProgressSummary[];
+  streamers?: Streamer[]; // Twitch streamers for this guild
   officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
 }
@@ -248,6 +249,7 @@ export interface Guild {
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
   progress: RaidProgress[];
+  streamers?: Streamer[]; // Twitch streamers for this guild
   worldRankHistory?: WorldRankHistoryEntry[];
 }
 

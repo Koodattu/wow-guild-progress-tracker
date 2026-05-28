@@ -111,6 +111,7 @@ function HomeContent() {
         parent_guild: guild.parent_guild,
         isCurrentlyRaiding: guild.isCurrentlyRaiding,
         lastFetched: guild.lastFetched,
+        streamers: guild.streamers,
         progress: [],
       };
 

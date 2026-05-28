@@ -3732,12 +3732,12 @@ class GuildService {
           officialProgress: 1,
           // Include raidSchedule for schedule summary calculation
           raidSchedule: 1,
-          // Include streamers to check isLive status (only need isLive field)
+          // Include lightweight streamer data for live status and modal Twitch links
           streamers: {
             $map: {
               input: { $ifNull: ["$streamers", []] },
               as: "s",
-              in: { isLive: "$$s.isLive" },
+              in: { channelName: "$$s.channelName", isLive: "$$s.isLive" },
             },
           },
         },
@@ -3831,6 +3831,13 @@ class GuildService {
 
       // Check if any streamers are live
       const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
+      const streamers =
+        guildObj.streamers
+          ?.filter((s: any) => s.channelName)
+          .map((s: any) => ({
+            channelName: s.channelName,
+            isLive: !!s.isLive,
+          })) ?? [];
 
       // Filter officialProgress to only include the requested raid
       const filteredOfficialProgress = raidSlug ? guildObj.officialProgress?.filter((op: any) => op.raidTierSlug?.toLowerCase() === raidSlug) || [] : [];
@@ -3849,6 +3856,7 @@ class GuildService {
         isStreaming: isStreaming,
         lastFetched: guildObj.lastFetched,
         progress: minimalProgress,
+        streamers,
         officialProgress: filteredOfficialProgress,
         scheduleDisplay: scheduleSummary,
       };

@@ -108,8 +108,12 @@ export default function GuildProfilePage({ params }: PageProps) {
         realm: guildSummary.realm,
         region: guildSummary.region,
         faction: guildSummary.faction,
+        warcraftlogsId: guildSummary.warcraftlogsId,
+        crest: guildSummary.crest,
+        parent_guild: guildSummary.parent_guild,
         isCurrentlyRaiding: guildSummary.isCurrentlyRaiding,
         lastFetched: guildSummary.lastFetched,
+        streamers: guildSummary.streamers,
         progress: [],
       };
 

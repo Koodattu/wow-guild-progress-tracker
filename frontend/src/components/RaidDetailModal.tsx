@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
+import { FaTwitch } from "react-icons/fa";
 import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry } from "@/types";
-import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay } from "@/lib/utils";
+import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getRaiderIOGuildUrl } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
 import PullProgressChart from "./PullProgressChart";
@@ -23,7 +25,6 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
     rioWorldRank: entry.rioWorldRank,
   }));
 
-  // For world rank, lower is better — invert the Y axis
   const ranks = chartData.map((d) => d.worldRank);
   const minRank = Math.min(...ranks);
   const maxRank = Math.max(...ranks);
@@ -53,7 +54,7 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
             <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="date" type="number" domain={["dataMin", "dataMax"]} tickFormatter={formatDate} tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" />
-              <YAxis reversed domain={[domainMin, domainMax]} tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" width={40} tickFormatter={(v: number) => `#${v}`} />
+              <YAxis domain={[domainMin, domainMax]} tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" width={40} tickFormatter={(v: number) => `#${v}`} />
               <Tooltip
                 contentStyle={{ backgroundColor: "#1F2937", border: "1px solid #374151", borderRadius: "0.5rem" }}
                 labelStyle={{ color: "#9CA3AF" }}
@@ -132,6 +133,9 @@ function BossPullHistoryContent({
 
 export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses, loading }: RaidDetailModalProps) {
   const [expandedBosses, setExpandedBosses] = useState<Set<string>>(new Set());
+  const wclGuildUrl = guild.warcraftlogsId ? `https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}` : null;
+  const raiderIoGuildUrl = getRaiderIOGuildUrl(guild.region, guild.realm, guild.name);
+  const streamers = guild.streamers?.filter((streamer) => streamer.channelName) ?? [];
 
   const toggleBossExpanded = (bossId: number, difficulty: "mythic" | "heroic") => {
     const expandedKey = `${bossId}-${difficulty}`;
@@ -439,17 +443,63 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between rounded-t-lg">
-          <div className="flex items-center gap-3">
+        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-start md:items-center justify-between gap-3 rounded-t-lg">
+          <div className="flex flex-1 items-center gap-3 min-w-0">
             <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">
               <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] md:scale-[0.375] origin-top-left" />
             </div>
-            <h2 className="text-lg md:text-2xl font-bold text-white">
-              {guild.name}
-              <span className="text-gray-400 font-normal"> - {guild.realm}</span>
-            </h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg md:text-2xl font-bold text-white min-w-0 break-words">
+                  {guild.name}
+                  <span className="text-gray-400 font-normal"> - {guild.realm}</span>
+                </h2>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {wclGuildUrl && (
+                    <a
+                      href={wclGuildUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 hover:opacity-80 transition-opacity"
+                      title="View on Warcraft Logs"
+                    >
+                      <Image src="/wcl-logo.png" alt="WCL" width={32} height={32} className="w-full h-full object-contain" />
+                    </a>
+                  )}
+                  <a
+                    href={raiderIoGuildUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 hover:opacity-80 transition-opacity"
+                    title="View on Raider.IO"
+                  >
+                    <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
+                  </a>
+                </div>
+              </div>
+              {streamers.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {streamers.map((streamer) => (
+                    <a
+                      key={streamer.channelName}
+                      href={`https://www.twitch.tv/${encodeURIComponent(streamer.channelName)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                        streamer.isLive ? "bg-purple-600 text-white hover:bg-purple-500" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                      }`}
+                      title={streamer.isLive ? `${streamer.channelName} is live` : `Visit ${streamer.channelName} on Twitch`}
+                    >
+                      <FaTwitch className="w-3 h-3" aria-hidden="true" />
+                      <span>{streamer.channelName}</span>
+                      {streamer.isLive && <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1">
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1 shrink-0">
             ×
           </button>
         </div>
