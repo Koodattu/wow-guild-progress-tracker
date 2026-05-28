@@ -443,65 +443,66 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-start md:items-center justify-between gap-3 rounded-t-lg">
+        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center gap-3 rounded-t-lg">
           <div className="flex flex-1 items-center gap-3 min-w-0">
             <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">
               <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] md:scale-[0.375] origin-top-left" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg md:text-2xl font-bold text-white min-w-0 break-words">
-                  {guild.name}
-                  <span className="text-gray-400 font-normal"> - {guild.realm}</span>
-                </h2>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {wclGuildUrl && (
-                    <a
-                      href={wclGuildUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 hover:opacity-80 transition-opacity"
-                      title="View on Warcraft Logs"
-                    >
-                      <Image src="/wcl-logo.png" alt="WCL" width={32} height={32} className="w-full h-full object-contain" />
-                    </a>
-                  )}
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-lg md:text-2xl font-bold text-white min-w-0 truncate">
+                {guild.name}
+                <span className="text-gray-400 font-normal"> - {guild.realm}</span>
+              </h2>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {wclGuildUrl && (
                   <a
-                    href={raiderIoGuildUrl}
+                    href={wclGuildUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 hover:opacity-80 transition-opacity"
-                    title="View on Raider.IO"
+                    title="View on Warcraft Logs"
                   >
-                    <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
+                    <Image src="/wcl-logo.png" alt="WCL" width={32} height={32} className="w-full h-full object-contain" />
                   </a>
-                </div>
+                )}
+                <a
+                  href={raiderIoGuildUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 hover:opacity-80 transition-opacity"
+                  title="View on Raider.IO"
+                >
+                  <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
+                </a>
               </div>
-              {streamers.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {streamers.map((streamer) => (
-                    <a
-                      key={streamer.channelName}
-                      href={`https://www.twitch.tv/${encodeURIComponent(streamer.channelName)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                        streamer.isLive ? "bg-purple-600 text-white hover:bg-purple-500" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                      }`}
-                      title={streamer.isLive ? `${streamer.channelName} is live` : `Visit ${streamer.channelName} on Twitch`}
-                    >
-                      <FaTwitch className="w-3 h-3" aria-hidden="true" />
-                      <span>{streamer.channelName}</span>
-                      {streamer.isLive && <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />}
-                    </a>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1 shrink-0">
-            ×
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {streamers.length > 0 && (
+              <div className="flex max-w-[38vw] md:max-w-[28rem] items-center gap-1.5 overflow-x-auto pr-1">
+                {streamers.map((streamer) => (
+                  <a
+                    key={streamer.channelName}
+                    href={`https://www.twitch.tv/${encodeURIComponent(streamer.channelName)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                      streamer.isLive ? "bg-purple-600 text-white hover:bg-purple-500" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                    }`}
+                    title={streamer.isLive ? `${streamer.channelName} is live` : `Visit ${streamer.channelName} on Twitch`}
+                  >
+                    <FaTwitch className="w-3 h-3" aria-hidden="true" />
+                    <span className="max-w-20 md:max-w-32 truncate">{streamer.channelName}</span>
+                    {streamer.isLive && <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />}
+                  </a>
+                ))}
+              </div>
+            )}
+            <div className="h-8 w-px bg-gray-700/80" />
+            <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1 shrink-0">
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="px-2 md:px-6 py-4 md:py-6">

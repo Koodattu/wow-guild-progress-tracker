@@ -366,11 +366,16 @@ function getGuildProfileHref(entry: RaceEntry) {
   return `/guilds/${encodeURIComponent(entry.realm)}/${encodeURIComponent(entry.name)}`;
 }
 
-function RacerLink({ entry, children }: { entry: RaceEntry; children: ReactNode }) {
+function getRacerHitboxClass(mode: HorseRaceMode) {
+  if (mode === "crest") return "h-8 w-8";
+  return "h-9 w-9";
+}
+
+function RacerLink({ entry, mode, children }: { entry: RaceEntry; mode: HorseRaceMode; children: ReactNode }) {
   return (
     <Link
       href={getGuildProfileHref(entry)}
-      className="block cursor-pointer rounded-full transition-all duration-150 hover:scale-110 hover:drop-shadow-[0_0_8px_rgba(250,204,21,0.85)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-300"
+      className={`inline-flex cursor-pointer items-center justify-center overflow-visible rounded-full transition-all duration-150 hover:scale-125 hover:brightness-125 hover:saturate-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-300 ${getRacerHitboxClass(mode)}`}
       title={`${entry.name}-${entry.realm}`}
       aria-label={`Open ${entry.name}-${entry.realm} guild profile`}
     >
@@ -460,7 +465,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 style={{ right: `${26 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${entry.name}-${entry.realm}: 0 pulls`}
               >
-                <RacerLink entry={entry}>
+                <RacerLink entry={entry} mode={mode}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                     <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(index)} />
                   </div>
@@ -484,7 +489,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                   style={{ left: `${entry.displayProgress}%`, top: `${markerTop}px`, zIndex: 20 + index }}
                   title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}
                 >
-                  <RacerLink entry={entry}>
+                  <RacerLink entry={entry} mode={mode}>
                     <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                       <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + index)} />
                     </div>
@@ -522,7 +527,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
                 title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}
               >
-                <RacerLink entry={entry}>
+                <RacerLink entry={entry} mode={mode}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                     <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(race.notStarted.length + race.unfinished.length + index)} />
                   </div>
