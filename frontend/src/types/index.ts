@@ -22,10 +22,23 @@ export interface PhaseDistribution {
   count: number;
 }
 
+export interface BossBestPull {
+  reportCode: string;
+  fightId: number;
+  url: string;
+  timestamp: string;
+  duration: number; // seconds
+  bossPercentage: number;
+  fightPercentage: number;
+  progressDisplay?: string;
+  isKill: boolean;
+}
+
 // Response from getBossPullHistory API
 export interface BossPullHistoryResponse {
   pullHistory: PullHistoryEntry[];
   phaseDistribution: PhaseDistribution[];
+  bestPulls: BossBestPull[];
 }
 
 export interface GuildCrest {

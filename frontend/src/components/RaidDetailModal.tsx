@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { FaTwitch } from "react-icons/fa";
-import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry } from "@/types";
+import { FaExternalLinkAlt, FaTwitch } from "react-icons/fa";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry, BossBestPull } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getRaiderIOGuildUrl } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
@@ -74,6 +74,60 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
   );
 }
 
+function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
+  if (!pulls || pulls.length === 0) return null;
+
+  const sortedPulls = [...pulls].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const formatPullDate = (timestamp: string) => {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleString("fi-FI", {
+      day: "numeric",
+      month: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getProgressLabel = (pull: BossBestPull) => {
+    if (pull.isKill) return "Kill";
+    if (pull.progressDisplay) return formatPhaseDisplay(pull.progressDisplay);
+    return formatPercent(pull.fightPercentage);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Best pulls</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {sortedPulls.map((pull) => (
+          <a
+            key={`${pull.reportCode}-${pull.fightId}`}
+            href={pull.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="group rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-blue-500/70 hover:bg-gray-800/70"
+            title="View fight on Warcraft Logs"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className={`truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+                <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
+              </div>
+              <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-400">
+              <span>{formatTime(pull.duration)}</span>
+              {!pull.isKill && <span>{formatPercent(pull.bossPercentage)} boss</span>}
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface RaidDetailModalProps {
   guild: Guild;
   onClose: () => void;
@@ -104,6 +158,7 @@ function BossPullHistoryContent({
 
   const pullHistory = data?.pullHistory;
   const phaseDistribution = data?.phaseDistribution;
+  const bestPulls = data?.bestPulls ?? [];
   const hasPullHistory = pullHistory && pullHistory.length > 0;
 
   if (isLoading) {
@@ -119,14 +174,18 @@ function BossPullHistoryContent({
       <>
         <PullProgressChart pullHistory={pullHistory} />
         {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+        <BestPullCards pulls={bestPulls} />
       </>
     );
   }
 
   return (
-    <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
-      <PullProgressChart pullHistory={pullHistory} />
-      {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+    <div className="space-y-3">
+      <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
+        <PullProgressChart pullHistory={pullHistory} />
+        {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
+      </div>
+      <BestPullCards pulls={bestPulls} />
     </div>
   );
 }

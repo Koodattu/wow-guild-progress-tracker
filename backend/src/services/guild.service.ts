@@ -26,6 +26,10 @@ class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
 
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   private formatConfigStreamers(streamers: string[] = []): IStreamer[] {
     return streamers
       .map((channelName) => channelName.trim().toLowerCase())
@@ -3890,9 +3894,12 @@ class GuildService {
   // Excludes pullHistory to reduce payload size
   // For current raid tier, also includes worldRankHistory for the modal chart
   async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<{ progress: any[]; worldRankHistory?: any[] } | null> {
+    const escapedName = this.escapeRegex(name);
+    const escapedRealm = this.escapeRegex(realm);
+
     const guild = await Guild.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+      name: { $regex: new RegExp(`^${escapedName}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${escapedRealm}$`, "i") }, // Case-insensitive exact match
     })
       .select("_id progress")
       .lean();
@@ -3923,11 +3930,14 @@ class GuildService {
 
   // Get pull history for a specific boss (on-demand fetching)
   async getBossPullHistory(realm: string, name: string, raidId: number, bossId: number, difficulty: "mythic" | "heroic"): Promise<any | null> {
+    const escapedName = this.escapeRegex(name);
+    const escapedRealm = this.escapeRegex(realm);
+
     const guild = await Guild.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+      name: { $regex: new RegExp(`^${escapedName}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${escapedRealm}$`, "i") }, // Case-insensitive exact match
     })
-      .select("progress")
+      .select("_id progress")
       .lean();
 
     if (!guild) {
@@ -3964,10 +3974,67 @@ class GuildService {
       .map(([phase, count]) => ({ phase, count }))
       .sort((a, b) => b.count - a.count);
 
+    const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
+    const firstKill = await Fight.findOne({
+      guildId: guild._id,
+      zoneId: raidId,
+      encounterID: bossId,
+      difficulty: difficultyId,
+      isKill: true,
+    })
+      .select("timestamp")
+      .sort({ timestamp: 1 })
+      .lean();
+
+    const fightQuery: any = {
+      guildId: guild._id,
+      zoneId: raidId,
+      encounterID: bossId,
+      difficulty: difficultyId,
+    };
+
+    if (firstKill?.timestamp) {
+      fightQuery.timestamp = { $lte: firstKill.timestamp };
+    }
+
+    const candidateLimit = Math.max(25, Math.min((boss.pullCount || 25) * 2, 250));
+    const bestPullCandidates = await Fight.find(fightQuery)
+      .select("reportCode fightId timestamp duration bossPercentage fightPercentage isKill progressDisplay")
+      .sort({ fightPercentage: 1, timestamp: -1 })
+      .limit(candidateLimit)
+      .lean();
+
+    const seenFights = new Map<string, any>();
+    const bestPulls: any[] = [];
+
+    for (const fight of bestPullCandidates) {
+      const duplicateCheck = this.isDuplicateFightInMemory(fight, [], seenFights);
+      if (duplicateCheck.isDuplicate) {
+        continue;
+      }
+
+      bestPulls.push({
+        reportCode: fight.reportCode,
+        fightId: fight.fightId,
+        url: this.getKillLogUrl(fight.reportCode, fight.fightId),
+        timestamp: fight.timestamp instanceof Date ? fight.timestamp.toISOString() : new Date(fight.timestamp).toISOString(),
+        duration: Math.round((fight.duration || 0) / 1000),
+        bossPercentage: fight.bossPercentage || 0,
+        fightPercentage: fight.isKill ? 0 : fight.fightPercentage || 0,
+        progressDisplay: fight.progressDisplay,
+        isKill: fight.isKill,
+      });
+
+      if (bestPulls.length === 5) {
+        break;
+      }
+    }
+
     // Return both pull history and phase distribution
     return {
       pullHistory,
       phaseDistribution,
+      bestPulls,
     };
   }
 
