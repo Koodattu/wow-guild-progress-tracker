@@ -3355,6 +3355,15 @@ class GuildService {
       });
     });
 
+    if (fight.isKill && fight.duration > 0) {
+      const reactionOffsetSeconds = fightVodOffsetSeconds + Math.max(0, Math.floor(fight.duration / 1000) - 15);
+      phaseLinks.set("Reaction", {
+        label: "Reaction",
+        url: fightVodService.buildTwitchVodUrl(videoId, reactionOffsetSeconds),
+        offsetSeconds: reactionOffsetSeconds,
+      });
+    }
+
     return Array.from(phaseLinks.values());
   }
 
@@ -4045,7 +4054,7 @@ class GuildService {
           fightId: target.fightId,
         })),
       })
-        .select("reportCode fightId channelName vodUrl videoId -_id")
+        .select("reportCode fightId channelName vodUrl offsetSeconds videoId -_id")
         .sort({ channelName: 1 })
         .lean();
 
@@ -4056,7 +4065,7 @@ class GuildService {
         const linksForFight = vodLinksByFight.get(key) || [];
         linksForFight.push({
           channelName: link.channelName,
-          url: link.vodUrl,
+          url: link.videoId ? fightVodService.buildTwitchVodUrl(link.videoId, link.offsetSeconds || 0) : link.vodUrl,
           videoId: link.videoId,
         });
         vodLinksByFight.set(key, linksForFight);

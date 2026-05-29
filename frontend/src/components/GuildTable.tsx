@@ -254,7 +254,12 @@ const GuildTableRow = memo(
         >
           {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
         </td>
-        <td className="px-3 py-3 text-center text-sm">
+        <td
+          className={`px-3 py-3 text-center text-sm cursor-pointer transition-colors ${hoveredGuildInfoRow || hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          onClick={() => onGuildClick(guild)}
+          onMouseEnter={() => setHoveredGuildInfoRow(true)}
+          onMouseLeave={() => setHoveredGuildInfoRow(false)}
+        >
           <BestVodLinks links={guild.bestVodLinks} />
         </td>
       </tr>
