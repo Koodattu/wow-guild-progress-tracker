@@ -107,33 +107,43 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
             className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
           >
             <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className={`truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
-                  <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
+                  <span>{formatTime(pull.duration)}</span>
+                  <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
                 </div>
-                <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />
               </div>
-              <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-400">
-                <span>{formatTime(pull.duration)}</span>
-                {!pull.isKill && <span>{formatPercent(pull.bossPercentage)} boss</span>}
-              </div>
+              <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
             </a>
             {pull.vodLinks && pull.vodLinks.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5 border-t border-gray-700/70 pt-2">
-                {pull.vodLinks.map((vod) => (
-                  <a
-                    key={`${vod.channelName}-${vod.videoId || vod.url}`}
-                    href={vod.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-w-0 items-center gap-1 rounded bg-purple-600/20 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
-                    title={`Watch ${vod.channelName} VOD`}
-                  >
-                    <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{vod.channelName}</span>
-                  </a>
-                ))}
+              <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">
+                {pull.vodLinks.map((vod) => {
+                  const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
+
+                  return (
+                    <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
+                      <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
+                        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{vod.channelName}</span>
+                      </div>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
+                        {phaseLinks.map((phase) => (
+                          <a
+                            key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
+                            href={phase.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+                            title={`Watch ${vod.channelName} ${phase.label}`}
+                          >
+                            <span className="block truncate">{phase.label}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

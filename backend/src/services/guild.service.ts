@@ -748,6 +748,8 @@ class GuildService {
     getGuildLogger(guild.name, guild.realm).info("Updating guild progress");
 
     try {
+      const wasCurrentlyRaiding = guild.isCurrentlyRaiding;
+
       // Determine if this is an initial fetch by checking if guild has any reports at all
       const hasAnyReports = await Report.exists({ guildId: guild._id });
       const isInitialFetch = !hasAnyReports;
@@ -765,6 +767,13 @@ class GuildService {
 
       guild.lastFetched = new Date();
       await guild.save();
+
+      if (wasCurrentlyRaiding !== guild.isCurrentlyRaiding) {
+        await Promise.all([
+          cacheService.invalidate(cacheService.getGuildListKey()),
+          cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name)),
+        ]);
+      }
 
       // Update world rankings only if there was new data and only for current raid
       if (hasNewData && isInitialFetch) {
@@ -3289,6 +3298,66 @@ class GuildService {
     }
   }
 
+  private getShortPhaseLabel(phaseName: string | undefined, phaseId: number): string {
+    if (!phaseName) return `P${phaseId}`;
+
+    const normalized = phaseName.toLowerCase();
+    const numberWords: Record<string, string> = {
+      one: "1",
+      two: "2",
+      three: "3",
+      four: "4",
+      five: "5",
+      six: "6",
+      seven: "7",
+      eight: "8",
+      nine: "9",
+      ten: "10",
+    };
+
+    const match = normalized.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    const number = match ? numberWords[match[1]] || match[1] : String(phaseId);
+
+    if (normalized.includes("intermission")) return `I${number}`;
+    return `P${number}`;
+  }
+
+  private getPhaseLinksForFight(fight: any | undefined, videoId: string, fightVodOffsetSeconds: number): Array<{ label: string; url: string; offsetSeconds: number }> {
+    const phaseLinks = new Map<string, { label: string; url: string; offsetSeconds: number }>();
+
+    phaseLinks.set("P1", {
+      label: "P1",
+      url: fightVodService.buildTwitchVodUrl(videoId, fightVodOffsetSeconds),
+      offsetSeconds: fightVodOffsetSeconds,
+    });
+
+    if (!fight) return Array.from(phaseLinks.values());
+
+    const transitions = [...(fight.phaseTransitions || [])].sort((a: any, b: any) => a.startTime - b.startTime);
+
+    transitions.forEach((transition: any) => {
+      let phaseOffsetMs: number | null = null;
+
+      if (transition.startTime >= fight.fightStartTime && transition.startTime <= fight.fightEndTime) {
+        phaseOffsetMs = transition.startTime - fight.fightStartTime;
+      } else if (transition.startTime >= 0 && transition.startTime <= fight.duration) {
+        phaseOffsetMs = transition.startTime;
+      }
+
+      if (phaseOffsetMs === null || phaseOffsetMs < 0 || phaseOffsetMs > fight.duration + 1000) return;
+
+      const label = this.getShortPhaseLabel(transition.name, transition.id);
+      const offsetSeconds = fightVodOffsetSeconds + Math.floor(phaseOffsetMs / 1000);
+      phaseLinks.set(label, {
+        label,
+        url: fightVodService.buildTwitchVodUrl(videoId, offsetSeconds),
+        offsetSeconds,
+      });
+    });
+
+    return Array.from(phaseLinks.values());
+  }
+
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
     let eventCreated = false;
 
@@ -3718,6 +3787,67 @@ class GuildService {
     return guilds;
   }
 
+  private getLastKilledBoss(bosses: any[] = []): any | null {
+    const killedBosses = bosses.filter((boss) => boss.kills > 0 && boss.firstKillReportCode && boss.firstKillFightId);
+    if (killedBosses.length === 0) return null;
+
+    return killedBosses.reduce((latest, boss) => {
+      const latestTime = latest.firstKillTime ? new Date(latest.firstKillTime).getTime() : 0;
+      const bossTime = boss.firstKillTime ? new Date(boss.firstKillTime).getTime() : 0;
+      return bossTime > latestTime ? boss : latest;
+    });
+  }
+
+  private hasProgressPullData(progress: any | null | undefined): boolean {
+    if (!progress) return false;
+
+    const currentBoss = progress.bosses?.find((boss: any) => boss.kills === 0);
+    return Boolean(currentBoss?.pullCount > 0 || currentBoss?.bestPercent > 0 || currentBoss?.bestPullPhase || (progress.totalTimeSpent ?? 0) > 0);
+  }
+
+  private getBestVodTargetForProgress(progress: any | null | undefined): { reportCode: string; fightId: number } | null {
+    if (!progress) return null;
+
+    const bosses = progress.bosses || [];
+    const currentBoss = bosses.find((boss: any) => boss.kills === 0);
+
+    if (currentBoss?.pullCount > 0 && currentBoss.bestPullReportCode && currentBoss.bestPullFightId) {
+      return {
+        reportCode: currentBoss.bestPullReportCode,
+        fightId: currentBoss.bestPullFightId,
+      };
+    }
+
+    const lastKilledBoss = this.getLastKilledBoss(bosses);
+    if (lastKilledBoss) {
+      return {
+        reportCode: lastKilledBoss.firstKillReportCode,
+        fightId: lastKilledBoss.firstKillFightId,
+      };
+    }
+
+    if (currentBoss?.bestPullReportCode && currentBoss.bestPullFightId) {
+      return {
+        reportCode: currentBoss.bestPullReportCode,
+        fightId: currentBoss.bestPullFightId,
+      };
+    }
+
+    return null;
+  }
+
+  private getBestVodTargetForGuildProgress(progressEntries: any[] = []): { reportCode: string; fightId: number } | null {
+    const mythicProgress = progressEntries.find((p: any) => p.difficulty === "mythic");
+    const heroicProgress = progressEntries.find((p: any) => p.difficulty === "heroic");
+    const mythicHasPullData = this.hasProgressPullData(mythicProgress);
+    const heroicHasPullData = this.hasProgressPullData(heroicProgress);
+
+    const preferredProgress = mythicHasPullData ? mythicProgress : heroicHasPullData ? heroicProgress : mythicProgress || heroicProgress;
+    const fallbackProgress = preferredProgress === mythicProgress ? heroicProgress : mythicProgress;
+
+    return this.getBestVodTargetForProgress(preferredProgress) || this.getBestVodTargetForProgress(fallbackProgress);
+  }
+
   // Get all guilds with progress filtered by raidId (minimal data for leaderboard)
   // Optimized with MongoDB aggregation pipeline for better performance
   async getAllGuildsForRaid(raidId: number): Promise<any[]> {
@@ -3749,6 +3879,7 @@ class GuildService {
           faction: 1,
           warcraftlogsId: 1,
           crest: 1,
+          horseRaceUmaImage: 1,
           parent_guild: 1,
           isCurrentlyRaiding: 1,
           lastFetched: 1,
@@ -3827,8 +3958,9 @@ class GuildService {
       },
     ]);
 
-    // Transform to minimal structure (still needed for boss-level calculations)
-    return guilds.map((guildObj) => {
+    const guildRows = guilds.map((guildObj) => {
+      const bestVodTarget = this.getBestVodTargetForGuildProgress(guildObj.progress);
+
       // Transform progress to minimal structure
       const minimalProgress = guildObj.progress.map((p: any) => {
         // Find current boss (first unkilled boss) to get best pull info
@@ -3883,6 +4015,7 @@ class GuildService {
         faction: guildObj.faction,
         warcraftlogsId: guildObj.warcraftlogsId,
         crest: guildObj.crest,
+        horseRaceUmaImage: guildObj.horseRaceUmaImage,
         parent_guild: guildObj.parent_guild,
         isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
         isStreaming: isStreaming,
@@ -3891,8 +4024,49 @@ class GuildService {
         streamers,
         officialProgress: filteredOfficialProgress,
         scheduleDisplay: scheduleSummary,
+        bestVodTarget,
       };
     });
+
+    const vodTargetKeys = Array.from(
+      new Map(
+        guildRows
+          .filter((guildObj) => guildObj.bestVodTarget)
+          .map((guildObj) => [`${guildObj.bestVodTarget!.reportCode}:${guildObj.bestVodTarget!.fightId}`, guildObj.bestVodTarget!]),
+      ).values(),
+    );
+
+    const vodLinksByFight = new Map<string, any[]>();
+    if (vodTargetKeys.length > 0) {
+      const vodLinks = await FightVodLink.find({
+        status: "resolved",
+        $or: vodTargetKeys.map((target) => ({
+          reportCode: target.reportCode,
+          fightId: target.fightId,
+        })),
+      })
+        .select("reportCode fightId channelName vodUrl videoId -_id")
+        .sort({ channelName: 1 })
+        .lean();
+
+      vodLinks.forEach((link) => {
+        if (!link.vodUrl) return;
+
+        const key = `${link.reportCode}:${link.fightId}`;
+        const linksForFight = vodLinksByFight.get(key) || [];
+        linksForFight.push({
+          channelName: link.channelName,
+          url: link.vodUrl,
+          videoId: link.videoId,
+        });
+        vodLinksByFight.set(key, linksForFight);
+      });
+    }
+
+    return guildRows.map(({ bestVodTarget, ...guildObj }) => ({
+      ...guildObj,
+      bestVodLinks: bestVodTarget ? vodLinksByFight.get(`${bestVodTarget.reportCode}:${bestVodTarget.fightId}`) || [] : [],
+    }));
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
@@ -4027,12 +4201,13 @@ class GuildService {
 
     const candidateLimit = Math.max(25, Math.min((boss.pullCount || 25) * 2, 250));
     const bestPullCandidates = await Fight.find(fightQuery)
-      .select("reportCode fightId timestamp duration bossPercentage fightPercentage isKill progressDisplay")
+      .select("reportCode fightId timestamp duration bossPercentage fightPercentage isKill progressDisplay phaseTransitions fightStartTime fightEndTime")
       .sort({ fightPercentage: 1, timestamp: -1 })
       .limit(candidateLimit)
       .lean();
 
     const seenFights = new Map<string, any>();
+    const bestFightByKey = new Map<string, any>();
     const bestPulls: any[] = [];
 
     for (const fight of bestPullCandidates) {
@@ -4052,6 +4227,7 @@ class GuildService {
         progressDisplay: fight.progressDisplay,
         isKill: fight.isKill,
       });
+      bestFightByKey.set(`${fight.reportCode}:${fight.fightId}`, fight);
 
       if (bestPulls.length === 5) {
         break;
@@ -4067,6 +4243,7 @@ class GuildService {
         })),
       })
         .select("reportCode fightId channelName vodUrl offsetSeconds videoId -_id")
+        .sort({ channelName: 1 })
         .lean();
 
       const vodLinksByFight = new Map<string, any[]>();
@@ -4079,6 +4256,7 @@ class GuildService {
           url: link.vodUrl,
           offsetSeconds: link.offsetSeconds || 0,
           videoId: link.videoId,
+          phaseLinks: link.videoId ? this.getPhaseLinksForFight(bestFightByKey.get(key), link.videoId, link.offsetSeconds || 0) : [],
         });
         vodLinksByFight.set(key, linksForFight);
       });
@@ -4166,6 +4344,7 @@ class GuildService {
       region: guildObj.region,
       faction: guildObj.faction,
       crest: guildObj.crest,
+      horseRaceUmaImage: guildObj.horseRaceUmaImage,
       parent_guild: guildObj.parent_guild,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
@@ -4249,6 +4428,7 @@ class GuildService {
       faction: guildObj.faction,
       warcraftlogsId: guildObj.warcraftlogsId,
       crest: guildObj.crest,
+      horseRaceUmaImage: guildObj.horseRaceUmaImage,
       parent_guild: guildObj.parent_guild,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
@@ -4279,6 +4459,7 @@ class GuildService {
       region: guildObj.region,
       faction: guildObj.faction,
       warcraftlogsId: guildObj.warcraftlogsId,
+      horseRaceUmaImage: guildObj.horseRaceUmaImage,
       isCurrentlyRaiding: guildObj.isCurrentlyRaiding,
       lastFetched: guildObj.lastFetched,
       progress: guildObj.progress, // Full progress with boss arrays

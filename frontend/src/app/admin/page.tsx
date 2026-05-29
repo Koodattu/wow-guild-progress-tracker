@@ -8,6 +8,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { getUmaImageLabel, UMA_IMAGES } from "@/lib/uma-images";
 import {
   triggerCalculateAllStatistics,
   triggerCalculateTierLists,
@@ -18,6 +19,7 @@ import {
   triggerUpdateInactiveGuilds,
   triggerUpdateAllGuilds,
   triggerRefetchRecentReports,
+  triggerBackfillFightVods,
   triggerUpdateGuildCrests,
   triggerRescanDeathEvents,
   triggerRescanCharacters,
@@ -221,6 +223,7 @@ export default function AdminPage() {
     parent_guild: "",
     streamers: "",
     activityStatus: "active" as "active" | "inactive",
+    horseRaceUmaImage: "",
   });
   const [editGuildLoading, setEditGuildLoading] = useState(false);
   const [editGuildTarget, setEditGuildTarget] = useState<{ id: string; name: string } | null>(null);
@@ -714,6 +717,7 @@ export default function AdminPage() {
       parent_guild: selectedGuild.parentGuild || "",
       streamers: selectedGuild.streamers?.map((s: { channelName: string }) => s.channelName).join(", ") || "",
       activityStatus: selectedGuild.activityStatus || "active",
+      horseRaceUmaImage: selectedGuild.horseRaceUmaImage || "",
     });
     setShowEditGuildModal(true);
   };
@@ -733,6 +737,7 @@ export default function AdminPage() {
               .filter(Boolean)
           : [],
         activityStatus: editGuildForm.activityStatus,
+        horseRaceUmaImage: editGuildForm.horseRaceUmaImage || null,
       });
       setTriggerMessage({ type: "success", text: `Guild ${editGuildTarget.name} updated` });
       setTimeout(() => setTriggerMessage(null), 5000);
@@ -1120,6 +1125,15 @@ export default function AdminPage() {
                       <span>Check Twitch Streams</span>
                       {triggerLoading === "twitch-streams" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["twitch-streams"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("backfill-fight-vods", triggerBackfillFightVods)}
+                      disabled={triggerLoading === "backfill-fight-vods" || triggerCooldowns["backfill-fight-vods"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Backfill Best-Pull VODs</span>
+                      {triggerLoading === "backfill-fight-vods" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["backfill-fight-vods"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("guild-crests", triggerUpdateGuildCrests)}
@@ -3938,6 +3952,28 @@ export default function AdminPage() {
                     placeholder="streamer1, streamer2, streamer3"
                   />
                   <p className="text-xs text-gray-500 mt-1">Comma-separated Twitch channel names</p>
+                </div>
+
+                {/* Horse Race Uma */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Horse Race Uma</label>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={editGuildForm.horseRaceUmaImage}
+                      onChange={(e) => setEditGuildForm({ ...editGuildForm, horseRaceUmaImage: e.target.value })}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    >
+                      <option value="">Random</option>
+                      {UMA_IMAGES.map((image) => (
+                        <option key={image} value={image}>
+                          {getUmaImageLabel(image)}
+                        </option>
+                      ))}
+                    </select>
+                    {editGuildForm.horseRaceUmaImage && (
+                      <img src={`/uma/${editGuildForm.horseRaceUmaImage}`} alt="" className="h-12 w-12 shrink-0 object-contain" aria-hidden="true" />
+                    )}
+                  </div>
                 </div>
 
                 {/* Activity Status */}

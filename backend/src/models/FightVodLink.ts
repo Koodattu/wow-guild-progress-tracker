@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export type FightVodLinkStatus = "pending" | "resolved" | "unavailable";
+export type FightVodLinkMatchMethod = "stream-id" | "vod-window";
 
 export interface IFightVodLink extends Document {
   guildId: mongoose.Types.ObjectId;
@@ -19,6 +20,11 @@ export interface IFightVodLink extends Document {
   vodUrl?: string;
   offsetSeconds?: number;
   status: FightVodLinkStatus;
+  matchMethod?: FightVodLinkMatchMethod;
+  matchConfidence?: number;
+  videoCreatedAt?: Date;
+  videoDurationSeconds?: number;
+  backfilledAt?: Date;
   attempts: number;
   lastCheckedAt?: Date;
   expiresAt: Date;
@@ -44,6 +50,11 @@ const FightVodLinkSchema = new Schema(
     vodUrl: { type: String },
     offsetSeconds: { type: Number },
     status: { type: String, enum: ["pending", "resolved", "unavailable"], required: true, default: "pending" },
+    matchMethod: { type: String, enum: ["stream-id", "vod-window"] },
+    matchConfidence: { type: Number },
+    videoCreatedAt: { type: Date },
+    videoDurationSeconds: { type: Number },
+    backfilledAt: { type: Date },
     attempts: { type: Number, required: true, default: 0 },
     lastCheckedAt: { type: Date },
     expiresAt: { type: Date, required: true },

@@ -50,6 +50,7 @@ class UpdateScheduler {
   private isUpdatingHotRaiding: boolean = false;
   private isUpdatingTwitchStreams: boolean = false;
   private isResolvingFightVodLinks: boolean = false;
+  private isBackfillingFightVodLinks: boolean = false;
   private isCleaningFightVodLinks: boolean = false;
   private isUpdatingOffActive: boolean = false;
   private isUpdatingOffInactive: boolean = false;
@@ -987,12 +988,41 @@ class UpdateScheduler {
       if (result.checked > 0) {
         logger.info(`[FightVOD] Checked ${result.checked} pending link(s), resolved ${result.resolved}, marked unavailable ${result.unavailable}`);
       }
-      await taskTracker.complete(taskId, result);
+      if (result.resolved > 0) {
+        await cacheService.invalidatePattern(/^progress:/);
+      }
+      await taskTracker.complete(taskId, { ...result });
     } catch (error) {
       logger.error("[FightVOD] Resolver error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isResolvingFightVodLinks = false;
+    }
+  }
+
+  async backfillFightVodLinks(): Promise<void> {
+    if (this.isBackfillingFightVodLinks) {
+      logger.info("[FightVOD Backfill] Previous backfill still in progress, skipping...");
+      return;
+    }
+
+    this.isBackfillingFightVodLinks = true;
+    const taskId = await taskTracker.start("Backfill Fight VOD Links");
+
+    try {
+      const result = await fightVodService.backfillRecentBestPullLinks();
+      logger.info(
+        `[FightVOD Backfill] Checked ${result.guildsChecked} guild(s), ${result.streamersChecked} streamer(s), considered ${result.fightsConsidered} fight-streamer pair(s), matched ${result.matched}, existing ${result.skippedExisting}, ambiguous ${result.ambiguous}, no match ${result.noVodMatch}, expired ${result.expired}, errors ${result.errors}`,
+      );
+      if (result.matched > 0) {
+        await cacheService.invalidatePattern(/^progress:/);
+      }
+      await taskTracker.complete(taskId, { ...result });
+    } catch (error) {
+      logger.error("[FightVOD Backfill] Error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isBackfillingFightVodLinks = false;
     }
   }
 
@@ -1054,6 +1084,7 @@ class UpdateScheduler {
 
       // Update each guild's streamers
       const now = new Date();
+      const changedGuildSummaries: Array<{ realm: string; name: string }> = [];
       for (const guild of guilds) {
         if (!guild.streamers || guild.streamers.length === 0) continue;
 
@@ -1111,6 +1142,7 @@ class UpdateScheduler {
               $set: { streamers: updatedStreamers },
             },
           );
+          changedGuildSummaries.push({ realm: guild.realm, name: guild.name });
         }
       }
 
@@ -1118,6 +1150,9 @@ class UpdateScheduler {
       // Without this, stale "live" data would persist in cache for up to 2 minutes after DB update.
       await cacheService.invalidate(cacheService.getLiveStreamersKey());
       await cacheService.invalidate(cacheService.getHomeKey());
+      await Promise.all(
+        changedGuildSummaries.map((guild) => cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name))),
+      );
 
       logger.info(`[Hot/Twitch] Completed stream status update`);
       await taskTracker.complete(taskId);
@@ -1153,6 +1188,7 @@ class UpdateScheduler {
 
       // Update all streamers to offline
       const now = new Date();
+      const changedGuildSummaries: Array<{ realm: string; name: string }> = [];
       for (const guild of guilds) {
         if (!guild.streamers || guild.streamers.length === 0) continue;
 
@@ -1180,11 +1216,15 @@ class UpdateScheduler {
             $set: { streamers: updatedStreamers },
           },
         );
+        changedGuildSummaries.push({ realm: guild.realm, name: guild.name });
       }
 
       // Invalidate streamer caches so clients immediately see all streams as offline.
       await cacheService.invalidate(cacheService.getLiveStreamersKey());
       await cacheService.invalidate(cacheService.getHomeKey());
+      await Promise.all(
+        changedGuildSummaries.map((guild) => cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name))),
+      );
 
       logger.info("[Off/Twitch] All streams marked as offline");
     } catch (error) {

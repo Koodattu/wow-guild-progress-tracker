@@ -53,7 +53,14 @@ export function cacheMiddleware(getKey: (req: Request) => string, getTTL?: (req:
       const cacheKey = getKey(req);
 
       // Try to get cached data from MongoDB (async operation)
-      const cacheEntry = await cacheService.getWithMetadata(cacheKey);
+      let cacheEntry = await cacheService.getWithMetadata(cacheKey);
+      const ttl = getTTL ? getTTL(req) : cacheService.DEFAULT_TTL;
+
+      // If code lowered a route TTL, do not keep serving entries written with the old longer TTL.
+      if (cacheEntry && cacheEntry.ttlMs > ttl) {
+        await cacheService.invalidate(cacheKey);
+        cacheEntry = null;
+      }
 
       if (cacheEntry) {
         const { data, expiresAt, ttlMs } = cacheEntry;
@@ -86,9 +93,6 @@ export function cacheMiddleware(getKey: (req: Request) => string, getTTL?: (req:
 
       // Override res.json to cache the response before sending
       res.json = function (body: any): Response {
-        // Determine TTL (use default if not provided)
-        const ttl = getTTL ? getTTL(req) : cacheService.DEFAULT_TTL;
-
         // Generate ETag for fresh response
         const etag = generateETag(body);
 

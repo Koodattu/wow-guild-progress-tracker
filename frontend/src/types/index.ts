@@ -37,6 +37,11 @@ export interface BossBestPull {
     url: string;
     offsetSeconds: number;
     videoId?: string;
+    phaseLinks?: Array<{
+      label: string;
+      url: string;
+      offsetSeconds: number;
+    }>;
   }>;
 }
 
@@ -194,12 +199,18 @@ export interface GuildListItem {
   faction?: string;
   warcraftlogsId?: number;
   crest?: GuildCrest;
+  horseRaceUmaImage?: string;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   isStreaming?: boolean; // Computed field: true if any streamer is live
   lastFetched?: string;
   progress: RaidProgressSummary[];
   streamers?: Streamer[]; // Twitch streamers for this guild
+  bestVodLinks?: Array<{
+    channelName: string;
+    url: string;
+    videoId?: string;
+  }>;
   officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
 }
@@ -232,6 +243,7 @@ export interface GuildSummary {
   faction?: string;
   warcraftlogsId?: number;
   crest?: GuildCrest;
+  horseRaceUmaImage?: string;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
@@ -264,6 +276,7 @@ export interface Guild {
   faction?: string;
   warcraftlogsId?: number;
   crest?: GuildCrest;
+  horseRaceUmaImage?: string;
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
@@ -679,6 +692,7 @@ export interface AdminGuild {
   faction?: string;
   warcraftlogsId?: number;
   wclStatus?: "active" | "not_found" | "unclaimed" | "unknown";
+  horseRaceUmaImage?: string;
   parentGuild?: string;
   isCurrentlyRaiding: boolean;
   lastFetched?: string;
@@ -1345,6 +1359,7 @@ export interface AdminGuildDetail {
   region: string;
   faction?: string;
   warcraftlogsId?: number;
+  horseRaceUmaImage?: string;
   parentGuild?: string;
   streamers?: Array<{ channelName: string; isLive?: boolean; isPlayingWoW?: boolean }>;
   isCurrentlyRaiding: boolean;
@@ -1471,6 +1486,7 @@ export interface UpdateGuildInput {
   parent_guild?: string | null;
   streamers?: string[];
   activityStatus?: "active" | "inactive";
+  horseRaceUmaImage?: string | null;
 }
 
 // Toggle Guild Raid Exclusion Response
@@ -1492,6 +1508,7 @@ export interface UpdateGuildResponse {
     name: string;
     realm: string;
     region: string;
+    horseRaceUmaImage?: string;
     parent_guild?: string;
     streamers?: Array<{ channelName: string }>;
     activityStatus?: "active" | "inactive";

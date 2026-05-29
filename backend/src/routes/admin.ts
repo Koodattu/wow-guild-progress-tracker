@@ -210,6 +210,18 @@ router.get("/users/:userId/pickems", async (req: Request, res: Response) => {
 // GUILD MANAGEMENT
 // ============================================================
 
+function normalizeHorseRaceUmaImage(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 120 || trimmed.includes("/") || trimmed.includes("\\") || !/^[a-z0-9][a-z0-9 .'-]*\.png$/i.test(trimmed)) return undefined;
+
+  return trimmed;
+}
+
 // Get all guilds with pagination and optional search
 router.get("/guilds", async (req: Request, res: Response) => {
   try {
@@ -233,6 +245,7 @@ router.get("/guilds", async (req: Request, res: Response) => {
           region: 1,
           faction: 1,
           warcraftlogsId: 1,
+          horseRaceUmaImage: 1,
           parent_guild: 1,
           isCurrentlyRaiding: 1,
           lastFetched: 1,
@@ -258,6 +271,7 @@ router.get("/guilds", async (req: Request, res: Response) => {
       region: guild.region,
       faction: guild.faction,
       warcraftlogsId: guild.warcraftlogsId,
+      horseRaceUmaImage: guild.horseRaceUmaImage,
       wclStatus: guild.wclStatus || "unknown",
       parentGuild: guild.parent_guild,
       isCurrentlyRaiding: guild.isCurrentlyRaiding,
@@ -339,6 +353,7 @@ router.get("/guilds/:guildId", async (req: Request, res: Response) => {
       region: guild.region,
       faction: guild.faction,
       warcraftlogsId: guild.warcraftlogsId,
+      horseRaceUmaImage: guild.horseRaceUmaImage,
       parentGuild: guild.parent_guild,
       streamers: guild.streamers || [],
       isCurrentlyRaiding: guild.isCurrentlyRaiding,
@@ -932,7 +947,7 @@ router.delete("/guilds/:guildId", async (req: Request, res: Response) => {
 router.put("/guilds/:guildId", async (req: Request, res: Response) => {
   try {
     const { guildId } = req.params;
-    const { parent_guild, streamers, activityStatus } = req.body;
+    const { parent_guild, streamers, activityStatus, horseRaceUmaImage } = req.body;
 
     const guild = await Guild.findById(guildId);
     if (!guild) {
@@ -970,7 +985,18 @@ router.put("/guilds/:guildId", async (req: Request, res: Response) => {
       guild.activityStatus = activityStatus;
     }
 
+    if (horseRaceUmaImage !== undefined) {
+      const normalizedUmaImage = normalizeHorseRaceUmaImage(horseRaceUmaImage);
+      if (normalizedUmaImage === undefined) {
+        return res.status(400).json({ error: "Horse race Uma image must be a PNG filename or null" });
+      }
+      guild.horseRaceUmaImage = normalizedUmaImage || undefined;
+    }
+
     await guild.save();
+    await Promise.all([cacheService.invalidateCurrentRaidCaches(), cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name)]).catch((error) => {
+      logger.warn("Failed to invalidate guild caches after admin guild update:", error);
+    });
 
     logger.info(`Admin updated guild: ${guild.name}-${guild.realm} (ID: ${guildId})`);
 
@@ -981,6 +1007,7 @@ router.put("/guilds/:guildId", async (req: Request, res: Response) => {
         name: guild.name,
         realm: guild.realm,
         region: guild.region,
+        horseRaceUmaImage: guild.horseRaceUmaImage,
         parent_guild: guild.parent_guild,
         streamers: guild.streamers,
         activityStatus: guild.activityStatus,
@@ -2037,6 +2064,21 @@ router.post("/trigger/check-twitch-streams", async (req: Request, res: Response)
   } catch (error) {
     logger.error("Error triggering Twitch stream check:", error);
     res.status(500).json({ error: "Failed to trigger Twitch stream check" });
+  }
+});
+
+// Trigger historical best-pull VOD backfill
+router.post("/trigger/backfill-fight-vods", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .backfillFightVodLinks()
+      .then(() => logger.info("Backfill fight VOD links completed"))
+      .catch((err) => logger.error("Backfill fight VOD links failed:", err));
+
+    res.json({ success: true, message: "Best-pull VOD backfill started" });
+  } catch (error) {
+    logger.error("Error triggering fight VOD backfill:", error);
+    res.status(500).json({ error: "Failed to trigger fight VOD backfill" });
   }
 });
 

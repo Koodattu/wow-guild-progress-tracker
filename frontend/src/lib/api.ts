@@ -144,7 +144,7 @@ export const api = {
   },
 
   async getGuildSummary(id: string): Promise<GuildSummary> {
-    const response = await fetch(`${API_URL}/api/guilds/${id}/summary`);
+    const response = await fetch(`${API_URL}/api/guilds/${id}/summary`, { cache: "no-store" });
     if (!response.ok) throw new Error("Failed to fetch guild summary");
     return response.json();
   },
@@ -152,7 +152,7 @@ export const api = {
   async getGuildSummaryByRealmName(realm: string, name: string): Promise<GuildSummary> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/summary`);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/summary`, { cache: "no-store" });
     if (!response.ok) throw new Error("Failed to fetch guild summary");
     return response.json();
   },
@@ -164,7 +164,7 @@ export const api = {
   },
 
   async getGuildList(): Promise<GuildDirectoryItem[]> {
-    const response = await fetch(`${API_URL}/api/guilds/list`);
+    const response = await fetch(`${API_URL}/api/guilds/list`, { cache: "no-store" });
     if (!response.ok) throw new Error("Failed to fetch guild list");
     return response.json();
   },
@@ -1162,6 +1162,15 @@ export async function triggerCheckTwitchStreams(): Promise<TriggerResponse> {
     credentials: "include",
   });
   if (!response.ok) throw new Error("Failed to trigger Twitch stream check");
+  return response.json();
+}
+
+export async function triggerBackfillFightVods(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/backfill-fight-vods`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger best-pull VOD backfill");
   return response.json();
 }
 
