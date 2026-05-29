@@ -169,6 +169,12 @@ export const api = {
     return response.json();
   },
 
+  async getHorseRaceUmaReservations(): Promise<string[]> {
+    const response = await fetch(`${API_URL}/api/guilds/horse-race-uma-reservations`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Failed to fetch horse race Uma reservations");
+    return response.json();
+  },
+
   async getGuildSchedules(): Promise<GuildSchedule[]> {
     const response = await fetch(`${API_URL}/api/guilds/schedules`);
     if (!response.ok) throw new Error("Failed to fetch guild schedules");

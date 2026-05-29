@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { useRaids, useEventsPaginated, useGuilds, useRaidDates } from "@/lib/queries";
+import { useRaids, useEventsPaginated, useGuilds, useRaidDates, useHorseRaceUmaReservations } from "@/lib/queries";
 import { useEventFiltersFromCookies } from "@/lib/useEventFilters";
 import GuildTable from "@/components/GuildTable";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
@@ -35,6 +35,7 @@ function HomeContent() {
   const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters);
   const events = eventsData?.events ?? [];
   const { data: guilds = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined);
+  const { data: reservedUmaImages = [] } = useHorseRaceUmaReservations();
   const { data: raidDates, error: raidDatesError } = useRaidDates(selectedRaidId);
 
   // Combined loading/error state
@@ -178,7 +179,7 @@ function HomeContent() {
       {/* Featured Live Streamers */}
       <FeaturedStreamers />
 
-      <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={raids[0]?.id ?? null} />
+      <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={raids[0]?.id ?? null} reservedUmaImages={reservedUmaImages} />
 
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}

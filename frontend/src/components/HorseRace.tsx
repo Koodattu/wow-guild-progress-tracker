@@ -12,6 +12,7 @@ interface HorseRaceProps {
   guilds: GuildListItem[];
   selectedRaidId: number | null;
   currentRaidId: number | null;
+  reservedUmaImages?: string[];
 }
 
 interface RaceEntry {
@@ -30,6 +31,8 @@ interface RaceEntry {
 }
 
 type BaseRaceEntry = Omit<RaceEntry, "displayProgress" | "labelPosition">;
+type HorseRaceDisplayMode = Exclude<HorseRaceMode, "random">;
+type RandomHorseRaceMode = Exclude<HorseRaceDisplayMode, "off">;
 
 const TRACK_MIN = 3;
 const TRACK_MAX = 97;
@@ -40,6 +43,8 @@ const START_WIDTH = 34;
 const MIN_TRACK_WIDTH = 680;
 const HORIZONTAL_STACK_SPACING = 2.0;
 const HORSE_RACER_SRC = "/horse/racer.png";
+const RANDOM_HORSE_RACE_MODES: RandomHorseRaceMode[] = ["crest", "japanese", "uma"];
+const EMPTY_RESERVED_UMA_IMAGES: string[] = [];
 const tintedRacerCache = new Map<string, string>();
 let racerImagePromise: Promise<HTMLImageElement> | null = null;
 
@@ -278,7 +283,7 @@ function TintedHorseRacer({ crest }: { crest?: GuildCrestType }) {
   return <img src={src} alt="" className="h-10 w-10 object-contain" aria-hidden="true" />;
 }
 
-function RacerSprite({ entry, mode, umaImage }: { entry: RaceEntry; mode: HorseRaceMode; umaImage: string }) {
+function RacerSprite({ entry, mode, umaImage }: { entry: RaceEntry; mode: HorseRaceDisplayMode; umaImage: string }) {
   if (mode === "crest") {
     return (
       <div className="h-8 w-8 shrink-0">
@@ -350,12 +355,12 @@ function getGuildProfileHref(entry: RaceEntry) {
   return `/guilds/${encodeURIComponent(entry.realm)}/${encodeURIComponent(entry.name)}`;
 }
 
-function getRacerHitboxClass(mode: HorseRaceMode) {
+function getRacerHitboxClass(mode: HorseRaceDisplayMode) {
   if (mode === "crest") return "h-8 w-8";
   return "h-9 w-9";
 }
 
-function RacerLink({ entry, mode, title, children }: { entry: RaceEntry; mode: HorseRaceMode; title?: string; children: ReactNode }) {
+function RacerLink({ entry, mode, title, children }: { entry: RaceEntry; mode: HorseRaceDisplayMode; title?: string; children: ReactNode }) {
   return (
     <Link
       href={getGuildProfileHref(entry)}
@@ -377,8 +382,12 @@ function shuffleUmaImages(): UmaImage[] {
   return images;
 }
 
-function assignUmaImages(entries: RaceEntry[], umaDeck: UmaImage[]) {
-  const reservedImages = new Set(entries.map((entry) => entry.horseRaceUmaImage).filter(isUmaImage));
+function getRandomHorseRaceMode(): RandomHorseRaceMode {
+  return RANDOM_HORSE_RACE_MODES[Math.floor(Math.random() * RANDOM_HORSE_RACE_MODES.length)];
+}
+
+function assignUmaImages(entries: RaceEntry[], umaDeck: UmaImage[], reservedUmaImages: string[]) {
+  const reservedImages = new Set([...reservedUmaImages.filter(isUmaImage), ...entries.map((entry) => entry.horseRaceUmaImage).filter(isUmaImage)]);
   const randomDeck = umaDeck.filter((image) => !reservedImages.has(image));
   const availableDeck = randomDeck.length > 0 ? randomDeck : umaDeck;
   const assignments = new Map<string, UmaImage>();
@@ -397,25 +406,27 @@ function assignUmaImages(entries: RaceEntry[], umaDeck: UmaImage[]) {
   return assignments;
 }
 
-export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: HorseRaceProps) {
+export default function HorseRace({ guilds, selectedRaidId, currentRaidId, reservedUmaImages = EMPTY_RESERVED_UMA_IMAGES }: HorseRaceProps) {
   const { mode, showCharacters, showBackground } = useHorseRaceMode();
+  const [randomMode] = useState<RandomHorseRaceMode>(() => getRandomHorseRaceMode());
+  const activeMode: HorseRaceDisplayMode = mode === "random" ? randomMode : mode;
   const [umaDeck, setUmaDeck] = useState(() => shuffleUmaImages());
 
   useEffect(() => {
-    if (mode === "uma") {
+    if (activeMode === "uma") {
       setUmaDeck(shuffleUmaImages());
     }
-  }, [mode]);
+  }, [activeMode]);
 
   const race = useMemo(() => {
     if (!selectedRaidId || selectedRaidId !== currentRaidId) return { notStarted: [], unfinished: [], finished: [], maxStackDepth: 1 };
     return buildEntries(guilds, selectedRaidId);
   }, [currentRaidId, guilds, selectedRaidId]);
-  const umaAssignments = useMemo(() => assignUmaImages([...race.notStarted, ...race.unfinished, ...race.finished], umaDeck), [race, umaDeck]);
+  const umaAssignments = useMemo(() => assignUmaImages([...race.notStarted, ...race.unfinished, ...race.finished], umaDeck, reservedUmaImages), [race, reservedUmaImages, umaDeck]);
 
   const entryCount = race.notStarted.length + race.unfinished.length + race.finished.length;
 
-  if (mode === "off" || entryCount === 0) return null;
+  if (activeMode === "off" || entryCount === 0) return null;
 
   const startWidth = Math.max(START_WIDTH, 28 + race.notStarted.length * FINISHED_SLOT_WIDTH);
   const finishWidth = Math.max(92, 28 + race.finished.length * FINISHED_SLOT_WIDTH);
@@ -469,9 +480,9 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 className="pointer-events-none absolute flex w-[63px] flex-col items-center"
                 style={{ right: `${26 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
               >
-                <RacerLink entry={entry} mode={mode} title={`${entry.name}-${entry.realm}: 0 pulls`}>
+                <RacerLink entry={entry} mode={activeMode} title={`${entry.name}-${entry.realm}: 0 pulls`}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
+                    <RacerSprite entry={entry} mode={activeMode} umaImage={getUmaImage(entry)} />
                   </div>
                 </RacerLink>
                 <div className="mt-0.5 max-w-[63px] px-1 text-center text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
@@ -492,9 +503,9 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                   className="pointer-events-none absolute flex w-[72px] -translate-x-1/2 justify-center"
                   style={{ left: `${entry.displayProgress}%`, top: `${markerTop}px`, zIndex: 20 + index }}
                 >
-                  <RacerLink entry={entry} mode={mode} title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}>
+                  <RacerLink entry={entry} mode={activeMode} title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}>
                     <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                      <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
+                      <RacerSprite entry={entry} mode={activeMode} umaImage={getUmaImage(entry)} />
                     </div>
                   </RacerLink>
                 </div>
@@ -529,9 +540,9 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
                 className="pointer-events-none absolute flex w-[66px] flex-col items-center"
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
               >
-                <RacerLink entry={entry} mode={mode} title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}>
+                <RacerLink entry={entry} mode={activeMode} title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
-                    <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
+                    <RacerSprite entry={entry} mode={activeMode} umaImage={getUmaImage(entry)} />
                   </div>
                 </RacerLink>
                 <div className="mt-0.5 max-w-[66px] px-1 text-center text-[10px] font-semibold leading-1.5 text-gray-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">

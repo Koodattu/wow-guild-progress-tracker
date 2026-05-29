@@ -23,6 +23,8 @@ import {
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
+import { useHorseRaceMode } from "@/lib/horse-race-preferences";
+import { getUmaImageLabel, isUmaImage } from "@/lib/uma-images";
 
 interface PageProps {
   params: Promise<{ realm: string; name: string }>;
@@ -41,6 +43,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   // React Query hooks for initial data
   const { data: guildSummary, isLoading: isLoadingGuildSummary, error: guildSummaryError } = useGuildSummaryByRealmName(realm, name);
+  const { mode: horseRaceMode } = useHorseRaceMode();
 
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
 
@@ -202,6 +205,14 @@ export default function GuildProfilePage({ params }: PageProps) {
     );
   }
 
+  const profileUmaImage = horseRaceMode === "uma" && isUmaImage(guildSummary.horseRaceUmaImage) ? guildSummary.horseRaceUmaImage : null;
+  const renderGuildProfileImage = (size: number, className: string) =>
+    profileUmaImage ? (
+      <img src={`/uma_full/${profileUmaImage}`} alt={`${guildSummary.name} ${getUmaImageLabel(profileUmaImage)}`} className={`${className} object-contain`} />
+    ) : (
+      <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={size} className={className} drawFactionCircle={true} />
+    );
+
   // Group progress by expansion and consolidate raid data
   const progressByExpansion = new Map<
     string,
@@ -261,7 +272,7 @@ export default function GuildProfilePage({ params }: PageProps) {
           {/* Mobile: Compact row layout */}
           <div className="md:hidden">
             <div className="flex items-center gap-2 mb-2">
-              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0 w-12 h-12" drawFactionCircle={true} />
+              {renderGuildProfileImage(128, "shrink-0 w-12 h-12")}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 flex-wrap">
                   <h1 className="text-xl font-bold text-white truncate">{guildSummary.name}</h1>
@@ -364,7 +375,7 @@ export default function GuildProfilePage({ params }: PageProps) {
           {/* Desktop: Original layout */}
           <div className="hidden md:block">
             <div className="flex flex-row items-start gap-3 mb-3">
-              <GuildCrest crest={guildSummary.crest} faction={guildSummary.faction} size={128} className="shrink-0 w-32 h-32" drawFactionCircle={true} />
+              {renderGuildProfileImage(128, "shrink-0 w-32 h-32")}
               <div className="flex-1 w-full">
                 {/* Guild Name Row with Icons and Last Updated */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 gap-2">

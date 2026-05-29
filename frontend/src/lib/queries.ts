@@ -17,6 +17,7 @@ export const queryKeys = {
     summary: (id: string) => ["guilds", "summary", id] as const,
     summaryByRealmName: (realm: string, name: string) => ["guilds", "summary", realm, name] as const,
     profile: (id: string) => ["guilds", "profile", id] as const,
+    horseRaceUmaReservations: ["guilds", "horseRaceUmaReservations"] as const,
     bossProgress: (realm: string, name: string, raidId: number) => ["guilds", "bossProgress", realm, name, raidId] as const,
     bossPullHistory: (realm: string, name: string, raidId: number, bossId: number, difficulty: string) =>
       ["guilds", "bossPullHistory", realm, name, raidId, bossId, difficulty] as const,
@@ -85,6 +86,14 @@ export function useGuildList() {
     staleTime: LIVE_STATUS_STALE_TIME,
     refetchInterval: LIVE_STATUS_REFETCH_INTERVAL,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useHorseRaceUmaReservations() {
+  return useQuery({
+    queryKey: queryKeys.guilds.horseRaceUmaReservations,
+    queryFn: () => api.getHorseRaceUmaReservations(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

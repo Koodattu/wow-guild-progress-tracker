@@ -3802,6 +3802,14 @@ class GuildService {
     return guilds;
   }
 
+  async getReservedHorseRaceUmaImages(): Promise<string[]> {
+    const images = await Guild.distinct("horseRaceUmaImage", {
+      horseRaceUmaImage: { $exists: true, $nin: [null, ""] },
+    });
+
+    return images.filter((image): image is string => typeof image === "string" && image.trim().length > 0).map((image) => image.trim());
+  }
+
   private getLastKilledBoss(bosses: any[] = []): any | null {
     const killedBosses = bosses.filter((boss) => boss.kills > 0 && boss.firstKillReportCode && boss.firstKillFightId);
     if (killedBosses.length === 0) return null;

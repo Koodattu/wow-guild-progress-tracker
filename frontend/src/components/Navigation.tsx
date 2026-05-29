@@ -9,7 +9,8 @@ import { setLocale, getLocale } from "@/lib/locale";
 import { useAuth } from "@/context/AuthContext";
 import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
 
-const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRaceCrest" | "horseRaceJapanese" | "horseRaceUma" | "horseRaceOff" }> = [
+const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRaceRandom" | "horseRaceCrest" | "horseRaceJapanese" | "horseRaceUma" | "horseRaceOff" }> = [
+  { mode: "random", labelKey: "horseRaceRandom" },
   { mode: "crest", labelKey: "horseRaceCrest" },
   { mode: "japanese", labelKey: "horseRaceJapanese" },
   { mode: "uma", labelKey: "horseRaceUma" },
@@ -100,13 +101,15 @@ export default function Navigation() {
 
   const isFrontpage = pathname === "/";
   const horseRaceModeLabel =
-    horseRaceMode === "crest"
-      ? t("horseRaceCrest")
-      : horseRaceMode === "japanese"
-        ? t("horseRaceJapanese")
-        : horseRaceMode === "uma"
-          ? t("horseRaceUma")
-          : t("horseRaceOff");
+    horseRaceMode === "random"
+      ? t("horseRaceRandom")
+      : horseRaceMode === "crest"
+        ? t("horseRaceCrest")
+        : horseRaceMode === "japanese"
+          ? t("horseRaceJapanese")
+          : horseRaceMode === "uma"
+            ? t("horseRaceUma")
+            : t("horseRaceOff");
 
   return (
     <>

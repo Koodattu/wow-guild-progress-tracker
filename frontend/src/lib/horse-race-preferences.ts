@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export const HORSE_RACE_MODES = ["crest", "japanese", "uma", "off"] as const;
+export const HORSE_RACE_MODES = ["random", "crest", "japanese", "uma", "off"] as const;
 
 export type HorseRaceMode = (typeof HORSE_RACE_MODES)[number];
 export interface HorseRacePreferences {
@@ -15,10 +15,9 @@ const MODE_STORAGE_KEY = "horse-race-mode";
 const CHARACTERS_STORAGE_KEY = "horse-race-show-characters";
 const BACKGROUND_STORAGE_KEY = "horse-race-show-background";
 const PREFERENCES_CHANGE_EVENT = "horse-race-preferences-change";
-const DEFAULT_MODE: HorseRaceMode = "crest";
+const DEFAULT_MODE: HorseRaceMode = "random";
 const DEFAULT_SHOW_CHARACTERS = true;
 const DEFAULT_SHOW_BACKGROUND = true;
-const FIRST_VISIT_MODES: HorseRaceMode[] = ["crest", "japanese", "uma"];
 const DEFAULT_PREFERENCES: HorseRacePreferences = {
   mode: DEFAULT_MODE,
   showCharacters: DEFAULT_SHOW_CHARACTERS,
@@ -31,10 +30,7 @@ function isHorseRaceMode(value: string | null): value is HorseRaceMode {
 
 function getInitialMode(storedMode: string | null): HorseRaceMode {
   if (isHorseRaceMode(storedMode)) return storedMode;
-
-  const randomMode = FIRST_VISIT_MODES[Math.floor(Math.random() * FIRST_VISIT_MODES.length)];
-  window.localStorage.setItem(MODE_STORAGE_KEY, randomMode);
-  return randomMode;
+  return DEFAULT_MODE;
 }
 
 function readStoredPreferences(): HorseRacePreferences {
