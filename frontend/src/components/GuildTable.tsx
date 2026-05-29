@@ -13,14 +13,73 @@ import {
 } from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
-import { useState, memo, useCallback } from "react";
+import { useState, memo, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { FaTwitch } from "react-icons/fa";
 
 type BestVodLink = NonNullable<GuildListItem["bestVodLinks"]>[number];
+type VodPhaseLink = {
+  label: string;
+  url: string;
+  offsetSeconds?: number;
+};
+
+const VOD_POPUP_WIDTH = 256;
+const VOD_POPUP_MARGIN = 8;
+const VOD_POPUP_GAP = 4;
 
 function formatVodPhaseLabel(label: string) {
-  return label.toLowerCase() === "reaction" ? "🎉" : label;
+  return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
+}
+
+function isVodPhaseLabel(label: string, expectedLabel: string) {
+  return label.trim().toLowerCase() === expectedLabel.toLowerCase();
+}
+
+function getVodPhaseLinks(vod: BestVodLink): VodPhaseLink[] {
+  return vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 }];
+}
+
+function getPrimaryVodPhaseIndex(phaseLinks: VodPhaseLink[]) {
+  const p1Index = phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "P1"));
+  if (p1Index !== -1) return p1Index;
+  return phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "VOD"));
+}
+
+function VodPhaseLinkRow({ vod }: { vod: BestVodLink }) {
+  const phaseLinks = getVodPhaseLinks(vod);
+  const primaryPhaseIndex = getPrimaryVodPhaseIndex(phaseLinks);
+  const primaryPhase = primaryPhaseIndex === -1 ? { label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 } : phaseLinks[primaryPhaseIndex];
+  const secondaryPhaseLinks = primaryPhaseIndex === -1 ? phaseLinks : phaseLinks.filter((_, index) => index !== primaryPhaseIndex);
+  const gridTemplateColumns = ["minmax(0, 1.35fr)", ...secondaryPhaseLinks.map(() => "minmax(0, 1fr)")].join(" ");
+
+  return (
+    <div className="grid gap-1" style={{ gridTemplateColumns }}>
+      <a
+        href={primaryPhase.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-w-0 items-center justify-center gap-1 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+        title={`Watch ${vod.channelName} ${primaryPhase.label}`}
+      >
+        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">{vod.channelName}</span>
+      </a>
+      {secondaryPhaseLinks.map((phase, index) => (
+        <a
+          key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds ?? index}`}
+          href={phase.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+          title={`Watch ${vod.channelName} ${phase.label}`}
+        >
+          <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
+        </a>
+      ))}
+    </div>
+  );
 }
 
 interface GuildTableProps {
@@ -30,39 +89,98 @@ interface GuildTableProps {
   selectedRaidId: number | null;
 }
 
-function VodPopup({ vod }: { vod: BestVodLink }) {
-  const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 }];
+function VodPopup({
+  vod,
+  anchor,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  vod: BestVodLink;
+  anchor: HTMLElement;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) {
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
-  return (
-    <div className="absolute left-1/2 top-full z-50 w-56 -translate-x-1/2 pt-1 text-left">
+  useEffect(() => {
+    const updatePosition = () => {
+      const rect = anchor.getBoundingClientRect();
+      const estimatedHeight = 96;
+      const maxLeft = window.innerWidth - VOD_POPUP_WIDTH - VOD_POPUP_MARGIN;
+      const left = Math.max(VOD_POPUP_MARGIN, Math.min(rect.left + rect.width / 2 - VOD_POPUP_WIDTH / 2, maxLeft));
+      const belowTop = rect.bottom + VOD_POPUP_GAP;
+      const top =
+        belowTop + estimatedHeight > window.innerHeight - VOD_POPUP_MARGIN && rect.top > estimatedHeight
+          ? rect.top - estimatedHeight - VOD_POPUP_GAP
+          : belowTop;
+
+      setPosition({ left, top: Math.max(VOD_POPUP_MARGIN, top) });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchor]);
+
+  if (typeof document === "undefined" || !position) return null;
+
+  return createPortal(
+    <div
+      className="fixed z-[70] pt-1 text-left"
+      style={{ left: position.left, top: position.top, width: VOD_POPUP_WIDTH }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onFocus={onMouseEnter}
+      onBlur={onMouseLeave}
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className="rounded border border-gray-700 bg-gray-900 p-2 shadow-xl">
-        <div className="min-w-0 space-y-1">
-          <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
-            <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">{vod.channelName}</span>
-          </div>
-          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
-            {phaseLinks.map((phase, index) => (
-              <a
-                key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}-${index}`}
-                href={phase.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
-                title={`Watch ${vod.channelName} ${phase.label}`}
-              >
-                <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
-              </a>
-            ))}
-          </div>
+        <div className="min-w-0">
+          <VodPhaseLinkRow vod={vod} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
   const [activeVodIndex, setActiveVodIndex] = useState<number | null>(null);
+  const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelClose = useCallback(() => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const openVod = useCallback(
+    (index: number, anchor: HTMLElement) => {
+      cancelClose();
+      setActiveVodIndex(index);
+      setPopupAnchor(anchor);
+    },
+    [cancelClose],
+  );
+
+  const scheduleClose = useCallback(() => {
+    cancelClose();
+    closeTimeoutRef.current = setTimeout(() => {
+      setActiveVodIndex(null);
+      setPopupAnchor(null);
+    }, 120);
+  }, [cancelClose]);
+
+  useEffect(() => {
+    return () => cancelClose();
+  }, [cancelClose]);
 
   if (!links || links.length === 0) {
     return <span className="text-gray-500">-</span>;
@@ -78,19 +196,17 @@ function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
           <div
             key={vodKey}
             className="relative inline-flex justify-center"
-            onMouseEnter={() => setActiveVodIndex(index)}
-            onMouseLeave={() => setActiveVodIndex(null)}
-            onFocus={() => setActiveVodIndex(index)}
-            onBlur={(event) => {
-              const nextTarget = event.relatedTarget;
-              if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-                setActiveVodIndex(null);
-              }
-            }}
+            onMouseEnter={(event) => openVod(index, event.currentTarget)}
+            onMouseLeave={scheduleClose}
+            onFocus={(event) => openVod(index, event.currentTarget)}
+            onBlur={scheduleClose}
           >
             <button
               type="button"
-              onClick={() => setActiveVodIndex(index)}
+              onClick={(event) => {
+                event.stopPropagation();
+                openVod(index, event.currentTarget);
+              }}
               className={
                 links.length === 1
                   ? "inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
@@ -104,7 +220,7 @@ function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
               <FaTwitch className={links.length === 1 ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5"} aria-hidden="true" />
               {links.length === 1 && <span className="truncate">{vod.channelName}</span>}
             </button>
-            {isActive && <VodPopup vod={vod} />}
+            {isActive && popupAnchor && <VodPopup vod={vod} anchor={popupAnchor} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />}
           </div>
         );
       })}
@@ -281,7 +397,7 @@ const GuildTableRow = memo(
         </td>
         <td
           className="px-3 py-3 text-center text-sm cursor-pointer transition-colors group-hover:bg-gray-800/30"
-          onClick={() => onGuildClick(guild)}
+          onClick={() => onRaidProgressClick(guild)}
         >
           <BestVodLinks links={guild.bestVodLinks} />
         </td>

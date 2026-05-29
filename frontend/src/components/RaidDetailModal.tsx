@@ -12,12 +12,64 @@ import PhaseDistributionChart from "./PhaseDistributionChart";
 import { useBossPullHistory } from "@/lib/queries";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
+type BestPullVodLink = NonNullable<BossBestPull["vodLinks"]>[number];
+type VodPhaseLink = {
+  label: string;
+  url: string;
+  offsetSeconds: number;
+};
+
 function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
 }
 
 function isVodPhaseLabel(label: string, expectedLabel: string) {
   return label.trim().toLowerCase() === expectedLabel.toLowerCase();
+}
+
+function getVodPhaseLinks(vod: BestPullVodLink): VodPhaseLink[] {
+  return vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
+}
+
+function getPrimaryVodPhaseIndex(phaseLinks: VodPhaseLink[]) {
+  const p1Index = phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "P1"));
+  if (p1Index !== -1) return p1Index;
+  return phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "VOD"));
+}
+
+function VodPhaseLinkRow({ vod }: { vod: BestPullVodLink }) {
+  const phaseLinks = getVodPhaseLinks(vod);
+  const primaryPhaseIndex = getPrimaryVodPhaseIndex(phaseLinks);
+  const primaryPhase = primaryPhaseIndex === -1 ? { label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds } : phaseLinks[primaryPhaseIndex];
+  const secondaryPhaseLinks = primaryPhaseIndex === -1 ? phaseLinks : phaseLinks.filter((_, index) => index !== primaryPhaseIndex);
+  const gridTemplateColumns = ["minmax(0, 1.35fr)", ...secondaryPhaseLinks.map(() => "minmax(0, 1fr)")].join(" ");
+
+  return (
+    <div className="grid gap-1" style={{ gridTemplateColumns }}>
+      <a
+        href={primaryPhase.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-w-0 items-center justify-center gap-1 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+        title={`Watch ${vod.channelName} ${primaryPhase.label}`}
+      >
+        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">{vod.channelName}</span>
+      </a>
+      {secondaryPhaseLinks.map((phase) => (
+        <a
+          key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
+          href={phase.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+          title={`Watch ${vod.channelName} ${phase.label}`}
+        >
+          <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
+        </a>
+      ))}
+    </div>
+  );
 }
 
 // Collapsible chart showing world rank history over time
@@ -124,48 +176,9 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
           </a>
           {pull.vodLinks && pull.vodLinks.length > 0 && (
             <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">
-              {pull.vodLinks.map((vod) => {
-                const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
-                const p1Link = phaseLinks.find((phase) => isVodPhaseLabel(phase.label, "P1"));
-                const visiblePhaseLinks = p1Link ? phaseLinks.filter((phase) => !isVodPhaseLabel(phase.label, "P1")) : phaseLinks;
-
-                return (
-                  <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
-                    <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
-                      <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      {p1Link ? (
-                        <a
-                          href={p1Link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="min-w-0 truncate transition-colors hover:text-purple-100 hover:underline"
-                          title={`Watch ${vod.channelName} ${p1Link.label}`}
-                        >
-                          {vod.channelName}
-                        </a>
-                      ) : (
-                        <span className="truncate">{vod.channelName}</span>
-                      )}
-                    </div>
-                    {visiblePhaseLinks.length > 0 && (
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${visiblePhaseLinks.length}, minmax(0, 1fr))` }}>
-                        {visiblePhaseLinks.map((phase) => (
-                          <a
-                            key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
-                            href={phase.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
-                            title={`Watch ${vod.channelName} ${phase.label}`}
-                          >
-                            <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {pull.vodLinks.map((vod) => (
+                <VodPhaseLinkRow key={`${vod.channelName}-${vod.videoId || vod.url}`} vod={vod} />
+              ))}
             </div>
           )}
         </div>
