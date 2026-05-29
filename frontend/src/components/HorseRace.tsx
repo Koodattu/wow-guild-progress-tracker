@@ -355,12 +355,12 @@ function getRacerHitboxClass(mode: HorseRaceMode) {
   return "h-9 w-9";
 }
 
-function RacerLink({ entry, mode, children }: { entry: RaceEntry; mode: HorseRaceMode; children: ReactNode }) {
+function RacerLink({ entry, mode, title, children }: { entry: RaceEntry; mode: HorseRaceMode; title?: string; children: ReactNode }) {
   return (
     <Link
       href={getGuildProfileHref(entry)}
-      className={`inline-flex cursor-pointer items-center justify-center overflow-visible rounded-full transition-all duration-150 hover:scale-125 hover:brightness-125 hover:saturate-125 focus-visible:outline-2 focus-visible:outline-yellow-300 ${getRacerHitboxClass(mode)}`}
-      title={`${entry.name}-${entry.realm}`}
+      className={`pointer-events-auto inline-flex cursor-pointer items-center justify-center overflow-visible rounded-full transition-all duration-150 hover:scale-125 hover:brightness-125 hover:saturate-125 focus-visible:outline-2 focus-visible:outline-yellow-300 ${getRacerHitboxClass(mode)}`}
+      title={title ?? `${entry.name}-${entry.realm}`}
       aria-label={`Open ${entry.name}-${entry.realm} guild profile`}
     >
       {children}
@@ -466,11 +466,10 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             {race.notStarted.map((entry, index) => (
               <div
                 key={entry.id}
-                className="absolute flex w-[63px] flex-col items-center"
+                className="pointer-events-none absolute flex w-[63px] flex-col items-center"
                 style={{ right: `${26 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
-                title={`${entry.name}-${entry.realm}: 0 pulls`}
               >
-                <RacerLink entry={entry} mode={mode}>
+                <RacerLink entry={entry} mode={mode} title={`${entry.name}-${entry.realm}: 0 pulls`}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                     <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
                   </div>
@@ -490,18 +489,17 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             {race.unfinished.map((entry, index) => (
               <div key={entry.id}>
                 <div
-                  className="absolute flex w-[72px] -translate-x-1/2 justify-center"
+                  className="pointer-events-none absolute flex w-[72px] -translate-x-1/2 justify-center"
                   style={{ left: `${entry.displayProgress}%`, top: `${markerTop}px`, zIndex: 20 + index }}
-                  title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}
                 >
-                  <RacerLink entry={entry} mode={mode}>
+                  <RacerLink entry={entry} mode={mode} title={`${entry.name}-${entry.realm}: ${getProgressLabel(entry)}`}>
                     <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                       <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
                     </div>
                   </RacerLink>
                 </div>
                 <div
-                  className="absolute flex w-24 -translate-x-1/2 justify-center"
+                  className="pointer-events-none absolute flex w-24 -translate-x-1/2 justify-center"
                   style={{ left: `${entry.displayProgress}%`, top: `${entry.labelPosition === "above" ? labelAboveTop : labelBelowTop}px`, zIndex: 40 + index }}
                 >
                   <RaceLabel entry={entry} />
@@ -528,11 +526,10 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId }: Hor
             {race.finished.map((entry, index) => (
               <div
                 key={entry.id}
-                className="absolute flex w-[66px] flex-col items-center"
+                className="pointer-events-none absolute flex w-[66px] flex-col items-center"
                 style={{ right: `${10 + index * FINISHED_SLOT_WIDTH}px`, top: `${markerTop}px`, zIndex: 30 + index }}
-                title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}
               >
-                <RacerLink entry={entry} mode={mode}>
+                <RacerLink entry={entry} mode={mode} title={`${index + 1}. ${entry.name}-${entry.realm}: finished`}>
                   <div className="drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]">
                     <RacerSprite entry={entry} mode={mode} umaImage={getUmaImage(entry)} />
                   </div>
