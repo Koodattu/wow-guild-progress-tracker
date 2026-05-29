@@ -265,16 +265,16 @@ const GuildTableRow = memo(
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
-      <tr key={guild._id} className={`group border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
+      <tr key={guild._id} className={`guild-table-row border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
         {/* First clickable area: Rank, World Rank, and Guild Name */}
         <td
-          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-guild-cell px-4 py-3 text-center cursor-pointer transition-colors"
           onClick={() => onGuildClick(guild)}
         >
           <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span>
         </td>
         <td
-          className="px-4 py-3 cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors"
           onClick={() => onGuildClick(guild)}
         >
           {worldRank ? (
@@ -286,7 +286,7 @@ const GuildTableRow = memo(
           )}
         </td>
         <td
-          className="px-4 py-3 cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors"
           onClick={() => onGuildClick(guild)}
         >
           <div className="flex items-center gap-2">
@@ -342,13 +342,13 @@ const GuildTableRow = memo(
         </td>
         {/* Second clickable area: Schedule and Raid Progress columns */}
         <td
-          className="px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors border-l-2 border-gray-700 group-hover:bg-gray-800/30"
+          className="guild-table-progress-cell px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors border-l-2 border-gray-700"
           onClick={() => onRaidProgressClick(guild)}
         >
           {guild.scheduleDisplay ? `${guild.scheduleDisplay.totalDays}D x ${guild.scheduleDisplay.averageHours}h` : "-"}
         </td>
         <td
-          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors"
           onClick={() => onRaidProgressClick(guild)}
         >
           <span className="text-orange-500 font-semibold" title={mythicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
@@ -357,7 +357,7 @@ const GuildTableRow = memo(
           </span>
         </td>
         <td
-          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors"
           onClick={() => onRaidProgressClick(guild)}
         >
           <span className="text-purple-500 font-semibold" title={heroicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
@@ -366,25 +366,25 @@ const GuildTableRow = memo(
           </span>
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
+          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
           {effectivePulls > 0 ? effectivePulls : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
+          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
           {effectiveBestPullDisplay ? formatPhaseDisplay(effectiveBestPullDisplay) : effectiveBestPull > 0 ? formatPercent(effectiveBestPull) : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
+          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
           {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
         </td>
         <td
-          className="px-3 py-3 text-center text-sm cursor-pointer transition-colors group-hover:bg-gray-800/30"
+          className="guild-table-progress-cell px-3 py-3 text-center text-sm cursor-pointer transition-colors"
           onClick={() => onRaidProgressClick(guild)}
         >
           <BestVodLinks links={guild.bestVodLinks} />

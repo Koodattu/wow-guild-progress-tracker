@@ -39,3 +39,10 @@ body {
   font-size: 1em;
   padding-left: 8px;
 }
+
+.guild-table-row:has(.guild-table-guild-cell:hover) .guild-table-guild-cell,
+.guild-table-row:has(.guild-table-guild-cell:focus-within) .guild-table-guild-cell,
+.guild-table-row:has(.guild-table-progress-cell:hover) .guild-table-progress-cell,
+.guild-table-row:has(.guild-table-progress-cell:focus-within) .guild-table-progress-cell {
+  background-color: rgb(55 65 81 / 0.45);
+}
