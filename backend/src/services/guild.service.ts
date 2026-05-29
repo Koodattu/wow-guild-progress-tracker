@@ -769,10 +769,7 @@ class GuildService {
       await guild.save();
 
       if (wasCurrentlyRaiding !== guild.isCurrentlyRaiding) {
-        await Promise.all([
-          cacheService.invalidate(cacheService.getGuildListKey()),
-          cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name)),
-        ]);
+        await Promise.all([cacheService.invalidate(cacheService.getGuildListKey()), cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name))]);
       }
 
       // Update world rankings only if there was new data and only for current raid
@@ -1070,11 +1067,11 @@ class GuildService {
       const hasCompletedMythic = mythicProgress && mythicProgress.bossesDefeated >= raidData.bosses.length;
       const hasExistingWorldRank = Boolean(
         mythicProgress?.worldRank ||
-          mythicProgress?.wclWorldRank ||
-          mythicProgress?.rioWorldRank ||
-          heroicProgress?.worldRank ||
-          heroicProgress?.wclWorldRank ||
-          heroicProgress?.rioWorldRank,
+        mythicProgress?.wclWorldRank ||
+        mythicProgress?.rioWorldRank ||
+        heroicProgress?.worldRank ||
+        heroicProgress?.wclWorldRank ||
+        heroicProgress?.rioWorldRank,
       );
       const hasWclWorldRank = Boolean(mythicProgress?.wclWorldRank || heroicProgress?.wclWorldRank);
       const hasRioWorldRank = Boolean(mythicProgress?.rioWorldRank || heroicProgress?.rioWorldRank);
@@ -3346,7 +3343,9 @@ class GuildService {
 
       if (phaseOffsetMs === null || phaseOffsetMs < 0 || phaseOffsetMs > fight.duration + 1000) return;
 
-      const isIntermission = String(transition.name || "").toLowerCase().includes("intermission");
+      const isIntermission = String(transition.name || "")
+        .toLowerCase()
+        .includes("intermission");
       const fallbackNumber = isIntermission ? ++intermissionCount : Number.isFinite(transition.id) ? transition.id : phaseLinks.length + 1;
       const label = this.getShortPhaseLabel(transition.name, fallbackNumber);
       const offsetSeconds = fightVodOffsetSeconds + Math.floor(phaseOffsetMs / 1000);
@@ -3363,7 +3362,7 @@ class GuildService {
     }
 
     if (fight.isKill && fight.duration > 0) {
-      const reactionOffsetSeconds = fightVodOffsetSeconds + Math.max(0, Math.floor(fight.duration / 1000) - 15);
+      const reactionOffsetSeconds = fightVodOffsetSeconds + Math.max(0, Math.floor(fight.duration / 1000) - 5);
       phaseLinks.push({
         label: "Reaction",
         url: fightVodService.buildTwitchVodUrl(videoId, reactionOffsetSeconds),
