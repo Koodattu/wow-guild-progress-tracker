@@ -17,6 +17,8 @@ import { useState, memo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { FaTwitch } from "react-icons/fa";
 
+type BestVodLink = NonNullable<GuildListItem["bestVodLinks"]>[number];
+
 interface GuildTableProps {
   guilds: GuildListItem[];
   onGuildClick: (guild: GuildListItem) => void;
@@ -24,90 +26,84 @@ interface GuildTableProps {
   selectedRaidId: number | null;
 }
 
+function VodPopup({ vod }: { vod: BestVodLink }) {
+  const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 }];
+
+  return (
+    <div className="absolute left-1/2 top-full z-50 w-56 -translate-x-1/2 pt-1 text-left">
+      <div className="rounded border border-gray-700 bg-gray-900 p-2 shadow-xl">
+        <div className="min-w-0 space-y-1">
+          <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
+            <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{vod.channelName}</span>
+          </div>
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
+            {phaseLinks.map((phase, index) => (
+              <a
+                key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}-${index}`}
+                href={phase.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+                title={`Watch ${vod.channelName} ${phase.label}`}
+              >
+                <span className="block truncate">{phase.label}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
-  const [open, setOpen] = useState(false);
+  const [activeVodIndex, setActiveVodIndex] = useState<number | null>(null);
 
   if (!links || links.length === 0) {
     return <span className="text-gray-500">-</span>;
   }
 
   return (
-    <div
-      className="relative inline-flex justify-center"
-      onClick={(event) => event.stopPropagation()}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-          setOpen(false);
-        }
-      }}
-    >
-      {links.length === 1 ? (
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
-          title={`Show ${links[0].channelName} VOD links`}
-          aria-haspopup="true"
-          aria-expanded={open}
-        >
-          <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">{links[0].channelName}</span>
-        </button>
-      ) : (
-        <div className="flex items-center justify-center gap-1">
-          {links.map((vod) => (
+    <div className="inline-flex items-center justify-center gap-1" onClick={(event) => event.stopPropagation()}>
+      {links.map((vod, index) => {
+        const isActive = activeVodIndex === index;
+        const vodKey = `${vod.channelName}-${vod.videoId || vod.url}`;
+
+        return (
+          <div
+            key={vodKey}
+            className="relative inline-flex justify-center"
+            onMouseEnter={() => setActiveVodIndex(index)}
+            onMouseLeave={() => setActiveVodIndex(null)}
+            onFocus={() => setActiveVodIndex(index)}
+            onBlur={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+                setActiveVodIndex(null);
+              }
+            }}
+          >
             <button
-              key={`${vod.channelName}-${vod.videoId || vod.url}`}
               type="button"
-              onClick={() => setOpen((value) => !value)}
-              className="inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+              onClick={() => setActiveVodIndex(index)}
+              className={
+                links.length === 1
+                  ? "inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
+                  : "inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+              }
               title={`Show ${vod.channelName} VOD links`}
-              aria-label={`Show ${vod.channelName} VOD links`}
+              aria-label={links.length === 1 ? undefined : `Show ${vod.channelName} VOD links`}
               aria-haspopup="true"
-              aria-expanded={open}
+              aria-expanded={isActive}
             >
-              <FaTwitch className="h-3.5 w-3.5" aria-hidden="true" />
+              <FaTwitch className={links.length === 1 ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5"} aria-hidden="true" />
+              {links.length === 1 && <span className="truncate">{vod.channelName}</span>}
             </button>
-          ))}
-        </div>
-      )}
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded border border-gray-700 bg-gray-900 p-2 text-left shadow-xl">
-          <div className="space-y-2">
-            {links.map((vod) => {
-              const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 }];
-
-              return (
-                <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
-                  <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
-                    <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{vod.channelName}</span>
-                  </div>
-                  <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
-                    {phaseLinks.map((phase, index) => (
-                      <a
-                        key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}-${index}`}
-                        href={phase.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
-                        title={`Watch ${vod.channelName} ${phase.label}`}
-                      >
-                        <span className="block truncate">{phase.label}</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            {isActive && <VodPopup vod={vod} />}
           </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -137,9 +133,6 @@ const GuildTableRow = memo(
     getCurrentPullCount: (progress: RaidProgressSummary | null) => number;
     t: any;
   }) => {
-    const [hoveredGuildInfoRow, setHoveredGuildInfoRow] = useState(false);
-    const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState(false);
-
     const mythicProgress = getLatestProgress(guild, "mythic");
     const heroicProgress = getLatestProgress(guild, "heroic");
     const mythicBestPull = getBestPullForProgress(mythicProgress);
@@ -164,21 +157,17 @@ const GuildTableRow = memo(
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
-      <tr key={guild._id} className={`border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
+      <tr key={guild._id} className={`group border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
         {/* First clickable area: Rank, World Rank, and Guild Name */}
         <td
-          className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredGuildInfoRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onGuildClick(guild)}
-          onMouseEnter={() => setHoveredGuildInfoRow(true)}
-          onMouseLeave={() => setHoveredGuildInfoRow(false)}
         >
           <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span>
         </td>
         <td
-          className={`px-4 py-3 cursor-pointer transition-colors ${hoveredGuildInfoRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onGuildClick(guild)}
-          onMouseEnter={() => setHoveredGuildInfoRow(true)}
-          onMouseLeave={() => setHoveredGuildInfoRow(false)}
         >
           {worldRank ? (
             <span className="font-semibold" style={{ color: getWorldRankColor(worldRank) }}>
@@ -189,10 +178,8 @@ const GuildTableRow = memo(
           )}
         </td>
         <td
-          className={`px-4 py-3 cursor-pointer transition-colors ${hoveredGuildInfoRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onGuildClick(guild)}
-          onMouseEnter={() => setHoveredGuildInfoRow(true)}
-          onMouseLeave={() => setHoveredGuildInfoRow(false)}
         >
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 shrink-0">
@@ -247,18 +234,14 @@ const GuildTableRow = memo(
         </td>
         {/* Second clickable area: Schedule and Raid Progress columns */}
         <td
-          className={`px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors border-l-2 border-gray-700 ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 text-center text-sm text-gray-300 cursor-pointer transition-colors border-l-2 border-gray-700 group-hover:bg-gray-800/30"
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           {guild.scheduleDisplay ? `${guild.scheduleDisplay.totalDays}D x ${guild.scheduleDisplay.averageHours}h` : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           <span className="text-orange-500 font-semibold" title={mythicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
             {mythicDisplay.text}
@@ -266,10 +249,8 @@ const GuildTableRow = memo(
           </span>
         </td>
         <td
-          className={`px-4 py-3 text-center cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className="px-4 py-3 text-center cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           <span className="text-purple-500 font-semibold" title={heroicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
             {heroicDisplay.text}
@@ -277,34 +258,26 @@ const GuildTableRow = memo(
           </span>
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           {effectivePulls > 0 ? effectivePulls : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           {effectiveBestPullDisplay ? formatPhaseDisplay(effectiveBestPullDisplay) : effectiveBestPull > 0 ? formatPercent(effectiveBestPull) : "-"}
         </td>
         <td
-          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors ${hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className={`px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors group-hover:bg-gray-800/30`}
           onClick={() => onRaidProgressClick(guild)}
-          onMouseEnter={() => setHoveredRaidProgressRow(true)}
-          onMouseLeave={() => setHoveredRaidProgressRow(false)}
         >
           {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
         </td>
         <td
-          className={`px-3 py-3 text-center text-sm cursor-pointer transition-colors ${hoveredGuildInfoRow || hoveredRaidProgressRow ? "bg-gray-800/30" : ""}`}
+          className="px-3 py-3 text-center text-sm cursor-pointer transition-colors group-hover:bg-gray-800/30"
           onClick={() => onGuildClick(guild)}
-          onMouseEnter={() => setHoveredGuildInfoRow(true)}
-          onMouseLeave={() => setHoveredGuildInfoRow(false)}
         >
           <BestVodLinks links={guild.bestVodLinks} />
         </td>
