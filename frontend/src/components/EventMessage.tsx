@@ -2,6 +2,7 @@
 
 import { Event } from "@/types";
 import { formatPhaseDisplay, getGuildProfileUrl } from "@/lib/utils";
+import { useBosses } from "@/lib/queries";
 import Link from "next/link";
 import GuildCrest from "@/components/GuildCrest";
 import IconImage from "@/components/IconImage";
@@ -30,10 +31,16 @@ function GuildName({ event }: { event: Event }) {
 
 // Inline boss name with optional icon
 function BossName({ event }: { event: Event }) {
+  const shouldResolveBossIcon = !event.bossIconUrl && !!event.bossName;
+  const { data: bosses = [] } = useBosses(shouldResolveBossIcon ? event.raidId : null);
+
   if (!event.bossName) return null;
+
+  const bossIconUrl = event.bossIconUrl ?? (bosses.find((boss) => boss.id === event.bossId) ?? bosses.find((boss) => boss.name === event.bossName))?.iconUrl;
+
   return (
     <span className="inline-flex items-center gap-1 align-middle">
-      {event.bossIconUrl && <IconImage iconFilename={event.bossIconUrl} alt={event.bossName} width={18} height={18} className="inline-block rounded shrink-0" />}
+      {bossIconUrl && <IconImage iconFilename={bossIconUrl} alt={event.bossName} width={18} height={18} className="inline-block rounded shrink-0" />}
       <span className="font-semibold">{event.bossName}</span>
     </span>
   );

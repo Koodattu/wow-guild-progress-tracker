@@ -258,8 +258,8 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     });
   };
 
-  const getBossIconUrl = (bossName: string): string | undefined => {
-    const boss = bosses.find((b) => b.name === bossName);
+  const getBossIconUrl = (bossId: number, bossName: string): string | undefined => {
+    const boss = bosses.find((b) => b.id === bossId) ?? bosses.find((b) => b.name === bossName);
     return boss?.iconUrl;
   };
 
@@ -285,7 +285,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
-    const bossIconFilename = getBossIconUrl(boss.bossName);
+    const bossIconFilename = getBossIconUrl(boss.bossId, boss.bossName);
     const expandedKey = `${boss.bossId}-${difficulty}`;
     const isExpanded = expandedBosses.has(expandedKey);
 
@@ -358,7 +358,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
     const hasKillLog = boss.firstKillReportCode && boss.firstKillFightId;
     const hasBestPullLog = boss.bestPullReportCode && boss.bestPullFightId;
     const hasLogLink = (isDefeated && hasKillLog) || (!isDefeated && hasBestPullLog);
-    const bossIconFilename = getBossIconUrl(boss.bossName);
+    const bossIconFilename = getBossIconUrl(boss.bossId, boss.bossName);
     const expandedKey = `${boss.bossId}-${difficulty}`;
     const isExpanded = expandedBosses.has(expandedKey);
 

@@ -230,8 +230,8 @@ export default function RaidAnalyticsPage() {
     setSelectedRaidId(raidId);
   };
 
-  const getBossIconUrl = (bossName: string): string | undefined => {
-    const boss = bosses.find((b) => b.name === bossName);
+  const getBossIconUrl = (bossId: number, bossName: string): string | undefined => {
+    const boss = bosses.find((b) => b.id === bossId) ?? bosses.find((b) => b.name === bossName);
     return boss?.iconUrl;
   };
 
@@ -344,7 +344,7 @@ export default function RaidAnalyticsPage() {
               <h2 className="text-base font-bold text-white mb-3">{t("bossBreakdown")}</h2>
               <div className="space-y-2">
                 {analytics.bosses.map((boss, index) => {
-                  const bossIcon = getBossIconUrl(boss.bossName);
+                  const bossIcon = getBossIconUrl(boss.bossId, boss.bossName);
                   return (
                     <div key={boss.bossId} className="bg-gray-900/60 rounded border border-gray-800/50 overflow-hidden hover:border-gray-700/50 transition-colors">
                       {/* Boss header with inline stats */}
