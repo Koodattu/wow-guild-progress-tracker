@@ -136,8 +136,9 @@ export function formatPhaseDisplay(displayString: string): string {
     .replace(/Intermission (\d+)\b/gi, "I$1")
     .replace(/Intermission One\b/gi, "I1")
     .replace(/Intermission Two\b/gi, "I2")
-    // Intermission (without number) -> I
-    .replace(/Intermission\b/gi, "I");
+    // Intermission (without number) -> I1
+    .replace(/Intermission\b/gi, "I1")
+    .replace(/\bI\?/gi, "I1");
 
   return formatted;
 }

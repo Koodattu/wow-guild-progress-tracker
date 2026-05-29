@@ -3298,9 +3298,8 @@ class GuildService {
     }
   }
 
-  private getShortPhaseLabel(phaseName: string | undefined, phaseId: number): string {
-    if (!phaseName) return `P${phaseId}`;
-
+  private getShortPhaseLabel(phaseName: string | undefined, fallbackNumber: number): string {
+    if (!phaseName) return `P${fallbackNumber}`;
     const normalized = phaseName.toLowerCase();
     const numberWords: Record<string, string> = {
       one: "1",
@@ -3316,24 +3315,25 @@ class GuildService {
     };
 
     const match = normalized.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
-    const number = match ? numberWords[match[1]] || match[1] : String(phaseId);
+    const number = match ? numberWords[match[1]] || match[1] : String(fallbackNumber);
 
     if (normalized.includes("intermission")) return `I${number}`;
     return `P${number}`;
   }
 
   private getPhaseLinksForFight(fight: any | undefined, videoId: string, fightVodOffsetSeconds: number): Array<{ label: string; url: string; offsetSeconds: number }> {
-    const phaseLinks = new Map<string, { label: string; url: string; offsetSeconds: number }>();
-
-    phaseLinks.set("P1", {
+    const phaseLinks: Array<{ label: string; url: string; offsetSeconds: number }> = [];
+    const fightStartLink = {
       label: "P1",
       url: fightVodService.buildTwitchVodUrl(videoId, fightVodOffsetSeconds),
       offsetSeconds: fightVodOffsetSeconds,
-    });
+    };
 
-    if (!fight) return Array.from(phaseLinks.values());
+    if (!fight) return [fightStartLink];
 
     const transitions = [...(fight.phaseTransitions || [])].sort((a: any, b: any) => a.startTime - b.startTime);
+    let addedTransitionLink = false;
+    let intermissionCount = 0;
 
     transitions.forEach((transition: any) => {
       let phaseOffsetMs: number | null = null;
@@ -3346,25 +3346,32 @@ class GuildService {
 
       if (phaseOffsetMs === null || phaseOffsetMs < 0 || phaseOffsetMs > fight.duration + 1000) return;
 
-      const label = this.getShortPhaseLabel(transition.name, transition.id);
+      const isIntermission = String(transition.name || "").toLowerCase().includes("intermission");
+      const fallbackNumber = isIntermission ? ++intermissionCount : Number.isFinite(transition.id) ? transition.id : phaseLinks.length + 1;
+      const label = this.getShortPhaseLabel(transition.name, fallbackNumber);
       const offsetSeconds = fightVodOffsetSeconds + Math.floor(phaseOffsetMs / 1000);
-      phaseLinks.set(label, {
+      phaseLinks.push({
         label,
         url: fightVodService.buildTwitchVodUrl(videoId, offsetSeconds),
         offsetSeconds,
       });
+      addedTransitionLink = true;
     });
+
+    if (!addedTransitionLink) {
+      phaseLinks.push(fightStartLink);
+    }
 
     if (fight.isKill && fight.duration > 0) {
       const reactionOffsetSeconds = fightVodOffsetSeconds + Math.max(0, Math.floor(fight.duration / 1000) - 15);
-      phaseLinks.set("Reaction", {
+      phaseLinks.push({
         label: "Reaction",
         url: fightVodService.buildTwitchVodUrl(videoId, reactionOffsetSeconds),
         offsetSeconds: reactionOffsetSeconds,
       });
     }
 
-    return Array.from(phaseLinks.values());
+    return phaseLinks;
   }
 
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
@@ -4047,6 +4054,20 @@ class GuildService {
 
     const vodLinksByFight = new Map<string, any[]>();
     if (vodTargetKeys.length > 0) {
+      const targetFights = await Fight.find({
+        $or: vodTargetKeys.map((target) => ({
+          reportCode: target.reportCode,
+          fightId: target.fightId,
+        })),
+      })
+        .select("reportCode fightId duration isKill phaseTransitions fightStartTime fightEndTime")
+        .lean();
+
+      const targetFightsByKey = new Map<string, any>();
+      targetFights.forEach((fight) => {
+        targetFightsByKey.set(`${fight.reportCode}:${fight.fightId}`, fight);
+      });
+
       const vodLinks = await FightVodLink.find({
         status: "resolved",
         $or: vodTargetKeys.map((target) => ({
@@ -4063,10 +4084,13 @@ class GuildService {
 
         const key = `${link.reportCode}:${link.fightId}`;
         const linksForFight = vodLinksByFight.get(key) || [];
+        const offsetSeconds = link.offsetSeconds || 0;
         linksForFight.push({
           channelName: link.channelName,
-          url: link.videoId ? fightVodService.buildTwitchVodUrl(link.videoId, link.offsetSeconds || 0) : link.vodUrl,
+          url: link.videoId ? fightVodService.buildTwitchVodUrl(link.videoId, offsetSeconds) : link.vodUrl,
+          offsetSeconds,
           videoId: link.videoId,
+          phaseLinks: link.videoId ? this.getPhaseLinksForFight(targetFightsByKey.get(key), link.videoId, offsetSeconds) : [],
         });
         vodLinksByFight.set(key, linksForFight);
       });

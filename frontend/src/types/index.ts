@@ -209,7 +209,13 @@ export interface GuildListItem {
   bestVodLinks?: Array<{
     channelName: string;
     url: string;
+    offsetSeconds?: number;
     videoId?: string;
+    phaseLinks?: Array<{
+      label: string;
+      url: string;
+      offsetSeconds: number;
+    }>;
   }>;
   officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;

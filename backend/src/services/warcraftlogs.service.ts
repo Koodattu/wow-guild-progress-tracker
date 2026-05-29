@@ -699,11 +699,11 @@ class WarcraftLogsService {
       if (match) {
         let num = match[1];
         if (isNaN(Number(num))) {
-          num = wordToNumber[num.toLowerCase()] || "?";
+          num = wordToNumber[num.toLowerCase()] || "1";
         }
         phaseDisplay = `I${num}`;
       } else {
-        phaseDisplay = "I?";
+        phaseDisplay = "I1";
       }
     }
 

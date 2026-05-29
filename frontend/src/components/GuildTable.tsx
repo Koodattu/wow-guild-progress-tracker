@@ -25,43 +25,89 @@ interface GuildTableProps {
 }
 
 function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
+  const [open, setOpen] = useState(false);
+
   if (!links || links.length === 0) {
     return <span className="text-gray-500">-</span>;
   }
 
-  if (links.length === 1) {
-    const vod = links[0];
-    return (
-      <a
-        href={vod.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => event.stopPropagation()}
-        className="inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
-        title={`Watch ${vod.channelName} VOD`}
-      >
-        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
-        <span className="truncate">{vod.channelName}</span>
-      </a>
-    );
-  }
-
   return (
-    <div className="flex items-center justify-center gap-1">
-      {links.map((vod) => (
-        <a
-          key={`${vod.channelName}-${vod.videoId || vod.url}`}
-          href={vod.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => event.stopPropagation()}
-          className="inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
-          title={`Watch ${vod.channelName} VOD`}
-          aria-label={`Watch ${vod.channelName} VOD`}
+    <div
+      className="relative inline-flex justify-center"
+      onClick={(event) => event.stopPropagation()}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      {links.length === 1 ? (
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
+          title={`Show ${links[0].channelName} VOD links`}
+          aria-haspopup="true"
+          aria-expanded={open}
         >
-          <FaTwitch className="h-3.5 w-3.5" aria-hidden="true" />
-        </a>
-      ))}
+          <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="truncate">{links[0].channelName}</span>
+        </button>
+      ) : (
+        <div className="flex items-center justify-center gap-1">
+          {links.map((vod) => (
+            <button
+              key={`${vod.channelName}-${vod.videoId || vod.url}`}
+              type="button"
+              onClick={() => setOpen((value) => !value)}
+              className="inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+              title={`Show ${vod.channelName} VOD links`}
+              aria-label={`Show ${vod.channelName} VOD links`}
+              aria-haspopup="true"
+              aria-expanded={open}
+            >
+              <FaTwitch className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded border border-gray-700 bg-gray-900 p-2 text-left shadow-xl">
+          <div className="space-y-2">
+            {links.map((vod) => {
+              const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds || 0 }];
+
+              return (
+                <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
+                  <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
+                    <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{vod.channelName}</span>
+                  </div>
+                  <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
+                    {phaseLinks.map((phase, index) => (
+                      <a
+                        key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}-${index}`}
+                        href={phase.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+                        title={`Watch ${vod.channelName} ${phase.label}`}
+                      >
+                        <span className="block truncate">{phase.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
