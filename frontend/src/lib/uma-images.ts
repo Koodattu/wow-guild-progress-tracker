@@ -18,6 +18,8 @@ export const UMA_IMAGES = [
   "winning ticket.png",
   "laku clap.png",
   "tony halme.png",
+  "marvelous sunday.png",
+  "tokai teio wheelchair.png",
 ] as const;
 
 export type UmaImage = (typeof UMA_IMAGES)[number];

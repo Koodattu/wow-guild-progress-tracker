@@ -359,7 +359,7 @@ function RacerLink({ entry, mode, children }: { entry: RaceEntry; mode: HorseRac
   return (
     <Link
       href={getGuildProfileHref(entry)}
-      className={`inline-flex cursor-pointer items-center justify-center overflow-visible rounded-full transition-all duration-150 hover:scale-125 hover:brightness-125 hover:saturate-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-300 ${getRacerHitboxClass(mode)}`}
+      className={`inline-flex cursor-pointer items-center justify-center overflow-visible rounded-full transition-all duration-150 hover:scale-125 hover:brightness-125 hover:saturate-125 focus-visible:outline-2 focus-visible:outline-yellow-300 ${getRacerHitboxClass(mode)}`}
       title={`${entry.name}-${entry.realm}`}
       aria-label={`Open ${entry.name}-${entry.realm} guild profile`}
     >
