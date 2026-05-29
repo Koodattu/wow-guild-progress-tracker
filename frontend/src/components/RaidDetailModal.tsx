@@ -23,51 +23,39 @@ function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
 }
 
-function isVodPhaseLabel(label: string, expectedLabel: string) {
-  return label.trim().toLowerCase() === expectedLabel.toLowerCase();
-}
-
 function getVodPhaseLinks(vod: BestPullVodLink): VodPhaseLink[] {
   return vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
 }
 
-function getPrimaryVodPhaseIndex(phaseLinks: VodPhaseLink[]) {
-  const p1Index = phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "P1"));
-  if (p1Index !== -1) return p1Index;
-  return phaseLinks.findIndex((phase) => isVodPhaseLabel(phase.label, "VOD"));
-}
-
 function VodPhaseLinkRow({ vod }: { vod: BestPullVodLink }) {
   const phaseLinks = getVodPhaseLinks(vod);
-  const primaryPhaseIndex = getPrimaryVodPhaseIndex(phaseLinks);
-  const primaryPhase = primaryPhaseIndex === -1 ? { label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds } : phaseLinks[primaryPhaseIndex];
-  const secondaryPhaseLinks = primaryPhaseIndex === -1 ? phaseLinks : phaseLinks.filter((_, index) => index !== primaryPhaseIndex);
-  const gridTemplateColumns = ["minmax(0, 1.35fr)", ...secondaryPhaseLinks.map(() => "minmax(0, 1fr)")].join(" ");
 
   return (
-    <div className="grid gap-1" style={{ gridTemplateColumns }}>
+    <div className="min-w-0 space-y-1">
       <a
-        href={primaryPhase.url}
+        href={`https://www.twitch.tv/${encodeURIComponent(vod.channelName)}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex min-w-0 items-center justify-center gap-1 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
-        title={`Watch ${vod.channelName} ${primaryPhase.label}`}
+        className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200 transition-colors hover:text-purple-100 hover:underline"
+        title={`Open ${vod.channelName} on Twitch`}
       >
         <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
         <span className="truncate">{vod.channelName}</span>
       </a>
-      {secondaryPhaseLinks.map((phase) => (
-        <a
-          key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
-          href={phase.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
-          title={`Watch ${vod.channelName} ${phase.label}`}
-        >
-          <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
-        </a>
-      ))}
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
+        {phaseLinks.map((phase) => (
+          <a
+            key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
+            href={phase.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+            title={`Watch ${vod.channelName} ${phase.label}`}
+          >
+            <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -166,13 +154,15 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
         >
           <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
             <div className="flex items-center justify-between gap-2">
-              <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+                <span className="shrink-0 text-[11px] text-gray-500">{formatTime(pull.duration)}</span>
+              </div>
               <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
-                <span>{formatTime(pull.duration)}</span>
+                <span>{formatPullDate(pull.timestamp)}</span>
                 <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
               </div>
             </div>
-            <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
           </a>
           {pull.vodLinks && pull.vodLinks.length > 0 && (
             <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">

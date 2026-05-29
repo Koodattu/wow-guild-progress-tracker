@@ -26,7 +26,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 
-RUN mkdir -p /app/logs /app/public/icons
+RUN mkdir -p /app/logs /app/public/icons /app/data/icons
 
 EXPOSE 3001
 EXPOSE 3002

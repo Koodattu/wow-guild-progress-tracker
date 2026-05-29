@@ -7,8 +7,7 @@ export class IconCacheService {
   private readonly iconsDir: string;
 
   constructor() {
-    // Store icons in a public directory
-    this.iconsDir = path.join(__dirname, "../../public/icons");
+    this.iconsDir = process.env.ICON_CACHE_DIR || path.join(__dirname, "../../public/icons");
 
     // Create icons directory if it doesn't exist
     this.ensureIconsDirectory();

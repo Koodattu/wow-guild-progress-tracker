@@ -144,8 +144,13 @@ app.use(session(sessionConfig));
 // Analytics middleware - tracks all requests automatically
 app.use(analyticsMiddleware);
 
-// Serve static icons
-app.use("/icons", express.static(path.join(__dirname, "../public/icons")));
+// Serve runtime-downloaded icons first, then bundled icons copied into the image.
+const bundledIconsDir = path.join(__dirname, "../public/icons");
+const runtimeIconsDir = process.env.ICON_CACHE_DIR;
+if (runtimeIconsDir && runtimeIconsDir !== bundledIconsDir) {
+  app.use("/icons", express.static(runtimeIconsDir));
+}
+app.use("/icons", express.static(bundledIconsDir));
 
 // ============================================================================
 // ROUTES
