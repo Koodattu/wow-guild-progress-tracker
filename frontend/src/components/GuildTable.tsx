@@ -19,6 +19,10 @@ import { FaTwitch } from "react-icons/fa";
 
 type BestVodLink = NonNullable<GuildListItem["bestVodLinks"]>[number];
 
+function formatVodPhaseLabel(label: string) {
+  return label.toLowerCase() === "reaction" ? "🎉" : label;
+}
+
 interface GuildTableProps {
   guilds: GuildListItem[];
   onGuildClick: (guild: GuildListItem) => void;
@@ -47,7 +51,7 @@ function VodPopup({ vod }: { vod: BestVodLink }) {
                 className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
                 title={`Watch ${vod.channelName} ${phase.label}`}
               >
-                <span className="block truncate">{phase.label}</span>
+                <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
               </a>
             ))}
           </div>

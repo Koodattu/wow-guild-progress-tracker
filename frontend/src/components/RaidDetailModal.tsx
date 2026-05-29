@@ -12,6 +12,10 @@ import PhaseDistributionChart from "./PhaseDistributionChart";
 import { useBossPullHistory } from "@/lib/queries";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
+function formatVodPhaseLabel(label: string) {
+  return label.toLowerCase() === "reaction" ? "🎉" : label;
+}
+
 // Collapsible chart showing world rank history over time
 function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -137,7 +141,7 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
                             className="min-w-0 rounded bg-purple-600/20 px-1.5 py-1 text-center text-[11px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
                             title={`Watch ${vod.channelName} ${phase.label}`}
                           >
-                            <span className="block truncate">{phase.label}</span>
+                            <span className="block truncate">{formatVodPhaseLabel(phase.label)}</span>
                           </a>
                         ))}
                       </div>
