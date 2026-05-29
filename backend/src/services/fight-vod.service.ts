@@ -2,19 +2,24 @@ import mongoose from "mongoose";
 import FightVodLink from "../models/FightVodLink";
 import Fight from "../models/Fight";
 import Guild from "../models/Guild";
+import TwitchVodProfile, { TwitchBroadcasterType, TwitchVodRetentionSource } from "../models/TwitchVodProfile";
 import type { IFight } from "../models/Fight";
 import type { IBossProgress, IGuild, IRaidProgress } from "../models/Guild";
 import type { IStreamer } from "../models/Streamer";
-import twitchService, { TwitchVideoData } from "./twitch.service";
+import twitchService, { TwitchUserData, TwitchVideoData } from "./twitch.service";
 import logger from "../utils/logger";
 
-const VOD_RETENTION_DAYS = 13;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NORMAL_VOD_RETENTION_DAYS = 7;
+const AFFILIATE_VOD_RETENTION_DAYS = 14;
+const EXTENDED_VOD_RETENTION_DAYS = 60;
+const MAX_VOD_RETENTION_DAYS = EXTENDED_VOD_RETENTION_DAYS;
 const RESOLUTION_RETRY_MS = 30 * 60 * 1000;
 const STREAM_END_TOLERANCE_MS = 30 * 60 * 1000;
 const VOD_LINK_PREROLL_SECONDS = 10;
 const HISTORICAL_MATCH_START_TOLERANCE_MS = 2 * 60 * 1000;
 const HISTORICAL_MATCH_END_TOLERANCE_MS = 2 * 60 * 1000;
-const HISTORICAL_VIDEO_LOOKUP_LIMIT = 100;
+const HISTORICAL_VIDEO_LOOKUP_MAX_PAGES = 5;
 
 interface StreamSnapshot {
   channelName: string;
@@ -39,6 +44,27 @@ interface HistoricalVodMatch {
   confidence: number;
 }
 
+interface BackfillStreamer {
+  channelName: string;
+  twitchUserId: string;
+  user: TwitchUserData | undefined;
+}
+
+interface VodRetentionSnapshot {
+  twitchUserId: string;
+  channelName: string;
+  broadcasterType: TwitchBroadcasterType;
+  expectedVodRetentionDays: number;
+  retentionSource: TwitchVodRetentionSource;
+}
+
+interface VodAvailabilityFields {
+  expectedExpiresAt: Date;
+  hardExpiresAt: Date;
+  expiresAt: Date;
+  nextAvailabilityCheckAt?: Date;
+}
+
 export interface FightVodBackfillResult {
   guildsChecked: number;
   streamersChecked: number;
@@ -52,6 +78,18 @@ export interface FightVodBackfillResult {
   errors: number;
 }
 
+export interface FightVodAvailabilityResult {
+  checked: number;
+  stillAvailable: number;
+  unavailable: number;
+  errors: number;
+}
+
+export interface FightVodCleanupResult {
+  deleted: number;
+  availability: FightVodAvailabilityResult;
+}
+
 class FightVodService {
   private toDate(value: Date | string | undefined): Date | null {
     if (!value) return null;
@@ -59,8 +97,134 @@ class FightVodService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  private getExpiresAt(streamStartedAt: Date): Date {
-    return new Date(streamStartedAt.getTime() + VOD_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  private getDateAfterDays(date: Date, days: number): Date {
+    return new Date(date.getTime() + days * DAY_MS);
+  }
+
+  private getHardExpiresAt(streamStartedAt: Date): Date {
+    return this.getDateAfterDays(streamStartedAt, MAX_VOD_RETENTION_DAYS);
+  }
+
+  private normalizeBroadcasterType(value: string | undefined): TwitchBroadcasterType {
+    if (value === "partner" || value === "affiliate") return value;
+    return "";
+  }
+
+  private getDefaultRetentionDays(broadcasterType: TwitchBroadcasterType): number {
+    if (broadcasterType === "partner") return EXTENDED_VOD_RETENTION_DAYS;
+    if (broadcasterType === "affiliate") return AFFILIATE_VOD_RETENTION_DAYS;
+    return NORMAL_VOD_RETENTION_DAYS;
+  }
+
+  private getDefaultRetentionSource(broadcasterType: TwitchBroadcasterType): TwitchVodRetentionSource {
+    if (broadcasterType === "partner") return "partner";
+    if (broadcasterType === "affiliate") return "affiliate-default";
+    return "normal-default";
+  }
+
+  private getOldestArchiveCreatedAt(videos: TwitchVideoData[]): Date | undefined {
+    return videos.reduce<Date | undefined>((oldest, video) => {
+      const createdAt = this.toDate(video.created_at);
+      if (!createdAt) return oldest;
+      if (!oldest || createdAt.getTime() < oldest.getTime()) return createdAt;
+      return oldest;
+    }, undefined);
+  }
+
+  private hasObservedExtendedRetention(videos: TwitchVideoData[], broadcasterType: TwitchBroadcasterType, now: Date): boolean {
+    if (broadcasterType === "partner") return true;
+
+    const threshold = now.getTime() - (this.getDefaultRetentionDays(broadcasterType) + 1) * DAY_MS;
+    return videos.some((video) => {
+      const createdAt = this.toDate(video.created_at);
+      return Boolean(createdAt && createdAt.getTime() <= threshold);
+    });
+  }
+
+  private async getStoredRetentionSnapshot(twitchUserId: string, channelName: string): Promise<VodRetentionSnapshot> {
+    const profile = await TwitchVodProfile.findOne({ twitchUserId }).lean();
+    if (profile) {
+      const broadcasterType = this.normalizeBroadcasterType(profile.broadcasterType);
+      return {
+        twitchUserId,
+        channelName: profile.channelName || channelName,
+        broadcasterType,
+        expectedVodRetentionDays: profile.expectedVodRetentionDays || this.getDefaultRetentionDays(broadcasterType),
+        retentionSource: profile.retentionSource || this.getDefaultRetentionSource(broadcasterType),
+      };
+    }
+
+    const broadcasterType = this.normalizeBroadcasterType(undefined);
+    return {
+      twitchUserId,
+      channelName,
+      broadcasterType,
+      expectedVodRetentionDays: this.getDefaultRetentionDays(broadcasterType),
+      retentionSource: this.getDefaultRetentionSource(broadcasterType),
+    };
+  }
+
+  private async refreshRetentionSnapshot(channelName: string, twitchUserId: string, user: TwitchUserData | undefined, videos: TwitchVideoData[], now: Date): Promise<VodRetentionSnapshot> {
+    const existingProfile = await TwitchVodProfile.findOne({ twitchUserId }).lean();
+    const broadcasterType = this.normalizeBroadcasterType(user?.broadcaster_type || existingProfile?.broadcasterType);
+    const oldestArchiveCreatedAt = this.getOldestArchiveCreatedAt(videos);
+
+    let expectedVodRetentionDays = this.getDefaultRetentionDays(broadcasterType);
+    let retentionSource = this.getDefaultRetentionSource(broadcasterType);
+
+    if (existingProfile?.retentionSource === "manual") {
+      expectedVodRetentionDays = existingProfile.expectedVodRetentionDays;
+      retentionSource = "manual";
+    } else if (this.hasObservedExtendedRetention(videos, broadcasterType, now)) {
+      expectedVodRetentionDays = EXTENDED_VOD_RETENTION_DAYS;
+      retentionSource = broadcasterType === "partner" ? "partner" : "observed-extended";
+    }
+
+    await TwitchVodProfile.updateOne(
+      { twitchUserId },
+      {
+        $set: {
+          twitchUserId,
+          channelName,
+          broadcasterType,
+          expectedVodRetentionDays,
+          retentionSource,
+          retentionObservedAt: now,
+          oldestArchiveCreatedAt,
+          lastArchiveCheckedAt: now,
+          nextRetentionRefreshAt: this.getDateAfterDays(now, 1),
+        },
+      },
+      { upsert: true },
+    );
+
+    return {
+      twitchUserId,
+      channelName,
+      broadcasterType,
+      expectedVodRetentionDays,
+      retentionSource,
+    };
+  }
+
+  private getAvailabilityFields(retention: VodRetentionSnapshot, streamStartedAt: Date, now: Date): VodAvailabilityFields {
+    const hardExpiresAt = this.getHardExpiresAt(streamStartedAt);
+    const expectedExpiresAt = this.getDateAfterDays(streamStartedAt, retention.expectedVodRetentionDays);
+    let nextAvailabilityCheckAt: Date | undefined;
+
+    if (retention.broadcasterType !== "partner") {
+      const defaultCheckAt = this.getDateAfterDays(streamStartedAt, this.getDefaultRetentionDays(retention.broadcasterType) + 1);
+      if (defaultCheckAt.getTime() > now.getTime() && defaultCheckAt.getTime() < hardExpiresAt.getTime()) {
+        nextAvailabilityCheckAt = defaultCheckAt;
+      }
+    }
+
+    return {
+      expectedExpiresAt,
+      hardExpiresAt,
+      expiresAt: hardExpiresAt,
+      nextAvailabilityCheckAt,
+    };
   }
 
   private getKnownStreamSnapshot(streamer: IStreamer, fightStartedAt: Date): StreamSnapshot | null {
@@ -103,7 +267,7 @@ class FightVodService {
     return guild.streamers
       .map((streamer) => this.getKnownStreamSnapshot(streamer, fightStartedAt))
       .filter((snapshot): snapshot is StreamSnapshot => Boolean(snapshot))
-      .filter((snapshot) => this.getExpiresAt(snapshot.streamStartedAt).getTime() > now);
+      .filter((snapshot) => this.getHardExpiresAt(snapshot.streamStartedAt).getTime() > now);
   }
 
   async enqueueForFights(guild: IGuild, raidProgress: IRaidProgress, boss: IBossProgress, fights: IFight[]): Promise<void> {
@@ -114,6 +278,9 @@ class FightVodService {
       if (snapshots.length === 0) continue;
 
       for (const snapshot of snapshots) {
+        const retention = await this.getStoredRetentionSnapshot(snapshot.twitchUserId, snapshot.channelName);
+        const availability = this.getAvailabilityFields(retention, snapshot.streamStartedAt, new Date());
+
         await FightVodLink.updateOne(
           {
             reportCode: fight.reportCode,
@@ -135,8 +302,12 @@ class FightVodService {
               streamId: snapshot.streamId,
               streamStartedAt: snapshot.streamStartedAt,
               status: "pending",
+              availabilityStatus: "active",
+              expectedExpiresAt: availability.expectedExpiresAt,
+              hardExpiresAt: availability.hardExpiresAt,
+              nextAvailabilityCheckAt: availability.nextAvailabilityCheckAt,
               attempts: 0,
-              expiresAt: this.getExpiresAt(snapshot.streamStartedAt),
+              expiresAt: availability.expiresAt,
             },
           },
           { upsert: true },
@@ -324,7 +495,7 @@ class FightVodService {
     }
 
     const now = new Date();
-    const cutoff = new Date(now.getTime() - VOD_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(now.getTime() - MAX_VOD_RETENTION_DAYS * DAY_MS);
     const guilds = await Guild.find({
       streamers: { $exists: true, $ne: [] },
       progress: { $exists: true, $ne: [] },
@@ -344,17 +515,18 @@ class FightVodService {
     result.userIdsResolved = usersByLogin.size;
 
     const videosByUser = new Map<string, TwitchVideoData[]>();
+    const retentionByUser = new Map<string, VodRetentionSnapshot>();
     const userIdsChecked = new Set<string>();
 
     const getVideosForUser = async (twitchUserId: string): Promise<TwitchVideoData[]> => {
       if (!videosByUser.has(twitchUserId)) {
         try {
-          const videos = await twitchService.getRecentArchiveVideos(twitchUserId, HISTORICAL_VIDEO_LOOKUP_LIMIT);
+          const videos = await twitchService.getArchiveVideosSince(twitchUserId, cutoff, HISTORICAL_VIDEO_LOOKUP_MAX_PAGES);
           videosByUser.set(
             twitchUserId,
             videos.filter((video) => {
               const createdAt = this.toDate(video.created_at);
-              return Boolean(createdAt && this.getExpiresAt(createdAt).getTime() > now.getTime());
+              return Boolean(createdAt && this.getHardExpiresAt(createdAt).getTime() > now.getTime());
             }),
           );
         } catch (error) {
@@ -367,14 +539,27 @@ class FightVodService {
       return videosByUser.get(twitchUserId) || [];
     };
 
+    const getStreamerContext = async (streamer: BackfillStreamer) => {
+      const videos = await getVideosForUser(streamer.twitchUserId);
+      if (!retentionByUser.has(streamer.twitchUserId)) {
+        retentionByUser.set(streamer.twitchUserId, await this.refreshRetentionSnapshot(streamer.channelName, streamer.twitchUserId, streamer.user, videos, now));
+      }
+
+      return {
+        videos,
+        retention: retentionByUser.get(streamer.twitchUserId)!,
+      };
+    };
+
     for (const guild of guilds) {
       const streamers = (guild.streamers || [])
         .map((streamer) => {
           const channelName = streamer.channelName.trim().toLowerCase();
-          const twitchUserId = streamer.twitchUserId || usersByLogin.get(channelName)?.id;
-          return twitchUserId ? { channelName, twitchUserId } : null;
+          const user = usersByLogin.get(channelName);
+          const twitchUserId = streamer.twitchUserId || user?.id;
+          return twitchUserId ? { channelName, twitchUserId, user } : null;
         })
-        .filter((streamer): streamer is { channelName: string; twitchUserId: string } => Boolean(streamer));
+        .filter((streamer): streamer is BackfillStreamer => Boolean(streamer));
 
       if (streamers.length === 0) continue;
       streamers.forEach((streamer) => userIdsChecked.add(streamer.twitchUserId));
@@ -402,8 +587,8 @@ class FightVodService {
             continue;
           }
 
-          const videos = await getVideosForUser(streamer.twitchUserId);
-          const match = this.findHistoricalVideoMatch(videos, candidate.fight);
+          const context = await getStreamerContext(streamer);
+          const match = this.findHistoricalVideoMatch(context.videos, candidate.fight);
 
           if (match === "ambiguous") {
             result.ambiguous += 1;
@@ -415,8 +600,8 @@ class FightVodService {
             continue;
           }
 
-          const expiresAt = this.getExpiresAt(match.streamStartedAt);
-          if (expiresAt.getTime() <= now.getTime()) {
+          const availability = this.getAvailabilityFields(context.retention, match.streamStartedAt, now);
+          if (availability.hardExpiresAt.getTime() <= now.getTime()) {
             result.expired += 1;
             continue;
           }
@@ -445,14 +630,18 @@ class FightVodService {
                 vodUrl: this.buildTwitchVodUrl(match.video.id, match.offsetSeconds),
                 offsetSeconds: match.offsetSeconds,
                 status: "resolved",
+                availabilityStatus: "active",
                 matchMethod: "vod-window",
                 matchConfidence: match.confidence,
                 videoCreatedAt: match.streamStartedAt,
                 videoDurationSeconds: match.durationSeconds,
                 backfilledAt: now,
+                expectedExpiresAt: availability.expectedExpiresAt,
+                hardExpiresAt: availability.hardExpiresAt,
+                nextAvailabilityCheckAt: availability.nextAvailabilityCheckAt,
                 attempts: 1,
                 lastCheckedAt: now,
-                expiresAt,
+                expiresAt: availability.expiresAt,
               },
             },
             { upsert: true },
@@ -478,10 +667,13 @@ class FightVodService {
 
     const now = new Date();
     const retryBefore = new Date(now.getTime() - RESOLUTION_RETRY_MS);
+    const legacyHardCutoff = new Date(now.getTime() - MAX_VOD_RETENTION_DAYS * DAY_MS);
     const pendingLinks = await FightVodLink.find({
       status: "pending",
-      expiresAt: { $gt: now },
-      $or: [{ lastCheckedAt: { $exists: false } }, { lastCheckedAt: { $lte: retryBefore } }],
+      $and: [
+        { $or: [{ hardExpiresAt: { $gt: now } }, { hardExpiresAt: { $exists: false }, streamStartedAt: { $gt: legacyHardCutoff } }] },
+        { $or: [{ lastCheckedAt: { $exists: false } }, { lastCheckedAt: { $lte: retryBefore } }] },
+      ],
     })
       .sort({ createdAt: 1 })
       .limit(limit);
@@ -525,10 +717,17 @@ class FightVodService {
         link.offsetSeconds = offsetSeconds;
         link.vodUrl = this.buildTwitchVodUrl(video.id, offsetSeconds);
         link.status = "resolved";
+        link.availabilityStatus = "active";
         link.matchMethod = "stream-id";
         link.matchConfidence = 1;
         link.videoCreatedAt = this.toDate(video.created_at) || undefined;
         link.videoDurationSeconds = durationSeconds || undefined;
+        const retention = await this.getStoredRetentionSnapshot(link.twitchUserId, link.channelName);
+        const availability = this.getAvailabilityFields(retention, link.streamStartedAt, now);
+        link.expectedExpiresAt = availability.expectedExpiresAt;
+        link.hardExpiresAt = availability.hardExpiresAt;
+        link.nextAvailabilityCheckAt = availability.nextAvailabilityCheckAt;
+        link.expiresAt = availability.expiresAt;
         await link.save();
         resolved += 1;
       } catch (error) {
@@ -539,9 +738,106 @@ class FightVodService {
     return { checked: pendingLinks.length, resolved, unavailable };
   }
 
-  async cleanupExpiredLinks(): Promise<number> {
-    const result = await FightVodLink.deleteMany({ expiresAt: { $lte: new Date() } });
-    return result.deletedCount || 0;
+  async refreshDueLinkAvailability(limit: number = 500): Promise<FightVodAvailabilityResult> {
+    const result: FightVodAvailabilityResult = {
+      checked: 0,
+      stillAvailable: 0,
+      unavailable: 0,
+      errors: 0,
+    };
+
+    if (!twitchService.isEnabled()) {
+      return result;
+    }
+
+    const now = new Date();
+    const legacyCheckCutoff = new Date(now.getTime() - (NORMAL_VOD_RETENTION_DAYS + 1) * DAY_MS);
+    const dueLinks = await FightVodLink.find({
+      status: "resolved",
+      videoId: { $exists: true, $ne: "" },
+      $and: [
+        { $or: [{ availabilityStatus: "active" }, { availabilityStatus: { $exists: false } }] },
+        {
+          $or: [
+            { nextAvailabilityCheckAt: { $lte: now } },
+            { hardExpiresAt: { $exists: false }, streamStartedAt: { $lte: legacyCheckCutoff } },
+          ],
+        },
+      ],
+    })
+      .sort({ nextAvailabilityCheckAt: 1, streamStartedAt: 1 })
+      .limit(limit);
+
+    if (dueLinks.length === 0) {
+      return result;
+    }
+
+    let videosById = new Map<string, TwitchVideoData>();
+    let usersByLogin = new Map<string, TwitchUserData>();
+
+    try {
+      videosById = await twitchService.getVideosByIds(dueLinks.map((link) => link.videoId).filter((videoId): videoId is string => Boolean(videoId)));
+      usersByLogin = await twitchService.getUsersByLogins(Array.from(new Set(dueLinks.map((link) => link.channelName))));
+    } catch (error) {
+      logger.warn(`[Fight VOD] Failed to fetch availability batch: ${error instanceof Error ? error.message : String(error)}`);
+      result.errors += dueLinks.length;
+      return result;
+    }
+
+    for (const link of dueLinks) {
+      result.checked += 1;
+
+      try {
+        link.lastAvailabilityCheckedAt = now;
+
+        const video = link.videoId ? videosById.get(link.videoId) : undefined;
+        if (!video) {
+          link.availabilityStatus = "unavailable";
+          link.status = "unavailable";
+          await link.save();
+          result.unavailable += 1;
+          continue;
+        }
+
+        const user = usersByLogin.get(link.channelName);
+        const retention = await this.refreshRetentionSnapshot(link.channelName, link.twitchUserId, user, [video], now);
+        const availability = this.getAvailabilityFields(retention, link.streamStartedAt, now);
+
+        link.availabilityStatus = "active";
+        link.expectedExpiresAt = availability.expectedExpiresAt;
+        link.hardExpiresAt = availability.hardExpiresAt;
+        link.nextAvailabilityCheckAt = availability.nextAvailabilityCheckAt;
+        link.expiresAt = availability.expiresAt;
+        link.videoCreatedAt = this.toDate(video.created_at) || link.videoCreatedAt;
+        link.videoDurationSeconds = this.parseTwitchDuration(video.duration) || link.videoDurationSeconds;
+        await link.save();
+
+        result.stillAvailable += 1;
+      } catch (error) {
+        result.errors += 1;
+        logger.warn(`[Fight VOD] Failed to refresh VOD availability for ${link.videoId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return result;
+  }
+
+  async cleanupExpiredLinks(): Promise<FightVodCleanupResult> {
+    const now = new Date();
+    const legacyHardCutoff = new Date(now.getTime() - MAX_VOD_RETENTION_DAYS * DAY_MS);
+    const availability = await this.refreshDueLinkAvailability();
+    const deleteResult = await FightVodLink.deleteMany({
+      $or: [
+        { availabilityStatus: "unavailable" },
+        { hardExpiresAt: { $lte: now } },
+        { hardExpiresAt: { $exists: false }, streamStartedAt: { $lte: legacyHardCutoff } },
+      ],
+    });
+
+    return {
+      deleted: deleteResult.deletedCount || 0,
+      availability,
+    };
   }
 }
 

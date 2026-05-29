@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export type FightVodLinkStatus = "pending" | "resolved" | "unavailable";
 export type FightVodLinkMatchMethod = "stream-id" | "vod-window";
+export type FightVodAvailabilityStatus = "active" | "unavailable";
 
 export interface IFightVodLink extends Document {
   guildId: mongoose.Types.ObjectId;
@@ -25,6 +26,11 @@ export interface IFightVodLink extends Document {
   videoCreatedAt?: Date;
   videoDurationSeconds?: number;
   backfilledAt?: Date;
+  availabilityStatus?: FightVodAvailabilityStatus;
+  expectedExpiresAt?: Date;
+  hardExpiresAt?: Date;
+  nextAvailabilityCheckAt?: Date;
+  lastAvailabilityCheckedAt?: Date;
   attempts: number;
   lastCheckedAt?: Date;
   expiresAt: Date;
@@ -55,6 +61,11 @@ const FightVodLinkSchema = new Schema(
     videoCreatedAt: { type: Date },
     videoDurationSeconds: { type: Number },
     backfilledAt: { type: Date },
+    availabilityStatus: { type: String, enum: ["active", "unavailable"], default: "active" },
+    expectedExpiresAt: { type: Date },
+    hardExpiresAt: { type: Date },
+    nextAvailabilityCheckAt: { type: Date },
+    lastAvailabilityCheckedAt: { type: Date },
     attempts: { type: Number, required: true, default: 0 },
     lastCheckedAt: { type: Date },
     expiresAt: { type: Date, required: true },
@@ -68,5 +79,7 @@ FightVodLinkSchema.index({ reportCode: 1, fightId: 1, channelName: 1 }, { unique
 FightVodLinkSchema.index({ status: 1, expiresAt: 1, lastCheckedAt: 1 });
 FightVodLinkSchema.index({ reportCode: 1, fightId: 1, status: 1 });
 FightVodLinkSchema.index({ expiresAt: 1 });
+FightVodLinkSchema.index({ availabilityStatus: 1, nextAvailabilityCheckAt: 1 });
+FightVodLinkSchema.index({ hardExpiresAt: 1 });
 
 export default mongoose.model<IFightVodLink>("FightVodLink", FightVodLinkSchema);

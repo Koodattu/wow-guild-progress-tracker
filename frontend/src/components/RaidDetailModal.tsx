@@ -13,7 +13,11 @@ import { useBossPullHistory } from "@/lib/queries";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 function formatVodPhaseLabel(label: string) {
-  return label.toLowerCase() === "reaction" ? "🎉" : label;
+  return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
+}
+
+function isVodPhaseLabel(label: string, expectedLabel: string) {
+  return label.trim().toLowerCase() === expectedLabel.toLowerCase();
 }
 
 // Collapsible chart showing world rank history over time
@@ -101,38 +105,51 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Best pulls</div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {sortedPulls.map((pull) => (
-          <div
-            key={`${pull.reportCode}-${pull.fightId}`}
-            onClick={(event) => event.stopPropagation()}
-            className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
-          >
-            <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
-              <div className="flex items-center justify-between gap-2">
-                <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
-                  <span>{formatTime(pull.duration)}</span>
-                  <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
-                </div>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      {sortedPulls.map((pull) => (
+        <div
+          key={`${pull.reportCode}-${pull.fightId}`}
+          onClick={(event) => event.stopPropagation()}
+          className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
+        >
+          <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
+            <div className="flex items-center justify-between gap-2">
+              <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+              <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
+                <span>{formatTime(pull.duration)}</span>
+                <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
               </div>
-              <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
-            </a>
-            {pull.vodLinks && pull.vodLinks.length > 0 && (
-              <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">
-                {pull.vodLinks.map((vod) => {
-                  const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
+            </div>
+            <div className="mt-1 text-[11px] text-gray-500">{formatPullDate(pull.timestamp)}</div>
+          </a>
+          {pull.vodLinks && pull.vodLinks.length > 0 && (
+            <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">
+              {pull.vodLinks.map((vod) => {
+                const phaseLinks = vod.phaseLinks && vod.phaseLinks.length > 0 ? vod.phaseLinks : [{ label: "VOD", url: vod.url, offsetSeconds: vod.offsetSeconds }];
+                const p1Link = phaseLinks.find((phase) => isVodPhaseLabel(phase.label, "P1"));
+                const visiblePhaseLinks = p1Link ? phaseLinks.filter((phase) => !isVodPhaseLabel(phase.label, "P1")) : phaseLinks;
 
-                  return (
-                    <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
-                      <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
-                        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+                return (
+                  <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="min-w-0 space-y-1">
+                    <div className="flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200">
+                      <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      {p1Link ? (
+                        <a
+                          href={p1Link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 truncate transition-colors hover:text-purple-100 hover:underline"
+                          title={`Watch ${vod.channelName} ${p1Link.label}`}
+                        >
+                          {vod.channelName}
+                        </a>
+                      ) : (
                         <span className="truncate">{vod.channelName}</span>
-                      </div>
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${phaseLinks.length}, minmax(0, 1fr))` }}>
-                        {phaseLinks.map((phase) => (
+                      )}
+                    </div>
+                    {visiblePhaseLinks.length > 0 && (
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${visiblePhaseLinks.length}, minmax(0, 1fr))` }}>
+                        {visiblePhaseLinks.map((phase) => (
                           <a
                             key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
                             href={phase.url}
@@ -145,14 +162,14 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
                           </a>
                         ))}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -210,7 +227,7 @@ function BossPullHistoryContent({
 
   return (
     <div className="space-y-3">
-      <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "lg:grid-cols-[5fr_1fr]" : ""}`}>
+      <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "xl:grid-cols-[6fr_1fr]" : ""}`}>
         <PullProgressChart pullHistory={pullHistory} />
         {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
       </div>
@@ -404,7 +421,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         </tr>
         {isExpanded && (
           <tr className="border-b border-gray-800 bg-gray-900/50">
-            <td colSpan={8} className="px-2 md:px-4 py-2 md:py-3">
+            <td colSpan={8} className="px-1 py-2 md:px-2 md:py-3">
               <BossPullHistoryContent realm={guild.realm} guildName={guild.name} raidId={selectedRaidId ?? 0} bossId={boss.bossId} difficulty={difficulty} variant="desktop" />
             </td>
           </tr>
@@ -532,7 +549,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
-      <div className="bg-gray-900 rounded-lg shadow-2xl max-w-7xl w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 rounded-lg shadow-2xl max-w-[92rem] w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center gap-3 rounded-t-lg">
           <div className="flex flex-1 items-center gap-3 min-w-0">
             <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">

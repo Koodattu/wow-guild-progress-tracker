@@ -4269,6 +4269,7 @@ class GuildService {
     if (bestPulls.length > 0) {
       const vodLinks = await FightVodLink.find({
         status: "resolved",
+        availabilityStatus: { $ne: "unavailable" },
         $or: bestPulls.map((pull) => ({
           reportCode: pull.reportCode,
           fightId: pull.fightId,

@@ -48,6 +48,9 @@ export interface TwitchVideoData {
 
 interface TwitchVideosResponse {
   data: TwitchVideoData[];
+  pagination?: {
+    cursor?: string;
+  };
 }
 
 export interface TwitchUserData {
@@ -231,6 +234,91 @@ class TwitchService {
 
     const data = (await response.json()) as TwitchVideosResponse;
     return data.data || [];
+  }
+
+  async getArchiveVideosSince(userId: string, cutoff: Date, maxPages: number = 5): Promise<TwitchVideoData[]> {
+    if (!this.isEnabled()) {
+      return [];
+    }
+
+    const token = await this.getAccessToken();
+    const videos: TwitchVideoData[] = [];
+    let cursor: string | undefined;
+
+    for (let page = 0; page < maxPages; page++) {
+      const params = new URLSearchParams({
+        user_id: userId,
+        type: "archive",
+        sort: "time",
+        first: "100",
+      });
+      if (cursor) params.set("after", cursor);
+
+      logger.info(`[API REQUEST] GET https://api.twitch.tv/helix/videos?${params.toString()}`);
+      const response = await fetch(`https://api.twitch.tv/helix/videos?${params.toString()}`, {
+        headers: {
+          "Client-ID": this.clientId,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Twitch videos API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as TwitchVideosResponse;
+      const pageVideos = data.data || [];
+      videos.push(...pageVideos);
+
+      const reachedCutoff = pageVideos.some((video) => {
+        const createdAt = new Date(video.created_at);
+        return !Number.isNaN(createdAt.getTime()) && createdAt.getTime() < cutoff.getTime();
+      });
+      if (reachedCutoff || !data.pagination?.cursor) break;
+
+      cursor = data.pagination.cursor;
+    }
+
+    return videos.filter((video) => {
+      const createdAt = new Date(video.created_at);
+      return !Number.isNaN(createdAt.getTime()) && createdAt.getTime() >= cutoff.getTime();
+    });
+  }
+
+  async getVideosByIds(videoIds: string[]): Promise<Map<string, TwitchVideoData>> {
+    const videosById = new Map<string, TwitchVideoData>();
+
+    if (!this.isEnabled() || videoIds.length === 0) {
+      return videosById;
+    }
+
+    const uniqueIds = Array.from(new Set(videoIds.filter(Boolean)));
+    const token = await this.getAccessToken();
+
+    for (let i = 0; i < uniqueIds.length; i += 100) {
+      const batch = uniqueIds.slice(i, i + 100);
+      const params = new URLSearchParams();
+      batch.forEach((id) => params.append("id", id));
+
+      logger.info(`[API REQUEST] GET https://api.twitch.tv/helix/videos?${params.toString()}`);
+      const response = await fetch(`https://api.twitch.tv/helix/videos?${params.toString()}`, {
+        headers: {
+          "Client-ID": this.clientId,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Twitch videos API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as TwitchVideosResponse;
+      (data.data || []).forEach((video) => {
+        videosById.set(video.id, video);
+      });
+    }
+
+    return videosById;
   }
 
   async getUsersByLogins(logins: string[]): Promise<Map<string, TwitchUserData>> {

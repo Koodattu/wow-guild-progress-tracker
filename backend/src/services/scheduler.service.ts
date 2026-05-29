@@ -1031,9 +1031,20 @@ class UpdateScheduler {
     const taskId = await taskTracker.start("Cleanup Fight VOD Links");
 
     try {
-      const deleted = await fightVodService.cleanupExpiredLinks();
-      logger.info(`[FightVOD] Deleted ${deleted} expired VOD link(s)`);
-      await taskTracker.complete(taskId, { deleted });
+      const result = await fightVodService.cleanupExpiredLinks();
+      logger.info(
+        `[FightVOD] Availability checked ${result.availability.checked} link(s), still available ${result.availability.stillAvailable}, unavailable ${result.availability.unavailable}, deleted ${result.deleted} stale link(s)`,
+      );
+      if (result.deleted > 0 || result.availability.unavailable > 0 || result.availability.stillAvailable > 0) {
+        await cacheService.invalidatePattern(/^progress:/);
+      }
+      await taskTracker.complete(taskId, {
+        deleted: result.deleted,
+        availabilityChecked: result.availability.checked,
+        availabilityStillAvailable: result.availability.stillAvailable,
+        availabilityUnavailable: result.availability.unavailable,
+        availabilityErrors: result.availability.errors,
+      });
     } catch (error) {
       logger.error("[FightVOD] Cleanup error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
