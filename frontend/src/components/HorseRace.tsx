@@ -467,7 +467,7 @@ export default function HorseRace({ guilds, selectedRaidId, currentRaidId, reser
               </div>
             )}
             <div
-              className="absolute right-0 z-30 flex w-5 items-center justify-center rounded-sm border border-emerald-300/50 bg-black/70 text-[8px] font-bold uppercase tracking-wide text-emerald-100 shadow shadow-black/40"
+              className="absolute right-[-7px] z-30 flex w-5 items-center justify-center rounded-sm border border-emerald-300/50 bg-black/70 text-[8px] font-bold uppercase tracking-wide text-emerald-100 shadow shadow-black/40"
               style={{ top: `${trackTop - 25}px`, height: "70px", writingMode: "vertical-rl", textOrientation: "mixed" }}
               aria-hidden="true"
             >

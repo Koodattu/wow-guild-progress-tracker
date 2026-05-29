@@ -27,7 +27,7 @@ function getEventTypeDisplay(type: string): string {
   }
 }
 
-// Get color for event type badge
+// Get text color for event type badge
 function getEventTypeColor(type: string): string {
   switch (type) {
     case "boss_kill":
@@ -45,28 +45,46 @@ function getEventTypeColor(type: string): string {
   }
 }
 
+function getEventTypeBorderColor(type: string): string {
+  switch (type) {
+    case "boss_kill":
+      return "#4ade80";
+    case "best_pull":
+      return "#60a5fa";
+    case "hiatus":
+      return "#9ca3af";
+    case "regress":
+      return "#f87171";
+    case "reproge":
+      return "#facc15";
+    default:
+      return "#9ca3af";
+  }
+}
+
 export default function EventCard({ event, className = "" }: EventCardProps) {
   const difficultyColor = event.difficulty === "mythic" ? "text-orange-500" : "text-purple-500";
-  const borderColor = event.difficulty === "mythic" ? "#f97316" : "#a855f7";
+  const difficultyBorderColor = event.difficulty === "mythic" ? "#f97316" : "#a855f7";
   const eventTypeColor = getEventTypeColor(event.type);
+  const eventTypeBorderColor = getEventTypeBorderColor(event.type);
   const eventTypeText = getEventTypeDisplay(event.type);
 
   return (
-    <div className={`border-l-4 bg-gray-800/50 px-3 md:px-4 py-3 md:py-4 rounded hover:bg-gray-800/70 transition-colors ${className}`} style={{ borderLeftColor: borderColor }}>
-      <div className="flex flex-col h-full justify-between gap-2 md:gap-3">
-        <div>
-          <div className="flex items-start justify-between mb-1.5 md:mb-2">
-            <div className={`${difficultyColor} text-xs font-semibold uppercase`}>{event.difficulty}</div>
-            <div className={`${eventTypeColor} text-xs font-semibold uppercase`}>{eventTypeText}</div>
+    <div
+      className={`border-l-4 border-r-4 bg-gray-800/50 px-3 md:px-4 py-2.5 md:py-3 rounded hover:bg-gray-800/70 transition-colors ${className}`}
+      style={{ borderLeftColor: eventTypeBorderColor, borderRightColor: difficultyBorderColor }}
+    >
+      <div className="flex h-full flex-col gap-2">
+        <div className="flex items-start justify-between gap-2 text-xs">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className={`${eventTypeColor} font-semibold uppercase`}>{eventTypeText}</span>
+            <span className="text-gray-500 whitespace-nowrap">{getTimeAgo(event.timestamp)}</span>
+            <WatchButton event={event} />
           </div>
-          <div className="text-white text-xs md:text-sm leading-relaxed">
-            <EventMessage event={event} />
-          </div>
+          <span className={`${difficultyColor} shrink-0 font-semibold uppercase`}>{event.difficulty}</span>
         </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500 truncate">{event.raidName}</span>
-          <WatchButton event={event} />
-          <span className="text-gray-500 whitespace-nowrap ml-2">{getTimeAgo(event.timestamp)}</span>
+        <div className="text-white text-xs md:text-sm leading-relaxed">
+          <EventMessage event={event} />
         </div>
       </div>
     </div>

@@ -16,8 +16,8 @@ const CHARACTERS_STORAGE_KEY = "horse-race-show-characters";
 const BACKGROUND_STORAGE_KEY = "horse-race-show-background";
 const PREFERENCES_CHANGE_EVENT = "horse-race-preferences-change";
 const DEFAULT_MODE: HorseRaceMode = "random";
-const DEFAULT_SHOW_CHARACTERS = true;
-const DEFAULT_SHOW_BACKGROUND = true;
+const DEFAULT_SHOW_CHARACTERS = false;
+const DEFAULT_SHOW_BACKGROUND = false;
 const DEFAULT_PREFERENCES: HorseRacePreferences = {
   mode: DEFAULT_MODE,
   showCharacters: DEFAULT_SHOW_CHARACTERS,
