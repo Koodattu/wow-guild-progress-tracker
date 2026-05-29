@@ -39,9 +39,9 @@ function BossName({ event }: { event: Event }) {
   const bossIconUrl = event.bossIconUrl ?? (bosses.find((boss) => boss.id === event.bossId) ?? bosses.find((boss) => boss.name === event.bossName))?.iconUrl;
 
   return (
-    <span className="inline-flex items-center gap-1 align-middle">
-      {bossIconUrl && <IconImage iconFilename={bossIconUrl} alt={event.bossName} width={18} height={18} className="inline-block rounded shrink-0" />}
-      <span className="font-semibold">{event.bossName}</span>
+    <span className="align-middle">
+      {bossIconUrl && <IconImage iconFilename={bossIconUrl} alt={event.bossName} width={18} height={18} className="mr-1 inline-block rounded align-[-4px]" />}
+      <span className="break-words font-semibold">{event.bossName}</span>
     </span>
   );
 }
