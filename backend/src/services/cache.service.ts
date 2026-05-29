@@ -145,9 +145,11 @@ class CacheService {
   public readonly OLDER_RAID_TTL = 24 * 60 * 60 * 1000; // 24 hours for historical raids
 
   // Semi-static data - changes occasionally, 24h TTL (invalidated by triggers)
-  public readonly GUILD_LIST_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on new guild or nightly)
   public readonly SCHEDULES_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on schedule update or nightly)
-  public readonly GUILD_SUMMARY_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on guild update)
+
+  // Guild directory/profile payloads include live state, so keep these close to the Twitch/live-log polling cadence.
+  public readonly GUILD_LIST_TTL = 15 * 60 * 1000; // 15 minutes
+  public readonly GUILD_SUMMARY_TTL = 15 * 60 * 1000; // 15 minutes
 
   // Dynamic data - changes frequently, short TTL
   public readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes

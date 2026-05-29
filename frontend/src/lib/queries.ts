@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { EventFilters } from "@/types";
 
+const LIVE_STATUS_STALE_TIME = 15 * 60 * 1000;
+const LIVE_STATUS_REFETCH_INTERVAL = 15 * 60 * 1000;
+
 // Query Key Factory
 // Centralized query keys for cache management and invalidation.
 
@@ -79,7 +82,9 @@ export function useGuildList() {
   return useQuery({
     queryKey: queryKeys.guilds.list,
     queryFn: () => api.getGuildList(),
-    staleTime: 5 * 60 * 1000, // Guild list is slow-changing
+    staleTime: LIVE_STATUS_STALE_TIME,
+    refetchInterval: LIVE_STATUS_REFETCH_INTERVAL,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -88,6 +93,9 @@ export function useGuildSummaryByRealmName(realm: string, name: string) {
     queryKey: queryKeys.guilds.summaryByRealmName(realm, name),
     queryFn: () => api.getGuildSummaryByRealmName(realm, name),
     enabled: !!realm && !!name,
+    staleTime: LIVE_STATUS_STALE_TIME,
+    refetchInterval: LIVE_STATUS_REFETCH_INTERVAL,
+    refetchOnWindowFocus: true,
   });
 }
 

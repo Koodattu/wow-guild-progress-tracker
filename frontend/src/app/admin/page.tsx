@@ -19,6 +19,7 @@ import {
   triggerUpdateInactiveGuilds,
   triggerUpdateAllGuilds,
   triggerRefetchRecentReports,
+  triggerBackfillFightVods,
   triggerUpdateGuildCrests,
   triggerRescanDeathEvents,
   triggerRescanCharacters,
@@ -1124,6 +1125,15 @@ export default function AdminPage() {
                       <span>Check Twitch Streams</span>
                       {triggerLoading === "twitch-streams" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["twitch-streams"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("backfill-fight-vods", triggerBackfillFightVods)}
+                      disabled={triggerLoading === "backfill-fight-vods" || triggerCooldowns["backfill-fight-vods"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Backfill Best-Pull VODs</span>
+                      {triggerLoading === "backfill-fight-vods" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["backfill-fight-vods"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
                       onClick={() => handleTrigger("guild-crests", triggerUpdateGuildCrests)}

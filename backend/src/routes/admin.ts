@@ -2067,6 +2067,21 @@ router.post("/trigger/check-twitch-streams", async (req: Request, res: Response)
   }
 });
 
+// Trigger historical best-pull VOD backfill
+router.post("/trigger/backfill-fight-vods", async (req: Request, res: Response) => {
+  try {
+    scheduler
+      .backfillFightVodLinks()
+      .then(() => logger.info("Backfill fight VOD links completed"))
+      .catch((err) => logger.error("Backfill fight VOD links failed:", err));
+
+    res.json({ success: true, message: "Best-pull VOD backfill started" });
+  } catch (error) {
+    logger.error("Error triggering fight VOD backfill:", error);
+    res.status(500).json({ error: "Failed to trigger fight VOD backfill" });
+  }
+});
+
 // Trigger world ranks update for all guilds
 // Body: { raidId?: number, scope?: "all" | "current" }
 router.post("/trigger/update-world-ranks", async (req: Request, res: Response) => {

@@ -37,6 +37,11 @@ export interface BossBestPull {
     url: string;
     offsetSeconds: number;
     videoId?: string;
+    phaseLinks?: Array<{
+      label: string;
+      url: string;
+      offsetSeconds: number;
+    }>;
   }>;
 }
 

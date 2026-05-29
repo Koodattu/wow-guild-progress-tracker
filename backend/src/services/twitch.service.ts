@@ -50,6 +50,23 @@ interface TwitchVideosResponse {
   data: TwitchVideoData[];
 }
 
+export interface TwitchUserData {
+  id: string;
+  login: string;
+  display_name: string;
+  type: string;
+  broadcaster_type: string;
+  description: string;
+  profile_image_url: string;
+  offline_image_url: string;
+  view_count: number;
+  created_at: string;
+}
+
+interface TwitchUsersResponse {
+  data: TwitchUserData[];
+}
+
 export interface StreamStatus {
   isLive: boolean;
   isPlayingWoW: boolean;
@@ -214,6 +231,42 @@ class TwitchService {
 
     const data = (await response.json()) as TwitchVideosResponse;
     return data.data || [];
+  }
+
+  async getUsersByLogins(logins: string[]): Promise<Map<string, TwitchUserData>> {
+    const usersByLogin = new Map<string, TwitchUserData>();
+
+    if (!this.isEnabled() || logins.length === 0) {
+      return usersByLogin;
+    }
+
+    const uniqueLogins = Array.from(new Set(logins.map((login) => login.trim().toLowerCase()).filter(Boolean)));
+    const token = await this.getAccessToken();
+
+    for (let i = 0; i < uniqueLogins.length; i += 100) {
+      const batch = uniqueLogins.slice(i, i + 100);
+      const params = new URLSearchParams();
+      batch.forEach((login) => params.append("login", login));
+
+      logger.info(`[API REQUEST] GET https://api.twitch.tv/helix/users?${params.toString()}`);
+      const response = await fetch(`https://api.twitch.tv/helix/users?${params.toString()}`, {
+        headers: {
+          "Client-ID": this.clientId,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Twitch users API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as TwitchUsersResponse;
+      (data.data || []).forEach((user) => {
+        usersByLogin.set(user.login.toLowerCase(), user);
+      });
+    }
+
+    return usersByLogin;
   }
 }
 
