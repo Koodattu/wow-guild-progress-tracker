@@ -988,6 +988,9 @@ class UpdateScheduler {
       if (result.checked > 0) {
         logger.info(`[FightVOD] Checked ${result.checked} pending link(s), resolved ${result.resolved}, marked unavailable ${result.unavailable}`);
       }
+      if (result.resolved > 0) {
+        await cacheService.invalidatePattern(/^progress:/);
+      }
       await taskTracker.complete(taskId, { ...result });
     } catch (error) {
       logger.error("[FightVOD] Resolver error:", error);
@@ -1011,6 +1014,9 @@ class UpdateScheduler {
       logger.info(
         `[FightVOD Backfill] Checked ${result.guildsChecked} guild(s), ${result.streamersChecked} streamer(s), considered ${result.fightsConsidered} fight-streamer pair(s), matched ${result.matched}, existing ${result.skippedExisting}, ambiguous ${result.ambiguous}, no match ${result.noVodMatch}, expired ${result.expired}, errors ${result.errors}`,
       );
+      if (result.matched > 0) {
+        await cacheService.invalidatePattern(/^progress:/);
+      }
       await taskTracker.complete(taskId, { ...result });
     } catch (error) {
       logger.error("[FightVOD Backfill] Error:", error);

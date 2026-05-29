@@ -15,12 +15,55 @@ import GuildCrest from "./GuildCrest";
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { FaTwitch } from "react-icons/fa";
 
 interface GuildTableProps {
   guilds: GuildListItem[];
   onGuildClick: (guild: GuildListItem) => void;
   onRaidProgressClick: (guild: GuildListItem) => void;
   selectedRaidId: number | null;
+}
+
+function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
+  if (!links || links.length === 0) {
+    return <span className="text-gray-500">-</span>;
+  }
+
+  if (links.length === 1) {
+    const vod = links[0];
+    return (
+      <a
+        href={vod.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        className="inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
+        title={`Watch ${vod.channelName} VOD`}
+      >
+        <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">{vod.channelName}</span>
+      </a>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      {links.map((vod) => (
+        <a
+          key={`${vod.channelName}-${vod.videoId || vod.url}`}
+          href={vod.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => event.stopPropagation()}
+          className="inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+          title={`Watch ${vod.channelName} VOD`}
+          aria-label={`Watch ${vod.channelName} VOD`}
+        >
+          <FaTwitch className="h-3.5 w-3.5" aria-hidden="true" />
+        </a>
+      ))}
+    </div>
+  );
 }
 
 // Memoized table row to prevent re-renders when other rows are hovered
@@ -211,6 +254,9 @@ const GuildTableRow = memo(
         >
           {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
         </td>
+        <td className="px-3 py-3 text-center text-sm">
+          <BestVodLinks links={guild.bestVodLinks} />
+        </td>
       </tr>
     );
   },
@@ -362,6 +408,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("pulls")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("progress")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("time")}</th>
+              <th className="px-3 py-3 text-center text-sm font-semibold text-gray-300">VOD</th>
             </tr>
           </thead>
           <tbody>

@@ -206,6 +206,11 @@ export interface GuildListItem {
   lastFetched?: string;
   progress: RaidProgressSummary[];
   streamers?: Streamer[]; // Twitch streamers for this guild
+  bestVodLinks?: Array<{
+    channelName: string;
+    url: string;
+    videoId?: string;
+  }>;
   officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
 }
