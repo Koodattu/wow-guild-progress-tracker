@@ -117,6 +117,7 @@ export interface RaidProgressSummary {
   bossesDefeated: number;
   totalBosses: number;
   totalTimeSpent: number;
+  totalCombatTimeSpent?: number;
   currentBossPulls: number;
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
@@ -137,6 +138,7 @@ export interface RaidProgress {
   bossesDefeated: number;
   totalBosses: number;
   totalTimeSpent: number;
+  totalCombatTimeSpent?: number;
   bosses: BossProgress[];
   worldRank?: number; // Best world rank (lowest of WCL and Raider.IO)
   worldRankColor?: string; // Color class for the best world rank

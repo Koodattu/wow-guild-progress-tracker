@@ -50,6 +50,7 @@ export interface IRaidProgress {
   bossesDefeated: number;
   totalBosses: number;
   totalTimeSpent: number; // in seconds
+  totalCombatTimeSpent?: number; // in seconds, includes all logged combat pulls
   bosses: IBossProgress[];
   worldRank?: number; // Best (lowest) world rank from either WCL or Raider.IO
   worldRankColor?: string; // Color class for the displayed world rank (e.g., "rare", "epic", "legendary")
@@ -194,6 +195,7 @@ const RaidProgressSchema: Schema = new Schema(
     bossesDefeated: { type: Number, default: 0 },
     totalBosses: { type: Number, required: true },
     totalTimeSpent: { type: Number, default: 0 },
+    totalCombatTimeSpent: { type: Number, default: 0 },
     bosses: [BossProgressSchema],
     worldRank: { type: Number }, // Best (lowest) world rank from either WCL or Raider.IO
     worldRankColor: { type: String }, // Color class for the displayed world rank

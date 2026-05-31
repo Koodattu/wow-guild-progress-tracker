@@ -30,6 +30,10 @@ const VOD_POPUP_WIDTH = 256;
 const VOD_POPUP_MARGIN = 8;
 const VOD_POPUP_GAP = 4;
 
+function formatOptionalTime(seconds?: number | null) {
+  return seconds && seconds > 0 ? formatTime(seconds) : "-";
+}
+
 function getLiveStreamerChannelNames(guild: GuildListItem) {
   return Array.from(new Set(guild.streamers?.filter((streamer) => streamer.isLive && streamer.channelName).map((streamer) => streamer.channelName) ?? []));
 }
@@ -293,7 +297,12 @@ const GuildTableRow = memo(
     const heroicBestPull = getBestPullForProgress(heroicProgress);
     const heroicBestPullDisplay = getBestPullDisplayString(heroicProgress);
     const heroicPulls = getCurrentPullCount(heroicProgress);
-    const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
+    const hasMythicPullData =
+      mythicPulls > 0 ||
+      mythicBestPull > 0 ||
+      !!mythicBestPullDisplay ||
+      (mythicProgress?.totalTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
@@ -305,7 +314,9 @@ const GuildTableRow = memo(
     const effectiveBestPull = hasMythicPullData ? mythicBestPull : heroicBestPull;
     const effectiveBestPullDisplay = hasMythicPullData ? mythicBestPullDisplay : heroicBestPullDisplay;
     const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
-    const isHeroicFallback = !hasMythicPullData && (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0);
+    const isHeroicFallback =
+      !hasMythicPullData &&
+      (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0 || (heroicProgress?.totalCombatTimeSpent ?? 0) > 0);
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
@@ -420,7 +431,13 @@ const GuildTableRow = memo(
           className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
-          {effectiveTimeProgress ? formatTime(effectiveTimeProgress.totalTimeSpent) : "-"}
+          {formatOptionalTime(effectiveTimeProgress?.totalTimeSpent)}
+        </td>
+        <td
+          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
+          onClick={() => onRaidProgressClick(guild)}
+        >
+          {formatOptionalTime(effectiveTimeProgress?.totalCombatTimeSpent)}
         </td>
         <td
           className="guild-table-progress-cell px-3 py-3 text-center text-sm cursor-pointer transition-colors"
@@ -471,7 +488,12 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const heroicBestPull = getBestPullForProgress(heroicProgress);
     const heroicBestPullDisplay = getBestPullDisplayString(heroicProgress);
     const heroicPulls = getCurrentPullCount(heroicProgress);
-    const hasMythicPullData = mythicPulls > 0 || mythicBestPull > 0 || !!mythicBestPullDisplay || (mythicProgress?.totalTimeSpent ?? 0) > 0;
+    const hasMythicPullData =
+      mythicPulls > 0 ||
+      mythicBestPull > 0 ||
+      !!mythicBestPullDisplay ||
+      (mythicProgress?.totalTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
@@ -481,8 +503,9 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const effectivePulls = hasMythicPullData ? mythicPulls : heroicPulls;
     const effectiveBestPull = hasMythicPullData ? mythicBestPull : heroicBestPull;
     const effectiveBestPullDisplay = hasMythicPullData ? mythicBestPullDisplay : heroicBestPullDisplay;
-    const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
-    const isHeroicFallback = !hasMythicPullData && (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0);
+    const isHeroicFallback =
+      !hasMythicPullData &&
+      (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0 || (heroicProgress?.totalCombatTimeSpent ?? 0) > 0);
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
@@ -567,7 +590,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
 
       {/* Desktop View - Table Layout */}
       <div className="hidden md:block overflow-x-auto bg-gray-900 rounded-lg border border-gray-700">
-        <table className="w-full border-collapse">
+        <table className="w-full min-w-[980px] border-collapse">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-800/50">
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("rank")}</th>
@@ -577,8 +600,9 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <th className="px-4 py-3 text-center text-sm font-semibold text-orange-500">{t("mythic")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">{t("heroic")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("pulls")}</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">%</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("progress")}</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("time")}</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("total")}</th>
               <th className="px-3 py-3 text-center text-sm font-semibold text-gray-300">VOD</th>
             </tr>
           </thead>

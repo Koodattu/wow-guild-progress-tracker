@@ -39,6 +39,10 @@ function formatScheduleHour(hour: number): string {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
+function formatOptionalTime(seconds?: number | null) {
+  return seconds && seconds > 0 ? formatTime(seconds) : "-";
+}
+
 function getSortedRaidScheduleDays(raidSchedule?: RaidSchedule) {
   if (!raidSchedule?.days?.length) return [];
 
@@ -533,7 +537,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                       {/* Raid Cards */}
                       {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
                         const iconUrl = getIconUrl(raid.iconUrl);
-                        const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                        const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                        const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
                         const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                         const bestProgress = mythicProgress?.bestPullPhase?.displayString
                           ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
@@ -585,11 +590,24 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   </div>
                                   <div className="text-[9px] text-gray-500">H</div>
                                 </div>
-                                {(totalTime > 0 || currentBossPulls > 0 || bestProgress) && (
-                                  <div className="text-center">
-                                    <div className="text-gray-300">{totalTime > 0 ? formatTime(totalTime) : currentBossPulls > 0 ? currentBossPulls : bestProgress || "-"}</div>
-                                    <div className="text-[9px] text-gray-500">{totalTime > 0 ? "time" : currentBossPulls > 0 ? "pulls" : "best"}</div>
-                                  </div>
+                                {progressTime > 0 || totalTime > 0 ? (
+                                  <>
+                                    <div className="text-center">
+                                      <div className="text-gray-300">{formatOptionalTime(progressTime)}</div>
+                                      <div className="text-[9px] text-gray-500">Progress</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-gray-300">{formatOptionalTime(totalTime)}</div>
+                                      <div className="text-[9px] text-gray-500">Total</div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  (currentBossPulls > 0 || bestProgress) && (
+                                    <div className="text-center">
+                                      <div className="text-gray-300">{currentBossPulls > 0 ? currentBossPulls : bestProgress || "-"}</div>
+                                      <div className="text-[9px] text-gray-500">{currentBossPulls > 0 ? "pulls" : "best"}</div>
+                                    </div>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -604,7 +622,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full border-collapse min-w-[600px]">
+              <table className="w-full border-collapse min-w-[720px]">
                 <thead>
                   <tr className="border-b border-gray-700 bg-gray-800/50">
                     <th className="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-gray-300">
@@ -631,7 +649,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">World</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-orange-500 border-l-2 border-gray-700">M</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-purple-500">H</th>
-                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Time</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Progress</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Total</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Pulls</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">%</th>
                   </tr>
@@ -650,13 +669,14 @@ export default function GuildProfilePage({ params }: PageProps) {
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
                             </div>
                           </td>
-                          <td colSpan={5} className="px-4 py-2 border-l-2 border-gray-700"></td>
+                          <td colSpan={6} className="px-4 py-2 border-l-2 border-gray-700"></td>
                         </tr>
 
                         {/* Raid Rows */}
                         {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
                           const iconUrl = getIconUrl(raid.iconUrl);
-                          const totalTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                          const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
+                          const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
                           const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                           const bestProgress = mythicProgress?.bestPullPhase?.displayString
                             ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
@@ -756,7 +776,17 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                {totalTime > 0 ? formatTime(totalTime) : "-"}
+                                {formatOptionalTime(progressTime)}
+                              </td>
+                              <td
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
+                                {formatOptionalTime(totalTime)}
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${

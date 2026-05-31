@@ -1436,6 +1436,7 @@ class GuildService {
         bossesDefeated,
         totalBosses,
         totalTimeSpent: 0,
+        totalCombatTimeSpent: 0,
         bosses: [],
         lastUpdated: new Date(),
       } as IRaidProgress);
@@ -2865,6 +2866,7 @@ class GuildService {
         existingProgress.bosses = [];
         existingProgress.bossesDefeated = 0;
         existingProgress.totalTimeSpent = 0;
+        existingProgress.totalCombatTimeSpent = 0;
         existingProgress.lastUpdated = new Date();
         guild.markModified("progress");
       }
@@ -2928,6 +2930,7 @@ class GuildService {
         existingProgress.bosses = [];
         existingProgress.bossesDefeated = 0;
         existingProgress.totalTimeSpent = 0;
+        existingProgress.totalCombatTimeSpent = 0;
         existingProgress.lastUpdated = new Date();
         guild.markModified("progress");
       }
@@ -3019,6 +3022,7 @@ class GuildService {
     );
 
     // THIRD PASS: Process all unique fights and build statistics
+    let totalCombatTime = 0;
     for (let i = 0; i < uniqueFights.length; i++) {
       // Yield every 50 fights to let the event loop process HTTP requests
       if (i % 50 === 0 && i > 0) await yieldToEventLoop();
@@ -3029,6 +3033,7 @@ class GuildService {
       const bossPercent = fight.bossPercentage || 0;
       const fightPercent = fight.fightPercentage || 0;
       const duration = fight.duration / 1000; // Convert ms to seconds
+      totalCombatTime += duration;
 
       if (!bossDataMap.has(encounterId)) {
         bossDataMap.set(encounterId, {
@@ -3188,6 +3193,7 @@ class GuildService {
         bossesDefeated: 0,
         totalBosses: raidData.bosses.length,
         totalTimeSpent: 0,
+        totalCombatTimeSpent: 0,
         bosses: [],
         lastUpdated: new Date(),
       } as IRaidProgress);
@@ -3279,6 +3285,7 @@ class GuildService {
     raidProgress.bossesDefeated = defeatedCount;
     raidProgress.totalBosses = raidData.bosses.length;
     raidProgress.totalTimeSpent = totalTime;
+    raidProgress.totalCombatTimeSpent = totalCombatTime;
     raidProgress.lastUpdated = new Date();
 
     guildLog.info(`Before markModified - ${difficulty} progress has ${raidProgress.bosses.length} bosses in array`);
@@ -3289,6 +3296,7 @@ class GuildService {
       guild.markModified(`progress.${progressIndex}.bosses`);
       guild.markModified(`progress.${progressIndex}.bossesDefeated`);
       guild.markModified(`progress.${progressIndex}.totalTimeSpent`);
+      guild.markModified(`progress.${progressIndex}.totalCombatTimeSpent`);
     }
 
     // Also mark the entire progress array as modified
@@ -4161,6 +4169,7 @@ class GuildService {
           bossesDefeated: p.bossesDefeated,
           totalBosses: p.totalBosses,
           totalTimeSpent: p.totalTimeSpent,
+          totalCombatTimeSpent: p.totalCombatTimeSpent,
           currentBossPulls: currentBoss?.pullCount || 0,
           bestPullPercent: currentBoss?.bestPercent || 0,
           bestPullPhase: currentBoss?.bestPullPhase,
@@ -4574,6 +4583,7 @@ class GuildService {
         bossesDefeated: p.bossesDefeated,
         totalBosses: p.totalBosses,
         totalTimeSpent: p.totalTimeSpent,
+        totalCombatTimeSpent: p.totalCombatTimeSpent,
         currentBossPulls: currentBoss?.pullCount || 0,
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
@@ -4646,6 +4656,7 @@ class GuildService {
         bossesDefeated: p.bossesDefeated,
         totalBosses: p.totalBosses,
         totalTimeSpent: p.totalTimeSpent,
+        totalCombatTimeSpent: p.totalCombatTimeSpent,
         currentBossPulls: currentBoss?.pullCount || 0,
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
