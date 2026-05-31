@@ -13,6 +13,7 @@ import {
   RaidProgress,
   GuildBossProgressResponse,
   GuildSchedule,
+  RaidingTodayResponse,
   LiveStreamer,
   TierList,
   OverallTierListResponse,
@@ -178,6 +179,12 @@ export const api = {
   async getGuildSchedules(): Promise<GuildSchedule[]> {
     const response = await fetch(`${API_URL}/api/guilds/schedules`);
     if (!response.ok) throw new Error("Failed to fetch guild schedules");
+    return response.json();
+  },
+
+  async getRaidingToday(): Promise<RaidingTodayResponse> {
+    const response = await fetch(`${API_URL}/api/guilds/raiding-today`);
+    if (!response.ok) throw new Error("Failed to fetch guilds raiding today");
     return response.json();
   },
 

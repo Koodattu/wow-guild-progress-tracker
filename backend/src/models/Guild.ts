@@ -290,7 +290,7 @@ GuildSchema.index({ guildStatus: 1 });
 // Index for lastFetched (used in background processing to find outdated guilds)
 GuildSchema.index({ lastFetched: 1 });
 
-// Index for lastLogDate (used to find inactive guilds)
-GuildSchema.index({ lastLogDate: 1 });
+// Index for lastLogEndTime (used to find inactive/recently active guilds)
+GuildSchema.index({ lastLogEndTime: 1 });
 
 export default mongoose.model<IGuild>("Guild", GuildSchema);

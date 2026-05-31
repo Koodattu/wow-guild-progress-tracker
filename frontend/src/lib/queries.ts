@@ -22,6 +22,7 @@ export const queryKeys = {
     bossPullHistory: (realm: string, name: string, raidId: number, bossId: number, difficulty: string) =>
       ["guilds", "bossPullHistory", realm, name, raidId, bossId, difficulty] as const,
     schedules: ["guilds", "schedules"] as const,
+    raidingToday: ["guilds", "raidingToday"] as const,
     liveStreamers: ["guilds", "liveStreamers"] as const,
   },
   events: {
@@ -129,6 +130,15 @@ export function useGuildSchedules() {
     queryKey: queryKeys.guilds.schedules,
     queryFn: () => api.getGuildSchedules(),
     staleTime: 5 * 60 * 1000, // Schedules are slow-changing
+  });
+}
+
+export function useRaidingToday() {
+  return useQuery({
+    queryKey: queryKeys.guilds.raidingToday,
+    queryFn: () => api.getRaidingToday(),
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
   });
 }
 

@@ -430,6 +430,23 @@ export interface GuildSchedule {
   raidSchedule: RaidSchedule;
 }
 
+export interface RaidingTodayGuild {
+  _id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  crest?: GuildCrest;
+  parent_guild?: string;
+  raidTime: RaidScheduleDay;
+}
+
+export interface RaidingTodayResponse {
+  date: string;
+  day: string;
+  guilds: RaidingTodayGuild[];
+}
+
 // Tier List types
 export interface GuildTierScore {
   guildId: string;

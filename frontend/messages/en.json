@@ -86,6 +86,9 @@
     "noGuilds": "No guilds found for this raid.",
     "latestEvents": "Latest Events",
     "firstKills": "First Kills",
+    "raidingToday": "Guilds raiding today",
+    "raidingTodayMore": "and {count} more",
+    "raidingTodayShowLess": "show less",
     "updated": "Updated"
   },
   "guildsPage": {

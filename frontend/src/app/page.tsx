@@ -12,6 +12,7 @@ import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import FeaturedStreamers from "@/components/FeaturedStreamers";
 import HorseRace from "@/components/HorseRace";
 import RaidDetailModal from "@/components/RaidDetailModal";
+import RaidingTodayStrip from "@/components/RaidingTodayStrip";
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -186,6 +187,7 @@ function HomeContent() {
 
         {/* Integrated Raid Selector + Guild Leaderboard */}
         <div>
+          <RaidingTodayStrip />
           {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates ?? null} />}
           <GuildTable guilds={guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={selectedRaidId} />
         </div>

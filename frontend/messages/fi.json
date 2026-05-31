@@ -86,6 +86,9 @@
     "noGuilds": "Ei kiltoja tälle raidille.",
     "latestEvents": "Viimeisimmät Tapahtumat",
     "firstKills": "Ensitapot",
+    "raidingToday": "Tänään raidaavat killat",
+    "raidingTodayMore": "ja {count} lisää",
+    "raidingTodayShowLess": "näytä vähemmän",
     "updated": "Päivitetty"
   },
   "guildsPage": {

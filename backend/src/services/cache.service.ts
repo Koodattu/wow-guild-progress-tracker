@@ -113,7 +113,7 @@ class CacheService {
    * Keys that should be prioritized for in-memory caching
    * These patterns are checked first and less likely to be evicted
    */
-  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^compare:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/];
+  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^compare:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/, /^guilds:raiding-today:/];
 
   // ============================================================================
   // STALE-WHILE-REVALIDATE TRACKING
@@ -146,6 +146,7 @@ class CacheService {
 
   // Semi-static data - changes occasionally, 24h TTL (invalidated by triggers)
   public readonly SCHEDULES_TTL = 24 * 60 * 60 * 1000; // 24 hours (invalidated on schedule update or nightly)
+  public readonly RAIDING_TODAY_TTL = 15 * 60 * 1000; // 15 minutes (date-aware key, refreshed for home page strip)
 
   // Guild directory/profile payloads include live state, so keep these close to the Twitch/live-log polling cadence.
   public readonly GUILD_LIST_TTL = 15 * 60 * 1000; // 15 minutes
@@ -753,6 +754,13 @@ class CacheService {
   }
 
   /**
+   * Get cache key for guilds raiding today.
+   */
+  getRaidingTodayKey(dateKey: string): string {
+    return `guilds:raiding-today:${dateKey}`;
+  }
+
+  /**
    * Get cache key for live streamers.
    */
   getLiveStreamersKey(): string {
@@ -1305,6 +1313,7 @@ class CacheService {
     }
     if (key === "guilds:list") return this.GUILD_LIST_TTL;
     if (key === "guilds:schedules") return this.SCHEDULES_TTL;
+    if (key.startsWith("guilds:raiding-today:")) return this.RAIDING_TODAY_TTL;
     if (key === "guilds:live-streamers") return this.LIVE_STREAMERS_TTL;
     if (key.startsWith("events:")) return this.EVENTS_TTL;
     if (key.startsWith("home:")) return this.CURRENT_RAID_TTL;

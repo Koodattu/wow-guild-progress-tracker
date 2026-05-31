@@ -24,6 +24,21 @@ import characterService from "./character.service";
 import fightVodService from "./fight-vod.service";
 import { yieldToEventLoop } from "../utils/yield";
 
+interface GuildRaidingTodayItem {
+  _id: string;
+  name: string;
+  realm: string;
+  region: string;
+  faction?: string;
+  crest?: IGuild["crest"];
+  parent_guild?: string;
+  raidTime: {
+    day: string;
+    startHour: number;
+    endHour: number;
+  };
+}
+
 class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
@@ -3794,6 +3809,55 @@ class GuildService {
         lastCalculated: guild.raidSchedule!.lastCalculated,
       },
     }));
+  }
+
+  // Get guilds scheduled to raid on the given weekday, using precomputed current-tier schedules.
+  async getGuildsRaidingOnDay(dayName: string): Promise<GuildRaidingTodayItem[]> {
+    const currentRaidId = CURRENT_RAID_IDS[0];
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const guilds = await Guild.find({
+      "raidSchedule.days": { $elemMatch: { day: dayName } },
+      lastLogEndTime: { $gte: sevenDaysAgo },
+      progress: {
+        $elemMatch: {
+          raidId: currentRaidId,
+          bossesDefeated: { $gt: 0 },
+        },
+      },
+      excludedRaidIds: { $ne: currentRaidId },
+    })
+      .select("_id name realm region faction parent_guild crest raidSchedule")
+      .lean();
+
+    return guilds
+      .flatMap((guild) => {
+        const raidTimes = guild.raidSchedule?.days.filter((day: any) => day.day === dayName) ?? [];
+
+        return raidTimes.map((day: any) => ({
+          _id: String(guild._id),
+          name: guild.name,
+          realm: guild.realm,
+          region: guild.region,
+          faction: guild.faction,
+          crest: guild.crest,
+          parent_guild: guild.parent_guild,
+          raidTime: {
+            day: day.day,
+            startHour: day.startHour,
+            endHour: day.endHour,
+          },
+        }));
+      })
+      .sort((a, b) => {
+        const startCompare = a.raidTime.startHour - b.raidTime.startHour;
+        if (startCompare !== 0) return startCompare;
+
+        const nameCompare = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        if (nameCompare !== 0) return nameCompare;
+
+        return a.realm.localeCompare(b.realm, undefined, { sensitivity: "base" });
+      });
   }
 
   // Get minimal guild list for directory page (only essential fields)

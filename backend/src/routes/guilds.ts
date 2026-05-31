@@ -6,6 +6,25 @@ import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
+const HELSINKI_TIME_ZONE = "Europe/Helsinki";
+const HELSINKI_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: HELSINKI_TIME_ZONE,
+  weekday: "long",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function getHelsinkiToday(): { dateKey: string; weekday: string } {
+  const parts = HELSINKI_DATE_FORMATTER.formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return {
+    dateKey: `${values.year}-${values.month}-${values.day}`,
+    weekday: values.weekday,
+  };
+}
+
 // Get all guilds with only their raid schedules (for calendar/timetable view)
 router.get(
   "/schedules",
@@ -20,6 +39,30 @@ router.get(
     } catch (error) {
       logger.error("Error fetching guild schedules:", error);
       res.status(500).json({ error: "Failed to fetch guild schedules" });
+    }
+  },
+);
+
+// Get guilds scheduled to raid today (for the home page strip)
+router.get(
+  "/raiding-today",
+  cacheMiddleware(
+    () => cacheService.getRaidingTodayKey(getHelsinkiToday().dateKey),
+    () => cacheService.RAIDING_TODAY_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const today = getHelsinkiToday();
+      const guilds = await guildService.getGuildsRaidingOnDay(today.weekday);
+
+      res.json({
+        date: today.dateKey,
+        day: today.weekday,
+        guilds,
+      });
+    } catch (error) {
+      logger.error("Error fetching guilds raiding today:", error);
+      res.status(500).json({ error: "Failed to fetch guilds raiding today" });
     }
   },
 );
