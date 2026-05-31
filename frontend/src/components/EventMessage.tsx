@@ -1,7 +1,7 @@
 "use client";
 
 import { Event } from "@/types";
-import { formatPhaseDisplay, formatTime, getDifficultyColor, getGuildProfileUrl } from "@/lib/utils";
+import { formatPhaseDisplay, formatTime, getGuildProfileUrl } from "@/lib/utils";
 import { useBosses } from "@/lib/queries";
 import Link from "next/link";
 import GuildCrest from "@/components/GuildCrest";
@@ -46,10 +46,6 @@ function BossName({ event }: { event: Event }) {
   );
 }
 
-function DifficultyWord({ difficulty }: { difficulty: Event["difficulty"] }) {
-  return <span className={`${getDifficultyColor(difficulty)} font-semibold lowercase`}>{difficulty}</span>;
-}
-
 // "Watch" link - exported for use in card layouts, renders nothing if no live streamers
 export function WatchButton({ event }: { event: Event }) {
   if (!event.liveStreamers || event.liveStreamers.length === 0) return null;
@@ -60,21 +56,23 @@ export function WatchButton({ event }: { event: Event }) {
       className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-red-400 hover:text-red-300 transition-colors font-semibold text-xs"
     >
       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-      Watch Live
+      Watch
     </Link>
   );
 }
 
 // Render event message as JSX with inline guild crest and boss icons
-export default function EventMessage({ event }: { event: Event; showDifficulty?: boolean }) {
+export default function EventMessage({ event, showDifficulty = false }: { event: Event; showDifficulty?: boolean }) {
   const { type, data, difficulty } = event;
+  const diffSuffix = showDifficulty ? ` (${difficulty})` : "";
 
   if (type === "boss_kill") {
     const pulls = data.pullCount || 0;
     const timeSpent = data.timeSpent || 0;
     return (
       <span>
-        <GuildName event={event} /> defeated <DifficultyWord difficulty={difficulty} /> <BossName event={event} /> after {pulls} pull{pulls !== 1 ? "s" : ""}
+        <GuildName event={event} /> defeated <BossName event={event} />
+        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}
         {timeSpent > 0 && <> over {formatTime(timeSpent)}</>}!
       </span>
     );
@@ -85,7 +83,8 @@ export default function EventMessage({ event }: { event: Event; showDifficulty?:
     const pulls = data.pullCount || 0;
     return (
       <span>
-        <GuildName event={event} /> reached {progressText} on <DifficultyWord difficulty={difficulty} /> <BossName event={event} />
+        <GuildName event={event} /> reached {progressText} on <BossName event={event} />
+        {diffSuffix}
         {pulls > 0 && <> on pull {pulls}</>}!
       </span>
     );
@@ -106,7 +105,8 @@ export default function EventMessage({ event }: { event: Event; showDifficulty?:
       const percent = data.bestPercent || 0;
       return (
         <span>
-          <GuildName event={event} /> failed to improve on <DifficultyWord difficulty={difficulty} /> <BossName event={event} /> ({percent.toFixed(1)}%) during their raid.
+          <GuildName event={event} /> failed to improve on <BossName event={event} />
+          {diffSuffix} ({percent.toFixed(1)}%) during their raid.
         </span>
       );
     }
@@ -121,14 +121,16 @@ export default function EventMessage({ event }: { event: Event; showDifficulty?:
     const pulls = data.pullCount || 0;
     return (
       <span>
-        <GuildName event={event} /> re-killed <DifficultyWord difficulty={difficulty} /> <BossName event={event} /> after {pulls} pull{pulls !== 1 ? "s" : ""}!
+        <GuildName event={event} /> re-killed <BossName event={event} />
+        {diffSuffix} after {pulls} pull{pulls !== 1 ? "s" : ""}!
       </span>
     );
   }
 
   return (
     <span>
-      <GuildName event={event} /> - <DifficultyWord difficulty={difficulty} /> <BossName event={event} />
+      <GuildName event={event} /> - <BossName event={event} />
+      {diffSuffix}
     </span>
   );
 }

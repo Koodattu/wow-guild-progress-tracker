@@ -1,7 +1,7 @@
 "use client";
 
 import { Event } from "@/types";
-import { getTimeAgo } from "@/lib/utils";
+import { getDifficultyColor, getTimeAgo } from "@/lib/utils";
 import EventMessage, { WatchButton } from "@/components/EventMessage";
 
 interface EventCardProps {
@@ -63,6 +63,7 @@ function getEventTypeBorderColor(type: string): string {
 }
 
 export default function EventCard({ event, className = "" }: EventCardProps) {
+  const difficultyColor = getDifficultyColor(event.difficulty);
   const eventTypeColor = getEventTypeColor(event.type);
   const eventTypeBorderColor = getEventTypeBorderColor(event.type);
   const eventTypeText = getEventTypeDisplay(event.type);
@@ -73,12 +74,15 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
       style={{ borderLeftColor: eventTypeBorderColor }}
     >
       <div className="flex h-full flex-col gap-2">
-        <div className="flex items-start justify-between gap-2 text-xs">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs">
           <div className="flex min-w-0 items-center gap-2">
             <span className={`${eventTypeColor} font-semibold uppercase`}>{eventTypeText}</span>
+            <span className="min-w-0 truncate text-gray-500">{getTimeAgo(event.timestamp)}</span>
+          </div>
+          <div className="justify-self-center">
             <WatchButton event={event} />
           </div>
-          <span className="shrink-0 text-gray-500 whitespace-nowrap">{getTimeAgo(event.timestamp)}</span>
+          <span className={`${difficultyColor} justify-self-end font-semibold uppercase`}>{event.difficulty}</span>
         </div>
         <div className="text-white text-xs md:text-sm leading-relaxed">
           <EventMessage event={event} />
