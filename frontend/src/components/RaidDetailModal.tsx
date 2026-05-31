@@ -51,14 +51,14 @@ function RaidScheduleBadges({ raidSchedule }: { raidSchedule?: RaidSchedule }) {
   if (days.length === 0) return null;
 
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 text-[10px] md:gap-1.5">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 md:gap-2">
       {days.map((day, index) => {
         const timeRange = `${formatScheduleHour(day.startHour)}-${formatScheduleHour(day.endHour)}`;
 
         return (
           <span
             key={`${day.day}-${day.startHour}-${day.endHour}-${index}`}
-            className="rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-gray-300 md:px-2 md:text-xs"
+            className="rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] leading-tight text-gray-300 md:px-2 md:py-1 md:text-sm md:leading-normal"
             title={`${day.day} ${timeRange}`}
           >
             <span className="md:hidden">{day.day.substring(0, 2)}</span>
