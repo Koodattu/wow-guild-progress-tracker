@@ -19,6 +19,13 @@ type VodPhaseLink = {
   offsetSeconds: number;
 };
 
+type WorldRankChartPoint = {
+  date: number;
+  worldRank: number;
+  wclWorldRank?: number;
+  rioWorldRank?: number;
+};
+
 function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
 }
@@ -60,18 +67,116 @@ function VodPhaseLinkRow({ vod }: { vod: BestPullVodLink }) {
   );
 }
 
+function CompactVodLinks({ links, className = "" }: { links?: BestPullVodLink[]; className?: string }) {
+  if (!links || links.length === 0) return null;
+
+  return (
+    <div className={`flex min-w-0 flex-wrap items-center gap-1 ${className}`} onClick={(event) => event.stopPropagation()}>
+      {links.map((vod) => {
+        const phaseLinks = getVodPhaseLinks(vod);
+
+        return (
+          <div key={`${vod.channelName}-${vod.videoId || vod.url}`} className="inline-flex max-w-full items-center gap-1 rounded bg-purple-950/30 px-1 py-0.5">
+            <a
+              href={`https://www.twitch.tv/${encodeURIComponent(vod.channelName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-w-0 items-center gap-1 text-[10px] font-medium text-purple-200 transition-colors hover:text-purple-100 hover:underline"
+              title={`Open ${vod.channelName} on Twitch`}
+            >
+              <FaTwitch className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="hidden max-w-16 truncate xl:inline">{vod.channelName}</span>
+            </a>
+            {phaseLinks.map((phase) => (
+              <a
+                key={`${vod.channelName}-${phase.label}-${phase.offsetSeconds}`}
+                href={phase.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-5 min-w-6 items-center justify-center rounded bg-purple-600/20 px-1.5 text-[10px] font-semibold text-purple-100 transition-colors hover:bg-purple-600/40 hover:text-white"
+                title={`Watch ${vod.channelName} ${phase.label}`}
+              >
+                <span className="max-w-12 truncate">{formatVodPhaseLabel(phase.label)}</span>
+              </a>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WclLogButton({ title, onClick, className = "" }: { title: string; onClick: React.MouseEventHandler<HTMLButtonElement>; className?: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center transition-opacity hover:opacity-80 ${className}`} title={title} aria-label={title}>
+      <Image src="/wcl-logo.png" alt="WCL" width={20} height={20} className="h-full w-full object-contain" />
+    </button>
+  );
+}
+
+function getWorldRankDayKey(timestamp: number) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function compactWorldRankHistoryForChart(history: WorldRankHistoryEntry[]): WorldRankChartPoint[] {
+  const points = history
+    .map((entry) => ({
+      date: new Date(entry.recordedAt).getTime(),
+      worldRank: entry.worldRank,
+      wclWorldRank: entry.wclWorldRank,
+      rioWorldRank: entry.rioWorldRank,
+    }))
+    .filter((entry) => Number.isFinite(entry.date) && Number.isFinite(entry.worldRank))
+    .sort((a, b) => a.date - b.date);
+
+  if (points.length <= 4) return points;
+
+  const keepIndexes = new Set<number>([0, points.length - 1]);
+  const indexesByDay = new Map<string, number[]>();
+
+  points.forEach((point, index) => {
+    const dayKey = getWorldRankDayKey(point.date);
+    const dayIndexes = indexesByDay.get(dayKey) || [];
+    dayIndexes.push(index);
+    indexesByDay.set(dayKey, dayIndexes);
+  });
+
+  indexesByDay.forEach((indexes) => {
+    keepIndexes.add(indexes[0]);
+    keepIndexes.add(indexes[indexes.length - 1]);
+
+    let bestIndex = indexes[0];
+    let worstIndex = indexes[0];
+
+    indexes.forEach((index) => {
+      if (points[index].worldRank < points[bestIndex].worldRank) bestIndex = index;
+      if (points[index].worldRank > points[worstIndex].worldRank) worstIndex = index;
+    });
+
+    keepIndexes.add(bestIndex);
+    keepIndexes.add(worstIndex);
+  });
+
+  const dailyCompacted = points.filter((_, index) => keepIndexes.has(index));
+
+  return dailyCompacted.filter((point, index) => {
+    if (index === 0 || index === dailyCompacted.length - 1) return true;
+
+    const previous = dailyCompacted[index - 1];
+    const next = dailyCompacted[index + 1];
+    return !(previous.worldRank === point.worldRank && next.worldRank === point.worldRank);
+  });
+}
+
 // Collapsible chart showing world rank history over time
 function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[] }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!history || history.length < 2) return null;
 
-  const chartData = history.map((entry) => ({
-    date: new Date(entry.recordedAt).getTime(),
-    worldRank: entry.worldRank,
-    wclWorldRank: entry.wclWorldRank,
-    rioWorldRank: entry.rioWorldRank,
-  }));
+  const chartData = compactWorldRankHistoryForChart(history);
+  if (chartData.length < 2) return null;
 
   const ranks = chartData.map((d) => d.worldRank);
   const minRank = Math.min(...ranks);
@@ -106,14 +211,16 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
               <Tooltip
                 contentStyle={{ backgroundColor: "#1F2937", border: "1px solid #374151", borderRadius: "0.5rem" }}
                 labelStyle={{ color: "#9CA3AF" }}
-                labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleDateString("fi-FI", { day: "numeric", month: "numeric", year: "numeric" })}
+                labelFormatter={(timestamp: number) =>
+                  new Date(timestamp).toLocaleString("fi-FI", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                }
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={(value: any, name: any) => {
                   const label = name === "worldRank" ? "World Rank" : name === "wclWorldRank" ? "WCL Rank" : "RIO Rank";
                   return [`#${value}`, label];
                 }}
               />
-              <Line type="stepAfter" dataKey="worldRank" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#F59E0B" }} activeDot={{ r: 5 }} name="worldRank" />
+              <Line type="linear" dataKey="worldRank" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#F59E0B" }} activeDot={{ r: 5 }} name="worldRank" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -214,8 +321,12 @@ function BossPullHistoryContent({
     return <div className="text-center py-4 text-gray-500">Loading pull history...</div>;
   }
 
-  if (!hasPullHistory) {
+  if (!hasPullHistory && bestPulls.length === 0) {
     return <div className="text-center py-4 text-gray-500">No pull history available</div>;
+  }
+
+  if (!hasPullHistory) {
+    return <BestPullCards pulls={bestPulls} />;
   }
 
   if (variant === "mobile") {
@@ -304,17 +415,17 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
             <div className="flex items-center gap-1">
               <span className={`text-sm font-medium truncate ${isDefeated ? "text-green-400" : "text-white"}`}>{boss.bossName}</span>
               {hasLogLink && (
-                <button
+                <WclLogButton
                   onClick={(e) => {
                     e.stopPropagation();
                     handleBossClick(boss);
                   }}
-                  className="text-xs text-gray-500 hover:text-blue-400 shrink-0"
-                >
-                  🔗
-                </button>
+                  className="h-4 w-4"
+                  title={isDefeated ? "View kill log on Warcraft Logs" : "View best pull log on Warcraft Logs"}
+                />
               )}
             </div>
+            <CompactVodLinks links={boss.bestVodLinks} className="mt-1" />
           </div>
 
           {/* Stats in compact row */}
@@ -371,23 +482,21 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         >
           <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-400">{bossNumber}</td>
           <td className="px-2 md:px-4 py-2 md:py-3">
-            <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:gap-2">
               <IconImage iconFilename={bossIconFilename} alt={`${boss.bossName} icon`} width={32} height={32} className="rounded w-6 h-6 md:w-8 md:h-8" />
-              <span className={`text-xs md:text-base ${isDefeated ? "text-green-400 font-semibold" : "text-white"}`}>
+              <span className={`min-w-0 truncate text-xs md:text-base ${isDefeated ? "text-green-400 font-semibold" : "text-white"}`}>
                 {boss.bossName}
-                {hasLogLink && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBossClick(boss);
-                    }}
-                    className="ml-1 md:ml-2 text-xs text-gray-500 hover:text-blue-400"
-                    title={isDefeated ? "View kill log on WarcraftLogs" : "View best pull log on WarcraftLogs"}
-                  >
-                    🔗
-                  </button>
-                )}
               </span>
+              {hasLogLink && (
+                <WclLogButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBossClick(boss);
+                  }}
+                  title={isDefeated ? "View kill log on Warcraft Logs" : "View best pull log on Warcraft Logs"}
+                />
+              )}
+              <CompactVodLinks links={boss.bestVodLinks} />
             </div>
           </td>
           <td className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm">
@@ -553,7 +662,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
   return (
     <div className="fixed inset-0 bg-black/80 flex items-start justify-center overflow-y-auto z-50" onClick={onClose}>
       <div className="bg-gray-900 rounded-lg shadow-2xl max-w-[92rem] w-full my-4 md:my-8 border border-gray-700" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center gap-3 rounded-t-lg">
+        <div className="sticky top-0 z-20 bg-gray-900 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4 flex items-center gap-3 rounded-t-lg">
           <div className="flex flex-1 items-center gap-3 min-w-0">
             <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">
               <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] md:scale-[0.375] origin-top-left" />
@@ -615,7 +724,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
           </div>
         </div>
 
-        <div className="px-2 md:px-6 py-4 md:py-6">
+        <div className="relative z-0 px-2 md:px-6 py-4 md:py-6">
           {!loading && guild.worldRankHistory && guild.worldRankHistory.length >= 2 && <WorldRankHistorySection history={guild.worldRankHistory} />}
           {loading ? (
             <div className="space-y-6">

@@ -39,6 +39,11 @@ interface GuildRaidingTodayItem {
   };
 }
 
+interface FightVodTarget {
+  reportCode: string;
+  fightId: number;
+}
+
 class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
@@ -3935,6 +3940,78 @@ class GuildService {
     return this.getBestVodTargetForProgress(preferredProgress) || this.getBestVodTargetForProgress(fallbackProgress);
   }
 
+  private getBossVodTarget(boss: any): FightVodTarget | null {
+    if (boss.kills > 0 && boss.firstKillReportCode && boss.firstKillFightId) {
+      return {
+        reportCode: boss.firstKillReportCode,
+        fightId: boss.firstKillFightId,
+      };
+    }
+
+    if (boss.bestPullReportCode && boss.bestPullFightId) {
+      return {
+        reportCode: boss.bestPullReportCode,
+        fightId: boss.bestPullFightId,
+      };
+    }
+
+    return null;
+  }
+
+  private async getVodLinksByFightTarget(targets: FightVodTarget[]): Promise<Map<string, any[]>> {
+    const uniqueTargets = Array.from(new Map(targets.map((target) => [`${target.reportCode}:${target.fightId}`, target])).values());
+    const vodLinksByFight = new Map<string, any[]>();
+
+    if (uniqueTargets.length === 0) {
+      return vodLinksByFight;
+    }
+
+    const targetFights = await Fight.find({
+      $or: uniqueTargets.map((target) => ({
+        reportCode: target.reportCode,
+        fightId: target.fightId,
+      })),
+    })
+      .select("reportCode fightId duration isKill phaseTransitions fightStartTime fightEndTime")
+      .lean();
+
+    const targetFightsByKey = new Map<string, any>();
+    targetFights.forEach((fight) => {
+      targetFightsByKey.set(`${fight.reportCode}:${fight.fightId}`, fight);
+    });
+
+    const vodLinks = await FightVodLink.find({
+      status: "resolved",
+      availabilityStatus: { $ne: "unavailable" },
+      $or: uniqueTargets.map((target) => ({
+        reportCode: target.reportCode,
+        fightId: target.fightId,
+      })),
+    })
+      .select("reportCode fightId channelName vodUrl offsetSeconds videoId -_id")
+      .sort({ channelName: 1 })
+      .lean();
+
+    vodLinks.forEach((link) => {
+      if (!link.vodUrl) return;
+
+      const key = `${link.reportCode}:${link.fightId}`;
+      const linksForFight = vodLinksByFight.get(key) || [];
+      const offsetSeconds = link.offsetSeconds || 0;
+
+      linksForFight.push({
+        channelName: link.channelName,
+        url: link.videoId ? fightVodService.buildTwitchVodUrl(link.videoId, offsetSeconds) : link.vodUrl,
+        offsetSeconds,
+        videoId: link.videoId,
+        phaseLinks: link.videoId ? this.getPhaseLinksForFight(targetFightsByKey.get(key), link.videoId, offsetSeconds) : [],
+      });
+      vodLinksByFight.set(key, linksForFight);
+    });
+
+    return vodLinksByFight;
+  }
+
   // Get all guilds with progress filtered by raidId (minimal data for leaderboard)
   // Optimized with MongoDB aggregation pipeline for better performance
   async getAllGuildsForRaid(raidId: number): Promise<any[]> {
@@ -4182,14 +4259,22 @@ class GuildService {
       return null;
     }
 
+    const matchingProgress = guild.progress.filter((p) => p.raidId === raidId);
+    const bossVodTargets = matchingProgress.flatMap((progress) => progress.bosses.map((boss) => this.getBossVodTarget(boss)).filter((target): target is FightVodTarget => target !== null));
+    const vodLinksByFight = await this.getVodLinksByFightTarget(bossVodTargets);
+
     // Return only the progress array for the specified raid, excluding pullHistory
-    const raidProgress = guild.progress
-      .filter((p) => p.raidId === raidId)
+    const raidProgress = matchingProgress
       .map((progress) => ({
         ...progress,
         bosses: progress.bosses.map((boss) => {
           const { pullHistory, ...bossWithoutHistory } = boss;
-          return bossWithoutHistory;
+          const vodTarget = this.getBossVodTarget(boss);
+
+          return {
+            ...bossWithoutHistory,
+            bestVodLinks: vodTarget ? vodLinksByFight.get(`${vodTarget.reportCode}:${vodTarget.fightId}`) || [] : [],
+          };
         }),
       }));
 
@@ -4214,14 +4299,22 @@ class GuildService {
       return null;
     }
 
+    const matchingProgress = guild.progress.filter((p) => p.raidId === raidId);
+    const bossVodTargets = matchingProgress.flatMap((progress) => progress.bosses.map((boss) => this.getBossVodTarget(boss)).filter((target): target is FightVodTarget => target !== null));
+    const vodLinksByFight = await this.getVodLinksByFightTarget(bossVodTargets);
+
     // Return only the progress array for the specified raid, excluding pullHistory
-    const raidProgress = guild.progress
-      .filter((p) => p.raidId === raidId)
+    const raidProgress = matchingProgress
       .map((progress) => ({
         ...progress,
         bosses: progress.bosses.map((boss) => {
           const { pullHistory, ...bossWithoutHistory } = boss;
-          return bossWithoutHistory;
+          const vodTarget = this.getBossVodTarget(boss);
+
+          return {
+            ...bossWithoutHistory,
+            bestVodLinks: vodTarget ? vodLinksByFight.get(`${vodTarget.reportCode}:${vodTarget.fightId}`) || [] : [],
+          };
         }),
       }));
 
@@ -4264,22 +4357,6 @@ class GuildService {
       return null;
     }
 
-    const pullHistory = boss.pullHistory || [];
-
-    // Calculate phase distribution (pullHistory already stores phases as P1, P2, I1, I2 format)
-    const phaseCount = new Map<string, number>();
-    pullHistory.forEach((pull: any) => {
-      if (pull.phase) {
-        const count = phaseCount.get(pull.phase) || 0;
-        phaseCount.set(pull.phase, count + 1);
-      }
-    });
-
-    // Sort by pull count (descending)
-    const phaseDistribution = Array.from(phaseCount.entries())
-      .map(([phase, count]) => ({ phase, count }))
-      .sort((a, b) => b.count - a.count);
-
     const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
     const firstKill = await Fight.findOne({
       guildId: guild._id,
@@ -4302,6 +4379,47 @@ class GuildService {
     if (firstKill?.timestamp) {
       fightQuery.timestamp = { $lte: firstKill.timestamp };
     }
+
+    let pullHistory = boss.pullHistory || [];
+
+    if (pullHistory.length === 0) {
+      const historyFights = await Fight.find(fightQuery)
+        .select("reportCode fightId encounterID difficulty timestamp duration bossPercentage fightPercentage isKill lastPhaseId lastPhaseName")
+        .sort({ timestamp: 1 })
+        .lean();
+
+      const seenHistoryFights = new Map<string, any>();
+      const uniqueHistoryFights: any[] = [];
+
+      for (const fight of historyFights) {
+        const duplicateCheck = this.isDuplicateFightInMemory(fight, uniqueHistoryFights, seenHistoryFights);
+        if (duplicateCheck.isDuplicate) {
+          continue;
+        }
+        uniqueHistoryFights.push(fight);
+      }
+
+      pullHistory = uniqueHistoryFights.map((fight, index) => ({
+        pullNumber: index + 1,
+        fightPercentage: fight.isKill ? 0 : fight.fightPercentage || 0,
+        phase: fight.lastPhaseName ? this.getShortPhaseLabel(fight.lastPhaseName, fight.lastPhaseId || 1) : undefined,
+        isKill: fight.isKill,
+      }));
+    }
+
+    // Calculate phase distribution (pullHistory already stores phases as P1, P2, I1, I2 format)
+    const phaseCount = new Map<string, number>();
+    pullHistory.forEach((pull: any) => {
+      if (pull.phase) {
+        const count = phaseCount.get(pull.phase) || 0;
+        phaseCount.set(pull.phase, count + 1);
+      }
+    });
+
+    // Sort by pull count (descending)
+    const phaseDistribution = Array.from(phaseCount.entries())
+      .map(([phase, count]) => ({ phase, count }))
+      .sort((a, b) => b.count - a.count);
 
     const candidateLimit = Math.max(25, Math.min((boss.pullCount || 25) * 2, 250));
     const bestPullCandidates = await Fight.find(fightQuery)

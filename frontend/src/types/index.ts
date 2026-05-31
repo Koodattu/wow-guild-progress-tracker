@@ -97,6 +97,7 @@ export interface BossProgress {
   bestPullPhase?: BestPullPhase; // Phase context for best pull
   bestPullReportCode?: string; // WCL report code for best pull (for unkilled bosses)
   bestPullFightId?: number; // Fight ID within the report for best pull (for unkilled bosses)
+  bestVodLinks?: NonNullable<BossBestPull["vodLinks"]>; // VOD links for the row's kill/best-pull log target
   pullHistory?: PullHistoryEntry[]; // Pull history for progress charts (up to first kill)
   lastUpdated: string;
 }
