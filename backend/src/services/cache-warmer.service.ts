@@ -118,11 +118,11 @@ class CacheWarmerService {
 
       // Enrich events with live streamer data - must match what the home route handler produces.
       const guildIds = [...new Set(events.map((e: any) => String(e.guildId)))];
-      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
-      const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
+      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1, isCurrentlyRaiding: 1 }).lean();
+      const guildMap = new Map<string, { realm: string; liveStreamers: string[]; isCurrentlyRaiding: boolean }>();
       for (const g of eventGuilds) {
         const liveStreamers = (g.streamers || []).filter((s: any) => s.isLive).map((s: any) => s.channelName);
-        guildMap.set(String(g._id), { realm: g.realm, liveStreamers });
+        guildMap.set(String(g._id), { realm: g.realm, liveStreamers, isCurrentlyRaiding: g.isCurrentlyRaiding ?? false });
       }
       const enrichedEvents = events.map((event: any) => {
         const guildData = guildMap.get(String(event.guildId));
@@ -130,6 +130,7 @@ class CacheWarmerService {
           ...event,
           guildRealm: event.guildRealm || guildData?.realm,
           liveStreamers: guildData?.liveStreamers || [],
+          isCurrentlyRaiding: guildData?.isCurrentlyRaiding || false,
         };
       });
 

@@ -75,15 +75,15 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
       style={{ borderLeftColor: eventTypeBorderColor }}
     >
       <div className="flex h-full flex-col gap-2">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-xs">
+        <div className="flex items-center justify-between gap-2 text-xs">
           <div className="flex min-w-0 items-center gap-2">
             <span className={`${eventTypeColor} font-semibold uppercase`}>{eventTypeText}</span>
             <span className="min-w-0 truncate text-gray-500">{getTimeAgo(event.timestamp)}</span>
           </div>
-          <div className="justify-self-center">
+          <div className="flex shrink-0 items-center gap-2">
             <WatchButton event={event} />
+            {showDifficulty && <span className={`${difficultyColor} font-semibold uppercase`}>{event.difficulty}</span>}
           </div>
-          <div className="justify-self-end">{showDifficulty && <span className={`${difficultyColor} font-semibold uppercase`}>{event.difficulty}</span>}</div>
         </div>
         <div className="text-white text-xs md:text-sm leading-relaxed">
           <EventMessage event={event} />

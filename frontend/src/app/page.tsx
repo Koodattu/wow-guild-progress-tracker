@@ -114,6 +114,7 @@ function HomeContent() {
         isCurrentlyRaiding: guild.isCurrentlyRaiding,
         lastFetched: guild.lastFetched,
         streamers: guild.streamers,
+        raidSchedule: guild.raidSchedule,
         progress: [],
       };
 

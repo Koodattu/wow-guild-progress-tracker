@@ -36,12 +36,12 @@ router.get(
 
       // Enrich events with live streamer data and guild realm (for profile links)
       const guildIds = [...new Set(events.map((e) => String(e.guildId)))];
-      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
+      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1, isCurrentlyRaiding: 1 }).lean();
 
-      const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
+      const guildMap = new Map<string, { realm: string; liveStreamers: string[]; isCurrentlyRaiding: boolean }>();
       for (const g of eventGuilds) {
         const liveStreamers = (g.streamers || []).filter((s) => s.isLive).map((s) => s.channelName);
-        guildMap.set(String(g._id), { realm: g.realm, liveStreamers });
+        guildMap.set(String(g._id), { realm: g.realm, liveStreamers, isCurrentlyRaiding: g.isCurrentlyRaiding ?? false });
       }
 
       const enrichedEvents = events.map((event) => {
@@ -50,6 +50,7 @@ router.get(
           ...event,
           guildRealm: event.guildRealm || guildData?.realm,
           liveStreamers: guildData?.liveStreamers || [],
+          isCurrentlyRaiding: guildData?.isCurrentlyRaiding || false,
         };
       });
 

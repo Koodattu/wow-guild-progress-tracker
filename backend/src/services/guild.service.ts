@@ -4031,6 +4031,43 @@ class GuildService {
   async getAllGuildsForRaid(raidId: number): Promise<any[]> {
     const raid = await Raid.findOne({ id: raidId }).lean();
     const raidSlug = raid?.slug?.toLowerCase();
+    const includeRaidSchedule = CURRENT_RAID_IDS.includes(raidId);
+
+    const guildProjection: Record<string, unknown> = {
+      _id: 1,
+      name: 1,
+      realm: 1,
+      region: 1,
+      faction: 1,
+      warcraftlogsId: 1,
+      crest: 1,
+      horseRaceUmaImage: 1,
+      parent_guild: 1,
+      isCurrentlyRaiding: 1,
+      lastFetched: 1,
+      // Filter progress array to only include the specified raid
+      progress: {
+        $filter: {
+          input: "$progress",
+          as: "p",
+          cond: { $eq: ["$$p.raidId", raidId] },
+        },
+      },
+      // Include official progress from Raider.IO
+      officialProgress: 1,
+      // Include lightweight streamer data for live status and modal Twitch links
+      streamers: {
+        $map: {
+          input: { $ifNull: ["$streamers", []] },
+          as: "s",
+          in: { channelName: "$$s.channelName", isLive: "$$s.isLive" },
+        },
+      },
+    };
+
+    if (includeRaidSchedule) {
+      guildProjection.raidSchedule = 1;
+    }
 
     // Use aggregation pipeline to filter, project, and sort at database level
     const guilds = await Guild.aggregate([
@@ -4049,39 +4086,7 @@ class GuildService {
       },
       // Stage 2: Project only the fields we need (exclude heavy nested data like pullHistory)
       {
-        $project: {
-          _id: 1,
-          name: 1,
-          realm: 1,
-          region: 1,
-          faction: 1,
-          warcraftlogsId: 1,
-          crest: 1,
-          horseRaceUmaImage: 1,
-          parent_guild: 1,
-          isCurrentlyRaiding: 1,
-          lastFetched: 1,
-          // Filter progress array to only include the specified raid
-          progress: {
-            $filter: {
-              input: "$progress",
-              as: "p",
-              cond: { $eq: ["$$p.raidId", raidId] },
-            },
-          },
-          // Include official progress from Raider.IO
-          officialProgress: 1,
-          // Include raidSchedule for schedule summary calculation
-          raidSchedule: 1,
-          // Include lightweight streamer data for live status and modal Twitch links
-          streamers: {
-            $map: {
-              input: { $ifNull: ["$streamers", []] },
-              as: "s",
-              in: { channelName: "$$s.channelName", isLive: "$$s.isLive" },
-            },
-          },
-        },
+        $project: guildProjection,
       },
       // Stage 3: Add computed field for sorting — find the unified guildRank.
       // The ranking algorithm stores guildRank on the highest-difficulty progress entry:
@@ -4170,6 +4175,17 @@ class GuildService {
 
       // Calculate schedule summary
       const scheduleSummary = this.calculateScheduleSummary(guildObj.raidSchedule);
+      const raidSchedule =
+        includeRaidSchedule && guildObj.raidSchedule?.days
+          ? {
+              days: guildObj.raidSchedule.days.map((day: any) => ({
+                day: day.day,
+                startHour: day.startHour,
+                endHour: day.endHour,
+              })),
+              lastCalculated: guildObj.raidSchedule.lastCalculated,
+            }
+          : undefined;
 
       // Check if any streamers are live
       const isStreaming = guildObj.streamers && guildObj.streamers.length > 0 ? guildObj.streamers.some((s: any) => s.isLive) : false;
@@ -4202,6 +4218,7 @@ class GuildService {
         streamers,
         officialProgress: filteredOfficialProgress,
         scheduleDisplay: scheduleSummary,
+        ...(raidSchedule ? { raidSchedule } : {}),
         bestVodTarget,
       };
     });

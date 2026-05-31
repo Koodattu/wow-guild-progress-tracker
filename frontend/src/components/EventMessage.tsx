@@ -48,7 +48,7 @@ function BossName({ event }: { event: Event }) {
 
 // "Watch" link - exported for use in card layouts, renders nothing if no live streamers
 export function WatchButton({ event }: { event: Event }) {
-  if (!event.liveStreamers || event.liveStreamers.length === 0) return null;
+  if (!event.isCurrentlyRaiding || !event.liveStreamers || event.liveStreamers.length === 0) return null;
   const streamsParam = event.liveStreamers.join(",");
   return (
     <Link

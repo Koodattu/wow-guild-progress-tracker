@@ -227,6 +227,7 @@ export interface GuildListItem {
   }>;
   officialProgress?: OfficialRaidProgress[];
   scheduleDisplay?: ScheduleDisplay | null;
+  raidSchedule?: RaidSchedule;
 }
 
 // Tier score for a single category
@@ -296,6 +297,7 @@ export interface Guild {
   lastFetched?: string;
   progress: RaidProgress[];
   streamers?: Streamer[]; // Twitch streamers for this guild
+  raidSchedule?: RaidSchedule;
   worldRankHistory?: WorldRankHistoryEntry[];
 }
 
@@ -312,6 +314,7 @@ export interface Event {
   bossName?: string;
   bossIconUrl?: string;
   liveStreamers?: string[]; // Currently live Twitch channel names for this guild
+  isCurrentlyRaiding?: boolean; // Current guild live-log status, enriched at response time
   difficulty: "mythic" | "heroic";
   data: {
     killRank?: number;

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { FaExternalLinkAlt, FaTwitch } from "react-icons/fa";
-import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry, BossBestPull } from "@/types";
+import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry, BossBestPull, RaidSchedule } from "@/types";
 import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getRaiderIOGuildUrl } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
@@ -25,6 +25,49 @@ type WorldRankChartPoint = {
   wclWorldRank?: number;
   rioWorldRank?: number;
 };
+
+const WEEK_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function formatScheduleHour(hour: number): string {
+  const totalMinutes = Math.round(hour * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function getSortedRaidScheduleDays(raidSchedule?: RaidSchedule) {
+  if (!raidSchedule?.days?.length) return [];
+
+  return [...raidSchedule.days].sort((a, b) => {
+    const aIndex = WEEK_ORDER.indexOf(a.day);
+    const bIndex = WEEK_ORDER.indexOf(b.day);
+    return (aIndex === -1 ? WEEK_ORDER.length : aIndex) - (bIndex === -1 ? WEEK_ORDER.length : bIndex);
+  });
+}
+
+function RaidScheduleBadges({ raidSchedule }: { raidSchedule?: RaidSchedule }) {
+  const days = getSortedRaidScheduleDays(raidSchedule);
+  if (days.length === 0) return null;
+
+  return (
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 text-[10px] md:gap-1.5">
+      {days.map((day, index) => {
+        const timeRange = `${formatScheduleHour(day.startHour)}-${formatScheduleHour(day.endHour)}`;
+
+        return (
+          <span
+            key={`${day.day}-${day.startHour}-${day.endHour}-${index}`}
+            className="rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-gray-300 md:px-2 md:text-xs"
+            title={`${day.day} ${timeRange}`}
+          >
+            <span className="md:hidden">{day.day.substring(0, 2)}</span>
+            <span className="hidden md:inline">{day.day.substring(0, 3)}</span> {timeRange}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
@@ -667,7 +710,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
             <div className="w-10 h-10 md:w-12 md:h-12 shrink-0">
               <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] md:scale-[0.375] origin-top-left" />
             </div>
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="text-lg md:text-2xl font-bold text-white min-w-0 truncate">
                 {guild.name}
                 <span className="text-gray-400 font-normal"> - {guild.realm}</span>
@@ -694,6 +737,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
                   <Image src="/raiderio-logo.png" alt="Raider.IO" width={32} height={32} className="w-full h-full object-contain" />
                 </a>
               </div>
+              <RaidScheduleBadges raidSchedule={guild.raidSchedule} />
             </div>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3">

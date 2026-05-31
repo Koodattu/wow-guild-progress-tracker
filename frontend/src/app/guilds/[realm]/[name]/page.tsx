@@ -3,7 +3,7 @@
 import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
-import { Guild, RaidProgressSummary, RaidInfo, Boss } from "@/types";
+import { Guild, RaidProgressSummary, RaidInfo, Boss, RaidSchedule } from "@/types";
 import { api } from "@/lib/api";
 import { useGuildSummaryByRealmName, useRaids, useGuildEventsByRealmName } from "@/lib/queries";
 import {
@@ -30,6 +30,53 @@ interface PageProps {
   params: Promise<{ realm: string; name: string }>;
 }
 
+const WEEK_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function formatScheduleHour(hour: number): string {
+  const totalMinutes = Math.round(hour * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function getSortedRaidScheduleDays(raidSchedule?: RaidSchedule) {
+  if (!raidSchedule?.days?.length) return [];
+
+  return [...raidSchedule.days].sort((a, b) => {
+    const aIndex = WEEK_ORDER.indexOf(a.day);
+    const bIndex = WEEK_ORDER.indexOf(b.day);
+    return (aIndex === -1 ? WEEK_ORDER.length : aIndex) - (bIndex === -1 ? WEEK_ORDER.length : bIndex);
+  });
+}
+
+function RaidScheduleBadges({ raidSchedule, variant, className = "" }: { raidSchedule?: RaidSchedule; variant: "mobile" | "desktop"; className?: string }) {
+  const days = getSortedRaidScheduleDays(raidSchedule);
+  if (days.length === 0) return null;
+
+  return (
+    <div className={`flex flex-wrap ${variant === "mobile" ? "gap-1 text-[10px]" : "gap-1.5 md:gap-2"} ${className}`}>
+      {days.map((day, index) => {
+        const dayLabel = variant === "mobile" ? day.day.substring(0, 2) : day.day.substring(0, 3);
+        const timeRange = `${formatScheduleHour(day.startHour)}-${formatScheduleHour(day.endHour)}`;
+
+        return (
+          <span
+            key={`${day.day}-${day.startHour}-${day.endHour}-${index}`}
+            className={
+              variant === "mobile"
+                ? "rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-gray-300"
+                : "rounded border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-300"
+            }
+            title={`${day.day} ${timeRange}`}
+          >
+            {dayLabel} {timeRange}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GuildProfilePage({ params }: PageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -47,7 +94,7 @@ export default function GuildProfilePage({ params }: PageProps) {
 
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
 
-  const { data: events = [] } = useGuildEventsByRealmName(realm, name, 5);
+  const { data: events = [] } = useGuildEventsByRealmName(realm, name, 4);
 
   // Combined loading/error states
   const loading = isLoadingGuildSummary || isLoadingRaids;
@@ -305,6 +352,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                     </a>
                   </div>
                 </div>
+                <RaidScheduleBadges raidSchedule={guildSummary.raidSchedule} variant="mobile" className="mt-1" />
               </div>
             </div>
             {/* Tier Scores - Mobile Compact */}
@@ -328,28 +376,6 @@ export default function GuildProfilePage({ params }: PageProps) {
                     {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
                   </span>
                 </div>
-              </div>
-            )}
-            {/* Raid Schedule - Mobile Compact */}
-            {guildSummary.raidSchedule && guildSummary.raidSchedule.days && guildSummary.raidSchedule.days.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-2 text-[10px]">
-                {[...guildSummary.raidSchedule.days]
-                  .sort((a, b) => {
-                    const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-                    return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
-                  })
-                  .map((day, index) => {
-                    const formatHour = (hour: number): string => {
-                      const h = Math.floor(hour);
-                      const m = (hour % 1) * 60;
-                      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-                    };
-                    return (
-                      <span key={index} className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-700">
-                        {day.day.substring(0, 2)} {formatHour(day.startHour)}-{formatHour(day.endHour)}
-                      </span>
-                    );
-                  })}
               </div>
             )}
             {/* Streamers - Mobile */}
@@ -376,10 +402,9 @@ export default function GuildProfilePage({ params }: PageProps) {
           <div className="hidden md:block">
             <div className="flex flex-row items-start gap-3 mb-3">
               {renderGuildProfileImage(128, "shrink-0 w-32 h-32")}
-              <div className="flex-1 w-full">
-                {/* Guild Name Row with Icons and Last Updated */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-1 gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="text-2xl md:text-5xl font-bold text-white">
                       {guildSummary.name}
                       {guildSummary.parent_guild && <span className="text-gray-400 font-normal"> ({guildSummary.parent_guild})</span>}
@@ -406,83 +431,57 @@ export default function GuildProfilePage({ params }: PageProps) {
                     </a>
                     {guildSummary.isCurrentlyRaiding && <span className="text-xs md:text-sm px-2 md:px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
                   </div>
-                  {guildSummary.lastFetched && <div className="text-xs md:text-sm text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
+                  {guildSummary.lastFetched && <div className="shrink-0 text-xs leading-none text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
                 </div>
-                {/* Realm Name Row with Tier Scores */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-2">
+
+                <div className="flex min-w-0 items-center justify-between gap-4">
                   <div className="text-xl md:text-3xl text-gray-400">{guildSummary.realm}</div>
-                  {/* Tier Scores Display - Classical Tier Style */}
                   {guildSummary.tierScores && guildSummary.tierScores.overall && (
-                    <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs">
-                      {/* Overall Score */}
+                    <div className="flex shrink-0 items-center justify-end gap-2 text-xs">
                       <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Overall</span>
-                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Overall</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
                           {getTierLetter(guildSummary.tierScores.overall.overallScore)}
                         </span>
                       </div>
-                      {/* Speed Score */}
                       <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Speed</span>
-                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Speed</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
                           {getTierLetter(guildSummary.tierScores.overall.speedScore)}
                         </span>
                       </div>
-                      {/* Efficiency Score */}
                       <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-1.5 md:px-2 py-1 text-gray-300 font-medium">Eff</span>
-                        <span className={`px-1.5 md:px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Efficiency</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
                           {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
                         </span>
                       </div>
                     </div>
                   )}
                 </div>
-                {/* Raid Schedule and Twitch Streamers Row */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-2">
-                  <div className="flex flex-wrap gap-1.5 md:gap-2">
-                    {guildSummary.raidSchedule &&
-                      guildSummary.raidSchedule.days &&
-                      guildSummary.raidSchedule.days.length > 0 &&
-                      [...guildSummary.raidSchedule.days]
-                        .sort((a, b) => {
-                          const weekOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-                          return weekOrder.indexOf(a.day) - weekOrder.indexOf(b.day);
-                        })
-                        .map((day, index) => {
-                          const formatHour = (hour: number): string => {
-                            const h = Math.floor(hour);
-                            const m = (hour % 1) * 60;
-                            return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-                          };
-                          const dayShort = day.day.substring(0, 3);
-                          return (
-                            <span key={index} className="px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700 text-sm">
-                              {dayShort} {formatHour(day.startHour)}-{formatHour(day.endHour)}
-                            </span>
-                          );
-                        })}
-                  </div>
+
+                <div className="flex min-w-0 items-center justify-between gap-4">
+                  <RaidScheduleBadges raidSchedule={guildSummary.raidSchedule} variant="desktop" className="min-w-0" />
                   {guildSummary.streamers && guildSummary.streamers.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex max-w-full shrink-0 flex-wrap justify-end gap-2">
                       {guildSummary.streamers.map((streamer) => (
                         <a
                           key={streamer.channelName}
                           href={`https://www.twitch.tv/${streamer.channelName}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-all font-medium text-sm ${
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                             streamer.isLive
-                              ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
+                              ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/40"
                               : "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
                           }`}
                           title={streamer.isLive ? `${streamer.channelName} is live!` : `Visit ${streamer.channelName} on Twitch`}
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
                           </svg>
-                          <span>{streamer.channelName}</span>
-                          {streamer.isLive && <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                          <span className="max-w-24 truncate">{streamer.channelName}</span>
+                          {streamer.isLive && <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse"></span>}
                         </a>
                       ))}
                     </div>

@@ -20,12 +20,12 @@ async function enrichEventsWithGuildData(events: any[]): Promise<Record<string, 
   const guildIds = [...new Set(events.map((e) => String(e.guildId)))];
 
   // Only fetch realm and streamers — lightweight query
-  const guilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1 }).lean();
+  const guilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1, isCurrentlyRaiding: 1 }).lean();
 
-  const guildMap = new Map<string, { realm: string; liveStreamers: string[] }>();
+  const guildMap = new Map<string, { realm: string; liveStreamers: string[]; isCurrentlyRaiding: boolean }>();
   for (const guild of guilds) {
     const liveStreamers = (guild.streamers || []).filter((s) => s.isLive).map((s) => s.channelName);
-    guildMap.set(String(guild._id), { realm: guild.realm, liveStreamers });
+    guildMap.set(String(guild._id), { realm: guild.realm, liveStreamers, isCurrentlyRaiding: guild.isCurrentlyRaiding ?? false });
   }
 
   return events.map((event) => {
@@ -34,6 +34,7 @@ async function enrichEventsWithGuildData(events: any[]): Promise<Record<string, 
       ...event,
       guildRealm: event.guildRealm || guildData?.realm,
       liveStreamers: guildData?.liveStreamers || [],
+      isCurrentlyRaiding: guildData?.isCurrentlyRaiding || false,
     };
   });
 }
