@@ -202,7 +202,7 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
         </span>
       </button>
       {expanded && (
-        <div className="mt-2 border border-gray-700 rounded-lg bg-gray-800/50 p-2 md:p-4">
+        <div className="mt-2 p-2 md:p-4">
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
