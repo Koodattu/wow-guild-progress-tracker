@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils";
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
+import Link from "next/link";
 import { useState, memo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
@@ -28,6 +29,49 @@ type VodPhaseLink = {
 const VOD_POPUP_WIDTH = 256;
 const VOD_POPUP_MARGIN = 8;
 const VOD_POPUP_GAP = 4;
+
+function getLiveStreamerChannelNames(guild: GuildListItem) {
+  return Array.from(new Set(guild.streamers?.filter((streamer) => streamer.isLive && streamer.channelName).map((streamer) => streamer.channelName) ?? []));
+}
+
+function GuildLiveBadge({ guild, label, compact = false }: { guild: GuildListItem; label: string; compact?: boolean }) {
+  const liveStreamers = getLiveStreamerChannelNames(guild);
+
+  if (!guild.isStreaming && liveStreamers.length === 0) return null;
+
+  const dot = <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400 animate-pulse" />;
+
+  if (liveStreamers.length === 0) {
+    return compact ? (
+      dot
+    ) : (
+      <span className="flex items-center gap-1 rounded bg-purple-900/50 px-2 py-0.5 text-xs font-semibold text-purple-300">
+        {dot}
+        {label}
+      </span>
+    );
+  }
+
+  const streamsParam = liveStreamers.join(",");
+  const title = `${label}: ${liveStreamers.join(", ")}`;
+
+  return (
+    <Link
+      href={`/livestreams?streams=${encodeURIComponent(streamsParam)}`}
+      onClick={(event) => event.stopPropagation()}
+      className={
+        compact
+          ? "inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-purple-900/50 active:bg-purple-800/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          : "inline-flex cursor-pointer items-center gap-1 rounded bg-purple-900/50 px-2 py-0.5 text-xs font-semibold text-purple-300 transition-colors hover:bg-purple-800/70 hover:text-purple-100 active:bg-purple-700/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+      }
+      title={title}
+      aria-label={title}
+    >
+      {dot}
+      {!compact && label}
+    </Link>
+  );
+}
 
 function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
@@ -331,12 +375,7 @@ const GuildTableRow = memo(
             >
               <Image src="/raiderio-logo.png" alt="Raider.IO" width={20} height={20} className="w-full h-full object-contain" />
             </a>
-            {guild.isStreaming && (
-              <span className="text-xs px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-                {t("live")}
-              </span>
-            )}
+            <GuildLiveBadge guild={guild} label={t("live")} />
             {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">{t("raiding")}</span>}
           </div>
         </td>
@@ -470,7 +509,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="font-semibold text-white text-xs truncate">{guild.name}</span>
-                  {guild.isStreaming && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0"></span>}
+                  <GuildLiveBadge guild={guild} label={t("live")} compact />
                   {guild.isCurrentlyRaiding && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>}
                 </div>
                 <div className="text-gray-500 text-[10px] truncate">

@@ -35,15 +35,22 @@ export default function Footer() {
       </div>
       <div className="text-center">
         <p className="text-gray-400 text-sm md:text-base">
-          {t("madeWith")}{" "}
+          Made with &lt;3 by{" "}
           <a href="https://www.twitch.tv/vaarattu" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Vaarattu
-          </a>{" "}
-          {t("and")}{" "}
+          </a>
+          ,{" "}
           <a href="https://github.com/Joeliciousb" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Joel
+          </a>{" "}
+          and{" "}
+          <a href="https://claude.ai/" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+            Carlos
           </a>
-          . {t("sendFeedback")}.
+          <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+            GPT
+          </a>
+          . Send feedback.
         </p>
         <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
           <a href="/terms" className="hover:text-gray-300 transition-colors">
