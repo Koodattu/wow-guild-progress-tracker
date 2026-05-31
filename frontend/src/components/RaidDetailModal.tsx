@@ -340,8 +340,8 @@ function BossPullHistoryContent({
   }
 
   return (
-    <div className="space-y-3">
-      <div className={`grid grid-cols-1 gap-2 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "xl:grid-cols-[6fr_1fr]" : ""}`}>
+    <div className="space-y-2">
+      <div className={`grid grid-cols-1 gap-1.5 items-start ${phaseDistribution && phaseDistribution.length > 1 ? "xl:grid-cols-[6fr_1fr]" : ""}`}>
         <PullProgressChart pullHistory={pullHistory} />
         {phaseDistribution && phaseDistribution.length > 1 && <PhaseDistributionChart phaseDistribution={phaseDistribution} />}
       </div>
@@ -456,7 +456,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
 
         {/* Expanded charts */}
         {isExpanded && (
-          <div className="mt-2 pt-2 border-t border-gray-700 space-y-4">
+          <div className="mt-1.5 pt-1.5 border-t border-gray-700 space-y-2">
             <BossPullHistoryContent realm={guild.realm} guildName={guild.name} raidId={selectedRaidId ?? 0} bossId={boss.bossId} difficulty={difficulty} variant="mobile" />
           </div>
         )}
@@ -533,7 +533,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
         </tr>
         {isExpanded && (
           <tr className="border-b border-gray-800 bg-gray-900/50">
-            <td colSpan={8} className="px-1 py-2 md:px-2 md:py-3">
+            <td colSpan={8} className="px-1 py-1 md:px-2 md:py-1.5">
               <BossPullHistoryContent realm={guild.realm} guildName={guild.name} raidId={selectedRaidId ?? 0} bossId={boss.bossId} difficulty={difficulty} variant="desktop" />
             </td>
           </tr>

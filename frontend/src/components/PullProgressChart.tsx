@@ -10,7 +10,7 @@ interface PullProgressChartProps {
   pullHistory: PullHistoryEntry[];
 }
 
-const CHART_MARGIN = { top: 8, right: 14, bottom: 8, left: 2 };
+const CHART_MARGIN = { top: 8, right: 14, bottom: 0, left: 2 };
 const PLOT_LEFT_OFFSET = 44;
 
 type PullTooltipPayload = {
@@ -213,7 +213,7 @@ export default function PullProgressChart({ pullHistory }: PullProgressChartProp
   return (
     <div
       ref={containerRef}
-      className={`h-48 w-full px-1 py-2 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none ${hasWclLinks ? "cursor-pointer" : ""}`}
+      className={`h-48 w-full px-1 py-0.5 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none ${hasWclLinks ? "cursor-pointer" : ""}`}
       onClick={handleContainerClick}
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -225,6 +225,8 @@ export default function PullProgressChart({ pullHistory }: PullProgressChartProp
             type="number"
             domain={["dataMin", "dataMax"]}
             allowDecimals={false}
+            height={16}
+            tickMargin={2}
             tick={{ fill: "#9CA3AF", fontSize: 11 }}
             stroke="#4B5563"
             tickLine={false}

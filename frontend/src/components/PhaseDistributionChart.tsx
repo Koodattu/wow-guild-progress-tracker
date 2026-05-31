@@ -66,7 +66,7 @@ export default function PhaseDistributionChart({ phaseDistribution }: PhaseDistr
   }));
 
   return (
-    <div className="w-full px-1.5 pb-1.5 pt-0 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none" onMouseDown={(event) => event.preventDefault()}>
+    <div className="w-full px-1.5 pb-0.5 pt-0 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none" onMouseDown={(event) => event.preventDefault()}>
       <div className="h-32 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
