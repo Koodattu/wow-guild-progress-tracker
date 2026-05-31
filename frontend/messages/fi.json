@@ -1,16 +1,16 @@
 {
   "navigation": {
     "home": "Koti",
-    "progressLeaderboard": "Edistymistilastot",
-    "allGuilds": "Kaikki Kiltat",
+    "progressLeaderboard": "Edistyminen",
+    "allGuilds": "Killat",
     "compare": "Vertailu",
-    "raidTimetable": "Raidi-aikataulu",
-    "characterRankings": "Hahmojen Sijoitukset",
+    "raidTimetable": "Aikataulu",
+    "characterRankings": "Hahmot",
     "livestreams": "Suoratoistot",
     "tierLists": "Tier Listat",
-    "raidAnalytics": "Raidi-analytiikka",
+    "raidAnalytics": "Analytiikka",
     "pickems": "Veikkaukset",
-    "latestEvents": "Viimeisimmät Tapahtumat",
+    "latestEvents": "Tapahtumat",
     "info": "Tietoa",
     "contact": "Yhteystiedot",
     "loginWithDiscord": "Kirjaudu Discordilla",
@@ -136,7 +136,7 @@
     "raidProgress": "Raidi-edistyminen"
   },
   "timetablePage": {
-    "title": "Raidi-aikataulu",
+    "title": "Aikataulu",
     "selectGuild": "Valitse Kilta",
     "allGuilds": "Kaikki Kiltat",
     "selectDay": "Valitse Päivä",

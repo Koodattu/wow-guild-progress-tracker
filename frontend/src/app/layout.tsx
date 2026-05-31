@@ -52,7 +52,7 @@ const getPageMetadata = (pathname: string, locale: "en" | "fi") => {
       description: isEnglish ? "Watch live WoW streams from Finnish guild members." : "Katso suomalaisten kiltalaisten WoW-striimejä livenä.",
     },
     "/timetable": {
-      title: isEnglish ? "Raid Timetable" : "Raid-aikataulu",
+      title: isEnglish ? "Timetable" : "Aikataulu",
       description: isEnglish ? "View raid schedules for Finnish WoW guilds." : "Katso suomalaisten WoW-kiltojen raid-aikataulut.",
     },
     "/privacy": {

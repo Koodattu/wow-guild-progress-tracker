@@ -137,30 +137,16 @@ export default function Navigation() {
                   {t("allGuilds")}
                 </Link>
                 <Link
-                  href="/compare"
-                  className={`text-sm font-medium transition-colors ${isActive("/compare") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
-                >
-                  {t("compare")}
-                </Link>
-                <Link
                   href="/character-rankings"
                   className={`text-sm font-medium transition-colors ${isActive("/character-rankings") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
                   {t("characterRankings")}
                 </Link>
                 <Link
-                  href="/timetable"
-                  className={`text-sm font-medium transition-colors ${isActive("/timetable") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                  href="/compare"
+                  className={`text-sm font-medium transition-colors ${isActive("/compare") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
-                  {t("raidTimetable")}
-                </Link>
-                <Link
-                  href="/livestreams"
-                  className={`text-sm font-medium transition-colors ${
-                    isActive("/livestreams") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
-                  } py-5`}
-                >
-                  {t("livestreams")}
+                  {t("compare")}
                 </Link>
                 <Link
                   href="/tierlists"
@@ -177,16 +163,30 @@ export default function Navigation() {
                   {t("raidAnalytics")}
                 </Link>
                 <Link
-                  href="/pickems"
-                  className={`text-sm font-medium transition-colors ${isActive("/pickems") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                  href="/timetable"
+                  className={`text-sm font-medium transition-colors ${isActive("/timetable") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
-                  {t("pickems")}
+                  {t("raidTimetable")}
+                </Link>
+                <Link
+                  href="/livestreams"
+                  className={`text-sm font-medium transition-colors ${
+                    isActive("/livestreams") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"
+                  } py-5`}
+                >
+                  {t("livestreams")}
                 </Link>
                 <Link
                   href="/events"
                   className={`text-sm font-medium transition-colors ${isActive("/events") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
                 >
                   {t("latestEvents")}
+                </Link>
+                <Link
+                  href="/pickems"
+                  className={`text-sm font-medium transition-colors ${isActive("/pickems") ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-400 hover:text-white"} py-5`}
+                >
+                  {t("pickems")}
                 </Link>
               </div>
             </div>
@@ -528,14 +528,6 @@ export default function Navigation() {
                 {t("allGuilds")}
               </Link>
               <Link
-                href="/compare"
-                className={`block px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive("/compare") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
-                }`}
-              >
-                {t("compare")}
-              </Link>
-              <Link
                 href="/character-rankings"
                 className={`block px-4 py-3 text-sm font-medium transition-colors ${
                   isActive("/character-rankings") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
@@ -544,20 +536,12 @@ export default function Navigation() {
                 {t("characterRankings")}
               </Link>
               <Link
-                href="/timetable"
+                href="/compare"
                 className={`block px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive("/timetable") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                  isActive("/compare") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}
               >
-                {t("raidTimetable")}
-              </Link>
-              <Link
-                href="/livestreams"
-                className={`block px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive("/livestreams") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
-                }`}
-              >
-                {t("livestreams")}
+                {t("compare")}
               </Link>
               <Link
                 href="/tierlists"
@@ -576,12 +560,20 @@ export default function Navigation() {
                 {t("raidAnalytics")}
               </Link>
               <Link
-                href="/pickems"
+                href="/timetable"
                 className={`block px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive("/pickems") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                  isActive("/timetable") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}
               >
-                {t("pickems")}
+                {t("raidTimetable")}
+              </Link>
+              <Link
+                href="/livestreams"
+                className={`block px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive("/livestreams") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                {t("livestreams")}
               </Link>
               <Link
                 href="/events"
@@ -590,6 +582,14 @@ export default function Navigation() {
                 }`}
               >
                 {t("latestEvents")}
+              </Link>
+              <Link
+                href="/pickems"
+                className={`block px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive("/pickems") ? "text-blue-400 bg-blue-900/20 border-l-2 border-blue-400" : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                {t("pickems")}
               </Link>
             </div>
 

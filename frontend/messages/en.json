@@ -1,16 +1,16 @@
 {
   "navigation": {
     "home": "Home",
-    "progressLeaderboard": "Progress Leaderboard",
-    "allGuilds": "All Guilds",
+    "progressLeaderboard": "Progress",
+    "allGuilds": "Guilds",
     "compare": "Compare",
-    "raidTimetable": "Raid Timetable",
-    "characterRankings": "Character Rankings",
+    "raidTimetable": "Timetable",
+    "characterRankings": "Characters",
     "livestreams": "Livestreams",
     "tierLists": "Tier Lists",
-    "raidAnalytics": "Raid Analytics",
+    "raidAnalytics": "Analytics",
     "pickems": "Pickems",
-    "latestEvents": "Latest Events",
+    "latestEvents": "Events",
     "info": "Info",
     "contact": "Contact",
     "loginWithDiscord": "Login with Discord",
@@ -136,7 +136,7 @@
     "raidProgress": "Raid Progress"
   },
   "timetablePage": {
-    "title": "Raid Timetable",
+    "title": "Timetable",
     "selectGuild": "Select Guild",
     "allGuilds": "All Guilds",
     "selectDay": "Select Day",

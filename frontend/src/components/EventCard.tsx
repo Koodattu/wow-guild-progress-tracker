@@ -63,6 +63,7 @@ function getEventTypeBorderColor(type: string): string {
 }
 
 export default function EventCard({ event, className = "" }: EventCardProps) {
+  const showDifficulty = event.type !== "hiatus";
   const difficultyColor = getDifficultyColor(event.difficulty);
   const eventTypeColor = getEventTypeColor(event.type);
   const eventTypeBorderColor = getEventTypeBorderColor(event.type);
@@ -82,7 +83,7 @@ export default function EventCard({ event, className = "" }: EventCardProps) {
           <div className="justify-self-center">
             <WatchButton event={event} />
           </div>
-          <span className={`${difficultyColor} justify-self-end font-semibold uppercase`}>{event.difficulty}</span>
+          <div className="justify-self-end">{showDifficulty && <span className={`${difficultyColor} font-semibold uppercase`}>{event.difficulty}</span>}</div>
         </div>
         <div className="text-white text-xs md:text-sm leading-relaxed">
           <EventMessage event={event} />

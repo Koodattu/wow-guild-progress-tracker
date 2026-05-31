@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useGuildSchedules } from "@/lib/queries";
+import { getGuildProfileUrl } from "@/lib/utils";
 import { GuildSchedule, RaidScheduleDay } from "@/types";
 import { useTranslations } from "next-intl";
 
@@ -37,6 +39,19 @@ export default function TimetablePage() {
 
   const { data, isLoading, error: queryError } = useGuildSchedules();
   const schedules = data ?? [];
+  const sortedSchedules = useMemo(
+    () =>
+      [...schedules].sort((a, b) => {
+        const nameCompare = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        if (nameCompare !== 0) return nameCompare;
+
+        const realmCompare = a.realm.localeCompare(b.realm, undefined, { sensitivity: "base" });
+        if (realmCompare !== 0) return realmCompare;
+
+        return (a.parent_guild ?? "").localeCompare(b.parent_guild ?? "", undefined, { sensitivity: "base" });
+      }),
+    [schedules],
+  );
   const [selectedGuild, setSelectedGuild] = useState<string>("all");
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -68,7 +83,7 @@ export default function TimetablePage() {
 
   // Get all raid events to display on the timetable
   const getRaidEvents = () => {
-    const filteredSchedules = selectedGuild === "all" ? schedules : schedules.filter((s) => s._id === selectedGuild);
+    const filteredSchedules = selectedGuild === "all" ? sortedSchedules : sortedSchedules.filter((s) => s._id === selectedGuild);
 
     const events: Array<{
       guild: GuildSchedule;
@@ -214,7 +229,7 @@ export default function TimetablePage() {
             className="bg-gray-800 border border-gray-700 rounded px-3 md:px-4 py-2 text-white focus:outline-none focus:border-blue-500 text-sm md:text-base w-full sm:w-auto"
           >
             <option value="all">{t("allGuilds")}</option>
-            {schedules.map((guild) => (
+            {sortedSchedules.map((guild) => (
               <option key={guild._id} value={guild._id}>
                 {guild.name} - {guild.realm}
                 {guild.parent_guild ? ` (${guild.parent_guild})` : ""}
@@ -292,9 +307,10 @@ export default function TimetablePage() {
                     const color = getGuildColor(guild._id);
 
                     return (
-                      <div
+                      <Link
                         key={`${guild._id}-${idx}`}
-                        className="absolute border border-opacity-50 rounded px-1 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
+                        href={getGuildProfileUrl(guild.realm, guild.name)}
+                        className="absolute block border border-opacity-50 rounded px-1 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                         style={{
                           left: `${left}%`,
                           width: `${width - 1}%`,
@@ -307,13 +323,14 @@ export default function TimetablePage() {
                         title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
                           daySchedule.endHour,
                         )}`}
+                        aria-label={`View ${guild.name} on ${guild.realm}`}
                       >
                         <div className="font-semibold truncate text-white drop-shadow text-[10px] md:text-xs">{guild.name}</div>
                         {guild.parent_guild && <div className="text-[8px] md:text-[10px] text-white/80 truncate drop-shadow hidden md:block">({guild.parent_guild})</div>}
                         <div className="text-[8px] md:text-[10px] text-white/90 drop-shadow">
                           {formatHour(daySchedule.startHour)} - {formatHour(daySchedule.endHour)}
                         </div>
-                      </div>
+                      </Link>
                     );
                   });
                 })()}
@@ -395,9 +412,10 @@ export default function TimetablePage() {
                       const color = getGuildColor(guild._id);
 
                       return (
-                        <div
+                        <Link
                           key={`${guild._id}-${idx}`}
-                          className="absolute border border-opacity-50 rounded px-2 py-1 text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
+                          href={getGuildProfileUrl(guild.realm, guild.name)}
+                          className="absolute block border border-opacity-50 rounded px-2 py-1 text-xs text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                           style={{
                             left: `${left}%`,
                             width: `${width - 1}%`,
@@ -410,13 +428,14 @@ export default function TimetablePage() {
                           title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
                             daySchedule.endHour,
                           )}`}
+                          aria-label={`View ${guild.name} on ${guild.realm}`}
                         >
                           <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
                           {guild.parent_guild && <div className="text-[10px] text-white/80 truncate drop-shadow">({guild.parent_guild})</div>}
                           <div className="text-[10px] text-white/90 drop-shadow">
                             {formatHour(daySchedule.startHour)} - {formatHour(daySchedule.endHour)}
                           </div>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>
@@ -487,9 +506,10 @@ export default function TimetablePage() {
                       const color = getGuildColor(guild._id);
 
                       return (
-                        <div
+                        <Link
                           key={`${guild._id}-${idx}`}
-                          className="absolute border border-opacity-50 rounded px-1 py-0.5 text-[9px] text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg"
+                          href={getGuildProfileUrl(guild.realm, guild.name)}
+                          className="absolute block border border-opacity-50 rounded px-1 py-0.5 text-[9px] text-white overflow-hidden hover:z-20 transition-all cursor-pointer shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                           style={{
                             left: `${left}%`,
                             width: `${width - 1}%`,
@@ -502,10 +522,11 @@ export default function TimetablePage() {
                           title={`${guild.name} - ${guild.realm}${guild.parent_guild ? ` (${guild.parent_guild})` : ""}\n${formatHour(daySchedule.startHour)} - ${formatHour(
                             daySchedule.endHour,
                           )}`}
+                          aria-label={`View ${guild.name} on ${guild.realm}`}
                         >
                           <div className="font-semibold truncate text-white drop-shadow">{guild.name}</div>
                           <div className="text-[8px] text-white/90 drop-shadow">{formatHour(daySchedule.startHour).replace(":00", "")}</div>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>
