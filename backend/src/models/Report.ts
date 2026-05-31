@@ -1,5 +1,14 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IReportFightSequenceEntry {
+  fightId: number;
+  encounterID: number;
+  difficulty: number;
+  startTime: number;
+  endTime: number;
+  name?: string;
+}
+
 export interface IReport extends Document {
   code: string; // WCL report code (unique)
   guildId: mongoose.Types.ObjectId;
@@ -8,6 +17,7 @@ export interface IReport extends Document {
   endTime?: number; // Unix timestamp, undefined if ongoing
   isOngoing: boolean;
   fightCount: number;
+  fightSequence?: IReportFightSequenceEntry[]; // Full WCL fight order, including non-tracked fights, for raid-time calculations
   encounterFights: {
     // Quick summary of fights by encounter
     [encounterID: number]: {
@@ -21,6 +31,18 @@ export interface IReport extends Document {
   updatedAt: Date;
 }
 
+const ReportFightSequenceSchema: Schema = new Schema(
+  {
+    fightId: { type: Number, required: true },
+    encounterID: { type: Number, default: 0 },
+    difficulty: { type: Number, default: 0 },
+    startTime: { type: Number, required: true },
+    endTime: { type: Number, required: true },
+    name: { type: String },
+  },
+  { _id: false },
+);
+
 const ReportSchema: Schema = new Schema(
   {
     code: { type: String, required: true },
@@ -30,6 +52,7 @@ const ReportSchema: Schema = new Schema(
     endTime: { type: Number },
     isOngoing: { type: Boolean, default: false },
     fightCount: { type: Number, default: 0 },
+    fightSequence: [ReportFightSequenceSchema],
     encounterFights: { type: Map, of: Object, default: new Map() },
     lastProcessed: { type: Date, default: Date.now },
   },
@@ -40,6 +63,7 @@ const ReportSchema: Schema = new Schema(
 
 // Compound index for efficient lookups
 ReportSchema.index({ guildId: 1, zoneId: 1, startTime: -1 });
+ReportSchema.index({ guildId: 1, startTime: -1 });
 ReportSchema.index({ code: 1 }, { unique: true });
 ReportSchema.index({ isOngoing: 1 });
 

@@ -1,5 +1,5 @@
 import Guild, { IGuild } from "../models/Guild";
-import Report from "../models/Report";
+import Report, { IReportFightSequenceEntry } from "../models/Report";
 import Fight from "../models/Fight";
 import GuildProcessingQueue, { IGuildProcessingQueue, ProcessingStatus, JobType } from "../models/GuildProcessingQueue";
 import wclService from "./warcraftlogs.service";
@@ -458,6 +458,34 @@ class BackgroundGuildProcessor {
   /**
    * Process a single report - save fights to database
    */
+  private buildReportFightSequence(report: any): IReportFightSequenceEntry[] {
+    if (!Array.isArray(report.fights)) {
+      return [];
+    }
+
+    return report.fights
+      .map((fight: any): IReportFightSequenceEntry | null => {
+        const fightId = Number(fight.id ?? fight.fightId);
+        const startTime = Number(fight.startTime);
+        const endTime = Number(fight.endTime);
+
+        if (!Number.isFinite(fightId) || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) {
+          return null;
+        }
+
+        return {
+          fightId,
+          encounterID: Number(fight.encounterID) || 0,
+          difficulty: Number(fight.difficulty) || 0,
+          startTime,
+          endTime,
+          name: typeof fight.name === "string" ? fight.name : undefined,
+        };
+      })
+      .filter((fight: IReportFightSequenceEntry | null): fight is IReportFightSequenceEntry => fight !== null)
+      .sort((a: IReportFightSequenceEntry, b: IReportFightSequenceEntry) => a.startTime - b.startTime || a.endTime - b.endTime || a.fightId - b.fightId);
+  }
+
   private async processReport(report: any, guild: IGuild, validBossIds: Set<number>): Promise<number> {
     let fightsSaved = 0;
     const zoneId = report.zone?.id;
@@ -474,6 +502,7 @@ class BackgroundGuildProcessor {
         endTime: report.endTime,
         isOngoing,
         fightCount: report.fights?.length || 0,
+        fightSequence: this.buildReportFightSequence(report),
         lastProcessed: new Date(),
       },
       { upsert: true, new: true },

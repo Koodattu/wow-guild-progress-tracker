@@ -23,6 +23,7 @@ import {
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
+import LatestReportsFeed from "@/components/LatestReportsFeed";
 import { useHorseRaceMode } from "@/lib/horse-race-preferences";
 import { getUmaImageLabel, isUmaImage } from "@/lib/uma-images";
 
@@ -502,6 +503,8 @@ export default function GuildProfilePage({ params }: PageProps) {
             <HorizontalEventsFeed events={events} />
           </div>
         )}
+
+        <LatestReportsFeed reports={guildSummary.latestReports ?? []} />
 
         {/* Progress Table */}
         {guildSummary.progress.length > 0 ? (

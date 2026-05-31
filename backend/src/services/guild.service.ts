@@ -2,7 +2,7 @@ import Guild, { IGuild, IRaidProgress, IBossProgress, IOfficialRaidProgress } fr
 import type { IStreamer } from "../models/Streamer";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
-import Report from "../models/Report";
+import Report, { IReportFightSequenceEntry } from "../models/Report";
 import Fight, { IFight } from "../models/Fight";
 import FightVodLink from "../models/FightVodLink";
 import TierList from "../models/TierList";
@@ -44,12 +44,269 @@ interface FightVodTarget {
   fightId: number;
 }
 
+interface RaidTimeInterval {
+  startMs: number;
+  endMs: number;
+}
+
+type LatestReportDifficulty = "mythic" | "heroic" | "normal" | "lfr" | "unknown";
+
+interface LatestReportBossSummary {
+  encounterID: number;
+  name: string;
+  iconUrl?: string;
+  pulls: number;
+  kills: number;
+  wipes: number;
+  difficulties: LatestReportDifficultySummary[];
+}
+
+interface LatestReportDifficultySummary {
+  difficultyId: number;
+  difficulty: LatestReportDifficulty;
+  pulls: number;
+  kills: number;
+  wipes: number;
+}
+
+interface LatestReportSummary {
+  code: string;
+  url: string;
+  raidId?: number;
+  raidName: string;
+  raidIconUrl?: string;
+  startTime: number;
+  endTime?: number;
+  durationSeconds?: number;
+  isOngoing: boolean;
+  fightCount: number;
+  kills: number;
+  wipes: number;
+  difficulties: LatestReportDifficultySummary[];
+  bosses: LatestReportBossSummary[];
+}
+
+interface LatestReportFightAggregation {
+  _id: {
+    reportCode: string;
+    zoneId: number;
+    encounterID: number;
+    encounterName: string;
+    difficulty: number;
+  };
+  pulls: number;
+  kills: number;
+  wipes: number;
+}
+
+interface LeanReportSummaryDocument {
+  _id: mongoose.Types.ObjectId;
+  code: string;
+  guildId: mongoose.Types.ObjectId;
+  zoneId: number;
+  startTime: number;
+  endTime?: number;
+  isOngoing?: boolean;
+  fightCount?: number;
+}
+
 class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
 
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  private buildReportFightSequence(report: any): IReportFightSequenceEntry[] {
+    if (!Array.isArray(report.fights)) {
+      return [];
+    }
+
+    return report.fights
+      .map((fight: any): IReportFightSequenceEntry | null => {
+        const fightId = Number(fight.id ?? fight.fightId);
+        const startTime = Number(fight.startTime);
+        const endTime = Number(fight.endTime);
+
+        if (!Number.isFinite(fightId) || !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) {
+          return null;
+        }
+
+        return {
+          fightId,
+          encounterID: Number(fight.encounterID) || 0,
+          difficulty: Number(fight.difficulty) || 0,
+          startTime,
+          endTime,
+          name: typeof fight.name === "string" ? fight.name : undefined,
+        };
+      })
+      .filter((fight: IReportFightSequenceEntry | null): fight is IReportFightSequenceEntry => fight !== null)
+      .sort((a: IReportFightSequenceEntry, b: IReportFightSequenceEntry) => a.startTime - b.startTime || a.endTime - b.endTime || a.fightId - b.fightId);
+  }
+
+  private getStoredFightKey(fight: { reportCode: string; fightId: number }): string {
+    return `${fight.reportCode}:${fight.fightId}`;
+  }
+
+  private getReportFightKey(reportCode: string, fightId: number): string {
+    return `${reportCode}:${fightId}`;
+  }
+
+  private getValidFightChainIntervals(reportCode: string, reportStartTime: number, fightSequence: IReportFightSequenceEntry[], validFightKeys: Set<string>): RaidTimeInterval[] {
+    const intervals: RaidTimeInterval[] = [];
+    let currentInterval: RaidTimeInterval | null = null;
+
+    for (const fight of fightSequence) {
+      const isValidFight = validFightKeys.has(this.getReportFightKey(reportCode, fight.fightId));
+
+      if (!isValidFight) {
+        if (currentInterval) {
+          intervals.push(currentInterval);
+          currentInterval = null;
+        }
+        continue;
+      }
+
+      const startMs = reportStartTime + fight.startTime;
+      const endMs = reportStartTime + fight.endTime;
+
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        continue;
+      }
+
+      if (!currentInterval) {
+        currentInterval = { startMs, endMs };
+      } else {
+        currentInterval.endMs = Math.max(currentInterval.endMs, endMs);
+      }
+    }
+
+    if (currentInterval) {
+      intervals.push(currentInterval);
+    }
+
+    return intervals;
+  }
+
+  private getFallbackReportInterval(fights: Array<{ reportStartTime: number; fightStartTime: number; fightEndTime: number }>): RaidTimeInterval | null {
+    let startMs = Number.MAX_SAFE_INTEGER;
+    let endMs = 0;
+
+    for (const fight of fights) {
+      startMs = Math.min(startMs, fight.reportStartTime + fight.fightStartTime);
+      endMs = Math.max(endMs, fight.reportStartTime + fight.fightEndTime);
+    }
+
+    if (startMs === Number.MAX_SAFE_INTEGER || endMs <= startMs) {
+      return null;
+    }
+
+    return { startMs, endMs };
+  }
+
+  private sumMergedIntervalsSeconds(intervals: RaidTimeInterval[]): number {
+    if (intervals.length === 0) {
+      return 0;
+    }
+
+    const sortedIntervals = [...intervals].sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+    let totalMs = 0;
+    let currentStart = sortedIntervals[0].startMs;
+    let currentEnd = sortedIntervals[0].endMs;
+
+    for (let i = 1; i < sortedIntervals.length; i++) {
+      const interval = sortedIntervals[i];
+
+      if (interval.startMs <= currentEnd) {
+        currentEnd = Math.max(currentEnd, interval.endMs);
+        continue;
+      }
+
+      totalMs += currentEnd - currentStart;
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+    }
+
+    totalMs += currentEnd - currentStart;
+    return totalMs / 1000;
+  }
+
+  private async calculateRaidTimeSpentFromFightChains(guildId: mongoose.Types.ObjectId, fights: any[]): Promise<number> {
+    if (fights.length === 0) {
+      return 0;
+    }
+
+    const fightsByReport = new Map<string, any[]>();
+    const validFightKeys = new Set<string>();
+
+    for (const fight of fights) {
+      if (!fight.reportCode || fight.fightId == null) continue;
+
+      validFightKeys.add(this.getStoredFightKey(fight));
+
+      const reportFights = fightsByReport.get(fight.reportCode) || [];
+      reportFights.push(fight);
+      fightsByReport.set(fight.reportCode, reportFights);
+    }
+
+    const reportCodes = Array.from(fightsByReport.keys());
+    if (reportCodes.length === 0) {
+      return 0;
+    }
+
+    const reports = (await Report.find({ guildId, code: { $in: reportCodes } })
+      .select("code startTime fightSequence")
+      .lean()) as Array<{ code: string; startTime: number; fightSequence?: IReportFightSequenceEntry[] }>;
+    const reportsByCode = new Map(reports.map((report) => [report.code, report]));
+    const intervals: RaidTimeInterval[] = [];
+
+    for (const reportCode of reportCodes) {
+      const report = reportsByCode.get(reportCode);
+
+      if (report?.fightSequence?.length) {
+        intervals.push(...this.getValidFightChainIntervals(reportCode, report.startTime, report.fightSequence, validFightKeys));
+        continue;
+      }
+
+      const fallbackInterval = this.getFallbackReportInterval(fightsByReport.get(reportCode) || []);
+      if (fallbackInterval) {
+        intervals.push(fallbackInterval);
+      }
+    }
+
+    return this.sumMergedIntervalsSeconds(intervals);
+  }
+
+  private getReportDifficultyLabel(difficultyId: number): LatestReportDifficulty {
+    switch (difficultyId) {
+      case 5:
+        return "mythic";
+      case 4:
+        return "heroic";
+      case 3:
+        return "normal";
+      case 2:
+        return "lfr";
+      default:
+        return "unknown";
+    }
+  }
+
+  private getReportDifficultySortValue(difficultyId: number): number {
+    switch (difficultyId) {
+      case 5:
+        return 0;
+      case 4:
+        return 1;
+      case 3:
+        return 2;
+      case 2:
+        return 3;
+      default:
+        return 4;
+    }
   }
 
   private formatConfigStreamers(streamers: string[] = []): IStreamer[] {
@@ -1437,6 +1694,8 @@ class GuildService {
         totalBosses,
         totalTimeSpent: 0,
         totalCombatTimeSpent: 0,
+        progressRaidTimeSpent: 0,
+        totalRaidTimeSpent: 0,
         bosses: [],
         lastUpdated: new Date(),
       } as IRaidProgress);
@@ -1722,6 +1981,7 @@ class GuildService {
             endTime: report.endTime,
             isOngoing,
             fightCount: report.fights?.length || 0,
+            fightSequence: this.buildReportFightSequence(report),
             lastProcessed: new Date(),
           },
           { upsert: true, new: true },
@@ -1940,6 +2200,7 @@ class GuildService {
           endTime: reportEndTime,
           isOngoing: isLive,
           fightCount: totalFightsInReport,
+          fightSequence: this.buildReportFightSequence(report),
           lastProcessed: new Date(),
         },
         { upsert: true, new: true },
@@ -2313,6 +2574,7 @@ class GuildService {
           endTime: reportEndTime,
           isOngoing: isLive,
           fightCount: totalFightsInReport, // Store total fight count to detect missing fights later
+          fightSequence: this.buildReportFightSequence(report),
           lastProcessed: new Date(),
         },
         { upsert: true, new: true },
@@ -2859,7 +3121,14 @@ class GuildService {
       guildLog.info(`No ${difficulty} fights found for ${raidData.name}`);
       // Clear existing progress for this raid/difficulty if it exists
       const existingProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
-      if (existingProgress && (existingProgress.bossesDefeated > 0 || existingProgress.bosses.length > 0)) {
+      if (
+        existingProgress &&
+        (existingProgress.bossesDefeated > 0 ||
+          existingProgress.bosses.length > 0 ||
+          (existingProgress.totalCombatTimeSpent ?? 0) > 0 ||
+          (existingProgress.progressRaidTimeSpent ?? 0) > 0 ||
+          (existingProgress.totalRaidTimeSpent ?? 0) > 0)
+      ) {
         guildLog.info(
           `Clearing stale ${difficulty} progress for ${raidData.name} (had ${existingProgress.bossesDefeated} defeated, ${existingProgress.bosses.length} bosses tracked)`,
         );
@@ -2867,6 +3136,8 @@ class GuildService {
         existingProgress.bossesDefeated = 0;
         existingProgress.totalTimeSpent = 0;
         existingProgress.totalCombatTimeSpent = 0;
+        existingProgress.progressRaidTimeSpent = 0;
+        existingProgress.totalRaidTimeSpent = 0;
         existingProgress.lastUpdated = new Date();
         guild.markModified("progress");
       }
@@ -2925,12 +3196,21 @@ class GuildService {
       guildLog.info(`No ${difficulty} fights remaining after date filtering for ${raidData.name}`);
       // Clear existing progress for this raid/difficulty if it exists
       const existingProgress = guild.progress.find((p) => p.raidId === raidData.id && p.difficulty === difficulty);
-      if (existingProgress && (existingProgress.bossesDefeated > 0 || existingProgress.bosses.length > 0)) {
+      if (
+        existingProgress &&
+        (existingProgress.bossesDefeated > 0 ||
+          existingProgress.bosses.length > 0 ||
+          (existingProgress.totalCombatTimeSpent ?? 0) > 0 ||
+          (existingProgress.progressRaidTimeSpent ?? 0) > 0 ||
+          (existingProgress.totalRaidTimeSpent ?? 0) > 0)
+      ) {
         guildLog.info(`Clearing stale ${difficulty} progress for ${raidData.name} after date filtering`);
         existingProgress.bosses = [];
         existingProgress.bossesDefeated = 0;
         existingProgress.totalTimeSpent = 0;
         existingProgress.totalCombatTimeSpent = 0;
+        existingProgress.progressRaidTimeSpent = 0;
+        existingProgress.totalRaidTimeSpent = 0;
         existingProgress.lastUpdated = new Date();
         guild.markModified("progress");
       }
@@ -3023,6 +3303,7 @@ class GuildService {
 
     // THIRD PASS: Process all unique fights and build statistics
     let totalCombatTime = 0;
+    const progressionFights: any[] = [];
     for (let i = 0; i < uniqueFights.length; i++) {
       // Yield every 50 fights to let the event loop process HTTP requests
       if (i % 50 === 0 && i > 0) await yieldToEventLoop();
@@ -3060,6 +3341,7 @@ class GuildService {
       const shouldCountPull = !firstKillTime || fight.timestamp <= firstKillTime;
 
       if (shouldCountPull) {
+        progressionFights.push(fight);
         bossData.pulls++;
         bossData.totalTime += duration;
 
@@ -3160,6 +3442,11 @@ class GuildService {
       }
     }
 
+    const [progressRaidTimeSpent, totalRaidTimeSpent] = await Promise.all([
+      this.calculateRaidTimeSpentFromFightChains(guild._id as mongoose.Types.ObjectId, progressionFights),
+      this.calculateRaidTimeSpentFromFightChains(guild._id as mongoose.Types.ObjectId, uniqueFights),
+    ]);
+
     // Sort kill order by time and assign order numbers
     killOrderTracker.sort((a, b) => a.killTime.getTime() - b.killTime.getTime());
     const killOrderMap = new Map<number, number>();
@@ -3194,6 +3481,8 @@ class GuildService {
         totalBosses: raidData.bosses.length,
         totalTimeSpent: 0,
         totalCombatTimeSpent: 0,
+        progressRaidTimeSpent: 0,
+        totalRaidTimeSpent: 0,
         bosses: [],
         lastUpdated: new Date(),
       } as IRaidProgress);
@@ -3286,6 +3575,8 @@ class GuildService {
     raidProgress.totalBosses = raidData.bosses.length;
     raidProgress.totalTimeSpent = totalTime;
     raidProgress.totalCombatTimeSpent = totalCombatTime;
+    raidProgress.progressRaidTimeSpent = progressRaidTimeSpent;
+    raidProgress.totalRaidTimeSpent = totalRaidTimeSpent;
     raidProgress.lastUpdated = new Date();
 
     guildLog.info(`Before markModified - ${difficulty} progress has ${raidProgress.bosses.length} bosses in array`);
@@ -3297,6 +3588,8 @@ class GuildService {
       guild.markModified(`progress.${progressIndex}.bossesDefeated`);
       guild.markModified(`progress.${progressIndex}.totalTimeSpent`);
       guild.markModified(`progress.${progressIndex}.totalCombatTimeSpent`);
+      guild.markModified(`progress.${progressIndex}.progressRaidTimeSpent`);
+      guild.markModified(`progress.${progressIndex}.totalRaidTimeSpent`);
     }
 
     // Also mark the entire progress array as modified
@@ -3916,7 +4209,15 @@ class GuildService {
     if (!progress) return false;
 
     const currentBoss = progress.bosses?.find((boss: any) => boss.kills === 0);
-    return Boolean(currentBoss?.pullCount > 0 || currentBoss?.bestPercent > 0 || currentBoss?.bestPullPhase || (progress.totalTimeSpent ?? 0) > 0);
+    return Boolean(
+      currentBoss?.pullCount > 0 ||
+        currentBoss?.bestPercent > 0 ||
+        currentBoss?.bestPullPhase ||
+        (progress.totalTimeSpent ?? 0) > 0 ||
+        (progress.totalCombatTimeSpent ?? 0) > 0 ||
+        (progress.progressRaidTimeSpent ?? 0) > 0 ||
+        (progress.totalRaidTimeSpent ?? 0) > 0,
+    );
   }
 
   private getBestVodTargetForProgress(progress: any | null | undefined): { reportCode: string; fightId: number } | null {
@@ -4170,6 +4471,8 @@ class GuildService {
           totalBosses: p.totalBosses,
           totalTimeSpent: p.totalTimeSpent,
           totalCombatTimeSpent: p.totalCombatTimeSpent,
+          progressRaidTimeSpent: p.progressRaidTimeSpent,
+          totalRaidTimeSpent: p.totalRaidTimeSpent,
           currentBossPulls: currentBoss?.pullCount || 0,
           bestPullPercent: currentBoss?.bestPercent || 0,
           bestPullPhase: currentBoss?.bestPullPhase,
@@ -4551,9 +4854,224 @@ class GuildService {
   // Get single guild by realm and name
   async getGuildByRealmName(realm: string, name: string): Promise<IGuild | null> {
     return await Guild.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+      name: { $regex: new RegExp(`^${this.escapeRegex(name)}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${this.escapeRegex(realm)}$`, "i") }, // Case-insensitive exact match
     });
+  }
+
+  private async getLatestReportSummaries(guildId: mongoose.Types.ObjectId, limit = 3): Promise<LatestReportSummary[]> {
+    const searchLimit = Math.max(limit * 4, limit);
+    const reports = (await Report.find({ guildId }).sort({ startTime: -1 }).limit(searchLimit).lean()) as unknown as LeanReportSummaryDocument[];
+
+    if (reports.length === 0) {
+      return [];
+    }
+
+    const reportCodes = reports.map((report) => report.code);
+
+    const fightAggregation = await Fight.aggregate<LatestReportFightAggregation>([
+      {
+        $match: {
+          guildId,
+          reportCode: { $in: reportCodes },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            reportCode: "$reportCode",
+            zoneId: "$zoneId",
+            encounterID: "$encounterID",
+            encounterName: "$encounterName",
+            difficulty: "$difficulty",
+          },
+          pulls: { $sum: 1 },
+          kills: { $sum: { $cond: ["$isKill", 1, 0] } },
+          wipes: { $sum: { $cond: ["$isKill", 0, 1] } },
+        },
+      },
+    ]);
+
+    const pullsByReportZone = new Map<string, Map<number, number>>();
+    for (const entry of fightAggregation) {
+      const zoneId = entry._id.zoneId;
+      if (!zoneId || zoneId <= 0) {
+        continue;
+      }
+
+      if (!pullsByReportZone.has(entry._id.reportCode)) {
+        pullsByReportZone.set(entry._id.reportCode, new Map());
+      }
+
+      const zonePulls = pullsByReportZone.get(entry._id.reportCode)!;
+      zonePulls.set(zoneId, (zonePulls.get(zoneId) || 0) + entry.pulls);
+    }
+
+    const inferredRaidIdByReport = new Map<string, number>();
+    for (const [reportCode, zonePulls] of pullsByReportZone.entries()) {
+      const [dominantZone] =
+        Array.from(zonePulls.entries()).sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          return b[0] - a[0];
+        })[0] || [];
+
+      if (dominantZone) {
+        inferredRaidIdByReport.set(reportCode, dominantZone);
+      }
+    }
+
+    const raidIds = Array.from(
+      new Set([
+        ...reports.map((report) => report.zoneId).filter((zoneId): zoneId is number => typeof zoneId === "number" && zoneId > 0),
+        ...Array.from(inferredRaidIdByReport.values()),
+      ]),
+    );
+
+    const raids = (await Raid.find({ id: { $in: raidIds } })
+      .select("id name iconUrl bosses.id bosses.name bosses.iconUrl")
+      .lean()) as unknown as Array<{ id: number; name: string; iconUrl?: string; bosses?: Array<{ id: number; name: string; iconUrl?: string }> }>;
+
+    const raidInfoById = new Map(raids.map((raid) => [raid.id, raid]));
+    const bossInfoByEncounterId = new Map<number, { name: string; iconUrl?: string }>();
+    for (const raid of raids) {
+      for (const boss of raid.bosses || []) {
+        if (!bossInfoByEncounterId.has(boss.id)) {
+          bossInfoByEncounterId.set(boss.id, {
+            name: boss.name,
+            iconUrl: boss.iconUrl,
+          });
+        }
+      }
+    }
+    const summariesByCode = new Map<string, LatestReportSummary>();
+    const bossesByReport = new Map<string, Map<number, LatestReportBossSummary>>();
+    const difficultiesByReport = new Map<string, Map<number, LatestReportDifficultySummary>>();
+    const bossDifficultiesByReport = new Map<string, Map<number, Map<number, LatestReportDifficultySummary>>>();
+
+    for (const report of reports) {
+      const endTime = report.endTime && report.endTime > 0 ? report.endTime : undefined;
+      const durationSeconds = endTime ? Math.max(0, Math.round((endTime - report.startTime) / 1000)) : undefined;
+      const raidId = inferredRaidIdByReport.get(report.code) || (report.zoneId && report.zoneId > 0 ? report.zoneId : undefined);
+      const raidInfo = raidId ? raidInfoById.get(raidId) : undefined;
+
+      summariesByCode.set(report.code, {
+        code: report.code,
+        url: `https://www.warcraftlogs.com/reports/${report.code}`,
+        raidId,
+        raidName: raidInfo?.name || (raidId ? `Raid ${raidId}` : "Raid Log"),
+        raidIconUrl: raidInfo?.iconUrl,
+        startTime: report.startTime,
+        endTime,
+        durationSeconds,
+        isOngoing: report.isOngoing === true,
+        fightCount: 0,
+        kills: 0,
+        wipes: 0,
+        difficulties: [],
+        bosses: [],
+      });
+      bossesByReport.set(report.code, new Map());
+      difficultiesByReport.set(report.code, new Map());
+      bossDifficultiesByReport.set(report.code, new Map());
+    }
+
+    for (const entry of fightAggregation) {
+      const reportCode = entry._id.reportCode;
+      const summary = summariesByCode.get(reportCode);
+      const bossMap = bossesByReport.get(reportCode);
+      const difficultyMap = difficultiesByReport.get(reportCode);
+      const bossDifficultyMap = bossDifficultiesByReport.get(reportCode);
+
+      if (!summary || !bossMap || !difficultyMap || !bossDifficultyMap) {
+        continue;
+      }
+
+      summary.fightCount += entry.pulls;
+      summary.kills += entry.kills;
+      summary.wipes += entry.wipes;
+
+      const encounterID = entry._id.encounterID;
+      const bossInfo = bossInfoByEncounterId.get(encounterID);
+      const existingBoss = bossMap.get(encounterID);
+      if (existingBoss) {
+        existingBoss.pulls += entry.pulls;
+        existingBoss.kills += entry.kills;
+        existingBoss.wipes += entry.wipes;
+      } else {
+        bossMap.set(encounterID, {
+          encounterID,
+          name: bossInfo?.name || entry._id.encounterName || `Boss ${encounterID}`,
+          iconUrl: bossInfo?.iconUrl,
+          pulls: entry.pulls,
+          kills: entry.kills,
+          wipes: entry.wipes,
+          difficulties: [],
+        });
+      }
+
+      const difficultyId = entry._id.difficulty;
+      if (!bossDifficultyMap.has(encounterID)) {
+        bossDifficultyMap.set(encounterID, new Map());
+      }
+
+      const difficultiesForBoss = bossDifficultyMap.get(encounterID)!;
+      const existingBossDifficulty = difficultiesForBoss.get(difficultyId);
+      if (existingBossDifficulty) {
+        existingBossDifficulty.pulls += entry.pulls;
+        existingBossDifficulty.kills += entry.kills;
+        existingBossDifficulty.wipes += entry.wipes;
+      } else {
+        difficultiesForBoss.set(difficultyId, {
+          difficultyId,
+          difficulty: this.getReportDifficultyLabel(difficultyId),
+          pulls: entry.pulls,
+          kills: entry.kills,
+          wipes: entry.wipes,
+        });
+      }
+
+      const existingDifficulty = difficultyMap.get(difficultyId);
+      if (existingDifficulty) {
+        existingDifficulty.pulls += entry.pulls;
+        existingDifficulty.kills += entry.kills;
+        existingDifficulty.wipes += entry.wipes;
+      } else {
+        difficultyMap.set(difficultyId, {
+          difficultyId,
+          difficulty: this.getReportDifficultyLabel(difficultyId),
+          pulls: entry.pulls,
+          kills: entry.kills,
+          wipes: entry.wipes,
+        });
+      }
+    }
+
+    for (const [reportCode, summary] of summariesByCode.entries()) {
+      summary.bosses = Array.from(bossesByReport.get(reportCode)?.values() ?? []).sort((a, b) => {
+        if (b.pulls !== a.pulls) return b.pulls - a.pulls;
+        if (b.kills !== a.kills) return b.kills - a.kills;
+        return a.name.localeCompare(b.name);
+      });
+
+      for (const boss of summary.bosses) {
+        boss.difficulties = Array.from(bossDifficultiesByReport.get(reportCode)?.get(boss.encounterID)?.values() ?? []).sort((a, b) => {
+          const difficultySort = this.getReportDifficultySortValue(a.difficultyId) - this.getReportDifficultySortValue(b.difficultyId);
+          if (difficultySort !== 0) return difficultySort;
+          return b.pulls - a.pulls;
+        });
+      }
+
+      summary.difficulties = Array.from(difficultiesByReport.get(reportCode)?.values() ?? []).sort((a, b) => {
+        const difficultySort = this.getReportDifficultySortValue(a.difficultyId) - this.getReportDifficultySortValue(b.difficultyId);
+        if (difficultySort !== 0) return difficultySort;
+        return b.pulls - a.pulls;
+      });
+    }
+
+    return reports
+      .map((report) => summariesByCode.get(report.code))
+      .filter((summary): summary is LatestReportSummary => Boolean(summary && summary.fightCount > 0))
+      .slice(0, limit);
   }
 
   // Get guild summary with progress summaries (without boss arrays)
@@ -4584,6 +5102,8 @@ class GuildService {
         totalBosses: p.totalBosses,
         totalTimeSpent: p.totalTimeSpent,
         totalCombatTimeSpent: p.totalCombatTimeSpent,
+        progressRaidTimeSpent: p.progressRaidTimeSpent,
+        totalRaidTimeSpent: p.totalRaidTimeSpent,
         currentBossPulls: currentBoss?.pullCount || 0,
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
@@ -4607,6 +5127,8 @@ class GuildService {
         }
       : undefined;
 
+    const latestReports = await this.getLatestReportSummaries(guildObj._id as mongoose.Types.ObjectId);
+
     return {
       _id: guildObj._id,
       name: guildObj.name,
@@ -4621,14 +5143,15 @@ class GuildService {
       progress: summaryProgress,
       scheduleDisplay: scheduleSummary,
       raidSchedule: raidSchedule,
+      latestReports,
     };
   }
 
   // Get guild summary by realm and name with progress summaries (without boss arrays)
   async getGuildSummaryByRealmName(realm: string, name: string): Promise<any | null> {
     const guild = await Guild.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${realm}$`, "i") }, // Case-insensitive exact match
+      name: { $regex: new RegExp(`^${this.escapeRegex(name)}$`, "i") }, // Case-insensitive exact match
+      realm: { $regex: new RegExp(`^${this.escapeRegex(realm)}$`, "i") }, // Case-insensitive exact match
     });
 
     if (!guild) {
@@ -4657,6 +5180,8 @@ class GuildService {
         totalBosses: p.totalBosses,
         totalTimeSpent: p.totalTimeSpent,
         totalCombatTimeSpent: p.totalCombatTimeSpent,
+        progressRaidTimeSpent: p.progressRaidTimeSpent,
+        totalRaidTimeSpent: p.totalRaidTimeSpent,
         currentBossPulls: currentBoss?.pullCount || 0,
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
@@ -4688,8 +5213,11 @@ class GuildService {
         }))
       : undefined;
 
-    // Get tier list scores for this guild (overall + current raids only)
-    const tierScores = await this.getGuildTierScores(guildObj._id.toString());
+    // Get supplemental profile summaries in parallel.
+    const [tierScores, latestReports] = await Promise.all([
+      this.getGuildTierScores(guildObj._id.toString()),
+      this.getLatestReportSummaries(guildObj._id, 3),
+    ]);
 
     return {
       _id: guildObj._id,
@@ -4709,6 +5237,7 @@ class GuildService {
       raidSchedule: raidSchedule,
       streamers: streamers,
       tierScores: tierScores,
+      latestReports,
     };
   }
 

@@ -118,6 +118,8 @@ export interface RaidProgressSummary {
   totalBosses: number;
   totalTimeSpent: number;
   totalCombatTimeSpent?: number;
+  progressRaidTimeSpent?: number;
+  totalRaidTimeSpent?: number;
   currentBossPulls: number;
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
@@ -139,6 +141,8 @@ export interface RaidProgress {
   totalBosses: number;
   totalTimeSpent: number;
   totalCombatTimeSpent?: number;
+  progressRaidTimeSpent?: number;
+  totalRaidTimeSpent?: number;
   bosses: BossProgress[];
   worldRank?: number; // Best world rank (lowest of WCL and Raider.IO)
   worldRankColor?: string; // Color class for the best world rank
@@ -251,6 +255,43 @@ export interface GuildTierScores {
   raids: RaidTierScoreEntry[];
 }
 
+export type GuildLatestReportDifficulty = "mythic" | "heroic" | "normal" | "lfr" | "unknown";
+
+export interface GuildLatestReportDifficultySummary {
+  difficultyId: number;
+  difficulty: GuildLatestReportDifficulty;
+  pulls: number;
+  kills: number;
+  wipes: number;
+}
+
+export interface GuildLatestReportBossSummary {
+  encounterID: number;
+  name: string;
+  iconUrl?: string;
+  pulls: number;
+  kills: number;
+  wipes: number;
+  difficulties: GuildLatestReportDifficultySummary[];
+}
+
+export interface GuildLatestReport {
+  code: string;
+  url: string;
+  raidId?: number;
+  raidName: string;
+  raidIconUrl?: string;
+  startTime: number;
+  endTime?: number;
+  durationSeconds?: number;
+  isOngoing: boolean;
+  fightCount: number;
+  kills: number;
+  wipes: number;
+  difficulties: GuildLatestReportDifficultySummary[];
+  bosses: GuildLatestReportBossSummary[];
+}
+
 // Guild with summary progress (for guild profile page initial load)
 export interface GuildSummary {
   _id: string;
@@ -270,6 +311,7 @@ export interface GuildSummary {
   raidSchedule?: RaidSchedule;
   streamers?: Streamer[]; // Twitch streamers for this guild
   tierScores?: GuildTierScores | null; // Tier list scores for this guild
+  latestReports?: GuildLatestReport[]; // Recent WCL reports with compact pull summaries
 }
 
 export interface WorldRankHistoryEntry {
