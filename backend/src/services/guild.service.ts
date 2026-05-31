@@ -2963,6 +2963,13 @@ class GuildService {
           fightPercentage: number;
           phase?: string;
           isKill: boolean;
+          reportCode?: string;
+          fightId?: number;
+          url?: string;
+          timestamp?: Date;
+          duration?: number;
+          bossPercentage?: number;
+          progressDisplay?: string;
         }>;
       }
     >();
@@ -3099,6 +3106,13 @@ class GuildService {
           fightPercentage: isKill ? 0 : fightPercent,
           phase: phaseShort,
           isKill: isKill,
+          reportCode: fight.reportCode,
+          fightId: fight.fightId,
+          url: this.getKillLogUrl(fight.reportCode, fight.fightId),
+          timestamp: fight.timestamp,
+          duration: Math.round(duration),
+          bossPercentage: bossPercent,
+          progressDisplay: fight.progressDisplay,
         });
 
         const vodCandidates = vodCandidateFightsByBoss.get(encounterId) || [];
@@ -4381,13 +4395,12 @@ class GuildService {
     }
 
     let pullHistory = boss.pullHistory || [];
+    const historyFights = await Fight.find(fightQuery)
+      .select("reportCode fightId encounterID difficulty timestamp duration bossPercentage fightPercentage isKill lastPhaseId lastPhaseName progressDisplay")
+      .sort({ timestamp: 1 })
+      .lean();
 
-    if (pullHistory.length === 0) {
-      const historyFights = await Fight.find(fightQuery)
-        .select("reportCode fightId encounterID difficulty timestamp duration bossPercentage fightPercentage isKill lastPhaseId lastPhaseName")
-        .sort({ timestamp: 1 })
-        .lean();
-
+    if (historyFights.length > 0) {
       const seenHistoryFights = new Map<string, any>();
       const uniqueHistoryFights: any[] = [];
 
@@ -4404,6 +4417,13 @@ class GuildService {
         fightPercentage: fight.isKill ? 0 : fight.fightPercentage || 0,
         phase: fight.lastPhaseName ? this.getShortPhaseLabel(fight.lastPhaseName, fight.lastPhaseId || 1) : undefined,
         isKill: fight.isKill,
+        reportCode: fight.reportCode,
+        fightId: fight.fightId,
+        url: this.getKillLogUrl(fight.reportCode, fight.fightId),
+        timestamp: fight.timestamp instanceof Date ? fight.timestamp.toISOString() : new Date(fight.timestamp).toISOString(),
+        duration: Math.round((fight.duration || 0) / 1000),
+        bossPercentage: fight.bossPercentage || 0,
+        progressDisplay: fight.progressDisplay,
       }));
     }
 

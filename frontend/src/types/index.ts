@@ -14,6 +14,13 @@ export interface PullHistoryEntry {
   fightPercentage: number; // 0-100, where 0 = kill, 100 = instant wipe
   phase?: string; // Phase identifier like "P1", "P2", "I1" etc.
   isKill: boolean;
+  reportCode?: string;
+  fightId?: number;
+  url?: string;
+  timestamp?: string;
+  duration?: number; // seconds
+  bossPercentage?: number;
+  progressDisplay?: string;
 }
 
 // Phase distribution for pie chart

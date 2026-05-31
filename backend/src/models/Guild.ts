@@ -15,6 +15,13 @@ export interface IPullHistoryEntry {
   fightPercentage: number; // 0-100, where 0 = kill, 100 = instant wipe
   phase?: string; // Phase identifier like "P1", "P2", "I1" etc.
   isKill: boolean;
+  reportCode?: string;
+  fightId?: number;
+  url?: string;
+  timestamp?: Date;
+  duration?: number; // seconds
+  bossPercentage?: number;
+  progressDisplay?: string;
 }
 
 export interface IBossProgress {
@@ -165,6 +172,13 @@ const BossProgressSchema: Schema = new Schema(
         fightPercentage: { type: Number, required: true },
         phase: { type: String },
         isKill: { type: Boolean, required: true },
+        reportCode: { type: String },
+        fightId: { type: Number },
+        url: { type: String },
+        timestamp: { type: Date },
+        duration: { type: Number },
+        bossPercentage: { type: Number },
+        progressDisplay: { type: String },
       },
     ],
     lastUpdated: { type: Date, default: Date.now },

@@ -1,150 +1,255 @@
 "use client";
 
+import { useRef, type MouseEvent } from "react";
+import { FaExternalLinkAlt } from "react-icons/fa";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PullHistoryEntry } from "@/types";
+import { formatPercent, formatPhaseDisplay } from "@/lib/utils";
 
 interface PullProgressChartProps {
   pullHistory: PullHistoryEntry[];
 }
 
+const CHART_MARGIN = { top: 8, right: 14, bottom: 8, left: 2 };
+const PLOT_LEFT_OFFSET = 44;
+
+type PullTooltipPayload = {
+  payload?: PullHistoryEntry;
+};
+
+type PullTooltipProps = {
+  active?: boolean;
+  payload?: PullTooltipPayload[];
+};
+
+type PullDotProps = {
+  cx?: number;
+  cy?: number;
+  payload?: PullHistoryEntry;
+};
+
+function getPullFromChartState(state: unknown): PullHistoryEntry | null {
+  if (!state || typeof state !== "object") return null;
+
+  const activePayload = (state as { activePayload?: PullTooltipPayload[] }).activePayload;
+  return activePayload?.[0]?.payload ?? null;
+}
+
+function formatPullTimestamp(timestamp?: string) {
+  if (!timestamp) return null;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleString("fi-FI", {
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds || seconds <= 0) return null;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (minutes === 0) return `${remainingSeconds}s`;
+  if (remainingSeconds === 0) return `${minutes}m`;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function getProgressLabel(pull: PullHistoryEntry) {
+  if (pull.isKill) return "Kill";
+  if (pull.progressDisplay) return formatPhaseDisplay(pull.progressDisplay);
+  return formatPercent(pull.fightPercentage);
+}
+
+function PullTooltip({ active, payload }: PullTooltipProps) {
+  const pull = payload?.[0]?.payload;
+  if (!active || !pull) return null;
+
+  const pullTimestamp = formatPullTimestamp(pull.timestamp);
+  const duration = formatDuration(pull.duration);
+
+  return (
+    <div className="min-w-44 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-xs shadow-xl">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <span className="font-semibold text-white">Pull {pull.pullNumber}</span>
+        <span className={pull.isKill ? "font-semibold text-green-400" : "font-semibold text-blue-300"}>{getProgressLabel(pull)}</span>
+      </div>
+      <div className="space-y-0.5 text-gray-400">
+        <div>
+          Fight progress: <span className="text-gray-200">{formatPercent(pull.fightPercentage)}</span>
+        </div>
+        {typeof pull.bossPercentage === "number" && (
+          <div>
+            Boss health: <span className="text-gray-200">{formatPercent(pull.bossPercentage)}</span>
+          </div>
+        )}
+        {pull.phase && (
+          <div>
+            Phase: <span className="text-gray-200">{pull.phase}</span>
+          </div>
+        )}
+        {duration && (
+          <div>
+            Duration: <span className="text-gray-200">{duration}</span>
+          </div>
+        )}
+        {pullTimestamp && (
+          <div>
+            Time: <span className="text-gray-200">{pullTimestamp}</span>
+          </div>
+        )}
+      </div>
+      {pull.url && (
+        <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-300">
+          Click chart to open WCL
+          <FaExternalLinkAlt className="h-2.5 w-2.5" aria-hidden="true" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PullProgressChart({ pullHistory }: PullProgressChartProps) {
+  const activePullRef = useRef<PullHistoryEntry | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
   if (!pullHistory || pullHistory.length === 0) {
     return null;
   }
 
-  // Use a wide aspect ratio viewBox for full width usage
-  const viewBoxWidth = 1000;
-  const viewBoxHeight = 150;
-  const padding = { top: 15, right: 15, bottom: 20, left: 35 };
-  const chartWidth = viewBoxWidth - padding.left - padding.right;
-  const chartHeight = viewBoxHeight - padding.top - padding.bottom;
+  const chartData = [...pullHistory].sort((a, b) => a.pullNumber - b.pullNumber);
+  const bestPull = chartData.reduce((best, pull) => (pull.fightPercentage < best.fightPercentage ? pull : best), chartData[0]);
+  const showDots = chartData.length <= 90;
+  const hasWclLinks = chartData.some((pull) => pull.url);
+  const firstPullNumber = chartData[0].pullNumber;
+  const lastPullNumber = chartData[chartData.length - 1].pullNumber;
 
-  const maxPulls = pullHistory.length;
-
-  const getX = (pullNumber: number) => {
-    if (maxPulls === 1) return padding.left + chartWidth / 2;
-    return padding.left + ((pullNumber - 1) / (maxPulls - 1)) * chartWidth;
+  const openPull = (pull: PullHistoryEntry | null) => {
+    if (!pull?.url) return;
+    window.open(pull.url, "_blank", "noopener,noreferrer");
   };
 
-  const getY = (fightPercentage: number) => {
-    // 100% at top, 0% at bottom (normal orientation)
-    // fightPercentage 100 = top of chart, fightPercentage 0 = bottom of chart
-    return padding.top + ((100 - fightPercentage) / 100) * chartHeight;
+  const getNearestPullFromClick = (event: MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return null;
+    if (chartData.length === 1) return chartData[0];
+
+    const bounds = container.getBoundingClientRect();
+    const plotLeft = bounds.left + PLOT_LEFT_OFFSET;
+    const plotRight = bounds.right - CHART_MARGIN.right;
+    const plotWidth = Math.max(1, plotRight - plotLeft);
+    const ratio = Math.min(1, Math.max(0, (event.clientX - plotLeft) / plotWidth));
+    const estimatedPullNumber = firstPullNumber + ratio * (lastPullNumber - firstPullNumber);
+
+    return chartData.reduce((nearest, pull) =>
+      Math.abs(pull.pullNumber - estimatedPullNumber) < Math.abs(nearest.pullNumber - estimatedPullNumber) ? pull : nearest,
+    );
   };
 
-  // Build path
-  const pathData = pullHistory
-    .map((pull, index) => {
-      const x = getX(pull.pullNumber);
-      const y = getY(pull.fightPercentage);
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-
-  // Find kill point if exists
-  const killPoint = pullHistory.find((p) => p.isKill);
-
-  // Calculate point radius based on number of pulls (smaller for more pulls)
-  const pointRadius = Math.max(1.5, Math.min(3, 80 / maxPulls));
-  const killPointRadius = pointRadius * 1.8;
-
-  // Generate dynamic X-axis tick marks
-  const getXAxisTicks = (): number[] => {
-    if (maxPulls <= 5) {
-      // Show all pulls for small counts
-      return Array.from({ length: maxPulls }, (_, i) => i + 1);
-    } else if (maxPulls <= 20) {
-      // Show every 5th pull
-      const ticks = [1];
-      for (let i = 5; i <= maxPulls; i += 5) {
-        ticks.push(i);
-      }
-      if (ticks[ticks.length - 1] !== maxPulls) ticks.push(maxPulls);
-      return ticks;
-    } else if (maxPulls <= 50) {
-      // Show every 10th pull
-      const ticks = [1];
-      for (let i = 10; i <= maxPulls; i += 10) {
-        ticks.push(i);
-      }
-      if (ticks[ticks.length - 1] !== maxPulls) ticks.push(maxPulls);
-      return ticks;
-    } else if (maxPulls <= 100) {
-      // Show every 20th pull
-      const ticks = [1];
-      for (let i = 20; i <= maxPulls; i += 20) {
-        ticks.push(i);
-      }
-      if (ticks[ticks.length - 1] !== maxPulls) ticks.push(maxPulls);
-      return ticks;
-    } else {
-      // Show every 50th pull for large counts
-      const ticks = [1];
-      for (let i = 50; i <= maxPulls; i += 50) {
-        ticks.push(i);
-      }
-      if (ticks[ticks.length - 1] !== maxPulls) ticks.push(maxPulls);
-      return ticks;
+  const handleChartActivity = (state: unknown) => {
+    const pull = getPullFromChartState(state);
+    if (pull) {
+      activePullRef.current = pull;
     }
   };
 
-  const xAxisTicks = getXAxisTicks();
+  const handleContainerClick = (event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    openPull(getNearestPullFromClick(event) || activePullRef.current);
+  };
+
+  const renderDot = ({ cx, cy, payload }: PullDotProps) => {
+    if (cx == null || cy == null || !payload) return null;
+
+    const isBest = payload.pullNumber === bestPull.pullNumber;
+    const isSpecial = payload.isKill || isBest;
+    if (!showDots && !isSpecial) return null;
+
+    const radius = payload.isKill ? 5 : isBest ? 4 : chartData.length > 50 ? 2 : 3;
+    const fill = payload.isKill ? "#22C55E" : isBest ? "#F59E0B" : "#60A5FA";
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={fill}
+        stroke="#111827"
+        strokeWidth={1.5}
+        className={payload.url ? "cursor-pointer" : ""}
+        onClick={(event: MouseEvent<SVGCircleElement>) => {
+          event.stopPropagation();
+          openPull(payload);
+        }}
+      />
+    );
+  };
+
+  const renderActiveDot = ({ cx, cy, payload }: PullDotProps) => {
+    if (cx == null || cy == null || !payload) return null;
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={6}
+        fill="#BFDBFE"
+        stroke="#1D4ED8"
+        strokeWidth={2}
+        className={payload.url ? "cursor-pointer" : ""}
+        onClick={(event: MouseEvent<SVGCircleElement>) => {
+          event.stopPropagation();
+          openPull(payload);
+        }}
+      />
+    );
+  };
 
   return (
-    <div className="w-full bg-gray-800/30 rounded">
-      <svg viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
-        {/* Grid lines */}
-        {[0, 50, 100].map((percent) => (
-          <line
-            key={percent}
-            x1={padding.left}
-            y1={getY(percent)}
-            x2={padding.left + chartWidth}
-            y2={getY(percent)}
-            stroke="#374151"
-            strokeWidth="0.5"
-            strokeDasharray={percent === 0 ? "none" : "3,3"}
-            opacity={0.5}
+    <div
+      ref={containerRef}
+      className={`h-48 w-full px-1 py-2 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none ${hasWclLinks ? "cursor-pointer" : ""}`}
+      onClick={handleContainerClick}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={CHART_MARGIN} onMouseMove={handleChartActivity}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.7} />
+          <XAxis
+            dataKey="pullNumber"
+            type="number"
+            domain={["dataMin", "dataMax"]}
+            allowDecimals={false}
+            tick={{ fill: "#9CA3AF", fontSize: 11 }}
+            stroke="#4B5563"
+            tickLine={false}
           />
-        ))}
-
-        {/* Y-axis labels - 100% at top, 0% at bottom */}
-        <text x={padding.left - 5} y={getY(100)} fontSize="9" fill="#6B7280" textAnchor="end" dominantBaseline="middle">
-          100%
-        </text>
-        <text x={padding.left - 5} y={getY(50)} fontSize="9" fill="#6B7280" textAnchor="end" dominantBaseline="middle">
-          50%
-        </text>
-        <text x={padding.left - 5} y={getY(0)} fontSize="9" fill="#6B7280" textAnchor="end" dominantBaseline="middle">
-          0%
-        </text>
-
-        {/* X-axis labels - dynamic ticks */}
-        {xAxisTicks.map((pullNum) => (
-          <text key={pullNum} x={getX(pullNum)} y={viewBoxHeight - 5} fontSize="8" fill="#6B7280" textAnchor="middle">
-            {pullNum}
-          </text>
-        ))}
-
-        {/* Progress line */}
-        <path d={pathData} fill="none" stroke="#60A5FA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Data points - only show if not too many */}
-        {maxPulls <= 80 &&
-          pullHistory.map((pull) => (
-            <circle
-              key={pull.pullNumber}
-              cx={getX(pull.pullNumber)}
-              cy={getY(pull.fightPercentage)}
-              r={pull.isKill ? killPointRadius : pointRadius}
-              fill={pull.isKill ? "#22C55E" : "#60A5FA"}
-            >
-              <title>
-                Pull {pull.pullNumber}: {pull.fightPercentage.toFixed(1)}%{pull.phase ? ` (${pull.phase})` : ""}
-                {pull.isKill ? " - KILL!" : ""}
-              </title>
-            </circle>
-          ))}
-      </svg>
+          <YAxis
+            domain={[0, 100]}
+            ticks={[0, 25, 50, 75, 100]}
+            tick={{ fill: "#9CA3AF", fontSize: 11 }}
+            stroke="#4B5563"
+            width={42}
+            tickFormatter={(value: number) => `${value}%`}
+          />
+          <Tooltip content={<PullTooltip />} cursor={{ stroke: "#6B7280", strokeDasharray: "3 3" }} />
+          <Line
+            type="linear"
+            dataKey="fightPercentage"
+            stroke="#60A5FA"
+            strokeWidth={2}
+            dot={renderDot}
+            activeDot={renderActiveDot}
+            isAnimationActive={false}
+            name="Progress"
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
