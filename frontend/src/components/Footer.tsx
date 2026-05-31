@@ -38,17 +38,18 @@ export default function Footer() {
           Made with &lt;3 by{" "}
           <a href="https://www.twitch.tv/vaarattu" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Vaarattu
-          </a>
-          ,{" "}
-          <a href="https://github.com/Joeliciousb" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
-            Joel
           </a>{" "}
           and{" "}
+          <a href="https://github.com/Joeliciousb" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+            Joel
+          </a>
+          ,{" "}
           <a href="https://claude.ai/" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
             Carlos
-          </a>
+          </a>{" "}
+          and{" "}
           <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
-            GPT
+            Chatti
           </a>
           . Send feedback.
         </p>

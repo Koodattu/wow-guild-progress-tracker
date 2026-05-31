@@ -213,7 +213,9 @@ export default function PullProgressChart({ pullHistory }: PullProgressChartProp
   return (
     <div
       ref={containerRef}
-      className={`h-48 w-full px-1 py-0.5 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none ${hasWclLinks ? "cursor-pointer" : ""}`}
+      className={`h-48 w-full px-1 py-0.5 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none ${
+        hasWclLinks ? "cursor-pointer [&_*]:cursor-pointer" : ""
+      }`}
       onClick={handleContainerClick}
       onMouseDown={(event) => event.preventDefault()}
     >

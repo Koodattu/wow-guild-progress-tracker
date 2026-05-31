@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { FaExternalLinkAlt, FaTwitch } from "react-icons/fa";
 import { Guild, RaidProgress, BossProgress, RaidInfo, Boss, WorldRankHistoryEntry, BossBestPull, RaidSchedule } from "@/types";
-import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getRaiderIOGuildUrl } from "@/lib/utils";
+import { formatTime, formatPercent, getDifficultyColor, getKillLogUrl, formatPhaseDisplay, getGuildProfileUrl, getRaiderIOGuildUrl } from "@/lib/utils";
 import IconImage from "./IconImage";
 import GuildCrest from "./GuildCrest";
 import PullProgressChart from "./PullProgressChart";
@@ -151,7 +152,13 @@ function CompactVodLinks({ links, className = "" }: { links?: BestPullVodLink[];
 
 function WclLogButton({ title, onClick, className = "" }: { title: string; onClick: React.MouseEventHandler<HTMLButtonElement>; className?: string }) {
   return (
-    <button type="button" onClick={onClick} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center transition-opacity hover:opacity-80 ${className}`} title={title} aria-label={title}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center transition-opacity hover:opacity-80 ${className}`}
+      title={title}
+      aria-label={title}
+    >
       <Image src="/wcl-logo.png" alt="WCL" width={20} height={20} className="h-full w-full object-contain" />
     </button>
   );
@@ -235,7 +242,12 @@ function WorldRankHistorySection({ history }: { history: WorldRankHistoryEntry[]
 
   return (
     <div className="mb-4">
-      <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-100 shadow-sm shadow-amber-950/30 transition-colors hover:border-amber-400/60 hover:bg-amber-500/20 hover:text-white"
+        aria-expanded={expanded}
+      >
         <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
@@ -296,33 +308,39 @@ function BestPullCards({ pulls }: { pulls: BossBestPull[] }) {
 
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-      {sortedPulls.map((pull) => (
-        <div
-          key={`${pull.reportCode}-${pull.fightId}`}
-          onClick={(event) => event.stopPropagation()}
-          className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
-        >
-          <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block" title="View fight on Warcraft Logs">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
-                <span className="shrink-0 text-[11px] text-gray-500">{formatTime(pull.duration)}</span>
+      {sortedPulls.map((pull) => {
+        const vodLinks = pull.vodLinks ?? [];
+        const hasVodLinks = vodLinks.length > 0;
+
+        return (
+          <div
+            key={`${pull.reportCode}-${pull.fightId}`}
+            onClick={(event) => event.stopPropagation()}
+            className="rounded border border-gray-700/70 bg-gray-800/30 p-2 transition-colors hover:border-gray-600 hover:bg-gray-800/70"
+          >
+            <a href={pull.url} target="_blank" rel="noopener noreferrer" className="group block cursor-pointer" title="View fight on Warcraft Logs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`min-w-0 truncate text-sm font-semibold ${pull.isKill ? "text-green-400" : "text-white"}`}>{getProgressLabel(pull)}</div>
+                  <span className="shrink-0 text-[11px] text-gray-500">{formatTime(pull.duration)}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
+                  <span>{formatPullDate(pull.timestamp)}</span>
+                  <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2 text-[11px] text-gray-500">
-                <span>{formatPullDate(pull.timestamp)}</span>
-                <FaExternalLinkAlt className="h-3 w-3 transition-colors group-hover:text-blue-400" aria-hidden="true" />
+              {hasVodLinks && <div className="mt-2 border-t border-gray-700/70 pt-2" aria-hidden="true" />}
+            </a>
+            {hasVodLinks && (
+              <div className="space-y-2">
+                {vodLinks.map((vod) => (
+                  <VodPhaseLinkRow key={`${vod.channelName}-${vod.videoId || vod.url}`} vod={vod} />
+                ))}
               </div>
-            </div>
-          </a>
-          {pull.vodLinks && pull.vodLinks.length > 0 && (
-            <div className="mt-2 space-y-2 border-t border-gray-700/70 pt-2">
-              {pull.vodLinks.map((vod) => (
-                <VodPhaseLinkRow key={`${vod.channelName}-${vod.videoId || vod.url}`} vod={vod} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -396,6 +414,7 @@ function BossPullHistoryContent({
 export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids, bosses, loading }: RaidDetailModalProps) {
   const [expandedBosses, setExpandedBosses] = useState<Set<string>>(new Set());
   const wclGuildUrl = guild.warcraftlogsId ? `https://www.warcraftlogs.com/guild/id/${guild.warcraftlogsId}` : null;
+  const guildProfileUrl = getGuildProfileUrl(guild.realm, guild.name);
   const raiderIoGuildUrl = getRaiderIOGuildUrl(guild.region, guild.realm, guild.name);
   const streamers = guild.streamers?.filter((streamer) => streamer.channelName) ?? [];
 
@@ -712,8 +731,10 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="text-lg md:text-2xl font-bold text-white min-w-0 truncate">
-                {guild.name}
-                <span className="text-gray-400 font-normal"> - {guild.realm}</span>
+                <Link href={guildProfileUrl} className="group block cursor-pointer truncate transition-colors hover:text-blue-300" title="View guild profile">
+                  {guild.name}
+                  <span className="text-gray-400 font-normal transition-colors group-hover:text-blue-200"> - {guild.realm}</span>
+                </Link>
               </h2>
               <div className="flex items-center gap-1.5 shrink-0">
                 {wclGuildUrl && (
@@ -762,7 +783,7 @@ export default function RaidDetailModal({ guild, onClose, selectedRaidId, raids,
               </div>
             )}
             <div className="h-8 w-px bg-gray-700/80" />
-            <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1 shrink-0">
+            <button type="button" onClick={onClose} className="cursor-pointer text-gray-400 hover:text-white text-2xl md:text-3xl leading-none px-2 md:px-3 py-1 shrink-0" aria-label="Close dialog">
               ×
             </button>
           </div>
