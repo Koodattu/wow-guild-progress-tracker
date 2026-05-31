@@ -538,51 +538,72 @@ function PickemsLandingView({
     return p.finalized && p.finalizedAt && new Date(p.finalizedAt) < sixMonthsAgo;
   });
 
+  const currentSections = [
+    {
+      id: "active",
+      title: "Active Pickems",
+      titleClassName: "text-white",
+      icon: <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />,
+      pickems: activePickems,
+    },
+    {
+      id: "awaiting-results",
+      title: "Awaiting Results",
+      titleClassName: "text-amber-400",
+      icon: <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />,
+      pickems: awaitingResultsPickems,
+    },
+    {
+      id: "completed",
+      title: "Completed",
+      titleClassName: "text-gray-400",
+      icon: (
+        <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      ),
+      pickems: completedPickems,
+    },
+  ];
+
+  // Single-card lifecycle sections share a row; phases with multiple cards stay grouped.
+  const singletonCurrentSections = currentSections.filter((section) => section.pickems.length === 1);
+  const shouldShareSingletonRows = singletonCurrentSections.length >= 2;
+  const sharedCurrentSections = shouldShareSingletonRows ? singletonCurrentSections : [];
+  const standaloneCurrentSections = currentSections.filter((section) => section.pickems.length > 0 && (!shouldShareSingletonRows || section.pickems.length > 1));
+
+  const renderPickemCard = (pickem: PickemSummary) => <PickemCard key={pickem.id} pickem={pickem} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(pickem.id)} />;
+
   return (
     <div className="space-y-8">
-      {activePickems.length > 0 && (
+      {sharedCurrentSections.length > 0 && (
         <section>
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Active Pickems
+            <span>Current Pickems</span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {activePickems.map((p) => (
-              <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
+            {sharedCurrentSections.map((section) => (
+              <div key={section.id} className="space-y-3">
+                <h3 className={`text-sm font-semibold flex items-center gap-2 ${section.titleClassName}`}>
+                  {section.icon}
+                  {section.title}
+                </h3>
+                {renderPickemCard(section.pickems[0])}
+              </div>
             ))}
           </div>
         </section>
       )}
 
-      {awaitingResultsPickems.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-amber-400 mb-4 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            Awaiting Results
+      {standaloneCurrentSections.map((section) => (
+        <section key={section.id}>
+          <h2 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${section.titleClassName}`}>
+            {section.icon}
+            {section.title}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {awaitingResultsPickems.map((p) => (
-              <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
-            ))}
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{section.pickems.map(renderPickemCard)}</div>
         </section>
-      )}
-
-      {completedPickems.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-gray-400 mb-4 flex items-center gap-2">
-            <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Completed
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {completedPickems.map((p) => (
-              <PickemCard key={p.id} pickem={p} getTimeRemaining={getTimeRemaining} onClick={() => onSelectPickem(p.id)} />
-            ))}
-          </div>
-        </section>
-      )}
+      ))}
 
       {archivedPickems.length > 0 && (
         <section>
