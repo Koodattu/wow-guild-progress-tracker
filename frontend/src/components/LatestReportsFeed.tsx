@@ -1,15 +1,15 @@
 "use client";
 
 import Image from "next/image";
+import { useMemo } from "react";
 import type { GuildLatestReport, GuildLatestReportBossSummary, GuildLatestReportDifficulty, GuildLatestReportDifficultySummary } from "@/types";
 import { formatTime, getIconUrl } from "@/lib/utils";
+import { useSingleRowOverflow } from "@/lib/useSingleRowOverflow";
 import { FaExternalLinkAlt } from "react-icons/fa";
 
 interface LatestReportsFeedProps {
   reports: GuildLatestReport[];
 }
-
-const MAX_VISIBLE_BOSSES = 5;
 
 function getReportDateTimeParts(report: GuildLatestReport): { startDate: string; startTime: string; endDate?: string; endTime?: string } {
   const start = new Date(report.startTime);
@@ -91,6 +91,11 @@ function formatBossTitle(boss: GuildLatestReportBossSummary): string {
   return `${boss.name}: ${pluralize(boss.pulls, "pull")}, ${pluralize(boss.kills, "kill")}, ${pluralize(boss.wipes, "wipe")}${difficultyText ? ` (${difficultyText})` : ""}`;
 }
 
+function getBossKey(reportCode: string, boss: GuildLatestReportBossSummary, index: number): string {
+  const difficultySignature = boss.difficulties.map((difficulty) => `${difficulty.difficultyId}:${difficulty.pulls}:${difficulty.kills}:${difficulty.wipes}`).join(",");
+  return [reportCode, boss.encounterID, index, boss.pulls, boss.kills, boss.wipes, difficultySignature].join("-");
+}
+
 function BossIcon({ boss }: { boss: GuildLatestReportBossSummary }) {
   const iconUrl = getIconUrl(boss.iconUrl);
 
@@ -111,11 +116,11 @@ function BossDifficultyCounts({ difficulty }: { difficulty: GuildLatestReportDif
   );
 }
 
-function BossChip({ boss }: { boss: GuildLatestReportBossSummary }) {
+function BossChip({ boss, itemRef }: { boss: GuildLatestReportBossSummary; itemRef?: (node: HTMLDivElement | null) => void }) {
   const visibleDifficulties = boss.difficulties.slice(0, 2);
 
   return (
-    <div title={formatBossTitle(boss)} className="flex shrink-0 items-center gap-1 rounded bg-gray-900/55 px-1.5 py-1">
+    <div ref={itemRef} title={formatBossTitle(boss)} className="flex shrink-0 items-center gap-1 rounded bg-gray-900/55 px-1.5 py-1">
       <BossIcon boss={boss} />
       <div className="flex min-w-0 flex-col gap-0.5 text-[10px]">
         {visibleDifficulties.length > 0 ? (
@@ -127,6 +132,36 @@ function BossChip({ boss }: { boss: GuildLatestReportBossSummary }) {
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function ReportBossList({ report }: { report: GuildLatestReport }) {
+  const bossKeys = useMemo(() => report.bosses.map((boss, index) => getBossKey(report.code, boss, index)), [report.bosses, report.code]);
+  const overflowCounts = useMemo(() => Array.from({ length: report.bosses.length }, (_, index) => index + 1), [report.bosses.length]);
+  const { containerRef, visibleCount, registerItem, registerOverflowIndicator } = useSingleRowOverflow({ itemKeys: bossKeys, resetKey: report.code });
+
+  if (report.bosses.length === 0) {
+    return null;
+  }
+
+  const visibleBosses = report.bosses.slice(0, visibleCount);
+  const hiddenBossCount = Math.max(0, report.bosses.length - visibleBosses.length);
+
+  return (
+    <div ref={containerRef} className="relative mt-2 flex min-w-0 flex-nowrap gap-1.5 overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-[9999px] top-0 flex">
+        {overflowCounts.map((count) => (
+          <div key={count} ref={registerOverflowIndicator(count)} className="flex shrink-0 items-center justify-center rounded bg-gray-900/40 px-1.5 py-1 text-[10px] font-semibold text-gray-500">
+            +{count}
+          </div>
+        ))}
+      </div>
+
+      {visibleBosses.map((boss, index) => (
+        <BossChip key={bossKeys[index]} boss={boss} itemRef={registerItem(bossKeys[index])} />
+      ))}
+      {hiddenBossCount > 0 && <div className="flex shrink-0 items-center justify-center rounded bg-gray-900/40 px-1.5 py-1 text-[10px] font-semibold text-gray-500">+{hiddenBossCount}</div>}
     </div>
   );
 }
@@ -158,8 +193,6 @@ export default function LatestReportsFeed({ reports }: LatestReportsFeedProps) {
     <section className="mb-3">
       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
         {reports.map((report) => {
-          const visibleBosses = report.bosses.slice(0, MAX_VISIBLE_BOSSES);
-          const hiddenBossCount = Math.max(0, report.bosses.length - visibleBosses.length);
           const raidIconUrl = getIconUrl(report.raidIconUrl);
 
           return (
@@ -186,16 +219,7 @@ export default function LatestReportsFeed({ reports }: LatestReportsFeedProps) {
                 <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />
               </div>
 
-              {visibleBosses.length > 0 && (
-                <div className="mt-2 flex min-w-0 flex-nowrap gap-1.5 overflow-hidden">
-                  {visibleBosses.map((boss) => (
-                    <BossChip key={`${report.code}-${boss.encounterID}`} boss={boss} />
-                  ))}
-                  {hiddenBossCount > 0 && (
-                    <div className="flex shrink-0 items-center justify-center rounded bg-gray-900/40 px-1.5 py-1 text-[10px] font-semibold text-gray-500">+{hiddenBossCount}</div>
-                  )}
-                </div>
-              )}
+              <ReportBossList report={report} />
             </a>
           );
         })}

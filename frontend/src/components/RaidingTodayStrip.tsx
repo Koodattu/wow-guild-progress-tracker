@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import GuildCrest from "@/components/GuildCrest";
 import { useRaidingToday } from "@/lib/queries";
+import { useSingleRowOverflow } from "@/lib/useSingleRowOverflow";
 import { formatGuildName, getGuildProfileUrl } from "@/lib/utils";
 import { RaidingTodayGuild } from "@/types";
 
@@ -15,85 +16,31 @@ const formatHour = (hour: number): string => {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 };
 
-const getGuildKey = (guild: RaidingTodayGuild) => `${guild._id}-${guild.raidTime.day}-${guild.raidTime.startHour}`;
+const getGuildKey = (guild: RaidingTodayGuild) =>
+  [guild._id, guild.realm, guild.name, guild.parent_guild ?? "", guild.raidTime.day, guild.raidTime.startHour, guild.raidTime.endHour].join("-");
 
 export default function RaidingTodayStrip() {
   const t = useTranslations("homePage");
   const { data, isLoading, error } = useRaidingToday();
   const guilds = data?.guilds ?? [];
   const [expanded, setExpanded] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(guilds.length);
-  const listRef = useRef<HTMLDivElement>(null);
-  const moreMeasureRef = useRef<HTMLButtonElement>(null);
-  const itemWidthsRef = useRef<Map<string, number>>(new Map());
   const guildKeys = useMemo(() => guilds.map(getGuildKey), [guilds]);
   const guildKeySignature = useMemo(() => guildKeys.join("|"), [guildKeys]);
+  const overflowCounts = useMemo(() => Array.from({ length: guilds.length }, (_, index) => index + 1), [guilds.length]);
+  const {
+    containerRef: listRef,
+    visibleCount,
+    registerItem,
+    registerOverflowIndicator,
+  } = useSingleRowOverflow({
+    itemKeys: guildKeys,
+    enabled: !expanded && !isLoading,
+    resetKey: data?.date,
+  });
 
   useEffect(() => {
-    itemWidthsRef.current.clear();
     setExpanded(false);
-    setVisibleCount(guilds.length);
   }, [data?.date, guildKeySignature, guilds.length]);
-
-  const registerItem = useCallback(
-    (key: string) => (node: HTMLAnchorElement | null) => {
-      if (node) {
-        itemWidthsRef.current.set(key, node.offsetWidth);
-      }
-    },
-    [],
-  );
-
-  const calculateVisibleCount = useCallback(() => {
-    if (expanded || isLoading || guilds.length === 0) return;
-
-    const list = listRef.current;
-    if (!list) return;
-
-    const itemWidths = guildKeys.map((key) => itemWidthsRef.current.get(key) ?? 0);
-    if (itemWidths.some((width) => width === 0)) return;
-
-    const style = window.getComputedStyle(list);
-    const gap = parseFloat(style.columnGap) || 0;
-    const listWidth = list.clientWidth;
-    const totalItemsWidth = itemWidths.reduce((total, width, index) => total + width + (index > 0 ? gap : 0), 0);
-
-    if (totalItemsWidth <= listWidth) {
-      setVisibleCount(guilds.length);
-      return;
-    }
-
-    const moreWidth = moreMeasureRef.current?.offsetWidth ?? 96;
-    const availableWidth = Math.max(0, listWidth - moreWidth - gap);
-    let usedWidth = 0;
-    let nextVisibleCount = 0;
-
-    for (const width of itemWidths) {
-      const nextWidth = usedWidth + width + (nextVisibleCount > 0 ? gap : 0);
-      if (nextWidth > availableWidth) break;
-
-      usedWidth = nextWidth;
-      nextVisibleCount++;
-    }
-
-    setVisibleCount(nextVisibleCount);
-  }, [expanded, guildKeys, guilds.length, isLoading]);
-
-  useLayoutEffect(() => {
-    calculateVisibleCount();
-  }, [calculateVisibleCount]);
-
-  useEffect(() => {
-    if (expanded || typeof ResizeObserver === "undefined") return;
-
-    const list = listRef.current;
-    if (!list) return;
-
-    const observer = new ResizeObserver(() => calculateVisibleCount());
-    observer.observe(list);
-
-    return () => observer.disconnect();
-  }, [calculateVisibleCount, expanded]);
 
   if (error || (!isLoading && guilds.length === 0)) {
     return null;
@@ -108,14 +55,13 @@ export default function RaidingTodayStrip() {
         <div className="shrink-0 text-[11px] font-medium uppercase text-gray-500">{t("raidingToday")}:</div>
 
         <div ref={listRef} className={`relative flex min-w-0 items-center gap-x-3 gap-y-1 ${expanded ? "flex-wrap" : "flex-nowrap overflow-hidden"}`}>
-          <button
-            ref={moreMeasureRef}
-            type="button"
-            className="pointer-events-none absolute -left-[9999px] h-6 whitespace-nowrap text-xs font-medium text-gray-500"
-            tabIndex={-1}
-          >
-            {t("raidingTodayMore", { count: guilds.length })}
-          </button>
+          <div aria-hidden="true" className="pointer-events-none absolute -left-[9999px] top-0 flex">
+            {overflowCounts.map((count) => (
+              <button key={count} ref={registerOverflowIndicator(count)} type="button" tabIndex={-1} className="h-6 whitespace-nowrap text-xs font-medium text-gray-500">
+                {t("raidingTodayMore", { count })}
+              </button>
+            ))}
+          </div>
 
           {isLoading
             ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-5 w-28 shrink-0 animate-pulse rounded bg-gray-800/50" />)
@@ -158,10 +104,7 @@ export default function RaidingTodayStrip() {
           {!isLoading && expanded && guilds.length > visibleCount && (
             <button
               type="button"
-              onClick={() => {
-                setExpanded(false);
-                requestAnimationFrame(calculateVisibleCount);
-              }}
+              onClick={() => setExpanded(false)}
               className="h-6 shrink-0 whitespace-nowrap text-xs font-medium text-gray-500 transition-colors hover:text-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
               aria-expanded={expanded}
             >
