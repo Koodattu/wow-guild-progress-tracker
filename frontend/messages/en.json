@@ -81,6 +81,8 @@
   },
   "homePage": {
     "title": "Finnish Guild Progress",
+    "seoTitle": "Finnish WoW Guild Progress",
+    "seoDescription": "Suomi WoW tracks Finnish World of Warcraft guilds, suomalaiset WoW-killat, raid progression, boss kills, schedules, livestreams, and events.",
     "selectRaid": "Select Raid",
     "loading": "Loading...",
     "error": "Failed to load data. Make sure the backend server is running.",

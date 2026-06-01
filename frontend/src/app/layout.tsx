@@ -9,6 +9,15 @@ import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useState, useMemo } from "react";
 import { AuthProvider } from "@/context/AuthContext";
 import { QueryProvider } from "@/lib/query-provider";
+import {
+  buildWebSiteStructuredData,
+  getCanonicalUrl,
+  getPageMetadata,
+  SEO_KEYWORDS,
+  SITE_IMAGE,
+  SITE_IMAGE_ALT,
+  SITE_NAME,
+} from "@/lib/seo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,68 +29,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://suomiwow.vaarattu.tv";
-const SITE_NAME = "Suomi WoW";
-const SITE_DESCRIPTION = "Track World of Warcraft guild progression for Finnish guilds. View raid progress, boss kills, livestreams, and events.";
-
-// Page-specific metadata configuration
-const getPageMetadata = (pathname: string, locale: "en" | "fi") => {
-  const isEnglish = locale === "en";
-
-  const pages: Record<string, { title: string; description: string }> = {
-    "/": {
-      title: isEnglish ? "Progress Leaderboard" : "Edistymistilastot",
-      description: isEnglish
-        ? "Track World of Warcraft guild progression for Finnish guilds. View raid progress, boss kills, and latest events."
-        : "Seuraa suomalaisten World of Warcraft -kiltojen edistymistä. Katso raid-edistyminen, boss-tapit ja viimeisimmät tapahtumat.",
-    },
-    "/guilds": {
-      title: isEnglish ? "Guilds" : "Killat",
-      description: isEnglish ? "Browse all Finnish WoW guilds and their raid progression." : "Selaa kaikkia suomalaisia WoW-kiltoja ja niiden raid-edistymistä.",
-    },
-    "/compare": {
-      title: isEnglish ? "Compare" : "Vertailu",
-      description: isEnglish ? "Compare Finnish WoW guild raid metrics by raid tier." : "Vertaile suomalaisten WoW-kiltojen raid-mittareita raidikohtaisesti.",
-    },
-    "/events": {
-      title: isEnglish ? "Events" : "Tapahtumat",
-      description: isEnglish ? "Latest boss kills and raid events from Finnish WoW guilds." : "Viimeisimmät boss-tapit ja raid-tapahtumat suomalaisilta WoW-killoilta.",
-    },
-    "/livestreams": {
-      title: isEnglish ? "Livestreams" : "Striimit",
-      description: isEnglish ? "Watch live WoW streams from Finnish guild members." : "Katso suomalaisten kiltalaisten WoW-striimejä livenä.",
-    },
-    "/timetable": {
-      title: isEnglish ? "Timetable" : "Aikataulu",
-      description: isEnglish ? "View raid schedules for Finnish WoW guilds." : "Katso suomalaisten WoW-kiltojen raid-aikataulut.",
-    },
-    "/privacy": {
-      title: isEnglish ? "Privacy Policy" : "Tietosuojakäytäntö",
-      description: isEnglish ? "Privacy policy for Finnish WoW Progress." : "Finnish WoW Progressin tietosuojakäytäntö.",
-    },
-    "/terms": {
-      title: isEnglish ? "Terms of Service" : "Käyttöehdot",
-      description: isEnglish ? "Terms of service for Finnish WoW Progress." : "Finnish WoW Progressin käyttöehdot.",
-    },
-    "/profile": {
-      title: isEnglish ? "Profile" : "Profiili",
-      description: isEnglish ? "View and manage your profile." : "Näytä ja hallitse profiiliasi.",
-    },
-  };
-
-  // Check for guild detail pages
-  if (pathname.startsWith("/guilds/") && pathname.split("/").length >= 4) {
-    const parts = pathname.split("/");
-    const realm = decodeURIComponent(parts[2] || "");
-    const guildName = decodeURIComponent(parts[3] || "");
-    return {
-      title: `${guildName} - ${realm}`,
-      description: isEnglish ? `View raid progression and details for ${guildName} on ${realm}.` : `Katso ${guildName} killan raid-edistyminen ja tiedot (${realm}).`,
-    };
-  }
-
-  return pages[pathname] || pages["/"];
-};
+const WEBSITE_STRUCTURED_DATA = buildWebSiteStructuredData();
+const KEYWORDS = SEO_KEYWORDS.join(", ");
 
 export default function RootLayout({
   children,
@@ -90,6 +39,11 @@ export default function RootLayout({
 }>) {
   const pathname = usePathname();
   const isLivestreamsPage = pathname === "/livestreams";
+  const isHomePage = pathname === "/";
+  const robotsContent =
+    pathname.startsWith("/admin") || pathname.startsWith("/profile")
+      ? "noindex, nofollow"
+      : "index, follow";
   const [locale, setLocale] = useState<"en" | "fi">("en");
   const [messages, setMessages] = useState<Record<string, string> | null>(null);
 
@@ -105,15 +59,47 @@ export default function RootLayout({
 
   const pageMetadata = useMemo(() => getPageMetadata(pathname, locale), [pathname, locale]);
   const fullTitle = `${pageMetadata.title} | ${SITE_NAME}`;
-  const canonicalUrl = `${SITE_URL}${pathname}`;
+  const canonicalUrl = getCanonicalUrl(pathname);
 
   if (!messages) {
     return (
       <html lang={locale}>
         <head>
-          <title>{SITE_NAME}</title>
-          <meta name="description" content={SITE_DESCRIPTION} />
+          <title>{fullTitle}</title>
+          <meta name="title" content={fullTitle} />
+          <meta name="description" content={pageMetadata.description} />
+          <meta name="application-name" content={SITE_NAME} />
+          <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
+          <meta name="keywords" content={KEYWORDS} />
+          <meta name="robots" content={robotsContent} />
           <link rel="icon" href="/icon.png" type="image/png" />
+          <link rel="canonical" href={canonicalUrl} />
+          <meta property="og:type" content="website" />
+          <meta property="og:url" content={canonicalUrl} />
+          <meta property="og:title" content={fullTitle} />
+          <meta property="og:description" content={pageMetadata.description} />
+          <meta property="og:image" content={SITE_IMAGE} />
+          <meta property="og:image:secure_url" content={SITE_IMAGE} />
+          <meta property="og:image:type" content="image/png" />
+          <meta property="og:image:width" content="1187" />
+          <meta property="og:image:height" content="536" />
+          <meta property="og:image:alt" content={SITE_IMAGE_ALT} />
+          <meta property="og:site_name" content={SITE_NAME} />
+          <meta property="og:locale" content="en_US" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:url" content={canonicalUrl} />
+          <meta name="twitter:title" content={fullTitle} />
+          <meta name="twitter:description" content={pageMetadata.description} />
+          <meta name="twitter:image" content={SITE_IMAGE} />
+          <meta name="twitter:image:alt" content={SITE_IMAGE_ALT} />
+          {isHomePage && (
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify(WEBSITE_STRUCTURED_DATA),
+              }}
+            />
+          )}
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
           <div className="flex items-center justify-center min-h-screen">
@@ -131,6 +117,10 @@ export default function RootLayout({
         <title>{fullTitle}</title>
         <meta name="title" content={fullTitle} />
         <meta name="description" content={pageMetadata.description} />
+        <meta name="application-name" content={SITE_NAME} />
+        <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
+        <meta name="keywords" content={KEYWORDS} />
+        <meta name="robots" content={robotsContent} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#1a1a2e" />
 
@@ -146,16 +136,31 @@ export default function RootLayout({
         <meta property="og:url" content={canonicalUrl} />
         <meta property="og:title" content={fullTitle} />
         <meta property="og:description" content={pageMetadata.description} />
-        <meta property="og:image" content={`${SITE_URL}/logo.png`} />
+        <meta property="og:image" content={SITE_IMAGE} />
+        <meta property="og:image:secure_url" content={SITE_IMAGE} />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1187" />
+        <meta property="og:image:height" content="536" />
+        <meta property="og:image:alt" content={SITE_IMAGE_ALT} />
         <meta property="og:site_name" content={SITE_NAME} />
         <meta property="og:locale" content={locale === "fi" ? "fi_FI" : "en_US"} />
 
         {/* Twitter */}
-        <meta property="twitter:card" content="summary" />
-        <meta property="twitter:url" content={canonicalUrl} />
-        <meta property="twitter:title" content={fullTitle} />
-        <meta property="twitter:description" content={pageMetadata.description} />
-        <meta property="twitter:image" content={`${SITE_URL}/logo.png`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content={canonicalUrl} />
+        <meta name="twitter:title" content={fullTitle} />
+        <meta name="twitter:description" content={pageMetadata.description} />
+        <meta name="twitter:image" content={SITE_IMAGE} />
+        <meta name="twitter:image:alt" content={SITE_IMAGE_ALT} />
+
+        {isHomePage && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(WEBSITE_STRUCTURED_DATA),
+            }}
+          />
+        )}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <QueryProvider>

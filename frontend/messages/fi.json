@@ -81,6 +81,8 @@
   },
   "homePage": {
     "title": "Suomalaisten Kiltojen Edistyminen",
+    "seoTitle": "Suomalaisten WoW-kiltojen edistyminen",
+    "seoDescription": "Suomi WoW seuraa suomalaisia World of Warcraft -kiltoja, raid-edistymistä, boss-tappoja, aikatauluja, striimejä ja tapahtumia.",
     "selectRaid": "Valitse Raidi",
     "loading": "Ladataan...",
     "error": "Tietojen lataaminen epäonnistui. Varmista, että palvelin on käynnissä.",

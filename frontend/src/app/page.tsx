@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
 import { useRaids, useEventsPaginated, useGuilds, useRaidDates, useHorseRaceUmaReservations } from "@/lib/queries";
@@ -18,6 +19,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const t = useTranslations("homePage");
 
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -171,6 +173,15 @@ function HomeContent() {
 
   return (
     <main className="text-white min-h-screen">
+      <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] mb-3 md:mb-4">
+        <h1 className="text-xl md:text-2xl font-semibold text-white">
+          {t("seoTitle")}
+        </h1>
+        <p className="mt-1 max-w-5xl text-sm md:text-base text-gray-300">
+          {t("seoDescription")}
+        </p>
+      </div>
+
       {/* Events Feed - full width */}
       {events.length > 0 && (
         <div className="px-3 md:px-4 mb-2">
