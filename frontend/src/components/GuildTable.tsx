@@ -34,6 +34,15 @@ function formatOptionalTime(seconds?: number | null) {
   return seconds && seconds > 0 ? formatTime(seconds) : "-";
 }
 
+function StackedTimeValue({ primary, secondary }: { primary?: number | null; secondary?: number | null }) {
+  return (
+    <div className="flex flex-col items-center leading-tight">
+      <div>{formatOptionalTime(primary)}</div>
+      <div className="mt-0.5 text-[11px] text-gray-500">({formatOptionalTime(secondary)})</div>
+    </div>
+  );
+}
+
 function getLiveStreamerChannelNames(guild: GuildListItem) {
   return Array.from(new Set(guild.streamers?.filter((streamer) => streamer.isLive && streamer.channelName).map((streamer) => streamer.channelName) ?? []));
 }
@@ -302,7 +311,9 @@ const GuildTableRow = memo(
       mythicBestPull > 0 ||
       !!mythicBestPullDisplay ||
       (mythicProgress?.totalTimeSpent ?? 0) > 0 ||
-      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0;
+      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.progressRaidTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.totalRaidTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
@@ -316,7 +327,13 @@ const GuildTableRow = memo(
     const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
     const isHeroicFallback =
       !hasMythicPullData &&
-      (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0 || (heroicProgress?.totalCombatTimeSpent ?? 0) > 0);
+      (heroicPulls > 0 ||
+        heroicBestPull > 0 ||
+        !!heroicBestPullDisplay ||
+        (heroicProgress?.totalTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.totalCombatTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.progressRaidTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.totalRaidTimeSpent ?? 0) > 0);
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (
@@ -431,13 +448,13 @@ const GuildTableRow = memo(
           className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
-          {formatOptionalTime(effectiveTimeProgress?.totalTimeSpent)}
+          <StackedTimeValue primary={effectiveTimeProgress?.totalTimeSpent} secondary={effectiveTimeProgress?.progressRaidTimeSpent} />
         </td>
         <td
           className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
           onClick={() => onRaidProgressClick(guild)}
         >
-          {formatOptionalTime(effectiveTimeProgress?.totalCombatTimeSpent)}
+          <StackedTimeValue primary={effectiveTimeProgress?.totalCombatTimeSpent} secondary={effectiveTimeProgress?.totalRaidTimeSpent} />
         </td>
         <td
           className="guild-table-progress-cell px-3 py-3 text-center text-sm cursor-pointer transition-colors"
@@ -493,7 +510,9 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
       mythicBestPull > 0 ||
       !!mythicBestPullDisplay ||
       (mythicProgress?.totalTimeSpent ?? 0) > 0 ||
-      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0;
+      (mythicProgress?.totalCombatTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.progressRaidTimeSpent ?? 0) > 0 ||
+      (mythicProgress?.totalRaidTimeSpent ?? 0) > 0;
     const guildRank = mythicProgress?.guildRank || heroicProgress?.guildRank || index + 1;
     const worldRank = getBestWorldRank(mythicProgress) || getBestWorldRank(heroicProgress);
     const official = guild.officialProgress?.[0];
@@ -505,7 +524,13 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const effectiveBestPullDisplay = hasMythicPullData ? mythicBestPullDisplay : heroicBestPullDisplay;
     const isHeroicFallback =
       !hasMythicPullData &&
-      (heroicPulls > 0 || heroicBestPull > 0 || !!heroicBestPullDisplay || (heroicProgress?.totalTimeSpent ?? 0) > 0 || (heroicProgress?.totalCombatTimeSpent ?? 0) > 0);
+      (heroicPulls > 0 ||
+        heroicBestPull > 0 ||
+        !!heroicBestPullDisplay ||
+        (heroicProgress?.totalTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.totalCombatTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.progressRaidTimeSpent ?? 0) > 0 ||
+        (heroicProgress?.totalRaidTimeSpent ?? 0) > 0);
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
 
     return (

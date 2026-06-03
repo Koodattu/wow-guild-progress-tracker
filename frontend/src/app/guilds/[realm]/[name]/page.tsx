@@ -44,6 +44,15 @@ function formatOptionalTime(seconds?: number | null) {
   return seconds && seconds > 0 ? formatTime(seconds) : "-";
 }
 
+function StackedTimeValue({ primary, secondary }: { primary?: number | null; secondary?: number | null }) {
+  return (
+    <div className="flex flex-col items-center leading-tight">
+      <div>{formatOptionalTime(primary)}</div>
+      <div className="mt-0.5 text-[10px] text-gray-500">({formatOptionalTime(secondary)})</div>
+    </div>
+  );
+}
+
 function getSortedRaidScheduleDays(raidSchedule?: RaidSchedule) {
   if (!raidSchedule?.days?.length) return [];
 
@@ -542,6 +551,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                         const iconUrl = getIconUrl(raid.iconUrl);
                         const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
                         const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
+                        const progressRaidTime = (mythicProgress?.progressRaidTimeSpent || 0) + (heroicProgress?.progressRaidTimeSpent || 0);
+                        const totalRaidTime = (mythicProgress?.totalRaidTimeSpent || 0) + (heroicProgress?.totalRaidTimeSpent || 0);
                         const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                         const bestProgress = mythicProgress?.bestPullPhase?.displayString
                           ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
@@ -593,14 +604,18 @@ export default function GuildProfilePage({ params }: PageProps) {
                                   </div>
                                   <div className="text-[9px] text-gray-500">H</div>
                                 </div>
-                                {progressTime > 0 || totalTime > 0 ? (
+                                {progressTime > 0 || totalTime > 0 || progressRaidTime > 0 || totalRaidTime > 0 ? (
                                   <>
                                     <div className="text-center">
-                                      <div className="text-gray-300">{formatOptionalTime(progressTime)}</div>
+                                      <div className="text-gray-300">
+                                        <StackedTimeValue primary={progressTime} secondary={progressRaidTime} />
+                                      </div>
                                       <div className="text-[9px] text-gray-500">Progress</div>
                                     </div>
                                     <div className="text-center">
-                                      <div className="text-gray-300">{formatOptionalTime(totalTime)}</div>
+                                      <div className="text-gray-300">
+                                        <StackedTimeValue primary={totalTime} secondary={totalRaidTime} />
+                                      </div>
                                       <div className="text-[9px] text-gray-500">Total</div>
                                     </div>
                                   </>
@@ -680,6 +695,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const iconUrl = getIconUrl(raid.iconUrl);
                           const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
                           const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
+                          const progressRaidTime = (mythicProgress?.progressRaidTimeSpent || 0) + (heroicProgress?.progressRaidTimeSpent || 0);
+                          const totalRaidTime = (mythicProgress?.totalRaidTimeSpent || 0) + (heroicProgress?.totalRaidTimeSpent || 0);
                           const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                           const bestProgress = mythicProgress?.bestPullPhase?.displayString
                             ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
@@ -779,7 +796,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                {formatOptionalTime(progressTime)}
+                                <StackedTimeValue primary={progressTime} secondary={progressRaidTime} />
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
@@ -789,7 +806,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
                                 onMouseLeave={() => setHoveredRaidProgressRow(null)}
                               >
-                                {formatOptionalTime(totalTime)}
+                                <StackedTimeValue primary={totalTime} secondary={totalRaidTime} />
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
