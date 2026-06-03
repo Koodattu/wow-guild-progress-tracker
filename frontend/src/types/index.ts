@@ -194,6 +194,13 @@ export interface LiveStreamer {
   };
 }
 
+export interface GuildLatestReportLink {
+  code: string;
+  url: string;
+  startTime: number;
+  isOngoing: boolean;
+}
+
 // Ultra-minimal guild info for directory/list page
 export interface GuildDirectoryItem {
   name: string;
@@ -217,6 +224,7 @@ export interface GuildListItem {
   parent_guild?: string; // Parent guild name if this is a team/sub-guild
   isCurrentlyRaiding: boolean;
   isStreaming?: boolean; // Computed field: true if any streamer is live
+  latestReport?: GuildLatestReportLink; // Latest WCL report link for active raiding badge
   lastFetched?: string;
   progress: RaidProgressSummary[];
   streamers?: Streamer[]; // Twitch streamers for this guild

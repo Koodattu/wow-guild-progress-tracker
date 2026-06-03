@@ -86,6 +86,13 @@ interface LatestReportSummary {
   bosses: LatestReportBossSummary[];
 }
 
+interface LatestReportLink {
+  code: string;
+  url: string;
+  startTime: number;
+  isOngoing: boolean;
+}
+
 interface LatestReportFightAggregation {
   _id: {
     reportCode: string;
@@ -108,6 +115,13 @@ interface LeanReportSummaryDocument {
   endTime?: number;
   isOngoing?: boolean;
   fightCount?: number;
+}
+
+interface LatestReportLinkAggregation {
+  _id: mongoose.Types.ObjectId;
+  code: string;
+  startTime: number;
+  isOngoing?: boolean;
 }
 
 class GuildService {
@@ -4535,6 +4549,8 @@ class GuildService {
       };
     });
 
+    const raidingGuildIds = guildRows.filter((guildObj) => guildObj.isCurrentlyRaiding).map((guildObj) => guildObj._id as mongoose.Types.ObjectId);
+
     const vodTargetKeys = Array.from(
       new Map(
         guildRows
@@ -4587,10 +4603,17 @@ class GuildService {
       });
     }
 
-    return guildRows.map(({ bestVodTarget, ...guildObj }) => ({
-      ...guildObj,
-      bestVodLinks: bestVodTarget ? vodLinksByFight.get(`${bestVodTarget.reportCode}:${bestVodTarget.fightId}`) || [] : [],
-    }));
+    const latestReportsByGuildId = await this.getLatestReportLinksByGuildIds(raidingGuildIds);
+
+    return guildRows.map(({ bestVodTarget, ...guildObj }) => {
+      const latestReport = latestReportsByGuildId.get(guildObj._id.toString());
+
+      return {
+        ...guildObj,
+        ...(latestReport ? { latestReport } : {}),
+        bestVodLinks: bestVodTarget ? vodLinksByFight.get(`${bestVodTarget.reportCode}:${bestVodTarget.fightId}`) || [] : [],
+      };
+    });
   }
 
   // Get detailed boss progress for a specific raid (returns only progress array, not guild info)
@@ -4857,6 +4880,50 @@ class GuildService {
       name: { $regex: new RegExp(`^${this.escapeRegex(name)}$`, "i") }, // Case-insensitive exact match
       realm: { $regex: new RegExp(`^${this.escapeRegex(realm)}$`, "i") }, // Case-insensitive exact match
     });
+  }
+
+  private async getLatestReportLinksByGuildIds(guildIds: mongoose.Types.ObjectId[]): Promise<Map<string, LatestReportLink>> {
+    const latestReportsByGuildId = new Map<string, LatestReportLink>();
+    const uniqueGuildIds = Array.from(new Map(guildIds.map((guildId) => [guildId.toString(), guildId])).values());
+
+    if (uniqueGuildIds.length === 0) {
+      return latestReportsByGuildId;
+    }
+
+    const reports = await Report.aggregate<LatestReportLinkAggregation>([
+      {
+        $match: {
+          guildId: { $in: uniqueGuildIds },
+        },
+      },
+      {
+        $sort: {
+          guildId: 1,
+          startTime: -1,
+        },
+      },
+      {
+        $group: {
+          _id: "$guildId",
+          code: { $first: "$code" },
+          startTime: { $first: "$startTime" },
+          isOngoing: { $first: "$isOngoing" },
+        },
+      },
+    ]);
+
+    for (const report of reports) {
+      if (!report.code) continue;
+
+      latestReportsByGuildId.set(report._id.toString(), {
+        code: report.code,
+        url: `https://www.warcraftlogs.com/reports/${report.code}`,
+        startTime: report.startTime,
+        isOngoing: report.isOngoing === true,
+      });
+    }
+
+    return latestReportsByGuildId;
   }
 
   private async getLatestReportSummaries(guildId: mongoose.Types.ObjectId, limit = 3): Promise<LatestReportSummary[]> {

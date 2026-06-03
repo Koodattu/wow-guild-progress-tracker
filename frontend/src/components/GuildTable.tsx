@@ -86,6 +86,50 @@ function GuildLiveBadge({ guild, label, compact = false }: { guild: GuildListIte
   );
 }
 
+function GuildRaidingBadge({ guild, label, compact = false }: { guild: GuildListItem; label: string; compact?: boolean }) {
+  if (!guild.isCurrentlyRaiding) return null;
+
+  const reportUrl = guild.latestReport?.url || (guild.latestReport?.code ? `https://www.warcraftlogs.com/reports/${guild.latestReport.code}` : null);
+  const title = reportUrl ? `Open latest Warcraft Logs report for ${guild.name}` : label;
+  const compactDot = <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-400" />;
+
+  if (compact) {
+    if (!reportUrl) return compactDot;
+
+    return (
+      <a
+        href={reportUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-green-900/50 active:bg-green-800/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+        title={title}
+        aria-label={title}
+      >
+        {compactDot}
+      </a>
+    );
+  }
+
+  if (!reportUrl) {
+    return <span className="rounded bg-green-900/50 px-2 py-0.5 text-xs font-semibold text-green-300">{label}</span>;
+  }
+
+  return (
+    <a
+      href={reportUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      className="inline-flex cursor-pointer items-center rounded bg-green-900/50 px-2 py-0.5 text-xs font-semibold text-green-300 transition-colors hover:bg-green-800/70 hover:text-green-100 active:bg-green-700/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+      title={title}
+      aria-label={title}
+    >
+      {label}
+    </a>
+  );
+}
+
 function formatVodPhaseLabel(label: string) {
   return label.trim().toLowerCase() === "reaction" ? "🎉" : label;
 }
@@ -404,7 +448,7 @@ const GuildTableRow = memo(
               <Image src="/raiderio-logo.png" alt="Raider.IO" width={20} height={20} className="w-full h-full object-contain" />
             </a>
             <GuildLiveBadge guild={guild} label={t("live")} />
-            {guild.isCurrentlyRaiding && <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-300 font-semibold">{t("raiding")}</span>}
+            <GuildRaidingBadge guild={guild} label={t("raiding")} />
           </div>
         </td>
         {/* Second clickable area: Schedule and Raid Progress columns */}
@@ -558,7 +602,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="font-semibold text-white text-xs truncate">{guild.name}</span>
                   <GuildLiveBadge guild={guild} label={t("live")} compact />
-                  {guild.isCurrentlyRaiding && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>}
+                  <GuildRaidingBadge guild={guild} label={t("raiding")} compact />
                 </div>
                 <div className="text-gray-500 text-[10px] truncate">
                   {guild.parent_guild ? `${guild.parent_guild} - ` : ""}
