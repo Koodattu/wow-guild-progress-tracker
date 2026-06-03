@@ -53,6 +53,59 @@ function StackedTimeValue({ primary, secondary }: { primary?: number | null; sec
   );
 }
 
+function hasDifficultyProgressData(progress?: RaidProgressSummary | null) {
+  return (
+    !!progress &&
+    ((progress.currentBossPulls ?? 0) > 0 ||
+      (progress.bestPullPercent ?? 0) > 0 ||
+      !!progress.bestPullPhase?.displayString ||
+      (progress.totalTimeSpent ?? 0) > 0 ||
+      (progress.totalCombatTimeSpent ?? 0) > 0 ||
+      (progress.progressRaidTimeSpent ?? 0) > 0 ||
+      (progress.totalRaidTimeSpent ?? 0) > 0)
+  );
+}
+
+function getRaidTimeMetrics(mythicProgress: RaidProgressSummary | null, heroicProgress: RaidProgressSummary | null, combineDifficulties: boolean) {
+  if (combineDifficulties) {
+    return {
+      progressTime: (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0),
+      totalTime: (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0),
+      progressRaidTime: (mythicProgress?.progressRaidTimeSpent || 0) + (heroicProgress?.progressRaidTimeSpent || 0),
+      totalRaidTime: (mythicProgress?.totalRaidTimeSpent || 0) + (heroicProgress?.totalRaidTimeSpent || 0),
+    };
+  }
+
+  const effectiveProgress = hasDifficultyProgressData(mythicProgress) ? mythicProgress : heroicProgress;
+
+  return {
+    progressTime: effectiveProgress?.totalTimeSpent || 0,
+    totalTime: effectiveProgress?.totalCombatTimeSpent || 0,
+    progressRaidTime: effectiveProgress?.progressRaidTimeSpent || 0,
+    totalRaidTime: effectiveProgress?.totalRaidTimeSpent || 0,
+  };
+}
+
+function TableToggle({ checked, onChange, label, ariaLabel }: { checked: boolean; onChange: () => void; label: string; ariaLabel: string }) {
+  return (
+    <div className="flex items-center gap-1 md:gap-2">
+      <button
+        onClick={onChange}
+        className={`relative inline-flex h-4 md:h-5 w-7 md:w-9 items-center rounded-full transition-colors ${checked ? "bg-blue-600" : "bg-gray-700"}`}
+        role="switch"
+        aria-checked={checked}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+      >
+        <span className={`inline-block h-2.5 md:h-3 w-2.5 md:w-3 transform rounded-full bg-white transition-transform ${checked ? "translate-x-4 md:translate-x-5" : "translate-x-0.5 md:translate-x-1"}`} />
+      </button>
+      <span className="text-[10px] md:text-xs text-gray-400 font-normal whitespace-nowrap" title={ariaLabel}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function getSortedRaidScheduleDays(raidSchedule?: RaidSchedule) {
   if (!raidSchedule?.days?.length) return [];
 
@@ -122,6 +175,7 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [modalLoading, setModalLoading] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
+  const [combineHeroicMythicTimes, setCombineHeroicMythicTimes] = useState(false);
 
   // Hover state for clickable areas
   const [hoveredRaidInfoRow, setHoveredRaidInfoRow] = useState<number | null>(null);
@@ -523,16 +577,14 @@ export default function GuildProfilePage({ params }: PageProps) {
               {/* Mobile Header with Toggle */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 bg-gray-800/50">
                 <span className="text-xs font-semibold text-gray-300">Raid Progress</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setShowAllRaids(!showAllRaids)}
-                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
-                    role="switch"
-                    aria-checked={showAllRaids}
-                  >
-                    <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${showAllRaids ? "translate-x-4" : "translate-x-0.5"}`} />
-                  </button>
-                  <span className="text-[10px] text-gray-400">All</span>
+                <div className="flex items-center gap-2">
+                  <TableToggle checked={showAllRaids} onChange={() => setShowAllRaids(!showAllRaids)} label="All" ariaLabel="Show all raids" />
+                  <TableToggle
+                    checked={combineHeroicMythicTimes}
+                    onChange={() => setCombineHeroicMythicTimes(!combineHeroicMythicTimes)}
+                    label="M+H"
+                    ariaLabel="Combine heroic and mythic times"
+                  />
                 </div>
               </div>
               {/* Mobile Raid Cards */}
@@ -549,10 +601,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                       {/* Raid Cards */}
                       {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
                         const iconUrl = getIconUrl(raid.iconUrl);
-                        const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
-                        const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
-                        const progressRaidTime = (mythicProgress?.progressRaidTimeSpent || 0) + (heroicProgress?.progressRaidTimeSpent || 0);
-                        const totalRaidTime = (mythicProgress?.totalRaidTimeSpent || 0) + (heroicProgress?.totalRaidTimeSpent || 0);
+                        const { progressTime, totalTime, progressRaidTime, totalRaidTime } = getRaidTimeMetrics(mythicProgress, heroicProgress, combineHeroicMythicTimes);
                         const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                         const bestProgress = mythicProgress?.bestPullPhase?.displayString
                           ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
@@ -646,20 +695,14 @@ export default function GuildProfilePage({ params }: PageProps) {
                     <th className="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-gray-300">
                       <div className="flex items-center gap-2 md:gap-3">
                         <span>Raid</span>
-                        <div className="flex items-center gap-1 md:gap-2">
-                          <button
-                            onClick={() => setShowAllRaids(!showAllRaids)}
-                            className={`relative inline-flex h-4 md:h-5 w-7 md:w-9 items-center rounded-full transition-colors ${showAllRaids ? "bg-blue-600" : "bg-gray-700"}`}
-                            role="switch"
-                            aria-checked={showAllRaids}
-                          >
-                            <span
-                              className={`inline-block h-2.5 md:h-3 w-2.5 md:w-3 transform rounded-full bg-white transition-transform ${
-                                showAllRaids ? "translate-x-4 md:translate-x-5" : "translate-x-0.5 md:translate-x-1"
-                              }`}
-                            />
-                          </button>
-                          <span className="text-[10px] md:text-xs text-gray-400 font-normal whitespace-nowrap">All</span>
+                        <div className="flex items-center gap-2 md:gap-3">
+                          <TableToggle checked={showAllRaids} onChange={() => setShowAllRaids(!showAllRaids)} label="All" ariaLabel="Show all raids" />
+                          <TableToggle
+                            checked={combineHeroicMythicTimes}
+                            onChange={() => setCombineHeroicMythicTimes(!combineHeroicMythicTimes)}
+                            label="M+H"
+                            ariaLabel="Combine heroic and mythic times"
+                          />
                         </div>
                       </div>
                     </th>
@@ -693,10 +736,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                         {/* Raid Rows */}
                         {raidEntries.map(({ raid, mythicProgress, heroicProgress }) => {
                           const iconUrl = getIconUrl(raid.iconUrl);
-                          const progressTime = (mythicProgress?.totalTimeSpent || 0) + (heroicProgress?.totalTimeSpent || 0);
-                          const totalTime = (mythicProgress?.totalCombatTimeSpent || 0) + (heroicProgress?.totalCombatTimeSpent || 0);
-                          const progressRaidTime = (mythicProgress?.progressRaidTimeSpent || 0) + (heroicProgress?.progressRaidTimeSpent || 0);
-                          const totalRaidTime = (mythicProgress?.totalRaidTimeSpent || 0) + (heroicProgress?.totalRaidTimeSpent || 0);
+                          const { progressTime, totalTime, progressRaidTime, totalRaidTime } = getRaidTimeMetrics(mythicProgress, heroicProgress, combineHeroicMythicTimes);
                           const currentBossPulls = mythicProgress?.currentBossPulls || 0;
                           const bestProgress = mythicProgress?.bestPullPhase?.displayString
                             ? formatPhaseDisplay(mythicProgress.bestPullPhase.displayString)
