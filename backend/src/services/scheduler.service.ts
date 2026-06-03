@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import mongoose from "mongoose";
-import Guild from "../models/Guild";
+import Guild, { IGuild } from "../models/Guild";
 import guildService from "./guild.service";
 import twitchService, { StreamStatus } from "./twitch.service";
 import tierListService from "./tierlist.service";
@@ -37,7 +37,15 @@ function throttleDelay(ms: number): Promise<void> {
 }
 
 /** Minimum interval between cache warming operations (in ms) */
-const CACHE_WARM_DEBOUNCE_MS = 30000; // 30 seconds
+const CACHE_WARM_DEBOUNCE_MS = 5 * 60 * 1000; // 5 minutes
+
+interface GuildBatchUpdateStats {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  withNewData: number;
+  raidingStatusChanged: number;
+}
 
 class UpdateScheduler {
   private hotHoursActiveInterval: NodeJS.Timeout | null = null;
@@ -63,6 +71,50 @@ class UpdateScheduler {
   private isCheckingHiatus: boolean = false;
   private isUpdatingRaiderIOGuilds: boolean = false;
   private lastCacheWarmTime: number = 0;
+
+  private async updateGuildProgressBatch(guilds: IGuild[], logPrefix: string, throttleMs: number, yieldEvery: number = 1): Promise<GuildBatchUpdateStats> {
+    const stats: GuildBatchUpdateStats = {
+      attempted: guilds.length,
+      succeeded: 0,
+      failed: 0,
+      withNewData: 0,
+      raidingStatusChanged: 0,
+    };
+
+    for (let i = 0; i < guilds.length; i++) {
+      const guild = guilds[i];
+      logger.info(`${logPrefix} Guild ${i + 1}/${guilds.length}: ${guild.name}`);
+
+      try {
+        const result = await guildService.updateGuildProgress((guild._id as mongoose.Types.ObjectId).toString());
+
+        if (!result) {
+          stats.failed++;
+        } else {
+          stats.succeeded++;
+          if (result.hasNewData) stats.withNewData++;
+          if (result.raidingStatusChanged) stats.raidingStatusChanged++;
+        }
+      } catch (error) {
+        stats.failed++;
+        logger.error(`${logPrefix} Guild ${guild.name} failed:`, error);
+      }
+
+      if (yieldEvery > 0 && (i + 1) % yieldEvery === 0) {
+        await yieldToEventLoop();
+      }
+
+      if (i < guilds.length - 1 && throttleMs > 0) {
+        await throttleDelay(throttleMs);
+      }
+    }
+
+    return stats;
+  }
+
+  private shouldWarmCachesAfterUpdate(stats: GuildBatchUpdateStats): boolean {
+    return stats.withNewData > 0 || stats.raidingStatusChanged > 0;
+  }
 
   // Finnish timezone offset check
   private isHotHours(): boolean {
@@ -568,7 +620,7 @@ class UpdateScheduler {
     }
   }
 
-  // HOT HOURS: Update active guilds (every 15 minutes during 16:00-01:00)
+  // HOT HOURS: Update active guilds at the configured interval during 16:00-01:00
   async updateActiveGuilds(): Promise<void> {
     this.isUpdatingHotActive = true;
     const taskId = await taskTracker.start("Update Active Guilds (Hot Hours)");
@@ -587,31 +639,23 @@ class UpdateScheduler {
 
       if (guilds.length === 0) {
         logger.info("[Hot/Active] No active guilds to update");
-        this.isUpdatingHotActive = false;
+        await taskTracker.complete(taskId, { guildsUpdated: 0 });
         return;
       }
 
       logger.info(`[Hot/Active] Updating ${guilds.length} active guild(s)...`);
 
-      // Update all active guilds sequentially with yielding to prevent blocking
-      for (let i = 0; i < guilds.length; i++) {
-        logger.info(`[Hot/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
-        await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
+      const stats = await this.updateGuildProgressBatch(guilds, "[Hot/Active]", 100);
 
-        // Yield to event loop after each guild to allow request handling
-        await yieldToEventLoop();
-
-        // Throttle between guilds to reduce CPU pressure
-        if (i < guilds.length - 1) {
-          await throttleDelay(100);
-        }
-      }
-
-      logger.info(`[Hot/Active] Completed updating ${guilds.length} guild(s)`);
+      logger.info(
+        `[Hot/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+      );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
-      await this.debouncedWarmCurrentRaidCaches();
-      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
+      if (this.shouldWarmCachesAfterUpdate(stats)) {
+        await this.debouncedWarmCurrentRaidCaches();
+      }
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -620,7 +664,7 @@ class UpdateScheduler {
     }
   }
 
-  // HOT HOURS: Update currently raiding guilds (every 5 minutes during 16:00-01:00)
+  // HOT HOURS: Update currently raiding guilds at the configured interval during 16:00-01:00
   private async updateRaidingGuilds(): Promise<void> {
     this.isUpdatingHotRaiding = true;
     const taskId = await taskTracker.start("Update Raiding Guilds (Hot Hours)");
@@ -632,31 +676,23 @@ class UpdateScheduler {
 
       if (raidingGuilds.length === 0) {
         // No raiding guilds, nothing to do
-        this.isUpdatingHotRaiding = false;
+        await taskTracker.complete(taskId, { guildsUpdated: 0 });
         return;
       }
 
       logger.info(`[Hot/Raiding] Updating ${raidingGuilds.length} actively raiding guild(s)...`);
 
-      // Update all raiding guilds sequentially with yielding to prevent blocking
-      for (let i = 0; i < raidingGuilds.length; i++) {
-        logger.info(`[Hot/Raiding] Guild ${i + 1}/${raidingGuilds.length}: ${raidingGuilds[i].name}`);
-        await guildService.updateGuildProgress((raidingGuilds[i]._id as mongoose.Types.ObjectId).toString());
+      const stats = await this.updateGuildProgressBatch(raidingGuilds, "[Hot/Raiding]", 100);
 
-        // Yield to event loop after each guild to allow request handling
-        await yieldToEventLoop();
-
-        // Throttle between guilds to reduce CPU pressure
-        if (i < raidingGuilds.length - 1) {
-          await throttleDelay(100);
-        }
-      }
-
-      logger.info(`[Hot/Raiding] Completed updating ${raidingGuilds.length} guild(s)`);
+      logger.info(
+        `[Hot/Raiding] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+      );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
-      await this.debouncedWarmCurrentRaidCaches();
-      await taskTracker.complete(taskId, { guildsUpdated: raidingGuilds.length });
+      if (this.shouldWarmCachesAfterUpdate(stats)) {
+        await this.debouncedWarmCurrentRaidCaches();
+      }
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -684,31 +720,23 @@ class UpdateScheduler {
 
       if (guilds.length === 0) {
         logger.info("[Off/Active] No active guilds to update");
-        this.isUpdatingOffActive = false;
+        await taskTracker.complete(taskId, { guildsUpdated: 0 });
         return;
       }
 
       logger.info(`[Off/Active] Updating ${guilds.length} active guild(s)...`);
 
-      // Update all active guilds sequentially with yielding to prevent blocking
-      for (let i = 0; i < guilds.length; i++) {
-        logger.info(`[Off/Active] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
-        await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
+      const stats = await this.updateGuildProgressBatch(guilds, "[Off/Active]", 100);
 
-        // Yield to event loop after each guild to allow request handling
-        await yieldToEventLoop();
-
-        // Throttle between guilds to reduce CPU pressure
-        if (i < guilds.length - 1) {
-          await throttleDelay(100);
-        }
-      }
-
-      logger.info(`[Off/Active] Completed updating ${guilds.length} guild(s)`);
+      logger.info(
+        `[Off/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+      );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
-      await this.debouncedWarmCurrentRaidCaches();
-      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
+      if (this.shouldWarmCachesAfterUpdate(stats)) {
+        await this.debouncedWarmCurrentRaidCaches();
+      }
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -734,33 +762,23 @@ class UpdateScheduler {
 
       if (guilds.length === 0) {
         logger.info("[Daily/Inactive] No inactive guilds to update");
-        this.isUpdatingOffInactive = false;
+        await taskTracker.complete(taskId, { guildsUpdated: 0 });
         return;
       }
 
       logger.info(`[Daily/Inactive] Updating ${guilds.length} inactive guild(s)...`);
 
-      // Update all inactive guilds sequentially with a small delay between each
-      for (let i = 0; i < guilds.length; i++) {
-        logger.info(`[Daily/Inactive] Guild ${i + 1}/${guilds.length}: ${guilds[i].name}`);
-        await guildService.updateGuildProgress((guilds[i]._id as mongoose.Types.ObjectId).toString());
+      const stats = await this.updateGuildProgressBatch(guilds, "[Daily/Inactive]", 2000, 5);
 
-        // Yield to event loop periodically (every 5 guilds) to allow request handling
-        if ((i + 1) % 5 === 0) {
-          await yieldToEventLoop();
-        }
-
-        // Small delay to avoid overwhelming the API
-        if (i < guilds.length - 1) {
-          await throttleDelay(2000);
-        }
-      }
-
-      logger.info(`[Daily/Inactive] Completed updating ${guilds.length} guild(s)`);
+      logger.info(
+        `[Daily/Inactive] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+      );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
-      await this.debouncedWarmCurrentRaidCaches();
-      await taskTracker.complete(taskId, { guildsUpdated: guilds.length });
+      if (this.shouldWarmCachesAfterUpdate(stats)) {
+        await this.debouncedWarmCurrentRaidCaches();
+      }
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
