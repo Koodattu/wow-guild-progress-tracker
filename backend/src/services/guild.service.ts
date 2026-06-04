@@ -1082,8 +1082,12 @@ class GuildService {
       await guild.save();
 
       const raidingStatusChanged = wasCurrentlyRaiding !== guild.isCurrentlyRaiding;
-      if (raidingStatusChanged) {
-        await Promise.all([cacheService.invalidate(cacheService.getGuildListKey()), cacheService.invalidate(cacheService.getGuildSummaryKey(guild.realm, guild.name))]);
+      if (hasNewData || raidingStatusChanged) {
+        const invalidations = [cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name)];
+        if (raidingStatusChanged) {
+          invalidations.push(cacheService.invalidate(cacheService.getGuildListKey()));
+        }
+        await Promise.all(invalidations);
       }
 
       // Update world rankings only if there was new data and only for current raid
