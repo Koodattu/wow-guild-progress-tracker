@@ -4,9 +4,10 @@ import type { Boss, CharacterRankingRow, ClassInfo } from "@/types";
 import type { ColumnDef } from "@/types/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Table } from "./Table";
 import IconImage from "./IconImage";
-import { formatSpecName, getAllClasses, getClassInfoById, getParseColor, getSpecIconUrl } from "@/lib/utils";
+import { formatSpecName, getAllClasses, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import { type PatchPartitionOption } from "@/lib/patch-partitions";
 import { Selector } from "./Selector";
 import { useTranslations } from "next-intl";
@@ -334,14 +335,6 @@ type BuildRankingColumnsOptions = {
   t: (key: string) => string;
 };
 
-function formatRealmSlug(realm: string) {
-  return realm
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
@@ -401,7 +394,11 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
       accessor: (row: CharacterRankingRow) => {
         const guild = row.character.guild;
         if (!guild?.name || !guild?.realm) return "—";
-        return `${guild.name} - ${formatRealmSlug(guild.realm)}`;
+        return (
+          <Link href={getGuildProfileUrl(guild.realm, guild.name)} className="hover:text-blue-300 transition-colors" onClick={(event) => event.stopPropagation()}>
+            {guild.name}
+          </Link>
+        );
       },
     },
   ];

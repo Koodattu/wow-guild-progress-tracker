@@ -250,7 +250,7 @@ function VodPopup({ vod, anchor, onMouseEnter, onMouseLeave }: { vod: BestVodLin
 
   return createPortal(
     <div
-      className="fixed z-[70] pt-1 text-left"
+      className="fixed z-70 pt-1 text-left"
       style={{ left: position.left, top: position.top, width: VOD_POPUP_WIDTH }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -541,7 +541,7 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     return (
       <div className={`mb-1.5 overflow-hidden rounded-lg bg-gray-800/50 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
         <div className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 p-2 active:bg-gray-700/50" onClick={() => onGuildClick(guild)}>
-          <div className="grid w-[3.75rem] shrink-0 grid-cols-2 gap-1 tabular-nums">
+          <div className="grid w-15 shrink-0 grid-cols-2 gap-1 tabular-nums">
             <div className="rounded bg-gray-900/35 px-1 py-1 text-center">
               <div className="text-[8px] font-medium uppercase leading-none text-gray-500">FI</div>
               <div className={`mt-0.5 text-sm font-bold leading-none ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</div>
