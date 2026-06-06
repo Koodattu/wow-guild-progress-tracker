@@ -4261,6 +4261,21 @@ class GuildService {
     });
   }
 
+  private getLastKilledBossForSummary(bosses: any[] = []): any | null {
+    const killedBosses = bosses.filter((boss) => boss.kills > 0);
+    if (killedBosses.length === 0) return null;
+
+    return killedBosses.reduce((latest, boss) => {
+      const latestTime = latest.firstKillTime ? new Date(latest.firstKillTime).getTime() : 0;
+      const bossTime = boss.firstKillTime ? new Date(boss.firstKillTime).getTime() : 0;
+      if (bossTime !== latestTime) return bossTime > latestTime ? boss : latest;
+
+      const latestOrder = latest.killOrder ?? 0;
+      const bossOrder = boss.killOrder ?? 0;
+      return bossOrder > latestOrder ? boss : latest;
+    });
+  }
+
   private hasProgressPullData(progress: any | null | undefined): boolean {
     if (!progress) return false;
 
@@ -4514,10 +4529,7 @@ class GuildService {
         // Find current boss (first unkilled boss) to get best pull info
         const currentBoss = p.bosses?.find((b: any) => b.kills === 0);
 
-        // Find the last killed boss to get the most recent kill timestamp
-        const killedBosses = p.bosses?.filter((b: any) => b.kills > 0 && b.firstKillTime) || [];
-        const lastKilledBoss =
-          killedBosses.length > 0 ? killedBosses.reduce((latest: any, boss: any) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+        const lastKilledBoss = this.getLastKilledBossForSummary(p.bosses);
 
         return {
           raidId: p.raidId,
@@ -4533,6 +4545,7 @@ class GuildService {
           bestPullPercent: currentBoss?.bestPercent || 0,
           bestPullPhase: currentBoss?.bestPullPhase,
           lastKillTime: lastKilledBoss?.firstKillTime || null,
+          lastKilledBossPulls: lastKilledBoss?.pullCount || 0,
           worldRank: p.worldRank,
           worldRankColor: p.worldRankColor,
           wclWorldRank: p.wclWorldRank,
@@ -5198,10 +5211,7 @@ class GuildService {
       // Find current boss (first unkilled boss) to get best pull info
       const currentBoss = p.bosses.find((b) => b.kills === 0);
 
-      // Find the last killed boss to get the most recent kill timestamp
-      const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
-      const lastKilledBoss =
-        killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+      const lastKilledBoss = this.getLastKilledBossForSummary(p.bosses);
 
       return {
         raidId: p.raidId,
@@ -5217,6 +5227,7 @@ class GuildService {
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
         lastKillTime: lastKilledBoss?.firstKillTime || null,
+        lastKilledBossPulls: lastKilledBoss?.pullCount || 0,
         worldRank: p.worldRank,
         worldRankColor: p.worldRankColor,
         guildRank: p.guildRank,
@@ -5276,10 +5287,7 @@ class GuildService {
       // Find current boss (first unkilled boss) to get best pull info
       const currentBoss = p.bosses.find((b) => b.kills === 0);
 
-      // Find the last killed boss to get the most recent kill timestamp
-      const killedBosses = p.bosses.filter((b) => b.kills > 0 && b.firstKillTime);
-      const lastKilledBoss =
-        killedBosses.length > 0 ? killedBosses.reduce((latest, boss) => (new Date(boss.firstKillTime!) > new Date(latest.firstKillTime!) ? boss : latest)) : null;
+      const lastKilledBoss = this.getLastKilledBossForSummary(p.bosses);
 
       return {
         raidId: p.raidId,
@@ -5295,6 +5303,7 @@ class GuildService {
         bestPullPercent: currentBoss?.bestPercent || 0,
         bestPullPhase: currentBoss?.bestPullPhase,
         lastKillTime: lastKilledBoss?.firstKillTime || null,
+        lastKilledBossPulls: lastKilledBoss?.pullCount || 0,
         worldRank: p.worldRank,
         worldRankColor: p.worldRankColor,
         guildRank: p.guildRank,

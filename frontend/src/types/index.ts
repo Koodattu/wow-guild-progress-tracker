@@ -124,6 +124,7 @@ export interface RaidProgressSummary {
   bestPullPercent: number;
   bestPullPhase?: BestPullPhase;
   lastKillTime?: string | null; // Timestamp of the most recent boss kill
+  lastKilledBossPulls?: number; // Pull count for the most recently defeated boss
   worldRank?: number; // Best world rank (lowest of WCL and Raider.IO)
   worldRankColor?: string; // Color class for the best world rank
   wclWorldRank?: number; // World rank from WarcraftLogs
