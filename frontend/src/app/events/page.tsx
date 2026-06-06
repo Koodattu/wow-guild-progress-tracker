@@ -2,69 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import EventCard from "@/components/EventCard";
-import Cookies from "js-cookie";
 import { useTranslations } from "next-intl";
 import { useEventsPaginated, useGuildList } from "@/lib/queries";
-import type { EventFilters } from "@/types";
-
-const EVENT_TYPES = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"] as const;
-const DIFFICULTIES = ["mythic", "heroic"] as const;
+import { DIFFICULTIES, EVENT_TYPES, useEventFilterPreferences } from "@/lib/useEventFilters";
 
 export default function EventsPage() {
   const t = useTranslations("eventsPage");
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 50;
-
-  // Initialize filters from cookies or defaults
-  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(() => {
-    const saved = Cookies.get("event-types-filter");
-    return saved ? new Set(JSON.parse(saved)) : new Set(EVENT_TYPES);
-  });
-
-  const [selectedDifficulties, setSelectedDifficulties] = useState<Set<string>>(() => {
-    const saved = Cookies.get("event-difficulties-filter");
-    return saved ? new Set(JSON.parse(saved)) : new Set(DIFFICULTIES);
-  });
-
-  const [selectedGuild, setSelectedGuild] = useState<string>(() => {
-    return Cookies.get("event-guild-filter") || "";
-  });
-
-  // Build filters object for the API call
-  // Only include filters that are not "all selected" (to avoid unnecessary query params)
-  const filters: EventFilters = useMemo(() => {
-    const f: EventFilters = {};
-    if (selectedEventTypes.size > 0 && selectedEventTypes.size < EVENT_TYPES.length) {
-      f.types = Array.from(selectedEventTypes);
-    }
-    if (selectedDifficulties.size > 0 && selectedDifficulties.size < DIFFICULTIES.length) {
-      f.difficulties = Array.from(selectedDifficulties);
-    }
-    if (selectedGuild) {
-      f.guildName = selectedGuild;
-    }
-    return f;
-  }, [selectedEventTypes, selectedDifficulties, selectedGuild]);
+  const {
+    selectedEventTypes,
+    selectedDifficulties,
+    selectedGuild,
+    filters,
+    setEventTypes,
+    setDifficulties,
+    setSelectedGuild,
+  } = useEventFilterPreferences();
+  const selectedEventTypeSet = useMemo(() => new Set(selectedEventTypes), [selectedEventTypes]);
+  const selectedDifficultySet = useMemo(() => new Set(selectedDifficulties), [selectedDifficulties]);
 
   const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage, filters);
   const { data: guildList } = useGuildList();
-
-  // Save filters to cookies whenever they change
-  useEffect(() => {
-    Cookies.set("event-types-filter", JSON.stringify(Array.from(selectedEventTypes)), { expires: 365 });
-  }, [selectedEventTypes]);
-
-  useEffect(() => {
-    Cookies.set("event-difficulties-filter", JSON.stringify(Array.from(selectedDifficulties)), { expires: 365 });
-  }, [selectedDifficulties]);
-
-  useEffect(() => {
-    if (selectedGuild) {
-      Cookies.set("event-guild-filter", selectedGuild, { expires: 365 });
-    } else {
-      Cookies.remove("event-guild-filter");
-    }
-  }, [selectedGuild]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -79,27 +38,23 @@ export default function EventsPage() {
   };
 
   const toggleEventType = (type: string) => {
-    setSelectedEventTypes((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(type)) {
-        newSet.delete(type);
-      } else {
-        newSet.add(type);
-      }
-      return newSet;
-    });
+    const newSet = new Set(selectedEventTypeSet);
+    if (newSet.has(type)) {
+      newSet.delete(type);
+    } else {
+      newSet.add(type);
+    }
+    setEventTypes(newSet.size === 0 ? [...EVENT_TYPES] : Array.from(newSet));
   };
 
   const toggleDifficulty = (difficulty: string) => {
-    setSelectedDifficulties((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(difficulty)) {
-        newSet.delete(difficulty);
-      } else {
-        newSet.add(difficulty);
-      }
-      return newSet;
-    });
+    const newSet = new Set(selectedDifficultySet);
+    if (newSet.has(difficulty)) {
+      newSet.delete(difficulty);
+    } else {
+      newSet.add(difficulty);
+    }
+    setDifficulties(newSet.size === 0 ? [...DIFFICULTIES] : Array.from(newSet));
   };
 
   const getEventTypeLabel = (type: string): string => {
@@ -156,7 +111,7 @@ export default function EventsPage() {
                   <label key={type} className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
                     <input
                       type="checkbox"
-                      checked={selectedEventTypes.has(type)}
+                      checked={selectedEventTypeSet.has(type)}
                       onChange={() => toggleEventType(type)}
                       className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-950 cursor-pointer"
                     />
@@ -174,7 +129,7 @@ export default function EventsPage() {
                   <label key={difficulty} className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
                     <input
                       type="checkbox"
-                      checked={selectedDifficulties.has(difficulty)}
+                      checked={selectedDifficultySet.has(difficulty)}
                       onChange={() => toggleDifficulty(difficulty)}
                       className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-950 cursor-pointer"
                     />

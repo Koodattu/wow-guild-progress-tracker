@@ -210,10 +210,9 @@ export default function LatestReportsFeed({ reports }: LatestReportsFeedProps) {
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <ReportDateTime report={report} />
-                      <div className="min-w-0 truncate text-[11px] text-gray-500">{formatReportStats(report)}</div>
                       {report.isOngoing && <span className="shrink-0 rounded bg-green-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-300">Live</span>}
                     </div>
-                    <div className="truncate text-xs text-gray-400">{report.raidName}</div>
+                    <div className="truncate text-xs text-gray-400">{formatReportStats(report)}</div>
                   </div>
                 </div>
                 <FaExternalLinkAlt className="mt-0.5 h-3 w-3 shrink-0 text-gray-500 transition-colors group-hover:text-blue-400" aria-hidden="true" />

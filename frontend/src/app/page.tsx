@@ -5,7 +5,8 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
 import { useRaids, useEventsPaginated, useGuilds, useRaidDates, useHorseRaceUmaReservations } from "@/lib/queries";
-import { useEventFiltersFromCookies } from "@/lib/useEventFilters";
+import { useEventFiltersFromLocalStorage } from "@/lib/useEventFilters";
+import { useHomePagePreferences } from "@/lib/homepage-preferences";
 import GuildTable from "@/components/GuildTable";
 import IntegratedRaidSelector from "@/components/IntegratedRaidSelector";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
@@ -32,7 +33,8 @@ function HomeContent() {
 
   // ─── React Query hooks ──────────────────────────────────────────────────────
   const { data: raids = [], isLoading: raidsLoading, error: raidsError } = useRaids();
-  const eventFilters = useEventFiltersFromCookies();
+  const { showEvents, showLivestreams, showRaidingToday } = useHomePagePreferences();
+  const eventFilters = useEventFiltersFromLocalStorage();
   const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters);
   const events = eventsData?.events ?? [];
   const { data: guilds = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined);
@@ -172,14 +174,14 @@ function HomeContent() {
   return (
     <main className="text-white min-h-screen">
       {/* Events Feed - full width */}
-      {events.length > 0 && (
+      {showEvents && events.length > 0 && (
         <div className="px-3 md:px-4 mb-2">
           <HorizontalEventsFeed events={events} />
         </div>
       )}
 
       {/* Featured Live Streamers */}
-      <FeaturedStreamers />
+      {showLivestreams && <FeaturedStreamers />}
 
       <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={raids[0]?.id ?? null} reservedUmaImages={reservedUmaImages} />
 
@@ -188,7 +190,7 @@ function HomeContent() {
 
         {/* Integrated Raid Selector + Guild Leaderboard */}
         <div>
-          <RaidingTodayStrip />
+          {showRaidingToday && <RaidingTodayStrip />}
           {raids.length > 0 && <IntegratedRaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} raidDates={raidDates ?? null} />}
           <GuildTable guilds={guilds} onGuildClick={handleGuildClick} onRaidProgressClick={handleRaidProgressClick} selectedRaidId={selectedRaidId} />
         </div>

@@ -8,6 +8,8 @@ import { useTranslations } from "next-intl";
 import { setLocale, getLocale } from "@/lib/locale";
 import { useAuth } from "@/context/AuthContext";
 import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
+import { useHomePagePreferences } from "@/lib/homepage-preferences";
+import { DIFFICULTIES, EVENT_TYPES, useEventFilterPreferences } from "@/lib/useEventFilters";
 
 const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRaceRandom" | "horseRaceCrest" | "horseRaceJapanese" | "horseRaceUma" | "horseRaceOff" }> = [
   { mode: "random", labelKey: "horseRaceRandom" },
@@ -44,9 +46,66 @@ const getMobileNavLinkClass = (isCurrent: boolean) =>
     isCurrent ? "border-blue-400/30 bg-blue-500/15 text-blue-100" : "border-transparent text-gray-300 hover:border-white/10 hover:bg-white/5 hover:text-white"
   }`;
 
+function SettingsToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left shadow-sm shadow-black/25 ring-1 transition-colors ${
+        checked ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/25 hover:bg-emerald-500/20" : "bg-gray-950/70 text-gray-500 ring-white/5 hover:bg-gray-900/90 hover:text-gray-300"
+      }`}
+      aria-pressed={checked}
+    >
+      <span className="text-sm font-medium">{label}</span>
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-emerald-500" : "bg-gray-700"}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm shadow-black/40 transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+      </span>
+    </button>
+  );
+}
+
+const getEventFilterChipClass = (type: string, selected: boolean) => {
+  if (!selected) {
+    return "rounded px-2.5 py-1.5 text-xs font-medium bg-gray-950/70 text-gray-500 ring-1 ring-white/5 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
+  }
+
+  switch (type) {
+    case "boss_kill":
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-green-400/15 text-green-300 ring-1 ring-green-400/35 transition-colors hover:bg-green-400/20";
+    case "best_pull":
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-blue-400/15 text-blue-300 ring-1 ring-blue-400/35 transition-colors hover:bg-blue-400/20";
+    case "hiatus":
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-400/15 text-gray-300 ring-1 ring-gray-400/30 transition-colors hover:bg-gray-400/20";
+    case "regress":
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-red-400/15 text-red-300 ring-1 ring-red-400/35 transition-colors hover:bg-red-400/20";
+    case "reproge":
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-400/35 transition-colors hover:bg-yellow-400/20";
+    default:
+      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-400/15 text-gray-300 ring-1 ring-gray-400/30 transition-colors hover:bg-gray-400/20";
+  }
+};
+
+const getDifficultySegmentClass = (difficulty: string, selected: boolean) => {
+  if (!selected) {
+    return "flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
+  }
+
+  return `flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold shadow-sm shadow-black/20 ring-1 ring-inset transition-colors ${
+    difficulty === "mythic"
+      ? "bg-orange-500/15 text-orange-300 ring-orange-400/30 hover:bg-orange-500/20"
+      : "bg-purple-500/15 text-purple-300 ring-purple-400/30 hover:bg-purple-500/20"
+  }`;
+};
+
+const getHorseRaceSegmentClass = (selected: boolean) =>
+  `flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold transition-colors ${
+    selected ? "bg-blue-600 text-white shadow-sm shadow-black/30" : "text-gray-500 hover:bg-gray-900/90 hover:text-gray-200"
+  }`;
+
 export default function Navigation() {
   const pathname = usePathname();
   const t = useTranslations("navigation");
+  const tEvents = useTranslations("eventsPage");
   const tInfo = useTranslations("infoDialog");
   const { user, isLoading, login, logout } = useAuth();
   const {
@@ -57,16 +116,20 @@ export default function Navigation() {
     setShowCharacters: setShowHorseRaceCharacters,
     setShowBackground: setShowHorseRaceBackground,
   } = useHorseRaceMode();
+  const { showEvents, showLivestreams, showRaidingToday, setShowEvents, setShowLivestreams, setShowRaidingToday } = useHomePagePreferences();
+  const { selectedEventTypes, selectedDifficulties, selectedGuild, setEventTypes, setDifficulties, setSelectedGuild } = useEventFilterPreferences();
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [isHorseRaceDropdownOpen, setIsHorseRaceDropdownOpen] = useState(false);
+  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState<"en" | "fi">("en");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
-  const horseRaceDropdownRef = useRef<HTMLDivElement>(null);
+  const settingsDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const selectedEventTypeSet = new Set(selectedEventTypes);
+  const selectedDifficultySet = new Set(selectedDifficulties);
 
   useEffect(() => {
     setCurrentLocale(getLocale());
@@ -75,7 +138,7 @@ export default function Navigation() {
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
-    setIsHorseRaceDropdownOpen(false);
+    setIsSettingsDropdownOpen(false);
   }, [pathname]);
 
   // Prevent body scroll when mobile menu is open
@@ -98,22 +161,22 @@ export default function Navigation() {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
-      if (horseRaceDropdownRef.current && !horseRaceDropdownRef.current.contains(event.target as Node)) {
-        setIsHorseRaceDropdownOpen(false);
+      if (settingsDropdownRef.current && !settingsDropdownRef.current.contains(event.target as Node)) {
+        setIsSettingsDropdownOpen(false);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setIsMobileMenuOpen(false);
       }
     };
 
-    if (isContactDropdownOpen || isUserDropdownOpen || isHorseRaceDropdownOpen || isMobileMenuOpen) {
+    if (isContactDropdownOpen || isUserDropdownOpen || isSettingsDropdownOpen || isMobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isContactDropdownOpen, isHorseRaceDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
+  }, [isContactDropdownOpen, isSettingsDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -127,16 +190,43 @@ export default function Navigation() {
   };
 
   const isFrontpage = pathname === "/";
-  const horseRaceModeLabel =
-    horseRaceMode === "random"
-      ? t("horseRaceRandom")
-      : horseRaceMode === "crest"
-        ? t("horseRaceCrest")
-        : horseRaceMode === "japanese"
-          ? t("horseRaceJapanese")
-          : horseRaceMode === "uma"
-            ? t("horseRaceUma")
-            : t("horseRaceOff");
+
+  const toggleEventType = (type: string) => {
+    const nextTypes = new Set(selectedEventTypeSet);
+    if (nextTypes.has(type)) {
+      nextTypes.delete(type);
+    } else {
+      nextTypes.add(type);
+    }
+    setEventTypes(nextTypes.size === 0 ? [...EVENT_TYPES] : Array.from(nextTypes));
+  };
+
+  const toggleDifficulty = (difficulty: string) => {
+    const nextDifficulties = new Set(selectedDifficultySet);
+    if (nextDifficulties.has(difficulty)) {
+      nextDifficulties.delete(difficulty);
+    } else {
+      nextDifficulties.add(difficulty);
+    }
+    setDifficulties(nextDifficulties.size === 0 ? [...DIFFICULTIES] : Array.from(nextDifficulties));
+  };
+
+  const getEventTypeLabel = (type: string): string => {
+    switch (type) {
+      case "boss_kill":
+        return tEvents("bossKill");
+      case "best_pull":
+        return tEvents("bestPull");
+      case "hiatus":
+        return tEvents("hiatus");
+      case "regress":
+        return tEvents("regress");
+      case "reproge":
+        return tEvents("reproge");
+      default:
+        return type;
+    }
+  };
 
   return (
     <>
@@ -168,73 +258,93 @@ export default function Navigation() {
             </div>
 
             {/* Right side buttons */}
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className={`relative h-8 w-8 shrink-0 ${isFrontpage ? "" : "pointer-events-none invisible"}`} ref={horseRaceDropdownRef}>
+            <div className="flex items-center gap-2">
+              <div className={`relative h-9 w-9 shrink-0 ${isFrontpage ? "" : "pointer-events-none invisible"}`} ref={settingsDropdownRef}>
                 <button
-                  onClick={() => setIsHorseRaceDropdownOpen((isOpen) => !isOpen)}
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center transition-transform hover:scale-110 active:scale-95"
-                  title={t("horseRaceToggleTitle")}
-                  aria-label={`${t("horseRaceToggleTitle")}: ${horseRaceModeLabel}`}
-                  aria-expanded={isHorseRaceDropdownOpen}
+                  type="button"
+                  onClick={() => setIsSettingsDropdownOpen((isOpen) => !isOpen)}
+                  className="group flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-emerald-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-emerald-500 active:scale-[0.96]"
+                  title={t("homepageSettings")}
+                  aria-label={t("homepageSettings")}
+                  aria-expanded={isSettingsDropdownOpen}
                 >
-                  <img
-                    src="/horse/racer.png"
-                    alt=""
-                    className={`h-7 w-7 shrink-0 object-contain transition-all ${horseRaceMode === "off" ? "grayscale opacity-55" : "opacity-100"}`}
-                    aria-hidden="true"
-                  />
+                  <svg className="h-5 w-5 transition-transform group-hover:rotate-45" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                      fillRule="evenodd"
+                      d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.53 1.53 0 0 1-2.29.95c-1.37-.84-2.94.73-2.1 2.1a1.53 1.53 0 0 1-.95 2.29c-1.56.38-1.56 2.6 0 2.98a1.53 1.53 0 0 1 .95 2.29c-.84 1.37.73 2.94 2.1 2.1a1.53 1.53 0 0 1 2.29.95c.38 1.56 2.6 1.56 2.98 0a1.53 1.53 0 0 1 2.29-.95c1.37.84 2.94-.73 2.1-2.1a1.53 1.53 0 0 1 .95-2.29c1.56-.38 1.56-2.6 0-2.98a1.53 1.53 0 0 1-.95-2.29c.84-1.37-.73-2.94-2.1-2.1a1.53 1.53 0 0 1-2.29-.95ZM10 13a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </button>
 
-                {isFrontpage && isHorseRaceDropdownOpen && (
-                  <div className="absolute left-1/2 z-50 mt-2 w-max min-w-56 -translate-x-1/2 rounded-md border border-white/10 bg-gray-950/95 p-2 shadow-2xl shadow-black/40">
-                    <div className="flex overflow-hidden rounded border border-white/10 bg-black/25">
-                      {HORSE_RACE_MODE_OPTIONS.map((option) => (
-                        <button
-                          key={option.mode}
-                          onClick={() => setHorseRaceMode(option.mode)}
-                          className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                            horseRaceMode === option.mode ? "bg-blue-500 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
-                          }`}
-                        >
-                          {t(option.labelKey)}
-                        </button>
-                      ))}
+                {isFrontpage && isSettingsDropdownOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-1.5rem))] rounded-md bg-[#182235] p-3 shadow-2xl shadow-black/70 ring-1 ring-blue-300/15">
+                    <div className="mb-3 border-b border-white/10 pb-2.5">
+                      <div>
+                        <div className="text-sm font-semibold text-white">{t("homepageSettings")}</div>
+                        <div className="text-xs text-gray-500">{t("homepageSettingsSubtitle")}</div>
+                      </div>
                     </div>
-                    <div className="mt-2 flex w-full overflow-hidden rounded border border-white/10 bg-black/25">
-                      <button
-                        onClick={() => setShowHorseRaceCharacters(true)}
-                        className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          showHorseRaceCharacters ? "bg-blue-500 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {t("horseRaceCharacters")}
-                      </button>
-                      <button
-                        onClick={() => setShowHorseRaceCharacters(false)}
-                        className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          !showHorseRaceCharacters ? "bg-blue-500 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {t("horseRaceOff")}
-                      </button>
+
+                    <div className="space-y-1.5">
+                      <SettingsToggle label={t("showEventsOnHome")} checked={showEvents} onChange={setShowEvents} />
+                      <SettingsToggle label={t("showLivestreamsOnHome")} checked={showLivestreams} onChange={setShowLivestreams} />
+                      <SettingsToggle label={t("showRaidingTodayOnHome")} checked={showRaidingToday} onChange={setShowRaidingToday} />
                     </div>
-                    <div className="mt-2 flex w-full overflow-hidden rounded border border-white/10 bg-black/25">
-                      <button
-                        onClick={() => setShowHorseRaceBackground(true)}
-                        className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          showHorseRaceBackground ? "bg-blue-500 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {t("horseRaceBackground")}
-                      </button>
-                      <button
-                        onClick={() => setShowHorseRaceBackground(false)}
-                        className={`flex-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          !showHorseRaceBackground ? "bg-blue-500 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {t("horseRaceOff")}
-                      </button>
+
+                    <div className="mt-3 rounded bg-[#0b1220] p-3 shadow-sm shadow-black/30 ring-1 ring-blue-200/10">
+                      <div className="mb-2.5 flex items-center justify-between gap-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t("eventFilters")}</div>
+                        <div className="rounded bg-gray-900/80 px-2 py-1 text-[11px] font-medium text-gray-400">
+                          {selectedEventTypes.length}/{EVENT_TYPES.length}
+                        </div>
+                      </div>
+                      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-600">{tEvents("eventTypes")}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {EVENT_TYPES.map((type) => (
+                          <button key={type} type="button" onClick={() => toggleEventType(type)} className={getEventFilterChipClass(type, selectedEventTypeSet.has(type))}>
+                            {getEventTypeLabel(type)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-600">{tEvents("difficulties")}</div>
+                      <div className="flex overflow-hidden rounded bg-gray-950/70 p-1 shadow-inner shadow-black/30 ring-1 ring-white/5">
+                        {DIFFICULTIES.map((difficulty) => (
+                          <button key={difficulty} type="button" onClick={() => toggleDifficulty(difficulty)} className={getDifficultySegmentClass(difficulty, selectedDifficultySet.has(difficulty))}>
+                            {difficulty === "mythic" ? tEvents("mythic") : tEvents("heroic")}
+                          </button>
+                        ))}
+                      </div>
+                      {selectedGuild && (
+                        <div className="mt-2 flex items-center justify-between gap-2 rounded bg-white/[0.04] px-2.5 py-1.5 text-xs text-gray-300">
+                          <span className="min-w-0 truncate">
+                            {tEvents("guild")}: {selectedGuild}
+                          </span>
+                          <button type="button" onClick={() => setSelectedGuild("")} className="shrink-0 font-medium text-blue-300 transition-colors hover:text-blue-100">
+                            {tEvents("allGuilds")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-3 rounded bg-[#0b1220] p-3 shadow-sm shadow-black/30 ring-1 ring-blue-200/10">
+                      <div className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("horseRaceSettings")}</div>
+                      <div className="flex overflow-hidden rounded bg-gray-950/70 p-1 shadow-inner shadow-black/30 ring-1 ring-white/5">
+                        {HORSE_RACE_MODE_OPTIONS.map((option) => (
+                          <button
+                            key={option.mode}
+                            type="button"
+                            onClick={() => setHorseRaceMode(option.mode)}
+                            className={getHorseRaceSegmentClass(horseRaceMode === option.mode)}
+                          >
+                            {t(option.labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-1.5">
+                        <SettingsToggle label={t("horseRaceCharacters")} checked={showHorseRaceCharacters} onChange={setShowHorseRaceCharacters} />
+                        <SettingsToggle label={t("horseRaceBackground")} checked={showHorseRaceBackground} onChange={setShowHorseRaceBackground} />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -257,35 +367,19 @@ export default function Navigation() {
               </div>
 
               {/* Desktop-only buttons */}
-              <div className="hidden items-center gap-2 md:flex">
-                {/* Info Dialog Button */}
-                <button
-                  onClick={() => setIsInfoDialogOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md transition-colors font-medium text-sm cursor-pointer"
-                  aria-label="Information"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  {t("info")}
-                </button>
-
-                {/* Contact Dropdown Button */}
+              <div className="hidden items-center gap-1.5 md:flex">
+                {/* Community Dropdown Button */}
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setIsContactDropdownOpen(!isContactDropdownOpen)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md transition-colors font-medium text-sm cursor-pointer"
-                    aria-label="Contact Links"
+                    className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-cyan-600 px-3 text-sm font-medium text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-cyan-500 active:scale-[0.96]"
+                    aria-label={t("community")}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path d="M13 6a3 3 0 1 1-6 0a3 3 0 0 1 6 0Z" />
+                      <path d="M18 8a2 2 0 1 1-4 0a2 2 0 0 1 4 0ZM14 15a4 4 0 0 0-8 0v.25c0 .414.336.75.75.75h6.5a.75.75 0 0 0 .75-.75V15ZM6 8a2 2 0 1 1-4 0a2 2 0 0 1 4 0ZM4.75 16A.75.75 0 0 1 4 15.25V15c0-1.01.292-1.953.797-2.746A3.99 3.99 0 0 0 1 16h3.75ZM19 16a3.99 3.99 0 0 0-3.797-3.746A5.971 5.971 0 0 1 16 15v.25a.75.75 0 0 1-.75.75H19Z" />
                     </svg>
-                    {t("contact")}
+                    {t("community")}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className={`h-4 w-4 transition-transform ${isContactDropdownOpen ? "rotate-180" : ""}`}
@@ -302,8 +396,26 @@ export default function Navigation() {
 
                   {/* Dropdown Menu */}
                   {isContactDropdownOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-36 overflow-hidden rounded-md border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/40">
+                    <div className="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-md border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/40">
                       <div className="py-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsContactDropdownOpen(false);
+                            setIsInfoDialogOpen(true);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-400/10 hover:text-emerald-100"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          {t("about")}
+                        </button>
+
                         {/* GitHub Link */}
                         <a
                           href="https://github.com/Koodattu/wow-guild-progress-tracker"
@@ -352,7 +464,7 @@ export default function Navigation() {
 
                 {/* Login with Discord Button or User Profile */}
                 {isLoading ? (
-                  <div className="hidden h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-4 text-sm text-gray-400 md:flex">
+                  <div className="hidden h-9 items-center gap-2 rounded-md bg-slate-800 px-3 text-sm text-gray-400 shadow-sm shadow-black/30 md:flex">
                     <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                   </div>
                 ) : user ? (
@@ -431,7 +543,7 @@ export default function Navigation() {
                 ) : (
                   <button
                     onClick={login}
-                    className="hidden h-9 cursor-pointer items-center gap-2 rounded-md border border-indigo-300/30 bg-indigo-500/90 px-4 text-sm font-medium text-white shadow-sm shadow-indigo-950/50 transition-colors hover:border-indigo-200/50 hover:bg-indigo-500 md:flex"
+                    className="hidden h-9 cursor-pointer items-center gap-2 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-indigo-500 active:scale-[0.96] md:flex"
                     aria-label="Login with Discord"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -501,7 +613,7 @@ export default function Navigation() {
 
             {/* Action Buttons */}
             <div className="space-y-3 px-4 py-3">
-              {/* Info Button */}
+              {/* About Button */}
               <button
                 onClick={() => {
                   setIsMobileMenuOpen(false);
@@ -516,7 +628,7 @@ export default function Navigation() {
                     clipRule="evenodd"
                   />
                 </svg>
-                {t("info")}
+                {t("about")}
               </button>
 
               {/* Social Links */}
