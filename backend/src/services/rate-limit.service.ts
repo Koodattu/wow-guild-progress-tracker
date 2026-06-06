@@ -1,4 +1,5 @@
 import logger from "../utils/logger";
+import RateLimitState from "../models/RateLimitState";
 
 /**
  * Rate limit data structure matching WarcraftLogs API response
@@ -44,6 +45,8 @@ interface RateLimitConfig {
  * Background processors should check this service before making requests.
  */
 class RateLimitService {
+  private readonly stateKey = "warcraftlogs";
+
   // Current rate limit state
   private pointsUsed: number = 0;
   private pointsMax: number = 3600; // Default WCL limit, updated from API responses
@@ -79,6 +82,7 @@ class RateLimitService {
     this.pointsMax = rateLimitData.limitPerHour;
     this.resetAt = new Date(Date.now() + rateLimitData.pointsResetIn * 1000);
     this.lastUpdated = new Date();
+    void this.persistState();
 
     const percentUsed = this.getPercentUsed();
     const isNearNow = this.isNearLimit();
@@ -208,6 +212,55 @@ class RateLimitService {
       isPaused: this.manualPause || this.isNearLimit(),
       lastUpdated: this.lastUpdated,
     };
+  }
+
+  /**
+   * Get status from shared persistent state when available.
+   * This lets the API process show WCL usage observed by the worker process.
+   */
+  async getSharedStatus(): Promise<RateLimitStatus> {
+    const state = await RateLimitState.findOne({ key: this.stateKey }).lean();
+
+    if (!state) {
+      return this.getStatus();
+    }
+
+    const pointsUsed = Date.now() > state.resetAt.getTime() ? 0 : state.pointsUsed;
+    const pointsMax = state.pointsMax;
+    const pointsRemaining = Math.max(0, pointsMax - pointsUsed);
+    const percentUsed = pointsMax === 0 ? 0 : (pointsUsed / pointsMax) * 100;
+    const resetInSeconds = Math.max(0, Math.ceil((state.resetAt.getTime() - Date.now()) / 1000));
+
+    return {
+      pointsUsed: Math.round(pointsUsed),
+      pointsMax,
+      pointsRemaining: Math.round(pointsRemaining),
+      percentUsed: Math.round(percentUsed * 10) / 10,
+      resetAt: state.resetAt,
+      resetInSeconds,
+      isNearLimit: percentUsed >= this.config.pauseThreshold,
+      isPaused: this.manualPause || percentUsed >= this.config.pauseThreshold,
+      lastUpdated: state.lastUpdated,
+    };
+  }
+
+  private async persistState(): Promise<void> {
+    try {
+      await RateLimitState.updateOne(
+        { key: this.stateKey },
+        {
+          $set: {
+            pointsUsed: this.pointsUsed,
+            pointsMax: this.pointsMax,
+            resetAt: this.resetAt,
+            lastUpdated: this.lastUpdated,
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      logger.error("[RateLimit] Failed to persist state:", error);
+    }
   }
 
   /**

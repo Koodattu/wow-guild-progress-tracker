@@ -1606,7 +1606,7 @@ router.post("/pickems/:pickemId/unfinalize", async (req: Request, res: Response)
 // Get current rate limit status
 router.get("/rate-limit", async (req: Request, res: Response) => {
   try {
-    const status = rateLimitService.getStatus();
+    const status = await rateLimitService.getSharedStatus();
     const config = rateLimitService.getConfig();
 
     res.json({
@@ -1633,7 +1633,7 @@ router.post("/rate-limit/pause", async (req: Request, res: Response) => {
     res.json({
       success: true,
       isPaused: paused,
-      status: rateLimitService.getStatus(),
+      status: await rateLimitService.getSharedStatus(),
     });
   } catch (error) {
     logger.error("Error toggling rate limit pause:", error);
