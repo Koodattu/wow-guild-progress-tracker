@@ -33,7 +33,7 @@ const NAVIGATION_LINKS = [
 ] as const;
 
 const getDesktopNavLinkClass = (isCurrent: boolean, previousIsCurrent: boolean, nextIsCurrent: boolean) =>
-  `flex h-full min-w-24 flex-1 items-center justify-center whitespace-nowrap border-x border-b-2 px-2 text-center text-sm font-medium transition-[background-color,color] ${
+  `flex h-full min-w-24 flex-1 cursor-pointer items-center justify-center whitespace-nowrap border-x border-b-2 px-2 text-center text-sm font-medium transition-[background-color,color] ${
     isCurrent
       ? "border-x-transparent border-b-blue-400 bg-blue-600/35 text-white"
       : `border-b-transparent text-gray-400 hover:bg-gray-800/80 hover:text-white ${previousIsCurrent ? "border-l-transparent" : "border-l-gray-700/80"} ${
@@ -42,7 +42,7 @@ const getDesktopNavLinkClass = (isCurrent: boolean, previousIsCurrent: boolean, 
   }`;
 
 const getMobileNavLinkClass = (isCurrent: boolean) =>
-  `block rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${
+  `block cursor-pointer rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${
     isCurrent ? "border-blue-400/30 bg-blue-500/15 text-blue-100" : "border-transparent text-gray-300 hover:border-white/10 hover:bg-white/5 hover:text-white"
   }`;
 
@@ -51,13 +51,13 @@ function SettingsToggle({ label, checked, onChange }: { label: string; checked: 
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left shadow-sm shadow-black/25 ring-1 transition-colors ${
-        checked ? "bg-emerald-500/15 text-emerald-50 ring-emerald-400/25 hover:bg-emerald-500/20" : "bg-gray-950/70 text-gray-500 ring-white/5 hover:bg-gray-900/90 hover:text-gray-300"
+      className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded px-3 py-2 text-left shadow-sm shadow-black/25 ring-1 transition-colors ${
+        checked ? "bg-blue-600/25 text-blue-50 ring-blue-400/35 hover:bg-blue-600/35" : "bg-gray-950/55 text-gray-500 ring-white/5 hover:bg-gray-900/80 hover:text-gray-300"
       }`}
       aria-pressed={checked}
     >
       <span className="text-sm font-medium">{label}</span>
-      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-emerald-500" : "bg-gray-700"}`}>
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-blue-500" : "bg-gray-700"}`}>
         <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm shadow-black/40 transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
       </span>
     </button>
@@ -66,40 +66,38 @@ function SettingsToggle({ label, checked, onChange }: { label: string; checked: 
 
 const getEventFilterChipClass = (type: string, selected: boolean) => {
   if (!selected) {
-    return "rounded px-2.5 py-1.5 text-xs font-medium bg-gray-950/70 text-gray-500 ring-1 ring-white/5 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
+    return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium bg-gray-950/60 text-gray-500 ring-1 ring-white/5 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
   }
 
   switch (type) {
     case "boss_kill":
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-green-400/15 text-green-300 ring-1 ring-green-400/35 transition-colors hover:bg-green-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-green-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-green-500";
     case "best_pull":
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-blue-400/15 text-blue-300 ring-1 ring-blue-400/35 transition-colors hover:bg-blue-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-blue-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-blue-500";
     case "hiatus":
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-400/15 text-gray-300 ring-1 ring-gray-400/30 transition-colors hover:bg-gray-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-gray-500";
     case "regress":
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-red-400/15 text-red-300 ring-1 ring-red-400/35 transition-colors hover:bg-red-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-red-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-red-500";
     case "reproge":
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-400/35 transition-colors hover:bg-yellow-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-yellow-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-yellow-500";
     default:
-      return "rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-400/15 text-gray-300 ring-1 ring-gray-400/30 transition-colors hover:bg-gray-400/20";
+      return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold bg-gray-600 text-white shadow-sm shadow-black/30 transition-colors hover:bg-gray-500";
   }
 };
 
 const getDifficultySegmentClass = (difficulty: string, selected: boolean) => {
   if (!selected) {
-    return "flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
+    return "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium bg-gray-950/60 text-gray-500 ring-1 ring-white/5 transition-colors hover:bg-gray-900/90 hover:text-gray-200";
   }
 
-  return `flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold shadow-sm shadow-black/20 ring-1 ring-inset transition-colors ${
-    difficulty === "mythic"
-      ? "bg-orange-500/15 text-orange-300 ring-orange-400/30 hover:bg-orange-500/20"
-      : "bg-purple-500/15 text-purple-300 ring-purple-400/30 hover:bg-purple-500/20"
+  return `cursor-pointer rounded px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-black/30 transition-colors ${
+    difficulty === "mythic" ? "bg-orange-600 hover:bg-orange-500" : "bg-purple-600 hover:bg-purple-500"
   }`;
 };
 
 const getHorseRaceSegmentClass = (selected: boolean) =>
-  `flex min-h-8 flex-1 items-center justify-center px-3 py-1.5 text-xs font-semibold transition-colors ${
-    selected ? "bg-blue-600 text-white shadow-sm shadow-black/30" : "text-gray-500 hover:bg-gray-900/90 hover:text-gray-200"
+  `flex min-h-8 flex-1 cursor-pointer items-center justify-center rounded px-3 py-1.5 text-xs font-semibold transition-colors ${
+    selected ? "bg-blue-600 text-white shadow-sm shadow-black/30 hover:bg-blue-500" : "text-gray-400 hover:bg-white/5 hover:text-gray-100"
   }`;
 
 export default function Navigation() {
@@ -263,7 +261,7 @@ export default function Navigation() {
                 <button
                   type="button"
                   onClick={() => setIsSettingsDropdownOpen((isOpen) => !isOpen)}
-                  className="group flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-emerald-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-emerald-500 active:scale-[0.96]"
+                  className="group flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-blue-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-blue-500 active:scale-[0.96]"
                   title={t("homepageSettings")}
                   aria-label={t("homepageSettings")}
                   aria-expanded={isSettingsDropdownOpen}
@@ -279,26 +277,15 @@ export default function Navigation() {
 
                 {isFrontpage && isSettingsDropdownOpen && (
                   <div className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-1.5rem))] rounded-md bg-[#182235] p-3 shadow-2xl shadow-black/70 ring-1 ring-blue-300/15">
-                    <div className="mb-3 border-b border-white/10 pb-2.5">
-                      <div>
-                        <div className="text-sm font-semibold text-white">{t("homepageSettings")}</div>
-                        <div className="text-xs text-gray-500">{t("homepageSettingsSubtitle")}</div>
-                      </div>
-                    </div>
-
+                    <div className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("generalSettings")}</div>
                     <div className="space-y-1.5">
                       <SettingsToggle label={t("showEventsOnHome")} checked={showEvents} onChange={setShowEvents} />
                       <SettingsToggle label={t("showLivestreamsOnHome")} checked={showLivestreams} onChange={setShowLivestreams} />
                       <SettingsToggle label={t("showRaidingTodayOnHome")} checked={showRaidingToday} onChange={setShowRaidingToday} />
                     </div>
 
-                    <div className="mt-3 rounded bg-[#0b1220] p-3 shadow-sm shadow-black/30 ring-1 ring-blue-200/10">
-                      <div className="mb-2.5 flex items-center justify-between gap-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t("eventFilters")}</div>
-                        <div className="rounded bg-gray-900/80 px-2 py-1 text-[11px] font-medium text-gray-400">
-                          {selectedEventTypes.length}/{EVENT_TYPES.length}
-                        </div>
-                      </div>
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <div className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("eventFilters")}</div>
                       <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-600">{tEvents("eventTypes")}</div>
                       <div className="flex flex-wrap gap-1.5">
                         {EVENT_TYPES.map((type) => (
@@ -308,7 +295,7 @@ export default function Navigation() {
                         ))}
                       </div>
                       <div className="mt-3 mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-600">{tEvents("difficulties")}</div>
-                      <div className="flex overflow-hidden rounded bg-gray-950/70 p-1 shadow-inner shadow-black/30 ring-1 ring-white/5">
+                      <div className="flex flex-wrap gap-1.5">
                         {DIFFICULTIES.map((difficulty) => (
                           <button key={difficulty} type="button" onClick={() => toggleDifficulty(difficulty)} className={getDifficultySegmentClass(difficulty, selectedDifficultySet.has(difficulty))}>
                             {difficulty === "mythic" ? tEvents("mythic") : tEvents("heroic")}
@@ -320,16 +307,16 @@ export default function Navigation() {
                           <span className="min-w-0 truncate">
                             {tEvents("guild")}: {selectedGuild}
                           </span>
-                          <button type="button" onClick={() => setSelectedGuild("")} className="shrink-0 font-medium text-blue-300 transition-colors hover:text-blue-100">
+                          <button type="button" onClick={() => setSelectedGuild("")} className="shrink-0 cursor-pointer font-medium text-blue-300 transition-colors hover:text-blue-100">
                             {tEvents("allGuilds")}
                           </button>
                         </div>
                       )}
                     </div>
 
-                    <div className="mt-3 rounded bg-[#0b1220] p-3 shadow-sm shadow-black/30 ring-1 ring-blue-200/10">
+                    <div className="mt-3 border-t border-white/10 pt-3">
                       <div className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("horseRaceSettings")}</div>
-                      <div className="flex overflow-hidden rounded bg-gray-950/70 p-1 shadow-inner shadow-black/30 ring-1 ring-white/5">
+                      <div className="flex overflow-hidden rounded bg-gray-950/55 p-1 shadow-inner shadow-black/25 ring-1 ring-white/5">
                         {HORSE_RACE_MODE_OPTIONS.map((option) => (
                           <button
                             key={option.mode}
@@ -354,13 +341,13 @@ export default function Navigation() {
               <div className="flex h-9 items-center gap-1 rounded-md border border-white/10 bg-black/25 p-1 shadow-inner shadow-black/20">
                 <button
                   onClick={() => handleLanguageChange("en")}
-                  className={`h-7 rounded px-2 text-xs font-medium transition-colors ${currentLocale === "en" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
+                  className={`h-7 cursor-pointer rounded px-2 text-xs font-medium transition-[background-color,color,transform] active:scale-[0.96] ${currentLocale === "en" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
                 >
                   EN
                 </button>
                 <button
                   onClick={() => handleLanguageChange("fi")}
-                  className={`h-7 rounded px-2 text-xs font-medium transition-colors ${currentLocale === "fi" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
+                  className={`h-7 cursor-pointer rounded px-2 text-xs font-medium transition-[background-color,color,transform] active:scale-[0.96] ${currentLocale === "fi" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
                 >
                   FI
                 </button>
@@ -372,7 +359,7 @@ export default function Navigation() {
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setIsContactDropdownOpen(!isContactDropdownOpen)}
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-cyan-600 px-3 text-sm font-medium text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-cyan-500 active:scale-[0.96]"
+                    className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-rose-600 px-3 text-sm font-medium text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-rose-500 active:scale-[0.96]"
                     aria-label={t("community")}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -404,7 +391,7 @@ export default function Navigation() {
                             setIsContactDropdownOpen(false);
                             setIsInfoDialogOpen(true);
                           }}
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-400/10 hover:text-emerald-100"
+                          className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-400/10 hover:text-emerald-100"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                             <path
@@ -422,7 +409,7 @@ export default function Navigation() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => setIsContactDropdownOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                          className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
@@ -436,7 +423,7 @@ export default function Navigation() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => setIsContactDropdownOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-indigo-500/15 hover:text-white"
+                          className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-indigo-500/15 hover:text-white"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z" />
@@ -450,7 +437,7 @@ export default function Navigation() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => setIsContactDropdownOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-purple-500/15 hover:text-white"
+                          className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-purple-500/15 hover:text-white"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
@@ -508,7 +495,7 @@ export default function Navigation() {
                             <Link
                               href="/admin"
                               onClick={() => setIsUserDropdownOpen(false)}
-                              className="flex items-center gap-2 px-3 py-2.5 text-sm text-amber-300 transition-colors hover:bg-amber-400/10 hover:text-amber-100"
+                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-amber-300 transition-colors hover:bg-amber-400/10 hover:text-amber-100"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                 <path
@@ -525,7 +512,7 @@ export default function Navigation() {
                               setIsUserDropdownOpen(false);
                               logout();
                             }}
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-red-300 transition-colors hover:bg-red-400/10 hover:text-red-100"
+                            className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-red-300 transition-colors hover:bg-red-400/10 hover:text-red-100"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                               <path
@@ -557,7 +544,7 @@ export default function Navigation() {
               {/* Mobile Hamburger Menu Button */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-gray-300 shadow-sm shadow-black/20 transition-colors hover:border-blue-400/35 hover:bg-white/[0.08] hover:text-white lg:hidden"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-gray-300 shadow-sm shadow-black/20 transition-colors hover:border-blue-400/35 hover:bg-white/[0.08] hover:text-white lg:hidden"
                 aria-label="Toggle menu"
               >
                 {isMobileMenuOpen ? (
@@ -591,7 +578,7 @@ export default function Navigation() {
               <Image src="/logo.png" alt="WoW Guild Progress" width={112} height={20} />
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-gray-300 transition-colors hover:border-blue-400/35 hover:bg-white/10 hover:text-white"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -619,7 +606,7 @@ export default function Navigation() {
                   setIsMobileMenuOpen(false);
                   setIsInfoDialogOpen(true);
                 }}
-                className="flex w-full items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-4 py-2.5 text-sm font-medium text-emerald-100 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/15 hover:text-white"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-rose-950/40 transition-[background-color,transform] hover:bg-rose-500 active:scale-[0.96]"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path
@@ -637,7 +624,7 @@ export default function Navigation() {
                   href="https://github.com/Koodattu/wow-guild-progress-tracker"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-gray-200 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
@@ -647,7 +634,7 @@ export default function Navigation() {
                   href="https://discord.gg/BgQDncamHZ"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-md border border-indigo-300/20 bg-indigo-400/10 px-3 py-2.5 text-sm text-indigo-100 transition-colors hover:bg-indigo-400/20 hover:text-white"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 py-2.5 text-sm text-white shadow-sm shadow-indigo-950/40 transition-colors hover:bg-indigo-500"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z" />
@@ -657,7 +644,7 @@ export default function Navigation() {
                   href="https://www.twitch.tv/vaarattu"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-md border border-purple-300/20 bg-purple-400/10 px-3 py-2.5 text-sm text-purple-100 transition-colors hover:bg-purple-400/20 hover:text-white"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-purple-300/20 bg-purple-400/10 px-3 py-2.5 text-sm text-purple-100 transition-colors hover:border-purple-300/35 hover:bg-purple-400/20 hover:text-white"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
@@ -679,7 +666,7 @@ export default function Navigation() {
                   <Link
                     href="/profile"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-gray-200 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
@@ -690,7 +677,7 @@ export default function Navigation() {
                     <Link
                       href="/admin"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex w-full items-center gap-2 rounded-md border border-amber-300/20 bg-amber-400/10 px-4 py-2.5 text-sm font-medium text-amber-100 transition-colors hover:bg-amber-400/20 hover:text-white"
+                      className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-amber-300/20 bg-amber-400/10 px-4 py-2.5 text-sm font-medium text-amber-100 transition-colors hover:border-amber-300/35 hover:bg-amber-400/20 hover:text-white"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path
@@ -707,7 +694,7 @@ export default function Navigation() {
                       setIsMobileMenuOpen(false);
                       logout();
                     }}
-                    className="flex w-full items-center justify-center gap-2 rounded-md border border-red-300/20 bg-red-400/10 px-4 py-2.5 text-sm font-medium text-red-100 transition-colors hover:bg-red-400/20 hover:text-white"
+                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-red-300/20 bg-red-400/10 px-4 py-2.5 text-sm font-medium text-red-100 transition-colors hover:border-red-300/35 hover:bg-red-400/20 hover:text-white"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path
@@ -725,7 +712,7 @@ export default function Navigation() {
                     setIsMobileMenuOpen(false);
                     login();
                   }}
-                  className="flex w-full items-center justify-center gap-2 rounded-md border border-indigo-300/30 bg-indigo-500/90 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-indigo-950/50 transition-colors hover:bg-indigo-500"
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-indigo-950/50 transition-[background-color,transform] hover:bg-indigo-500 active:scale-[0.96]"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z" />
@@ -757,7 +744,7 @@ export default function Navigation() {
               </div>
             </div>
             <div className="mt-6 flex justify-end">
-              <button onClick={() => setIsInfoDialogOpen(false)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors font-medium">
+              <button onClick={() => setIsInfoDialogOpen(false)} className="cursor-pointer rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-500">
                 {tInfo("close")}
               </button>
             </div>
