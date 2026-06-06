@@ -36,12 +36,15 @@ type RandomHorseRaceMode = Exclude<HorseRaceDisplayMode, "off">;
 
 const TRACK_MIN = 3;
 const TRACK_MAX = 97;
-const CLUSTER_THRESHOLD = 1.25;
+const DENSE_GAP_THRESHOLD = 4.75;
+const EMPTY_GAP_THRESHOLD = 13;
+const DENSE_GAP_STRETCH = 0.58;
+const EMPTY_GAP_TIGHTEN = 0.1;
+const MIN_VISUAL_GAP = 2.4;
 const LABEL_COLLISION_THRESHOLD = 8;
 const FINISHED_SLOT_WIDTH = 58;
 const START_WIDTH = 34;
 const MIN_TRACK_WIDTH = 680;
-const HORIZONTAL_STACK_SPACING = 2.0;
 const HORSE_RACER_SRC = "/horse/racer.png";
 const RANDOM_HORSE_RACE_MODES: RandomHorseRaceMode[] = ["crest", "japanese", "uma"];
 const EMPTY_RESERVED_UMA_IMAGES: string[] = [];
@@ -73,10 +76,75 @@ function compareRaceOrder(a: BaseRaceEntry, b: BaseRaceEntry) {
   return (a.progress.guildRank ?? 99999) - (b.progress.guildRank ?? 99999);
 }
 
-function compareFightPosition(a: BaseRaceEntry, b: BaseRaceEntry) {
-  if (a.bossHealth !== b.bossHealth) return a.bossHealth - b.bossHealth;
-  if (a.trackProgress !== b.trackProgress) return b.trackProgress - a.trackProgress;
-  return (a.progress.guildRank ?? 99999) - (b.progress.guildRank ?? 99999);
+function compareTrackPosition(a: BaseRaceEntry, b: BaseRaceEntry) {
+  if (a.trackProgress !== b.trackProgress) return a.trackProgress - b.trackProgress;
+  return (b.progress.guildRank ?? 99999) - (a.progress.guildRank ?? 99999);
+}
+
+function getVisualTrackGap(rawGap: number) {
+  const denseStretch = Math.max(0, DENSE_GAP_THRESHOLD - rawGap) * DENSE_GAP_STRETCH;
+  const emptyTighten = Math.max(0, rawGap - EMPTY_GAP_THRESHOLD) * EMPTY_GAP_TIGHTEN;
+  return Math.max(MIN_VISUAL_GAP, rawGap + denseStretch - emptyTighten);
+}
+
+function getMaxDenseStackDepth(sortedEntries: BaseRaceEntry[]) {
+  let maxStackDepth = 1;
+  let stackDepth = 1;
+
+  for (let index = 1; index < sortedEntries.length; index += 1) {
+    if (sortedEntries[index].trackProgress - sortedEntries[index - 1].trackProgress <= DENSE_GAP_THRESHOLD) {
+      stackDepth += 1;
+      maxStackDepth = Math.max(maxStackDepth, stackDepth);
+    } else {
+      stackDepth = 1;
+    }
+  }
+
+  return maxStackDepth;
+}
+
+// Keep the race mostly linear, but borrow a little space from empty gaps so dense packs read separately.
+function spreadRaceEntries(entries: BaseRaceEntry[]): { entries: RaceEntry[]; maxStackDepth: number } {
+  if (entries.length === 0) return { entries: [], maxStackDepth: 1 };
+
+  const sortedEntries = [...entries].sort(compareTrackPosition);
+  const maxStackDepth = getMaxDenseStackDepth(sortedEntries);
+
+  if (sortedEntries.length === 1) {
+    return {
+      entries: [
+        {
+          ...sortedEntries[0],
+          displayProgress: clamp(sortedEntries[0].trackProgress, TRACK_MIN, TRACK_MAX),
+          labelPosition: "below",
+        },
+      ],
+      maxStackDepth,
+    };
+  }
+
+  const visualGaps = sortedEntries.slice(1).map((entry, index) => getVisualTrackGap(entry.trackProgress - sortedEntries[index].trackProgress));
+  const visualSpan = visualGaps.reduce((sum, gap) => sum + gap, 0);
+  const maxVisualSpan = TRACK_MAX - TRACK_MIN;
+  const scale = visualSpan > maxVisualSpan ? maxVisualSpan / visualSpan : 1;
+  const scaledGaps = visualGaps.map((gap) => gap * scale);
+  const scaledSpan = scaledGaps.reduce((sum, gap) => sum + gap, 0);
+  const rawCenter = (sortedEntries[0].trackProgress + sortedEntries[sortedEntries.length - 1].trackProgress) / 2;
+  let nextPosition = clamp(rawCenter - scaledSpan / 2, TRACK_MIN, TRACK_MAX - scaledSpan);
+
+  return {
+    entries: sortedEntries.map((entry, index) => {
+      const displayProgress = nextPosition;
+      nextPosition += scaledGaps[index] ?? 0;
+
+      return {
+        ...entry,
+        displayProgress: clamp(displayProgress, TRACK_MIN, TRACK_MAX),
+        labelPosition: "below",
+      };
+    }),
+    maxStackDepth,
+  };
 }
 
 function assignLabelPositions(entries: RaceEntry[]): RaceEntry[] {
@@ -133,33 +201,7 @@ function buildEntries(guilds: GuildListItem[], selectedRaidId: number) {
   const notStarted = sortedEntries.filter((entry) => !entry.isFinished && entry.progress.currentBossPulls <= 0);
   const unfinished = sortedEntries.filter((entry) => !entry.isFinished && entry.progress.currentBossPulls > 0);
   const finished = sortedEntries.filter((entry) => entry.isFinished);
-
-  const positionedUnfinished: RaceEntry[] = [];
-  let maxStackDepth = 1;
-  for (let index = 0; index < unfinished.length; ) {
-    const cluster = [unfinished[index]];
-    let nextIndex = index + 1;
-
-    while (nextIndex < unfinished.length && Math.abs(unfinished[nextIndex].trackProgress - cluster[cluster.length - 1].trackProgress) <= CLUSTER_THRESHOLD) {
-      cluster.push(unfinished[nextIndex]);
-      nextIndex += 1;
-    }
-
-    maxStackDepth = Math.max(maxStackDepth, cluster.length);
-
-    const orderedCluster = cluster.sort(compareFightPosition);
-
-    orderedCluster.forEach((entry, clusterIndex) => {
-      const spread = orderedCluster.length > 1 ? ((orderedCluster.length - 1) / 2 - clusterIndex) * HORIZONTAL_STACK_SPACING : 0;
-      positionedUnfinished.push({
-        ...entry,
-        displayProgress: clamp(entry.trackProgress + spread, TRACK_MIN, TRACK_MAX),
-        labelPosition: "below",
-      });
-    });
-
-    index = nextIndex;
-  }
+  const positionedUnfinished = spreadRaceEntries(unfinished);
 
   const positionedFinished = finished.map((entry, index) => ({
     ...entry,
@@ -174,9 +216,9 @@ function buildEntries(guilds: GuildListItem[], selectedRaidId: number) {
       displayProgress: 0,
       labelPosition: "below" as const,
     })),
-    unfinished: assignLabelPositions(positionedUnfinished),
+    unfinished: assignLabelPositions(positionedUnfinished.entries),
     finished: positionedFinished,
-    maxStackDepth,
+    maxStackDepth: positionedUnfinished.maxStackDepth,
   };
 }
 
