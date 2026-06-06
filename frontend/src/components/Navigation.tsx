@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { setLocale, getLocale } from "@/lib/locale";
+import { setLocale, getLocale, LOCALE_CHANGE_EVENT, type Locale } from "@/lib/locale";
 import { useAuth } from "@/context/AuthContext";
 import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
 import { useHomePagePreferences } from "@/lib/homepage-preferences";
@@ -121,7 +121,7 @@ export default function Navigation() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [currentLocale, setCurrentLocale] = useState<"en" | "fi">("en");
+  const [currentLocale, setCurrentLocale] = useState<Locale>("en");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const settingsDropdownRef = useRef<HTMLDivElement>(null);
@@ -131,6 +131,15 @@ export default function Navigation() {
 
   useEffect(() => {
     setCurrentLocale(getLocale());
+
+    const handleLocaleChange = (event: Event) => {
+      setCurrentLocale((event as CustomEvent<Locale>).detail);
+    };
+
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    return () => {
+      window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    };
   }, []);
 
   // Close mobile menu on route change
@@ -183,7 +192,7 @@ export default function Navigation() {
     return pathname.startsWith(path);
   };
 
-  const handleLanguageChange = (newLocale: "en" | "fi") => {
+  const handleLanguageChange = (newLocale: Locale) => {
     setLocale(newLocale);
   };
 

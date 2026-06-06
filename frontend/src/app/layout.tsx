@@ -9,6 +9,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useState, useMemo } from "react";
 import { AuthProvider } from "@/context/AuthContext";
 import { QueryProvider } from "@/lib/query-provider";
+import { getLocale, LOCALE_CHANGE_EVENT, type Locale } from "@/lib/locale";
 import {
   buildWebSiteStructuredData,
   getCanonicalUrl,
@@ -44,17 +45,35 @@ export default function RootLayout({
     pathname.startsWith("/admin") || pathname.startsWith("/profile")
       ? "noindex, nofollow"
       : "index, follow";
-  const [locale, setLocale] = useState<"en" | "fi">("en");
+  const [locale, setLocale] = useState<Locale>("en");
   const [messages, setMessages] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
-    // Get locale from cookie
-    const match = document.cookie.match(/NEXT_LOCALE=([^;]+)/);
-    const cookieLocale = (match?.[1] as "en" | "fi") || "en";
-    setLocale(cookieLocale);
+    let active = true;
+    let loadId = 0;
 
-    // Load messages
-    import(`../../messages/${cookieLocale}.json`).then((m) => setMessages(m.default));
+    const loadLocale = (nextLocale: Locale) => {
+      const currentLoadId = ++loadId;
+      document.documentElement.lang = nextLocale;
+
+      import(`../../messages/${nextLocale}.json`).then((m) => {
+        if (!active || currentLoadId !== loadId) return;
+        setLocale(nextLocale);
+        setMessages(m.default);
+      });
+    };
+
+    const handleLocaleChange = (event: Event) => {
+      loadLocale((event as CustomEvent<Locale>).detail);
+    };
+
+    loadLocale(getLocale());
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+
+    return () => {
+      active = false;
+      window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    };
   }, []);
 
   const pageMetadata = useMemo(() => getPageMetadata(pathname, locale), [pathname, locale]);
