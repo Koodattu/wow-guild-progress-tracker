@@ -14,7 +14,7 @@ import {
 import GuildCrest from "./GuildCrest";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, memo, useCallback, useEffect, useRef } from "react";
+import { useState, memo, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { FaTwitch } from "react-icons/fa";
@@ -221,17 +221,7 @@ interface GuildTableProps {
   selectedRaidId: number | null;
 }
 
-function VodPopup({
-  vod,
-  anchor,
-  onMouseEnter,
-  onMouseLeave,
-}: {
-  vod: BestVodLink;
-  anchor: HTMLElement;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-}) {
+function VodPopup({ vod, anchor, onMouseEnter, onMouseLeave }: { vod: BestVodLink; anchor: HTMLElement; onMouseEnter: () => void; onMouseLeave: () => void }) {
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
   useEffect(() => {
@@ -241,10 +231,7 @@ function VodPopup({
       const maxLeft = window.innerWidth - VOD_POPUP_WIDTH - VOD_POPUP_MARGIN;
       const left = Math.max(VOD_POPUP_MARGIN, Math.min(rect.left + rect.width / 2 - VOD_POPUP_WIDTH / 2, maxLeft));
       const belowTop = rect.bottom + VOD_POPUP_GAP;
-      const top =
-        belowTop + estimatedHeight > window.innerHeight - VOD_POPUP_MARGIN && rect.top > estimatedHeight
-          ? rect.top - estimatedHeight - VOD_POPUP_GAP
-          : belowTop;
+      const top = belowTop + estimatedHeight > window.innerHeight - VOD_POPUP_MARGIN && rect.top > estimatedHeight ? rect.top - estimatedHeight - VOD_POPUP_GAP : belowTop;
 
       setPosition({ left, top: Math.max(VOD_POPUP_MARGIN, top) });
     };
@@ -281,7 +268,16 @@ function VodPopup({
   );
 }
 
-function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
+function MobileStat({ label, children, className = "text-gray-300" }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className="min-w-0 rounded bg-gray-900/35 px-1.5 py-1 text-center">
+      <div className={`truncate text-xs font-bold leading-tight ${className}`}>{children}</div>
+      <div className="mt-0.5 truncate text-[9px] font-medium uppercase leading-none text-gray-500">{label}</div>
+    </div>
+  );
+}
+
+function BestVodLinks({ links, compact = false }: { links?: GuildListItem["bestVodLinks"]; compact?: boolean }) {
   const [activeVodIndex, setActiveVodIndex] = useState<number | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<HTMLElement | null>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -315,7 +311,7 @@ function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
   }, [cancelClose]);
 
   if (!links || links.length === 0) {
-    return <span className="text-gray-500">-</span>;
+    return <span className={compact ? "inline-flex h-8 w-8 items-center justify-center text-gray-600" : "text-gray-500"}>-</span>;
   }
 
   return (
@@ -323,6 +319,7 @@ function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
       {links.map((vod, index) => {
         const isActive = activeVodIndex === index;
         const vodKey = `${vod.channelName}-${vod.videoId || vod.url}`;
+        const iconOnly = compact || links.length > 1;
 
         return (
           <div
@@ -340,17 +337,19 @@ function BestVodLinks({ links }: { links?: GuildListItem["bestVodLinks"] }) {
                 openVod(index, event.currentTarget);
               }}
               className={
-                links.length === 1
+                !iconOnly
                   ? "inline-flex max-w-[110px] items-center justify-center gap-1.5 rounded bg-purple-600/15 px-1.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-600/30 hover:text-white"
-                  : "inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
+                  : compact
+                    ? "inline-flex h-8 w-8 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white active:scale-[0.96] active:bg-purple-600/45"
+                    : "inline-flex h-6 w-6 items-center justify-center rounded bg-purple-600/15 text-purple-200 transition-colors hover:bg-purple-600/35 hover:text-white"
               }
               title={`Show ${vod.channelName} VOD links`}
-              aria-label={links.length === 1 ? undefined : `Show ${vod.channelName} VOD links`}
+              aria-label={iconOnly ? `Show ${vod.channelName} VOD links` : undefined}
               aria-haspopup="true"
               aria-expanded={isActive}
             >
-              <FaTwitch className={links.length === 1 ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5"} aria-hidden="true" />
-              {links.length === 1 && <span className="truncate">{vod.channelName}</span>}
+              <FaTwitch className={!iconOnly ? "h-3 w-3 shrink-0" : compact ? "h-4 w-4" : "h-3.5 w-3.5"} aria-hidden="true" />
+              {!iconOnly && <span className="truncate">{vod.channelName}</span>}
             </button>
             {isActive && popupAnchor && <VodPopup vod={vod} anchor={popupAnchor} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />}
           </div>
@@ -399,16 +398,10 @@ const GuildTableRow = memo(
     return (
       <tr key={guild._id} className={`guild-table-row border-b border-gray-800 ${guild.isCurrentlyRaiding ? "border-l-4 border-l-green-500" : ""}`}>
         {/* First clickable area: Rank, World Rank, and Guild Name */}
-        <td
-          className="guild-table-guild-cell px-4 py-3 text-center cursor-pointer transition-colors"
-          onClick={() => onGuildClick(guild)}
-        >
+        <td className="guild-table-guild-cell px-4 py-3 text-center cursor-pointer transition-colors" onClick={() => onGuildClick(guild)}>
           <span className={`font-semibold ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</span>
         </td>
-        <td
-          className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors"
-          onClick={() => onGuildClick(guild)}
-        >
+        <td className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors" onClick={() => onGuildClick(guild)}>
           {worldRank ? (
             <span className="font-semibold" style={{ color: getWorldRankColor(worldRank) }}>
               {worldRank}
@@ -417,10 +410,7 @@ const GuildTableRow = memo(
             <span className="text-gray-500">-</span>
           )}
         </td>
-        <td
-          className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors"
-          onClick={() => onGuildClick(guild)}
-        >
+        <td className="guild-table-guild-cell px-4 py-3 cursor-pointer transition-colors" onClick={() => onGuildClick(guild)}>
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 shrink-0">
               <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.33] origin-top-left" />
@@ -474,52 +464,31 @@ const GuildTableRow = memo(
         >
           {guild.scheduleDisplay ? `${guild.scheduleDisplay.totalDays}D x ${guild.scheduleDisplay.averageHours}h` : "-"}
         </td>
-        <td
-          className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors"
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors" onClick={() => onRaidProgressClick(guild)}>
           <span className="text-orange-500 font-semibold" title={mythicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
             {mythicDisplay.text}
             {mythicDisplay.isOfficial && <span className="text-[10px] text-orange-400/60 ml-0.5">*</span>}
           </span>
         </td>
-        <td
-          className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors"
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className="guild-table-progress-cell px-4 py-3 text-center cursor-pointer transition-colors" onClick={() => onRaidProgressClick(guild)}>
           <span className="text-purple-500 font-semibold" title={heroicDisplay.isOfficial ? t("officialProgressTooltip") : undefined}>
             {heroicDisplay.text}
             {heroicDisplay.isOfficial && <span className="text-[10px] text-purple-400/60 ml-0.5">*</span>}
           </span>
         </td>
-        <td
-          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`} onClick={() => onRaidProgressClick(guild)}>
           {effectivePullDisplay.pulls > 0 ? effectivePullDisplay.pulls : "-"}
         </td>
-        <td
-          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`} onClick={() => onRaidProgressClick(guild)}>
           <BestPullValue display={effectivePullDisplay} />
         </td>
-        <td
-          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`} onClick={() => onRaidProgressClick(guild)}>
           <StackedTimeValue primary={effectiveTimeProgress?.totalTimeSpent} secondary={effectiveTimeProgress?.progressRaidTimeSpent} />
         </td>
-        <td
-          className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`}
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className={`guild-table-progress-cell px-4 py-3 text-center text-sm ${fallbackTextColor} cursor-pointer transition-colors`} onClick={() => onRaidProgressClick(guild)}>
           <StackedTimeValue primary={effectiveTimeProgress?.totalCombatTimeSpent} secondary={effectiveTimeProgress?.totalRaidTimeSpent} />
         </td>
-        <td
-          className="guild-table-progress-cell px-3 py-3 text-center text-sm cursor-pointer transition-colors"
-          onClick={() => onRaidProgressClick(guild)}
-        >
+        <td className="guild-table-progress-cell px-3 py-3 text-center text-sm cursor-pointer transition-colors" onClick={() => onRaidProgressClick(guild)}>
           <BestVodLinks links={guild.bestVodLinks} />
         </td>
       </tr>
@@ -554,74 +523,65 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
     const heroicDisplay = getEffectiveProgress(heroicProgress, official, "heroic");
 
     const effectivePullDisplay = hasMythicPullData ? mythicPullDisplay : heroicPullDisplay;
+    const effectiveTimeProgress = hasMythicPullData ? mythicProgress : heroicProgress;
     const isHeroicFallback = !hasMythicPullData && hasProgressDisplayData(heroicProgress, heroicPullDisplay);
     const fallbackTextColor = isHeroicFallback ? "text-purple-400" : "text-gray-300";
+    const progressTime = effectiveTimeProgress?.totalTimeSpent;
 
     return (
-      <div className={`bg-gray-800/50 rounded-lg mb-1.5 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
-        {/* Single row layout: Left tap zone (guild info) | Right tap zone (progress) */}
-        <div className="flex items-center">
-          {/* Left side: Rank + Guild info - navigates to guild page */}
-          <div className="flex items-center gap-2 flex-1 min-w-0 p-2 cursor-pointer active:bg-gray-700/50 rounded-l-lg" onClick={() => onGuildClick(guild)}>
-            {/* Rank section */}
-            <div className="flex flex-col items-center shrink-0 w-8">
-              <span className={`font-bold text-sm ${getLeaderboardRankColor(guildRank)}`}>#{guildRank}</span>
-              {worldRank && (
-                <span className="text-[10px]" style={{ color: getWorldRankColor(worldRank) }}>
-                  W{worldRank}
-                </span>
-              )}
+      <div className={`mb-1.5 overflow-hidden rounded-lg bg-gray-800/50 ${guild.isCurrentlyRaiding ? "border-l-2 border-l-green-500" : ""}`}>
+        <div className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 p-2 active:bg-gray-700/50" onClick={() => onGuildClick(guild)}>
+          <div className="grid w-[3.75rem] shrink-0 grid-cols-2 gap-1 tabular-nums">
+            <div className="rounded bg-gray-900/35 px-1 py-1 text-center">
+              <div className="text-[8px] font-medium uppercase leading-none text-gray-500">FI</div>
+              <div className={`mt-0.5 text-sm font-bold leading-none ${getLeaderboardRankColor(guildRank)}`}>{guildRank}</div>
             </div>
-
-            {/* Guild info */}
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <div className="w-7 h-7 shrink-0">
-                <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.22] origin-top-left" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 flex-wrap">
-                  <span className="font-semibold text-white text-xs truncate">{guild.name}</span>
-                  <GuildLiveBadge guild={guild} label={t("live")} compact />
-                  <GuildRaidingBadge guild={guild} label={t("raiding")} compact />
-                </div>
-                <div className="text-gray-500 text-[10px] truncate">
-                  {guild.parent_guild ? `${guild.parent_guild} - ` : ""}
-                  {guild.realm}
-                </div>
+            <div className="rounded bg-gray-900/35 px-1 py-1 text-center">
+              <div className="text-[8px] font-medium uppercase leading-none text-gray-500">WR</div>
+              <div className="mt-0.5 text-sm font-bold leading-none" style={worldRank ? { color: getWorldRankColor(worldRank) } : undefined}>
+                {worldRank || "-"}
               </div>
             </div>
           </div>
 
-          {/* Right side: Progress - opens modal */}
-          <div
-            className="flex items-center gap-2 shrink-0 p-2 border-l border-gray-600 cursor-pointer active:bg-gray-700/50 rounded-r-lg"
-            onClick={() => onRaidProgressClick(guild)}
-          >
-            <div className="text-center">
-              <div className="text-orange-500 font-bold text-xs">
-                {mythicDisplay.text}
-                {mythicDisplay.isOfficial && <span className="text-[8px] text-orange-400/60">*</span>}
-              </div>
-              <div className="text-[9px] text-gray-500">M</div>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="h-9 w-9 shrink-0">
+              <GuildCrest crest={guild.crest} faction={guild.faction} size={128} className="scale-[0.28] origin-top-left" />
             </div>
-            <div className="text-center">
-              <div className="text-purple-500 font-bold text-xs">
-                {heroicDisplay.text}
-                {heroicDisplay.isOfficial && <span className="text-[8px] text-purple-400/60">*</span>}
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="truncate text-sm font-semibold text-white">{guild.name}</span>
+                <GuildLiveBadge guild={guild} label={t("live")} compact />
+                <GuildRaidingBadge guild={guild} label={t("raiding")} compact />
               </div>
-              <div className="text-[9px] text-gray-500">H</div>
-            </div>
-            <div className="text-center">
-              <div className={`text-xs ${fallbackTextColor}`}>{effectivePullDisplay.pulls > 0 ? effectivePullDisplay.pulls : "-"}</div>
-              <div className="text-[9px] text-gray-500">{t("pulls")}</div>
-            </div>
-            <div className="text-center min-w-8">
-              <div className={`text-xs ${fallbackTextColor}`}>
-                <BestPullValue display={effectivePullDisplay} />
+              <div className="truncate text-[10px] text-gray-500">
+                {guild.realm}
+                {guild.parent_guild ? ` - ${guild.parent_guild}` : ""}
               </div>
-              <div className="text-[9px] text-gray-500">%</div>
             </div>
           </div>
+
+          <BestVodLinks links={guild.bestVodLinks} compact />
+        </div>
+
+        <div className="grid cursor-pointer grid-cols-5 gap-1 border-t border-gray-700/70 p-1.5 tabular-nums active:bg-gray-700/50" onClick={() => onRaidProgressClick(guild)}>
+          <MobileStat label="M" className="text-orange-500">
+            {mythicDisplay.text}
+            {mythicDisplay.isOfficial && <span className="text-[8px] text-orange-400/60">*</span>}
+          </MobileStat>
+          <MobileStat label="H" className="text-purple-500">
+            {heroicDisplay.text}
+            {heroicDisplay.isOfficial && <span className="text-[8px] text-purple-400/60">*</span>}
+          </MobileStat>
+          <MobileStat label={t("pulls")} className={fallbackTextColor}>
+            {effectivePullDisplay.pulls > 0 ? effectivePullDisplay.pulls : "-"}
+          </MobileStat>
+          <MobileStat label="%" className={fallbackTextColor}>
+            <BestPullValue display={effectivePullDisplay} />
+          </MobileStat>
+          <MobileStat label={t("time")} className={fallbackTextColor}>
+            {formatOptionalTime(progressTime)}
+          </MobileStat>
         </div>
       </div>
     );
