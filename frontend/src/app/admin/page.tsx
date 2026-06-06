@@ -23,6 +23,8 @@ import {
   triggerUpdateGuildCrests,
   triggerRescanDeathEvents,
   triggerRescanCharacters,
+  triggerBackfillReportCharacters,
+  triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
   triggerUpdateRaiderIOGuilds,
   getAdminGuildDetail,
@@ -31,6 +33,7 @@ import {
   queueGuildRescan,
   queueGuildRescanDeaths,
   queueGuildRescanCharacters,
+  queueGuildBackfillReportCharacters,
   verifyGuildReports,
   getAdminGuildReports,
   deleteAdminReport,
@@ -649,6 +652,24 @@ export default function AdminPage() {
     }
   };
 
+  // Handler for queueing report-level character backfill
+  const handleQueueBackfillReportCharacters = async (guildId: string, guildName: string) => {
+    try {
+      await queueGuildBackfillReportCharacters(guildId);
+      setTriggerMessage({ type: "success", text: `${guildName} queued for report character backfill` });
+      if (selectedGuild) {
+        const detail = await getAdminGuildDetail(guildId);
+        setSelectedGuild(detail);
+      }
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to queue report character backfill",
+      });
+    }
+  };
+
   // Handler for recalculating guild stats
   const handleRecalculateStats = async (guildId: string, guildName: string) => {
     try {
@@ -1163,6 +1184,24 @@ export default function AdminPage() {
                       {triggerCooldowns["rescan-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     <button
+                      onClick={() => handleTrigger("backfill-report-characters", triggerBackfillReportCharacters)}
+                      disabled={triggerLoading === "backfill-report-characters" || triggerCooldowns["backfill-report-characters"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Backfill Report Characters</span>
+                      {triggerLoading === "backfill-report-characters" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["backfill-report-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("rebuild-character-raid-participations", triggerRebuildCharacterRaidParticipations)}
+                      disabled={triggerLoading === "rebuild-character-raid-participations" || triggerCooldowns["rebuild-character-raid-participations"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Rebuild Character Raid Data</span>
+                      {triggerLoading === "rebuild-character-raid-participations" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rebuild-character-raid-participations"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
                       onClick={() => handleTrigger("update-raiderio", triggerUpdateRaiderIOGuilds)}
                       disabled={triggerLoading === "update-raiderio" || triggerCooldowns["update-raiderio"]}
                       className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
@@ -1391,6 +1430,13 @@ export default function AdminPage() {
                               title="Rescan characters"
                             >
                               Chars
+                            </button>
+                            <button
+                              onClick={() => handleQueueBackfillReportCharacters(guild.id, guild.name)}
+                              className="px-2 py-1 bg-sky-600 text-white text-xs rounded hover:bg-sky-700"
+                              title="Backfill report characters"
+                            >
+                              Rpt Chars
                             </button>
                             <button
                               onClick={() => handleRecalculateStats(guild.id, guild.name)}
@@ -2927,10 +2973,14 @@ export default function AdminPage() {
                                     {item.jobType && item.jobType !== "full_rescan" && (
                                       <span
                                         className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                          item.jobType === "rescan_deaths" ? "bg-teal-900 text-teal-300" : "bg-cyan-900 text-cyan-300"
+                                          item.jobType === "rescan_deaths"
+                                            ? "bg-teal-900 text-teal-300"
+                                            : item.jobType === "backfill_report_characters"
+                                              ? "bg-sky-900 text-sky-300"
+                                              : "bg-cyan-900 text-cyan-300"
                                         }`}
                                       >
-                                        {item.jobType === "rescan_deaths" ? "Deaths" : "Characters"}
+                                        {item.jobType === "rescan_deaths" ? "Deaths" : item.jobType === "backfill_report_characters" ? "Report Chars" : "Characters"}
                                       </span>
                                     )}
                                   </td>
@@ -2988,7 +3038,7 @@ export default function AdminPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Progress</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reports</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Fights</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Fights / Chars</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Activity</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                     </tr>
@@ -3004,10 +3054,14 @@ export default function AdminPage() {
                           {item.jobType && item.jobType !== "full_rescan" && (
                             <span
                               className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                item.jobType === "rescan_deaths" ? "bg-teal-900 text-teal-300" : "bg-cyan-900 text-cyan-300"
+                                item.jobType === "rescan_deaths"
+                                  ? "bg-teal-900 text-teal-300"
+                                  : item.jobType === "backfill_report_characters"
+                                    ? "bg-sky-900 text-sky-300"
+                                    : "bg-cyan-900 text-cyan-300"
                               }`}
                             >
-                              {item.jobType === "rescan_deaths" ? "Deaths" : "Characters"}
+                              {item.jobType === "rescan_deaths" ? "Deaths" : item.jobType === "backfill_report_characters" ? "Report Chars" : "Characters"}
                             </span>
                           )}
                         </td>
@@ -3602,6 +3656,12 @@ export default function AdminPage() {
                           className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
                         >
                           Rescan Characters
+                        </button>
+                        <button
+                          onClick={() => handleQueueBackfillReportCharacters(selectedGuild.id, selectedGuild.name)}
+                          className="px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700"
+                        >
+                          Backfill Report Characters
                         </button>
                         <button
                           onClick={() => handleRecalculateStats(selectedGuild.id, selectedGuild.name)}

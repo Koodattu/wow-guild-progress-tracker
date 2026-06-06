@@ -100,6 +100,7 @@ class UpdateScheduler {
   private isUpdatingRefetchRecentReports: boolean = false;
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
+  private isUpdatingCharacterRaidParticipations: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
   private isCheckingHiatus: boolean = false;
   private isUpdatingRaiderIOGuilds: boolean = false;
@@ -471,6 +472,21 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Rebuild materialized character raid participation data (at 08:30 Finnish time)
+    cron.schedule(
+      "30 8 * * *",
+      async () => {
+        if (this.isUpdatingCharacterRaidParticipations) {
+          logger.info("[Nightly/CharacterRaidParticipation] Previous rebuild still in progress, skipping...");
+          return;
+        }
+        await this.rebuildCharacterRaidParticipations();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Check for hiatus events (at 9 AM Finnish time)
     // Detects guilds that have stopped raiding for 7, 14, or 30 days
     cron.schedule(
@@ -528,6 +544,7 @@ class UpdateScheduler {
     logger.info("    * Raid analytics calculation: daily at 07:00");
     logger.info("    * Character rankings refresh: daily at 08:00");
     logger.info("    * Guild crests update: daily at 08:00");
+    logger.info("    * Character raid participation rebuild: daily at 08:30");
     logger.info("    * Hiatus event check: daily at 09:00");
     logger.info("    * Full cache warmup: daily at 11:00");
 
@@ -611,6 +628,17 @@ class UpdateScheduler {
     this.refreshCharacterRankings()
       .then(() => logger.info("[Admin] Character rankings refresh completed"))
       .catch((err) => logger.error("[Admin] Character rankings refresh failed:", err));
+    return true;
+  }
+
+  // Trigger character raid participation rebuild from admin panel (returns false if already running)
+  triggerCharacterRaidParticipationRebuild(): boolean {
+    if (this.isUpdatingCharacterRaidParticipations) {
+      return false;
+    }
+    this.rebuildCharacterRaidParticipations()
+      .then(() => logger.info("[Admin] Character raid participation rebuild completed"))
+      .catch((err) => logger.error("[Admin] Character raid participation rebuild failed:", err));
     return true;
   }
 
@@ -1149,6 +1177,21 @@ class UpdateScheduler {
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingCharacterRankings = false;
+    }
+  }
+
+  private async rebuildCharacterRaidParticipations(): Promise<void> {
+    this.isUpdatingCharacterRaidParticipations = true;
+    const taskId = await taskTracker.start("Rebuild Character Raid Participations");
+
+    try {
+      const result = await characterService.rebuildCharacterRaidParticipations();
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[CharacterRaidParticipation] Rebuild error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isUpdatingCharacterRaidParticipations = false;
     }
   }
 

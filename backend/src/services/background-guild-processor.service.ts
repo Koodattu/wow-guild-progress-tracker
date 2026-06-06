@@ -191,6 +191,9 @@ class BackgroundGuildProcessor {
         case "rescan_characters":
           await this.processGuildCharacterRescan(queueItem);
           break;
+        case "backfill_report_characters":
+          await this.processGuildReportCharacterBackfill(queueItem);
+          break;
         case "recalculate_stats":
           await this.processGuildStatsRecalculation(queueItem);
           break;
@@ -790,6 +793,143 @@ class BackgroundGuildProcessor {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       guildLog.error(`[CharacterRescan] Fatal error: ${errorMessage}`);
+      const classifiedError = classifyError(errorMessage);
+      await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
+    }
+  }
+
+  /**
+   * Process a guild's report-level character backfill.
+   * Fetches each stored report once, stores report rankedCharacters as appearances,
+   * and marks the report so future runs skip already-fetched reports.
+   */
+  private async processGuildReportCharacterBackfill(queueItem: IGuildProcessingQueue): Promise<void> {
+    const guildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
+
+    try {
+      const guild = await Guild.findById(queueItem.guildId);
+      if (!guild) {
+        await queueItem.markFailed("Guild not found in database", "unknown", true, "Guild not found");
+        return;
+      }
+
+      const jobStartedAt = new Date();
+      const pendingReportQuery = {
+        guildId: guild._id,
+        isOngoing: { $ne: true },
+        endTime: { $gt: 0 },
+        $or: [
+          { charactersFetchStatus: "pending" },
+          { charactersFetchStatus: { $exists: false } },
+          { charactersFetchStatus: "failed", charactersFetchFailedAt: { $lt: jobStartedAt } },
+        ],
+      };
+
+      const totalReports = await Report.countDocuments(pendingReportQuery);
+      guildLog.info(`[ReportCharacterBackfill] Found ${totalReports} reports needing character fetch`);
+
+      if (totalReports === 0) {
+        await queueItem.markCompleted();
+        return;
+      }
+
+      await queueItem.updateProgress(0, 0, 0, totalReports);
+
+      let reportsProcessed = 0;
+      let appearancesSaved = 0;
+
+      while (true) {
+        const report = await Report.findOne(pendingReportQuery).sort({ startTime: 1 }).select("code startTime").lean();
+        if (!report) {
+          break;
+        }
+
+        if (!rateLimitService.canProceedBackground()) {
+          guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached, pausing...`);
+          await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+          await queueItem.pause();
+          await rateLimitService.waitForReset();
+          await queueItem.resume();
+          guildLog.info("[ReportCharacterBackfill] Resuming after rate limit reset");
+        }
+
+        if (this.isPaused) {
+          guildLog.info(`[ReportCharacterBackfill] Manually paused at ${reportsProcessed}/${totalReports} reports`);
+          await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+          await queueItem.pause();
+          return;
+        }
+
+        try {
+          const reportData = await wclService.getReportByCodeAllDifficulties(report.code, { includeRankedCharacters: true });
+          const wclReport = reportData.reportData?.report;
+
+          if (!wclReport) {
+            throw new Error("WCL report not found or inaccessible");
+          }
+
+          const rankedCharacters = Array.isArray(wclReport.rankedCharacters) ? wclReport.rankedCharacters : [];
+          const result = await characterService.upsertCharactersFromReportAppearances({
+            reportCode: wclReport.code,
+            reportStartTime: wclReport.startTime || report.startTime,
+            reportGuildId: guild._id as mongoose.Types.ObjectId,
+            reportGuildName: guild.name,
+            reportGuildRealm: guild.realm,
+            rankedCharacters,
+          });
+
+          await Report.updateOne(
+            { _id: report._id },
+            {
+              $set: {
+                startTime: wclReport.startTime || report.startTime,
+                endTime: wclReport.endTime || 0,
+                fightCount: wclReport.fights?.length || 0,
+                fightSequence: this.buildReportFightSequence(wclReport),
+                charactersFetchStatus: "fetched",
+                charactersFetchedAt: new Date(),
+                rankedCharacterCount: rankedCharacters.length,
+                characterAppearanceCount: result.processed,
+                lastProcessed: new Date(),
+              },
+              $unset: {
+                charactersFetchFailedAt: "",
+                charactersFetchError: "",
+              },
+            },
+          );
+
+          reportsProcessed++;
+          appearancesSaved += result.processed;
+          await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+          guildLog.info(`[ReportCharacterBackfill] ${report.code}: saved ${result.processed}/${rankedCharacters.length} appearances`);
+
+          await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          guildLog.error(`[ReportCharacterBackfill] Failed for report ${report.code}: ${errorMessage}`);
+
+          await Report.updateOne(
+            { _id: report._id },
+            {
+              $set: {
+                charactersFetchStatus: "failed",
+                charactersFetchFailedAt: new Date(),
+                charactersFetchError: errorMessage,
+              },
+            },
+          );
+
+          reportsProcessed++;
+          await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+        }
+      }
+
+      await queueItem.markCompleted();
+      guildLog.info(`[ReportCharacterBackfill] Completed: ${reportsProcessed} reports processed, ${appearancesSaved} appearances saved`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      guildLog.error(`[ReportCharacterBackfill] Fatal error: ${errorMessage}`);
       const classifiedError = classifyError(errorMessage);
       await queueItem.markFailed(errorMessage, classifiedError.type, classifiedError.isPermanent, classifiedError.userMessage);
     }

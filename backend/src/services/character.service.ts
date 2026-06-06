@@ -2,6 +2,9 @@ import { CURRENT_RAID_IDS } from "../config/guilds";
 import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
 import Character from "../models/Character";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
+import CharacterReportAppearance from "../models/CharacterReportAppearance";
+import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
+import Guild from "../models/Guild";
 import Ranking from "../models/Ranking";
 import Raid from "../models/Raid";
 import logger from "../utils/logger";
@@ -162,7 +165,95 @@ export type CharacterRankingsResponse = {
   };
 };
 
+export type GuildRaidCharacterRosterResponse = {
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+  };
+  raid: {
+    id: number;
+    name: string;
+  } | null;
+  characters: Array<{
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+    firstSeenAt: Date;
+    lastSeenAt: Date;
+    reportCount: number;
+  }>;
+};
+
+export type CharacterProfileResponse = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+    firstReportSeenAt?: Date;
+    lastReportSeenAt?: Date;
+    guildHistory: Array<{
+      guildName: string;
+      guildRealm: string;
+      firstSeenAt: Date;
+      lastSeenAt: Date;
+    }>;
+  };
+  raidTimeline: Array<{
+    zoneId: number;
+    raidName: string;
+    guildId: string;
+    guildName: string;
+    guildRealm: string;
+    firstSeenAt: Date;
+    lastSeenAt: Date;
+    reportCount: number;
+  }>;
+  rankings: Array<{
+    zoneId: number;
+    raidName: string;
+    encounterId: number | null;
+    encounterName: string | null;
+    metric: string | null;
+    specName: string | null;
+    rankPercent: number | null;
+    score: number;
+    partition: number | null;
+    updatedAt?: Date;
+  }>;
+};
+
+type WclRankedCharacter = {
+  canonicalID?: number;
+  name?: string;
+  classID?: number;
+  hidden?: boolean;
+  server?: {
+    slug?: string;
+    region?: {
+      slug?: string;
+    };
+  };
+  guilds?: Array<{
+    name?: string;
+    server?: {
+      slug?: string;
+      region?: {
+        slug?: string;
+      };
+    };
+  }>;
+};
+
 class CharacterService {
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   /**
    * Upsert a character from WCL report data with guild history tracking.
    *
@@ -219,6 +310,112 @@ class CharacterService {
     // However, existing pre-migration characters won't have guildHistory at all.
     // To keep it simple and idempotent, always run the guild update — it's a no-op if nothing changed.
     await this.updateCharacterGuild(character._id as mongoose.Types.ObjectId, character.guildName ?? null, character.guildRealm ?? null, guildName, guildRealm, now);
+  }
+
+  /**
+   * Upsert report-level character appearances discovered from WCL rankedCharacters.
+   *
+   * This is intentionally separate from the ranking-oriented Mythic upsert above:
+   * old report discoveries should populate character/history data without making
+   * the character immediately eligible for current-tier ranking refreshes.
+   */
+  async upsertCharactersFromReportAppearances(params: {
+    reportCode: string;
+    reportStartTime: number | Date;
+    reportGuildId: mongoose.Types.ObjectId;
+    reportGuildName: string;
+    reportGuildRealm: string;
+    rankedCharacters: WclRankedCharacter[];
+  }): Promise<{ processed: number; skipped: number }> {
+    const reportSeenAt = params.reportStartTime instanceof Date ? params.reportStartTime : new Date(params.reportStartTime);
+    let processed = 0;
+    let skipped = 0;
+
+    for (const rankedCharacter of params.rankedCharacters) {
+      const canonicalID = rankedCharacter.canonicalID;
+      const name = rankedCharacter.name;
+      const realm = rankedCharacter.server?.slug;
+      const region = rankedCharacter.server?.region?.slug;
+      const classID = rankedCharacter.classID;
+
+      if (!canonicalID || !name || !realm || !region || !classID) {
+        skipped += 1;
+        continue;
+      }
+
+      const character = await Character.findOneAndUpdate(
+        { wclCanonicalCharacterId: canonicalID },
+        {
+          $set: {
+            name,
+            realm,
+            region,
+            classID,
+            wclProfileHidden: rankedCharacter.hidden === true,
+          },
+          $min: {
+            firstReportSeenAt: reportSeenAt,
+          },
+          $max: {
+            lastReportSeenAt: reportSeenAt,
+          },
+          $setOnInsert: {
+            wclCanonicalCharacterId: canonicalID,
+            guildName: null,
+            guildRealm: null,
+            guildUpdatedAt: null,
+            guildHistory: [],
+            lastMythicSeenAt: new Date(0),
+            rankingsAvailable: null,
+            nextEligibleRefreshAt: new Date("2100-01-01T00:00:00.000Z"),
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      if (!character) {
+        skipped += 1;
+        continue;
+      }
+
+      const wclGuilds = (rankedCharacter.guilds || [])
+        .map((guild) => ({
+          name: guild.name,
+          realm: guild.server?.slug,
+          region: guild.server?.region?.slug,
+        }))
+        .filter((guild): guild is { name: string; realm: string; region: string } => Boolean(guild.name && guild.realm && guild.region));
+
+      await CharacterReportAppearance.findOneAndUpdate(
+        {
+          reportCode: params.reportCode,
+          wclCanonicalCharacterId: canonicalID,
+        },
+        {
+          $set: {
+            characterId: character._id,
+            wclCanonicalCharacterId: canonicalID,
+            reportCode: params.reportCode,
+            reportStartTime: reportSeenAt,
+            reportGuildId: params.reportGuildId,
+            reportGuildName: params.reportGuildName,
+            reportGuildRealm: params.reportGuildRealm,
+            characterName: name,
+            characterRealm: realm,
+            characterRegion: region,
+            classID,
+            hidden: rankedCharacter.hidden === true,
+            wclGuilds,
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      await this.updateReportGuildHistory(character._id as mongoose.Types.ObjectId, params.reportGuildName, params.reportGuildRealm, reportSeenAt);
+      processed += 1;
+    }
+
+    return { processed, skipped };
   }
 
   /**
@@ -297,6 +494,223 @@ class CharacterService {
         },
       );
     }
+  }
+
+  private async updateReportGuildHistory(characterId: mongoose.Types.ObjectId, guildName: string, guildRealm: string, seenAt: Date): Promise<void> {
+    const character = await Character.findById(characterId).select("guildName guildRealm guildUpdatedAt guildHistory").lean();
+    if (!character) return;
+
+    const history = [...(character.guildHistory || [])].map((entry) => ({
+      guildName: entry.guildName,
+      guildRealm: entry.guildRealm,
+      firstSeenAt: new Date(entry.firstSeenAt),
+      lastSeenAt: new Date(entry.lastSeenAt),
+    }));
+
+    const existing = history.find((entry) => entry.guildName === guildName && entry.guildRealm === guildRealm);
+    if (existing) {
+      if (seenAt < existing.firstSeenAt) existing.firstSeenAt = seenAt;
+      if (seenAt > existing.lastSeenAt) existing.lastSeenAt = seenAt;
+    } else {
+      history.push({
+        guildName,
+        guildRealm,
+        firstSeenAt: seenAt,
+        lastSeenAt: seenAt,
+      });
+    }
+
+    history.sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime() || a.guildName.localeCompare(b.guildName));
+
+    const update: Record<string, unknown> = { guildHistory: history };
+    const guildUpdatedAt = character.guildUpdatedAt ? new Date(character.guildUpdatedAt) : null;
+    if (!guildUpdatedAt || seenAt >= guildUpdatedAt) {
+      update.guildName = guildName;
+      update.guildRealm = guildRealm;
+      update.guildUpdatedAt = seenAt;
+    }
+
+    await Character.updateOne({ _id: characterId }, { $set: update });
+  }
+
+  async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
+    logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
+
+    const rows = await CharacterReportAppearance.aggregate([
+      {
+        $lookup: {
+          from: "reports",
+          let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }],
+                },
+              },
+            },
+            { $project: { zoneId: 1 } },
+          ],
+          as: "report",
+        },
+      },
+      { $unwind: "$report" },
+      { $match: { "report.zoneId": { $gt: 0 } } },
+      {
+        $sort: {
+          reportStartTime: 1,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+            zoneId: "$report.zoneId",
+            reportGuildId: "$reportGuildId",
+          },
+          characterId: { $first: "$characterId" },
+          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+          zoneId: { $first: "$report.zoneId" },
+          reportGuildId: { $first: "$reportGuildId" },
+          reportGuildName: { $last: "$reportGuildName" },
+          reportGuildRealm: { $last: "$reportGuildRealm" },
+          characterName: { $last: "$characterName" },
+          characterRealm: { $last: "$characterRealm" },
+          characterRegion: { $last: "$characterRegion" },
+          classID: { $last: "$classID" },
+          firstSeenAt: { $min: "$reportStartTime" },
+          lastSeenAt: { $max: "$reportStartTime" },
+          reportCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          characterId: 1,
+          wclCanonicalCharacterId: 1,
+          zoneId: 1,
+          reportGuildId: 1,
+          reportGuildName: 1,
+          reportGuildRealm: 1,
+          characterName: 1,
+          characterRealm: 1,
+          characterRegion: 1,
+          classID: 1,
+          firstSeenAt: 1,
+          lastSeenAt: 1,
+          reportCount: 1,
+        },
+      },
+    ]);
+
+    const deleteResult = await CharacterRaidParticipation.deleteMany({});
+    if (rows.length > 0) {
+      await CharacterRaidParticipation.insertMany(rows, { ordered: false });
+    }
+
+    logger.info(`[CharacterRaidParticipation] Rebuild complete: deleted ${deleteResult.deletedCount}, inserted ${rows.length}`);
+    return { deleted: deleteResult.deletedCount ?? 0, inserted: rows.length };
+  }
+
+  async getGuildRaidCharactersByRealmName(realm: string, name: string, zoneId: number): Promise<GuildRaidCharacterRosterResponse | null> {
+    const guild = await Guild.findOne({
+      realm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
+      name: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
+    })
+      .select("_id name realm")
+      .lean();
+
+    if (!guild) return null;
+
+    const [raid, characters] = await Promise.all([
+      Raid.findOne({ id: zoneId }).select("id name -_id").lean(),
+      CharacterRaidParticipation.find({ reportGuildId: guild._id, zoneId })
+        .sort({ classID: 1, characterName: 1 })
+        .select("wclCanonicalCharacterId characterName characterRealm characterRegion classID firstSeenAt lastSeenAt reportCount -_id")
+        .lean(),
+    ]);
+
+    return {
+      guild: {
+        id: guild._id.toString(),
+        name: guild.name,
+        realm: guild.realm,
+      },
+      raid: raid ? { id: raid.id, name: raid.name } : null,
+      characters: characters.map((character) => ({
+        wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+        name: character.characterName,
+        realm: character.characterRealm,
+        region: character.characterRegion,
+        classID: character.classID,
+        firstSeenAt: character.firstSeenAt,
+        lastSeenAt: character.lastSeenAt,
+        reportCount: character.reportCount,
+      })),
+    };
+  }
+
+  async getCharacterProfileByRealmName(realm: string, name: string): Promise<CharacterProfileResponse | null> {
+    const character = await Character.findOne({
+      realm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
+      name: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
+    }).lean();
+
+    if (!character) return null;
+
+    const [timelineRows, rankingRows] = await Promise.all([
+      CharacterRaidParticipation.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId })
+        .sort({ firstSeenAt: 1, zoneId: 1 })
+        .lean(),
+      CharacterLeaderboard.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId })
+        .sort({ zoneId: -1, score: -1 })
+        .limit(50)
+        .lean(),
+    ]);
+
+    const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter((id): id is number => typeof id === "number");
+    const raids = await Raid.find({ id: { $in: raidIds } }).select("id name -_id").lean();
+    const raidNameById = new Map(raids.map((raid) => [raid.id, raid.name]));
+
+    return {
+      character: {
+        wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+        name: character.name,
+        realm: character.realm,
+        region: character.region,
+        classID: character.classID,
+        firstReportSeenAt: character.firstReportSeenAt,
+        lastReportSeenAt: character.lastReportSeenAt,
+        guildHistory: (character.guildHistory || []).map((entry) => ({
+          guildName: entry.guildName,
+          guildRealm: entry.guildRealm,
+          firstSeenAt: entry.firstSeenAt,
+          lastSeenAt: entry.lastSeenAt,
+        })),
+      },
+      raidTimeline: timelineRows.map((row) => ({
+        zoneId: row.zoneId,
+        raidName: raidNameById.get(row.zoneId) || `Raid ${row.zoneId}`,
+        guildId: row.reportGuildId.toString(),
+        guildName: row.reportGuildName,
+        guildRealm: row.reportGuildRealm,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+        reportCount: row.reportCount,
+      })),
+      rankings: rankingRows.map((row: any) => ({
+        zoneId: row.zoneId,
+        raidName: raidNameById.get(row.zoneId) || `Raid ${row.zoneId}`,
+        encounterId: row.encounterId ?? null,
+        encounterName: row.encounterName || null,
+        metric: row.metric ?? null,
+        specName: row.specName ?? null,
+        rankPercent: row.rankPercent ?? null,
+        score: row.score ?? 0,
+        partition: row.partition ?? null,
+        updatedAt: row.updatedAt,
+      })),
+    };
   }
 
   // Check and update character rankings (nightly job)

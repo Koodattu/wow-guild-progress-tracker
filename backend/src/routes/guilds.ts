@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
+import characterService from "../services/character.service";
 import logger from "../utils/logger";
 import cacheService from "../services/cache.service";
 import { cacheMiddleware } from "../middleware/cache.middleware";
@@ -169,6 +170,29 @@ router.get("/:realm/:name/raids/:raidId/bosses/:bossId/pull-history", async (req
   } catch (error) {
     logger.error("Error fetching boss pull history:", error);
     res.status(500).json({ error: "Failed to fetch boss pull history" });
+  }
+});
+
+// Get calculated character roster for a specific guild and raid by realm/name
+router.get("/:realm/:name/raids/:raidId/characters", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const raidId = parseInt(req.params.raidId);
+
+    if (!Number.isFinite(raidId)) {
+      return res.status(400).json({ error: "Invalid raid ID" });
+    }
+
+    const result = await characterService.getGuildRaidCharactersByRealmName(realm, name, raidId);
+    if (!result) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching guild raid characters:", error);
+    res.status(500).json({ error: "Failed to fetch guild raid characters" });
   }
 });
 

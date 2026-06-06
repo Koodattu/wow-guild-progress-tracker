@@ -20,6 +20,18 @@ type QueryResult = {
   summary: Record<string, unknown>;
 };
 
+type MeasuredQueryResult<T> = QueryResult & {
+  value: T;
+};
+
+type ReportFight = {
+  id: number;
+  encounterID: number;
+  name?: string;
+  difficulty?: number;
+  kill?: boolean;
+};
+
 function getArg(name: string): string | undefined {
   const prefix = `--${name}=`;
   const match = process.argv.find((arg) => arg.startsWith(prefix));
@@ -53,7 +65,7 @@ async function measure<T>(
   query: string,
   variables: Record<string, unknown>,
   summarize: (result: T) => Record<string, unknown>,
-): Promise<QueryResult> {
+): Promise<MeasuredQueryResult<T>> {
   const before = await getRateLimit(`${label}:before`);
   const result = await wclService.query<T>(query, variables);
   const after = (result as { rateLimitData?: RateLimitData }).rateLimitData;
@@ -62,13 +74,20 @@ async function measure<T>(
     throw new Error(`Measured query did not return rateLimitData: ${label}`);
   }
 
-  return {
+  const queryResult = {
     label,
     before,
     after,
     cost: after.pointsSpentThisHour - before.pointsSpentThisHour,
     summary: summarize(result),
-  };
+  } as MeasuredQueryResult<T>;
+
+  Object.defineProperty(queryResult, "value", {
+    value: result,
+    enumerable: false,
+  });
+
+  return queryResult;
 }
 
 async function findReportCode(cliReportCode?: string): Promise<string> {
@@ -98,11 +117,7 @@ async function main(): Promise<void> {
   const storedReport = await Report.findOne({ code: reportCode }).lean();
   const storedFights = await Fight.find({ reportCode }).sort({ fightId: 1 }).select("fightId encounterID difficulty isKill").lean();
   const storedFightIds = uniqueNumbers(storedFights.map((fight) => fight.fightId));
-  const firstStoredFightId = Number(getArg("fightId")) || storedFightIds[0];
-
-  if (!firstStoredFightId) {
-    throw new Error(`Report ${reportCode} has no stored fights. Pass --fightId=<id> to test backend character query shape.`);
-  }
+  const requestedFightId = Number(getArg("fightId")) || undefined;
 
   const reportFightsQuery = `
     query($reportCode: String!) {
@@ -317,15 +332,22 @@ async function main(): Promise<void> {
   `;
 
   const results: QueryResult[] = [];
-  results.push(
-    await measure<any>("report fights + phases (backend getReportByCodeAllDifficulties)", reportFightsQuery, { reportCode }, (result) => {
-      const report = result.reportData?.report;
-      return {
-        fightCount: report?.fights?.length ?? 0,
-        phaseEncounterCount: report?.phases?.length ?? 0,
-      };
-    }),
-  );
+  const reportFightsResult = await measure<any>("report fights + phases (backend getReportByCodeAllDifficulties)", reportFightsQuery, { reportCode }, (result) => {
+    const report = result.reportData?.report;
+    return {
+      fightCount: report?.fights?.length ?? 0,
+      phaseEncounterCount: report?.phases?.length ?? 0,
+    };
+  });
+  results.push(reportFightsResult);
+
+  const reportFights: ReportFight[] = reportFightsResult.value.reportData?.report?.fights ?? [];
+  const reportFightIds = uniqueNumbers(reportFights.map((fight) => fight.id));
+  const firstFightId = requestedFightId || reportFightIds[0];
+
+  if (!firstFightId) {
+    throw new Error(`Report ${reportCode} has no WCL encounter fights.`);
+  }
   results.push(
     await measure<any>("same report query + rankedCharacters", reportWithCharactersQuery, { reportCode }, (result) => {
       const report = result.reportData?.report;
@@ -347,11 +369,11 @@ async function main(): Promise<void> {
     await measure<any>(
       "current backend getFightCharacters shape (rankedCharacters + one filtered fight)",
       backendGetFightCharactersShapeQuery,
-      { reportCode, fightId: firstStoredFightId },
+      { reportCode, fightId: firstFightId },
       (result) => {
         const report = result.reportData?.report;
         return {
-          requestedFightId: firstStoredFightId,
+          requestedFightId: firstFightId,
           returnedFightIds: (report?.fights ?? []).map((fight: { id: number }) => fight.id),
           rankedCharacterCount: report?.rankedCharacters?.length ?? 0,
         };
@@ -359,16 +381,16 @@ async function main(): Promise<void> {
     ),
   );
 
-  if (storedFightIds.length > 0) {
+  if (reportFightIds.length > 0) {
     results.push(
       await measure<any>(
-        "death events for stored fights in report (backend getDeathEventsForReport)",
+        "death events for all WCL encounter fights in report (backend getDeathEventsForReport)",
         deathEventsQuery,
-        { reportCode, fightIds: storedFightIds, limit: 10000 },
+        { reportCode, fightIds: reportFightIds, limit: 10000 },
         (result) => {
           const report = result.reportData?.report;
           return {
-            requestedFightCount: storedFightIds.length,
+            requestedFightCount: reportFightIds.length,
             actorCount: report?.masterData?.actors?.length ?? 0,
             deathEventCount: report?.events?.data?.length ?? 0,
           };
@@ -376,6 +398,46 @@ async function main(): Promise<void> {
       ),
     );
   }
+
+  const perFightLimit = Math.max(0, Number(getArg("perFightLimit")) || reportFightIds.length);
+  const perFightIds = reportFightIds.slice(0, perFightLimit);
+  const perFightResults: QueryResult[] = [];
+
+  for (const fightId of perFightIds) {
+    const fight = reportFights.find((item) => item.id === fightId);
+    perFightResults.push(
+      await measure<any>(`per-fight death events: fight ${fightId}`, deathEventsQuery, { reportCode, fightIds: [fightId], limit: 10000 }, (result) => {
+        const report = result.reportData?.report;
+        return {
+          fightId,
+          encounterID: fight?.encounterID,
+          name: fight?.name,
+          difficulty: fight?.difficulty,
+          kill: fight?.kill,
+          actorCount: report?.masterData?.actors?.length ?? 0,
+          deathEventCount: report?.events?.data?.length ?? 0,
+        };
+      }),
+    );
+
+    perFightResults.push(
+      await measure<any>(`per-fight current character query shape: fight ${fightId}`, backendGetFightCharactersShapeQuery, { reportCode, fightId }, (result) => {
+        const report = result.reportData?.report;
+        return {
+          fightId,
+          encounterID: fight?.encounterID,
+          name: fight?.name,
+          difficulty: fight?.difficulty,
+          kill: fight?.kill,
+          returnedFightIds: (report?.fights ?? []).map((returnedFight: { id: number }) => returnedFight.id),
+          rankedCharacterCount: report?.rankedCharacters?.length ?? 0,
+        };
+      }),
+    );
+  }
+
+  const totalWholeReportCost = results.reduce((sum, result) => sum + result.cost, 0);
+  const totalPerFightCost = perFightResults.reduce((sum, result) => sum + result.cost, 0);
 
   const output = {
     reportCode,
@@ -389,9 +451,16 @@ async function main(): Promise<void> {
         }
       : null,
     storedFightCount: storedFightIds.length,
+    wclEncounterFightCount: reportFightIds.length,
     measuredAt: new Date().toISOString(),
     note: "cost is pointsSpentThisHour delta from the probe immediately before each measured query; probe cost itself is excluded",
+    totals: {
+      wholeReportMeasuredCost: totalWholeReportCost,
+      perFightMeasuredCost: totalPerFightCost,
+      perFightMeasuredFightCount: perFightIds.length,
+    },
     results,
+    perFightResults,
   };
 
   console.log(JSON.stringify(output, null, 2));

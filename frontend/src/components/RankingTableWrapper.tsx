@@ -372,7 +372,13 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
                   <IconImage iconFilename={specIcon} alt={row.context.specName!} fill style={{ objectFit: "cover" }} />
                 </div>
               )}
-              <span className="flex items-center gap-2">{row.character.name}</span>
+              <Link
+                href={`/characters/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`}
+                className="flex items-center gap-2 transition-colors hover:text-blue-300"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.character.name}
+              </Link>
             </div>
             <a
               href={wclUrl}

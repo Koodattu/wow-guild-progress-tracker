@@ -58,6 +58,8 @@ import {
   RaidAnalyticsListItem,
   CharacterRankingRow,
   CharacterRankingsFilterOptionsResponse,
+  GuildRaidCharactersResponse,
+  CharacterProfileResponse,
   RateLimitResponse,
   RateLimitStatus,
   ProcessingQueueStatsResponse,
@@ -127,6 +129,22 @@ export const api = {
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/bosses`);
     if (!response.ok) throw new Error("Failed to fetch guild boss progress");
+    return response.json();
+  },
+
+  async getGuildRaidCharactersByRealmName(realm: string, name: string, raidId: number): Promise<GuildRaidCharactersResponse> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/guilds/${encodedRealm}/${encodedName}/raids/${raidId}/characters`);
+    if (!response.ok) throw new Error("Failed to fetch guild raid characters");
+    return response.json();
+  },
+
+  async getCharacterProfileByRealmName(realm: string, name: string): Promise<CharacterProfileResponse> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}`);
+    if (!response.ok) throw new Error("Failed to fetch character profile");
     return response.json();
   },
 
@@ -1302,6 +1320,24 @@ export async function triggerRescanCharacters(): Promise<TriggerResponse> {
   return response.json();
 }
 
+export async function triggerBackfillReportCharacters(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/backfill-report-characters`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger report character backfill");
+  return response.json();
+}
+
+export async function triggerRebuildCharacterRaidParticipations(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-character-raid-participations`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger character raid data rebuild");
+  return response.json();
+}
+
 export async function triggerUpdateRaiderIOGuilds(): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/update-raiderio-guilds`, {
     method: "POST",
@@ -1371,6 +1407,18 @@ export async function queueGuildRescanCharacters(guildId: string): Promise<Queue
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || "Failed to queue guild for character rescan");
+  }
+  return response.json();
+}
+
+export async function queueGuildBackfillReportCharacters(guildId: string): Promise<QueueRescanResponse> {
+  const response = await fetch(`${API_URL}/api/admin/guilds/${guildId}/queue-backfill-report-characters`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to queue guild for report character backfill");
   }
   return response.json();
 }

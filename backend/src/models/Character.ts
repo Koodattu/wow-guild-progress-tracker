@@ -20,6 +20,8 @@ export interface ICharacter extends Document {
   wclProfileHidden: boolean;
 
   lastMythicSeenAt: Date;
+  firstReportSeenAt?: Date;
+  lastReportSeenAt?: Date;
   rankingsAvailable: boolean | null;
   nextEligibleRefreshAt?: Date;
 
@@ -51,6 +53,8 @@ const CharacterSchema: Schema = new Schema(
     wclProfileHidden: { type: Boolean, required: true, default: false },
 
     lastMythicSeenAt: { type: Date, required: true },
+    firstReportSeenAt: { type: Date },
+    lastReportSeenAt: { type: Date },
     rankingsAvailable: { type: Boolean, required: false, default: null },
     nextEligibleRefreshAt: { type: Date, required: false, default: Date.now },
   },
@@ -63,5 +67,6 @@ CharacterSchema.index({
   rankingsAvailable: 1,
   nextEligibleRefreshAt: 1,
 });
+CharacterSchema.index({ lastReportSeenAt: -1 });
 
 export default mongoose.model<ICharacter>("Character", CharacterSchema);

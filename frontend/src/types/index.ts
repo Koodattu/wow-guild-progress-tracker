@@ -1126,6 +1126,70 @@ export type CharacterRankingRow = {
   }>;
 };
 
+export type GuildRaidCharacter = {
+  wclCanonicalCharacterId: number;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  reportCount: number;
+};
+
+export type GuildRaidCharactersResponse = {
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+  };
+  raid: {
+    id: number;
+    name: string;
+  } | null;
+  characters: GuildRaidCharacter[];
+};
+
+export type CharacterProfileResponse = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+    firstReportSeenAt?: string;
+    lastReportSeenAt?: string;
+    guildHistory: Array<{
+      guildName: string;
+      guildRealm: string;
+      firstSeenAt: string;
+      lastSeenAt: string;
+    }>;
+  };
+  raidTimeline: Array<{
+    zoneId: number;
+    raidName: string;
+    guildId: string;
+    guildName: string;
+    guildRealm: string;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    reportCount: number;
+  }>;
+  rankings: Array<{
+    zoneId: number;
+    raidName: string;
+    encounterId: number | null;
+    encounterName: string | null;
+    metric: string | null;
+    specName: string | null;
+    rankPercent: number | null;
+    score: number;
+    partition: number | null;
+    updatedAt?: string;
+  }>;
+};
+
 export type Spec = {
   name: string;
   role: "dps" | "healer" | "tank";
@@ -1374,7 +1438,7 @@ export interface QueueItem {
   guildName: string;
   guildRealm: string;
   guildRegion: string;
-  jobType: "full_rescan" | "rescan_deaths" | "rescan_characters";
+  jobType: "full_rescan" | "rescan_deaths" | "rescan_characters" | "backfill_report_characters";
   status: ProcessingStatus;
   priority: number;
   progress: QueueItemProgress;
@@ -1400,7 +1464,7 @@ export interface ProcessingQueueErrorItem {
   guildName: string;
   guildRealm: string;
   guildRegion: string;
-  jobType: "full_rescan" | "rescan_deaths" | "rescan_characters";
+  jobType: "full_rescan" | "rescan_deaths" | "rescan_characters" | "backfill_report_characters";
   status: ProcessingStatus;
   errorType?: ErrorType;
   isPermanentError?: boolean;

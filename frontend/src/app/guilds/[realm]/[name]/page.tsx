@@ -3,7 +3,7 @@
 import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
-import { Guild, RaidProgressSummary, RaidInfo, Boss, RaidSchedule } from "@/types";
+import { Guild, RaidProgressSummary, RaidInfo, Boss, RaidSchedule, GuildRaidCharactersResponse } from "@/types";
 import { api } from "@/lib/api";
 import { useGuildSummaryByRealmName, useRaids, useGuildEventsByRealmName } from "@/lib/queries";
 import {
@@ -19,6 +19,7 @@ import {
   getTierBgColor,
   getEffectiveProgress,
   findOfficialProgressForRaid,
+  getClassInfoById,
 } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
@@ -42,6 +43,11 @@ function formatScheduleHour(hour: number): string {
 
 function formatOptionalTime(seconds?: number | null) {
   return seconds && seconds > 0 ? formatTime(seconds) : "-";
+}
+
+function formatShortDate(value?: string | Date | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function StackedTimeValue({ primary, secondary }: { primary?: number | null; secondary?: number | null }) {
@@ -176,6 +182,10 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showAllRaids, setShowAllRaids] = useState(false);
   const [combineHeroicMythicTimes, setCombineHeroicMythicTimes] = useState(false);
+  const [selectedCharacterRaid, setSelectedCharacterRaid] = useState<RaidInfo | null>(null);
+  const [raidCharacters, setRaidCharacters] = useState<GuildRaidCharactersResponse | null>(null);
+  const [raidCharactersLoading, setRaidCharactersLoading] = useState(false);
+  const [raidCharactersError, setRaidCharactersError] = useState<string | null>(null);
 
   // Hover state for clickable areas
   const [hoveredRaidInfoRow, setHoveredRaidInfoRow] = useState<number | null>(null);
@@ -259,6 +269,40 @@ export default function GuildProfilePage({ params }: PageProps) {
       }
     },
     [guildSummary, realm, name, updateURL],
+  );
+
+  const handleRaidCharactersClick = useCallback(
+    async (raid: RaidInfo) => {
+      setSelectedCharacterRaid(raid);
+      setRaidCharacters(null);
+      setRaidCharactersError(null);
+      setRaidCharactersLoading(true);
+
+      try {
+        const response = await api.getGuildRaidCharactersByRealmName(realm, name, raid.id);
+        setRaidCharacters(response);
+      } catch (err) {
+        console.error("Error fetching raid characters:", err);
+        setRaidCharactersError("Failed to load raid characters.");
+      } finally {
+        setRaidCharactersLoading(false);
+      }
+    },
+    [realm, name],
+  );
+
+  const handleCloseCharactersModal = useCallback(() => {
+    setSelectedCharacterRaid(null);
+    setRaidCharacters(null);
+    setRaidCharactersLoading(false);
+    setRaidCharactersError(null);
+  }, []);
+
+  const handleCharacterNavigate = useCallback(
+    (characterRealm: string, characterName: string) => {
+      router.push(`/characters/${encodeURIComponent(characterRealm)}/${encodeURIComponent(characterName)}`);
+    },
+    [router],
   );
 
   // Handle raid info click - navigate to main page with raid selected
@@ -678,6 +722,15 @@ export default function GuildProfilePage({ params }: PageProps) {
                                 )}
                               </div>
                             </div>
+                            <div className="border-t border-gray-700/50 px-2 py-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRaidCharactersClick(raid)}
+                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md bg-gray-700 px-3 text-xs font-semibold text-gray-100 transition-colors hover:bg-gray-600 active:scale-[0.99]"
+                              >
+                                Characters
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -714,6 +767,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Total</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Pulls</th>
                     <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">%</th>
+                    <th className="px-2 md:px-4 py-2 md:py-4 text-center text-xs md:text-sm font-semibold text-gray-300">Characters</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -730,7 +784,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               <Image src={`/expansions/${expansionIconPath}.png`} alt={`${expansion} icon`} height={20} width={32} />
                             </div>
                           </td>
-                          <td colSpan={6} className="px-4 py-2 border-l-2 border-gray-700"></td>
+                          <td colSpan={7} className="px-4 py-2 border-l-2 border-gray-700"></td>
                         </tr>
 
                         {/* Raid Rows */}
@@ -868,6 +922,15 @@ export default function GuildProfilePage({ params }: PageProps) {
                               >
                                 {bestProgress}
                               </td>
+                              <td className={`px-2 md:px-4 py-2 md:py-3 text-center ${!hasProgress ? "opacity-60" : ""}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRaidCharactersClick(raid)}
+                                  className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-800 px-3 text-xs font-semibold text-gray-100 transition-colors hover:bg-gray-700 active:scale-[0.98]"
+                                >
+                                  View
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -880,6 +943,75 @@ export default function GuildProfilePage({ params }: PageProps) {
           </div>
         ) : (
           <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-lg border border-gray-700">No progress data available for this guild yet.</div>
+        )}
+
+        {/* Raid Characters Modal */}
+        {selectedCharacterRaid && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={handleCloseCharactersModal}>
+            <div className="w-full max-w-4xl overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4 border-b border-gray-700 px-4 py-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">{selectedCharacterRaid.name} Characters</h2>
+                  <p className="text-sm text-gray-400">
+                    {guildSummary.name} - {raidCharacters?.characters.length ?? 0} characters
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseCharactersModal}
+                  className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md bg-gray-800 text-gray-200 transition-colors hover:bg-gray-700"
+                  aria-label="Close characters dialog"
+                >
+                  x
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-y-auto">
+                {raidCharactersLoading ? (
+                  <div className="px-4 py-10 text-center text-gray-300">Loading characters...</div>
+                ) : raidCharactersError ? (
+                  <div className="px-4 py-10 text-center text-red-300">{raidCharactersError}</div>
+                ) : raidCharacters?.characters.length ? (
+                  <table className="w-full min-w-[680px] border-collapse">
+                    <thead className="sticky top-0 bg-gray-900">
+                      <tr className="border-b border-gray-700 text-left text-xs font-semibold text-gray-400">
+                        <th className="px-4 py-3">Class</th>
+                        <th className="px-4 py-3">Character</th>
+                        <th className="px-4 py-3 text-right">Reports</th>
+                        <th className="px-4 py-3">First Seen</th>
+                        <th className="px-4 py-3">Last Seen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {raidCharacters.characters.map((character) => {
+                        const className = getClassInfoById(character.classID)?.name ?? `Class ${character.classID}`;
+                        return (
+                          <tr key={character.wclCanonicalCharacterId} className="border-b border-gray-800 hover:bg-gray-800/60">
+                            <td className="px-4 py-3 text-sm text-gray-300">{className}</td>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => handleCharacterNavigate(character.realm, character.name)}
+                                className="text-left font-semibold text-blue-300 transition-colors hover:text-blue-200"
+                              >
+                                {character.name}
+                                <span className="ml-2 text-xs font-normal text-gray-500">{character.realm}</span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-200">{character.reportCount}</td>
+                            <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(character.firstSeenAt)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(character.lastSeenAt)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="px-4 py-10 text-center text-gray-400">No characters have been calculated for this guild and raid yet.</div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Raid Detail Modal */}

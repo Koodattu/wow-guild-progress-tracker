@@ -349,10 +349,10 @@ class WarcraftLogsService {
   }
 
   // Get a single report by code with fights - ALL difficulties (not filtered)
-  async getReportByCodeAllDifficulties(reportCode: string) {
+  async getReportByCodeAllDifficulties(reportCode: string, options: { includeRankedCharacters?: boolean } = {}) {
     logger.info(`[API REQUEST] WarcraftLogsService.getReportByCodeAllDifficulties - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode})`);
     const query = `
-      query($reportCode: String!) {
+      query($reportCode: String!, $includeRankedCharacters: Boolean!) {
         rateLimitData {
           limitPerHour
           pointsSpentThisHour
@@ -363,6 +363,27 @@ class WarcraftLogsService {
             code
             startTime
             endTime
+            rankedCharacters @include(if: $includeRankedCharacters) {
+              canonicalID
+              name
+              classID
+              hidden
+              server {
+                slug
+                region {
+                  slug
+                }
+              }
+              guilds {
+                name
+                server {
+                  slug
+                  region {
+                    slug
+                  }
+                }
+              }
+            }
             phases {
               encounterID
               separatesWipes
@@ -394,6 +415,7 @@ class WarcraftLogsService {
 
     const variables = {
       reportCode,
+      includeRankedCharacters: options.includeRankedCharacters === true,
     };
 
     return this.query<any>(query, variables);

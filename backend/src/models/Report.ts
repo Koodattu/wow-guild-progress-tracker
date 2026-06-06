@@ -27,6 +27,12 @@ export interface IReport extends Document {
     };
   };
   lastProcessed: Date;
+  charactersFetchStatus?: "pending" | "fetched" | "failed";
+  charactersFetchedAt?: Date;
+  charactersFetchFailedAt?: Date;
+  charactersFetchError?: string;
+  rankedCharacterCount?: number;
+  characterAppearanceCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +61,17 @@ const ReportSchema: Schema = new Schema(
     fightSequence: [ReportFightSequenceSchema],
     encounterFights: { type: Map, of: Object, default: new Map() },
     lastProcessed: { type: Date, default: Date.now },
+    charactersFetchStatus: {
+      type: String,
+      enum: ["pending", "fetched", "failed"],
+      default: "pending",
+      index: true,
+    },
+    charactersFetchedAt: { type: Date },
+    charactersFetchFailedAt: { type: Date },
+    charactersFetchError: { type: String },
+    rankedCharacterCount: { type: Number, default: 0 },
+    characterAppearanceCount: { type: Number, default: 0 },
   },
   {
     timestamps: true,
@@ -66,5 +83,6 @@ ReportSchema.index({ guildId: 1, zoneId: 1, startTime: -1 });
 ReportSchema.index({ guildId: 1, startTime: -1 });
 ReportSchema.index({ code: 1 }, { unique: true });
 ReportSchema.index({ isOngoing: 1 });
+ReportSchema.index({ guildId: 1, charactersFetchStatus: 1, startTime: 1 });
 
 export default mongoose.model<IReport>("Report", ReportSchema);

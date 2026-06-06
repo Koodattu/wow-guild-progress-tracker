@@ -2272,7 +2272,6 @@ class GuildService {
         }
 
         const fightWrites: any[] = [];
-        const characterDiscoveryTargets: Array<{ reportCode: string; fightId: number }> = [];
 
         for (const fight of report.fights) {
           const encounterId = fight.encounterID;
@@ -2343,32 +2342,12 @@ class GuildService {
             },
           });
 
-          // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in raid 44
-          if (fight.kill && difficulty === 5 && fightZoneId === 44) {
-            characterDiscoveryTargets.push({ reportCode: report.code, fightId: fight.id });
-          }
-
           newFightsInThisReport++;
           totalNewFights++;
         }
 
         if (fightWrites.length > 0) {
           await Fight.bulkWrite(fightWrites, { ordered: false });
-        }
-
-        for (const target of characterDiscoveryTargets) {
-          try {
-            const charData = await wclService.getFightCharacters(target.reportCode, target.fightId);
-            const rankedChars = charData?.reportData?.report?.rankedCharacters || [];
-
-            for (const char of rankedChars) {
-              // Upsert character to TrackedCharacter model
-              // Fields: canonicalID, name, serverSlug, region, lastMythicSeenAt, etc.
-              console.log(`Discovered character: ${char.name} (${char.canonicalID})`);
-            }
-          } catch (error) {
-            guildLog.error(`Failed to fetch characters for fight ${target.fightId}:`, error);
-          }
         }
 
         if (newFightsInThisReport > 0) {
@@ -2722,7 +2701,7 @@ class GuildService {
             },
           });
 
-          // ADD CHARACTER DISCOVERY: Fetch characters for Mythic kills in current raids
+          // Existing ranking-discovery path: keep this scoped to new current-tier Mythic kills.
           if (fight.kill && difficulty === 5 && CURRENT_RAID_IDS.includes(fightZoneId || 0)) {
             characterDiscoveryTargets.push({ reportCode: report.code, fightId: fight.id });
           }
@@ -2754,9 +2733,9 @@ class GuildService {
               });
             }
 
-            guildLog.info(`Saved ${rankedChars.length} characters from fight ${target.fightId} in report ${target.reportCode}`);
+            guildLog.info(`Saved ${rankedChars.length} ranking-discovery characters from fight ${target.fightId} in report ${target.reportCode}`);
           } catch (error) {
-            guildLog.error(`Failed to fetch characters for fight ${target.fightId}:`, error);
+            guildLog.error(`Failed to fetch ranking-discovery characters for fight ${target.fightId}:`, error);
           }
         }
 
@@ -5640,6 +5619,33 @@ class GuildService {
     }
 
     logger.info(`[RescanCharacters] Queued ${queued} guilds, skipped ${skipped}`);
+    return { queued, skipped };
+  }
+
+  /**
+   * Queue all guilds for report-level character backfill via the background processing queue.
+   * This fetches rankedCharacters once per stored report and skips reports already marked fetched.
+   */
+  async queueAllGuildsForReportCharacterBackfill(): Promise<{
+    queued: number;
+    skipped: number;
+  }> {
+    logger.info("[ReportCharacterBackfill] Queueing all guilds for report character backfill");
+
+    const guilds = await Guild.find({ initialFetchCompleted: true });
+    let queued = 0;
+    let skipped = 0;
+
+    for (const guild of guilds) {
+      try {
+        await backgroundGuildProcessor.queueGuild(guild, 20, "backfill_report_characters");
+        queued++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    logger.info(`[ReportCharacterBackfill] Queued ${queued} guilds, skipped ${skipped}`);
     return { queued, skipped };
   }
 }

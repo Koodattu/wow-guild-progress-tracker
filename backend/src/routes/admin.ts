@@ -10,6 +10,7 @@ import Raid from "../models/Raid";
 import Character from "../models/Character";
 import Ranking from "../models/Ranking";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
+import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import Pickem from "../models/Pickem";
 import { RequestLog, HourlyStats } from "../models/Analytics";
 import { CLASSES } from "../config/classes";
@@ -570,6 +571,43 @@ router.post("/guilds/:guildId/queue-rescan-characters", async (req: Request, res
   }
 });
 
+// Queue guild for report-level character backfill
+router.post("/guilds/:guildId/queue-backfill-report-characters", async (req: Request, res: Response) => {
+  try {
+    const { guildId } = req.params;
+
+    const guild = await Guild.findById(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: "Guild not found" });
+    }
+
+    const existingQueue = await GuildProcessingQueue.findOne({
+      guildId: guild._id,
+      jobType: "backfill_report_characters",
+      status: { $in: ["pending", "in_progress"] },
+    });
+
+    if (existingQueue) {
+      return res.status(400).json({
+        error: "Guild is already queued for report character backfill",
+        status: existingQueue.status,
+      });
+    }
+
+    const queueItem = await backgroundGuildProcessor.queueGuild(guild, 5, "backfill_report_characters");
+
+    res.json({
+      success: true,
+      message: `Guild ${guild.name} queued for report character backfill`,
+      queueId: queueItem._id.toString(),
+      status: queueItem.status,
+    });
+  } catch (error) {
+    logger.error("Error queueing guild for report character backfill:", error);
+    res.status(500).json({ error: "Failed to queue guild for report character backfill" });
+  }
+});
+
 // Check if we have all reports (compare WCL vs database)
 router.get("/guilds/:guildId/verify-reports", async (req: Request, res: Response) => {
   try {
@@ -740,15 +778,21 @@ router.delete("/guilds/:guildId/reports/:reportId", async (req: Request, res: Re
       return res.status(404).json({ error: "Report not found for this guild" });
     }
 
-    // Delete all fights for this report, then the report itself
-    const fightDeleteResult = await Fight.deleteMany({
-      reportCode: report.code,
-      guildId: report.guildId,
-    });
+    // Delete all fights and character appearances for this report, then the report itself
+    const [fightDeleteResult, appearanceDeleteResult] = await Promise.all([
+      Fight.deleteMany({
+        reportCode: report.code,
+        guildId: report.guildId,
+      }),
+      CharacterReportAppearance.deleteMany({
+        reportCode: report.code,
+        reportGuildId: report.guildId,
+      }),
+    ]);
 
     await Report.deleteOne({ _id: report._id });
 
-    logger.info(`Deleted report ${report.code} and ${fightDeleteResult.deletedCount} fights for guild ${guild.name}`);
+    logger.info(`Deleted report ${report.code}, ${fightDeleteResult.deletedCount} fights, and ${appearanceDeleteResult.deletedCount} character appearances for guild ${guild.name}`);
 
     res.json({
       success: true,
@@ -897,19 +941,21 @@ router.delete("/guilds/:guildId", async (req: Request, res: Response) => {
     const guildRealm = guild.realm;
 
     // Count associated data before deletion
-    const [reportCount, fightCount, eventCount, queueCount] = await Promise.all([
+    const [reportCount, fightCount, eventCount, queueCount, appearanceCount] = await Promise.all([
       Report.countDocuments({ guildId: guild._id }),
       Fight.countDocuments({ guildId: guild._id }),
       Event.countDocuments({ guildId: guild._id }),
       GuildProcessingQueue.countDocuments({ guildId: guild._id }),
+      CharacterReportAppearance.countDocuments({ reportGuildId: guild._id }),
     ]);
 
     // Delete all associated data in parallel
-    const [reportResult, fightResult, eventResult, queueResult, tierListOverallResult, tierListRaidsResult] = await Promise.all([
+    const [reportResult, fightResult, eventResult, queueResult, appearanceResult, tierListOverallResult, tierListRaidsResult] = await Promise.all([
       Report.deleteMany({ guildId: guild._id }),
       Fight.deleteMany({ guildId: guild._id }),
       Event.deleteMany({ guildId: guild._id }),
       GuildProcessingQueue.deleteMany({ guildId: guild._id }),
+      CharacterReportAppearance.deleteMany({ reportGuildId: guild._id }),
       // Remove guild from tier list overall array
       TierList.updateMany({}, { $pull: { overall: { guildId: guild._id } } }),
       // Remove guild from tier list raid arrays
@@ -2261,6 +2307,21 @@ router.post("/trigger/rescan-characters", async (req: Request, res: Response) =>
   }
 });
 
+// Queue all guilds for report-level character backfill
+router.post("/trigger/backfill-report-characters", async (req: Request, res: Response) => {
+  try {
+    const result = await guildService.queueAllGuildsForReportCharacterBackfill();
+    res.json({
+      success: true,
+      message: `Report character backfill queued: ${result.queued} guilds queued, ${result.skipped} skipped`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering report character backfill:", error);
+    res.status(500).json({ error: "Failed to trigger report character backfill" });
+  }
+});
+
 // Trigger Raider.IO update for all WCL-not-found guilds (same as nightly 9 AM job)
 router.post("/trigger/update-raiderio-guilds", async (req: Request, res: Response) => {
   try {
@@ -2287,6 +2348,21 @@ router.post("/trigger/refresh-character-rankings", async (req: Request, res: Res
   } catch (error) {
     logger.error("Error triggering character rankings refresh:", error);
     res.status(500).json({ error: "Failed to trigger character rankings refresh" });
+  }
+});
+
+// Trigger character raid participation rebuild (fast, no WCL API calls)
+router.post("/trigger/rebuild-character-raid-participations", async (req: Request, res: Response) => {
+  try {
+    const started = scheduler.triggerCharacterRaidParticipationRebuild();
+    if (!started) {
+      res.json({ success: false, message: "Character raid participation rebuild is already running" });
+      return;
+    }
+    res.json({ success: true, message: "Character raid participation rebuild started in background" });
+  } catch (error) {
+    logger.error("Error triggering character raid participation rebuild:", error);
+    res.status(500).json({ error: "Failed to trigger character raid participation rebuild" });
   }
 });
 
