@@ -16,9 +16,31 @@ import logger from "../utils/logger";
 // Polling intervals from environment (in minutes), with sensible defaults
 const POLLING_ACTIVE_GUILDS_MS = parseInt(process.env.POLLING_ACTIVE_GUILDS_MINUTES || "5", 10) * 60 * 1000;
 const POLLING_RAIDING_GUILDS_MS = parseInt(process.env.POLLING_RAIDING_GUILDS_MINUTES || "3", 10) * 60 * 1000;
+const POLLING_KNOWN_SCHEDULE_NOT_TODAY_MS = 30 * 60 * 1000; // 30 minutes
 const POLLING_OFF_HOURS_ACTIVE_MS = 60 * 60 * 1000; // 1 hour
 const POLLING_TWITCH_MS = 15 * 60 * 1000; // 15 minutes
 const POLLING_FIGHT_VODS_MS = 30 * 60 * 1000; // 30 minutes
+const ACTIVITY_STATUS_ACTIVE_DAYS = 14;
+const SCHEDULE_POLLING_WINDOW_BEFORE_HOURS = 1;
+const SCHEDULE_POLLING_WINDOW_AFTER_HOURS = 1;
+const HOURS_PER_WEEK = 7 * 24;
+
+const HELSINKI_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Helsinki",
+  weekday: "long",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
 
 /**
  * Yield to the event loop to prevent blocking.
@@ -45,6 +67,17 @@ interface GuildBatchUpdateStats {
   failed: number;
   withNewData: number;
   raidingStatusChanged: number;
+}
+
+interface HotActiveGuildBuckets {
+  scheduledWindow: IGuild[];
+  scheduledWindowDeferred: IGuild[];
+  scheduledTodayOutsideWindowDue: IGuild[];
+  scheduledTodayOutsideWindowDeferred: IGuild[];
+  unknownSchedule: IGuild[];
+  unknownScheduleDeferred: IGuild[];
+  knownScheduleNotTodayDue: IGuild[];
+  knownScheduleNotTodayDeferred: IGuild[];
 }
 
 class UpdateScheduler {
@@ -114,6 +147,105 @@ class UpdateScheduler {
 
   private shouldWarmCachesAfterUpdate(stats: GuildBatchUpdateStats): boolean {
     return stats.withNewData > 0 || stats.raidingStatusChanged > 0;
+  }
+
+  private getHelsinkiTime(): { weekday: string; hour: number } {
+    const parts = HELSINKI_TIME_FORMATTER.formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const hours = parseInt(values.hour, 10) % 24;
+    const minutes = parseInt(values.minute, 10);
+
+    return {
+      weekday: values.weekday,
+      hour: hours + minutes / 60,
+    };
+  }
+
+  private hasKnownSchedule(guild: IGuild): boolean {
+    return (guild.raidSchedule?.days?.length ?? 0) > 0;
+  }
+
+  private isScheduledOnDay(guild: IGuild, dayName: string): boolean {
+    return guild.raidSchedule?.days?.some((day) => day.day === dayName) ?? false;
+  }
+
+  private isWithinSchedulePollingWindow(guild: IGuild, weekday: string, hour: number): boolean {
+    const currentDayIndex = WEEKDAY_INDEX[weekday];
+    if (currentDayIndex === undefined) return false;
+
+    const currentHourOfWeek = currentDayIndex * 24 + hour;
+
+    return (
+      guild.raidSchedule?.days?.some((day) => {
+        const scheduleDayIndex = WEEKDAY_INDEX[day.day];
+        if (scheduleDayIndex === undefined) return false;
+
+        const scheduleDayStart = scheduleDayIndex * 24;
+        const windowStart = scheduleDayStart + day.startHour - SCHEDULE_POLLING_WINDOW_BEFORE_HOURS;
+        let windowEnd = scheduleDayStart + day.endHour;
+        if (day.endHour < day.startHour) {
+          windowEnd += 24;
+        }
+        windowEnd += SCHEDULE_POLLING_WINDOW_AFTER_HOURS;
+
+        return [currentHourOfWeek, currentHourOfWeek + HOURS_PER_WEEK, currentHourOfWeek - HOURS_PER_WEEK].some((candidateHour) => candidateHour >= windowStart && candidateHour <= windowEnd);
+      }) ?? false
+    );
+  }
+
+  private isDueForUpdate(guild: IGuild, intervalMs: number): boolean {
+    if (!guild.lastFetched) return true;
+    return guild.lastFetched.getTime() <= Date.now() - intervalMs;
+  }
+
+  private bucketHotActiveGuilds(guilds: IGuild[], currentTime: { weekday: string; hour: number }): HotActiveGuildBuckets {
+    const buckets: HotActiveGuildBuckets = {
+      scheduledWindow: [],
+      scheduledWindowDeferred: [],
+      scheduledTodayOutsideWindowDue: [],
+      scheduledTodayOutsideWindowDeferred: [],
+      unknownSchedule: [],
+      unknownScheduleDeferred: [],
+      knownScheduleNotTodayDue: [],
+      knownScheduleNotTodayDeferred: [],
+    };
+
+    for (const guild of guilds) {
+      if (!this.hasKnownSchedule(guild)) {
+        if (this.isDueForUpdate(guild, POLLING_ACTIVE_GUILDS_MS)) {
+          buckets.unknownSchedule.push(guild);
+        } else {
+          buckets.unknownScheduleDeferred.push(guild);
+        }
+        continue;
+      }
+
+      if (this.isWithinSchedulePollingWindow(guild, currentTime.weekday, currentTime.hour)) {
+        if (this.isDueForUpdate(guild, POLLING_ACTIVE_GUILDS_MS)) {
+          buckets.scheduledWindow.push(guild);
+        } else {
+          buckets.scheduledWindowDeferred.push(guild);
+        }
+        continue;
+      }
+
+      if (this.isScheduledOnDay(guild, currentTime.weekday)) {
+        if (this.isDueForUpdate(guild, POLLING_KNOWN_SCHEDULE_NOT_TODAY_MS)) {
+          buckets.scheduledTodayOutsideWindowDue.push(guild);
+        } else {
+          buckets.scheduledTodayOutsideWindowDeferred.push(guild);
+        }
+        continue;
+      }
+
+      if (this.isDueForUpdate(guild, POLLING_KNOWN_SCHEDULE_NOT_TODAY_MS)) {
+        buckets.knownScheduleNotTodayDue.push(guild);
+      } else {
+        buckets.knownScheduleNotTodayDeferred.push(guild);
+      }
+    }
+
+    return buckets;
   }
 
   // Finnish timezone offset check
@@ -380,6 +512,7 @@ class UpdateScheduler {
     logger.info("  - Hot hours (16:00-01:00):");
     logger.info(`    * Active guilds: every ${POLLING_ACTIVE_GUILDS_MS / 60000} minutes`);
     logger.info(`    * Raiding guilds: every ${POLLING_RAIDING_GUILDS_MS / 60000} minutes`);
+    logger.info(`    * Known schedule, not today: every ${POLLING_KNOWN_SCHEDULE_NOT_TODAY_MS / 60000} minutes`);
     logger.info("    * Twitch streams: every 15 minutes");
     logger.info("  - Off hours (01:00-16:00):");
     logger.info("    * Active guilds: every 60 minutes");
@@ -599,22 +732,22 @@ class UpdateScheduler {
   // Guilds with recent Raider.IO current-tier progress are also considered active
   private async updateGuildActivityStatus(): Promise<void> {
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const activeCutoff = new Date();
+      activeCutoff.setDate(activeCutoff.getDate() - ACTIVITY_STATUS_ACTIVE_DAYS);
 
-      // Mark guilds as inactive if no WCL logs in 30+ days
+      // Mark guilds as inactive if no WCL logs within the active cutoff
       // Exclude guilds that are RIO-only (wclStatus=not_found) with active RIO status -
       // those are managed by updateRaiderIOGuilds instead
       await Guild.updateMany(
         {
           wclStatus: { $ne: "not_found" },
-          $or: [{ lastLogEndTime: { $lt: thirtyDaysAgo } }, { lastLogEndTime: { $exists: false } }],
+          $or: [{ lastLogEndTime: { $lt: activeCutoff } }, { lastLogEndTime: { $exists: false } }],
         },
         { $set: { activityStatus: "inactive" } },
       );
 
-      // Mark guilds as active if they have WCL logs within 30 days
-      await Guild.updateMany({ lastLogEndTime: { $gte: thirtyDaysAgo } }, { $set: { activityStatus: "active" } });
+      // Mark guilds as active if they have WCL logs within the active cutoff
+      await Guild.updateMany({ lastLogEndTime: { $gte: activeCutoff } }, { $set: { activityStatus: "active" } });
     } catch (error) {
       logger.error("[Activity Status] Error updating guild activity status:", error);
     }
@@ -631,19 +764,41 @@ class UpdateScheduler {
 
       // Get active guilds that are NOT currently raiding (raiding guilds handled separately)
       // Skip guilds marked as not found on WarcraftLogs
-      const guilds = await Guild.find({
+      const activeGuilds = await Guild.find({
         activityStatus: "active",
         isCurrentlyRaiding: { $ne: true },
         wclStatus: { $ne: "not_found" },
+        excludedRaidIds: { $nin: CURRENT_RAID_IDS },
       });
 
-      if (guilds.length === 0) {
+      if (activeGuilds.length === 0) {
         logger.info("[Hot/Active] No active guilds to update");
         await taskTracker.complete(taskId, { guildsUpdated: 0 });
         return;
       }
 
-      logger.info(`[Hot/Active] Updating ${guilds.length} active guild(s)...`);
+      const currentTime = this.getHelsinkiTime();
+      const buckets = this.bucketHotActiveGuilds(activeGuilds, currentTime);
+      const guilds = [...buckets.scheduledWindow, ...buckets.unknownSchedule, ...buckets.scheduledTodayOutsideWindowDue, ...buckets.knownScheduleNotTodayDue];
+
+      if (guilds.length === 0) {
+        logger.info(
+          `[Hot/Active] No active guilds due for update (${activeGuilds.length} active; deferred: ${buckets.scheduledWindowDeferred.length} in schedule window, ${buckets.unknownScheduleDeferred.length} unknown schedule, ${buckets.scheduledTodayOutsideWindowDeferred.length} scheduled today outside window, ${buckets.knownScheduleNotTodayDeferred.length} known schedule not today; now=${currentTime.weekday} ${currentTime.hour.toFixed(2)})`,
+        );
+        await taskTracker.complete(taskId, {
+          guildsUpdated: 0,
+          activeGuilds: activeGuilds.length,
+          scheduledWindowDeferred: buckets.scheduledWindowDeferred.length,
+          unknownScheduleDeferred: buckets.unknownScheduleDeferred.length,
+          scheduledTodayOutsideWindowDeferred: buckets.scheduledTodayOutsideWindowDeferred.length,
+          knownScheduleNotTodayDeferred: buckets.knownScheduleNotTodayDeferred.length,
+        });
+        return;
+      }
+
+      logger.info(
+        `[Hot/Active] Updating ${guilds.length}/${activeGuilds.length} due active guild(s): ${buckets.scheduledWindow.length} in schedule window, ${buckets.unknownSchedule.length} unknown schedule, ${buckets.scheduledTodayOutsideWindowDue.length} scheduled today outside window, ${buckets.knownScheduleNotTodayDue.length} known schedule not today (deferred: ${buckets.scheduledWindowDeferred.length} in schedule window, ${buckets.unknownScheduleDeferred.length} unknown schedule, ${buckets.scheduledTodayOutsideWindowDeferred.length} scheduled today outside window, ${buckets.knownScheduleNotTodayDeferred.length} known schedule not today; now=${currentTime.weekday} ${currentTime.hour.toFixed(2)})`,
+      );
 
       const stats = await this.updateGuildProgressBatch(guilds, "[Hot/Active]", 100);
 
