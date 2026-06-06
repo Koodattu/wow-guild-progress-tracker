@@ -100,6 +100,7 @@ class UpdateScheduler {
   private isUpdatingRefetchRecentReports: boolean = false;
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
+  private isQueueingReportCharacterBackfill: boolean = false;
   private isUpdatingCharacterRaidParticipations: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
   private isCheckingHiatus: boolean = false;
@@ -342,6 +343,22 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Queue report-level character backfill (at 1 AM Finnish time)
+    // The queued jobs skip reports already marked charactersFetchStatus="fetched".
+    cron.schedule(
+      "0 1 * * *",
+      async () => {
+        if (this.isQueueingReportCharacterBackfill) {
+          logger.info("[Nightly/ReportCharacterBackfill] Previous queueing run still in progress, skipping...");
+          return;
+        }
+        await this.queueReportCharacterBackfill();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM Finnish time)
     // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
     cron.schedule(
@@ -536,6 +553,7 @@ class UpdateScheduler {
     logger.info("    * Twitch streams: all marked offline");
     logger.info("  - Fight VOD resolver: every 30 minutes");
     logger.info("  - Nightly jobs (Europe/Helsinki):");
+    logger.info("    * Report character backfill queue: daily at 01:00");
     logger.info("    * Fight VOD cleanup: daily at 02:30");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
@@ -629,6 +647,22 @@ class UpdateScheduler {
       .then(() => logger.info("[Admin] Character rankings refresh completed"))
       .catch((err) => logger.error("[Admin] Character rankings refresh failed:", err));
     return true;
+  }
+
+  async queueReportCharacterBackfill(): Promise<void> {
+    this.isQueueingReportCharacterBackfill = true;
+    const taskId = await taskTracker.start("Queue Report Character Backfill");
+
+    try {
+      const result = await guildService.queueAllGuildsForReportCharacterBackfill();
+      logger.info(`[Nightly/ReportCharacterBackfill] Queued ${result.queued} guild(s), skipped ${result.skipped}`);
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[Nightly/ReportCharacterBackfill] Error queueing jobs:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isQueueingReportCharacterBackfill = false;
+    }
   }
 
   // Trigger character raid participation rebuild from admin panel (returns false if already running)
