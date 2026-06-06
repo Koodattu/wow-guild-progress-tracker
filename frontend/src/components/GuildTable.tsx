@@ -298,6 +298,12 @@ function BestVodLinks({ links, compact = false }: { links?: GuildListItem["bestV
     [cancelClose],
   );
 
+  const closeVod = useCallback(() => {
+    cancelClose();
+    setActiveVodIndex(null);
+    setPopupAnchor(null);
+  }, [cancelClose]);
+
   const scheduleClose = useCallback(() => {
     cancelClose();
     closeTimeoutRef.current = setTimeout(() => {
@@ -311,7 +317,7 @@ function BestVodLinks({ links, compact = false }: { links?: GuildListItem["bestV
   }, [cancelClose]);
 
   if (!links || links.length === 0) {
-    return <span className={compact ? "inline-flex h-8 w-8 items-center justify-center text-gray-600" : "text-gray-500"}>-</span>;
+    return compact ? null : <span className="text-gray-500">-</span>;
   }
 
   return (
@@ -325,15 +331,19 @@ function BestVodLinks({ links, compact = false }: { links?: GuildListItem["bestV
           <div
             key={vodKey}
             className="relative inline-flex justify-center"
-            onMouseEnter={(event) => openVod(index, event.currentTarget)}
-            onMouseLeave={scheduleClose}
-            onFocus={(event) => openVod(index, event.currentTarget)}
-            onBlur={scheduleClose}
+            onMouseEnter={compact ? undefined : (event) => openVod(index, event.currentTarget)}
+            onMouseLeave={compact ? undefined : scheduleClose}
+            onFocus={compact ? undefined : (event) => openVod(index, event.currentTarget)}
+            onBlur={compact ? undefined : scheduleClose}
           >
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
+                if (compact && isActive) {
+                  closeVod();
+                  return;
+                }
                 openVod(index, event.currentTarget);
               }}
               className={
