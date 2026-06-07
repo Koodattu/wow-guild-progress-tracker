@@ -177,7 +177,7 @@ function CharacterExternalLink({ href, title, src, alt, imageClassName = "" }: {
       rel="noopener noreferrer"
       aria-label={title}
       title={title}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md opacity-80 transition-[opacity,transform] hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96] md:h-8 md:w-8"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md opacity-80 transition-[opacity,transform] hover:opacity-100 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96] md:h-8 md:w-8"
     >
       <Image src={src} alt={alt} width={24} height={24} className={`h-5 w-5 object-contain md:h-6 md:w-6 ${imageClassName}`} />
     </a>
@@ -199,7 +199,10 @@ function CharacterRaidReportsDialog({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-5xl overflow-hidden rounded-lg bg-gray-900 shadow-[0_18px_70px_rgba(0,0,0,0.55)] ring-1 ring-gray-700" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="w-full max-w-5xl overflow-hidden rounded-lg bg-gray-900 shadow-[0_18px_70px_rgba(0,0,0,0.55)] ring-1 ring-gray-700"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-gray-700 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <IconImage iconFilename={selected.raid.iconUrl} alt={`${selected.raid.name} icon`} width={32} height={32} className="h-8 w-8 shrink-0 rounded object-cover" />
@@ -213,7 +216,7 @@ function CharacterRaidReportsDialog({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md bg-gray-800 text-lg leading-none text-gray-200 transition-colors hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md bg-gray-800 text-lg leading-none text-gray-200 transition-colors hover:bg-gray-700 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96]"
             aria-label="Close reports dialog"
           >
             x
@@ -261,7 +264,7 @@ function CharacterRaidReportsDialog({
                           href={report.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-800 px-3 text-sm font-semibold text-blue-300 transition-colors hover:bg-gray-700 hover:text-blue-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+                          className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-800 px-3 text-sm font-semibold text-blue-300 transition-colors hover:bg-gray-700 hover:text-blue-200 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96]"
                         >
                           Open
                         </a>
@@ -286,7 +289,7 @@ function CharacterChoiceCard({ choice }: { choice: CharacterProfileChoice }) {
   return (
     <Link
       href={getCharacterProfileHref(choice.realm, choice.name, choice.classID)}
-      className="group flex min-h-[136px] flex-col justify-between rounded-lg bg-gray-900 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.24)] ring-1 ring-gray-700 transition-[background-color,box-shadow,transform] hover:bg-gray-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,0.34)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+      className="group flex min-h-[136px] flex-col justify-between rounded-lg bg-gray-900 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.24)] ring-1 ring-gray-700 transition-[background-color,box-shadow,transform] hover:bg-gray-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,0.34)] focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96]"
     >
       <div className="flex min-w-0 items-center gap-3">
         <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md shadow-sm shadow-black/35 ring-1 ring-white/10">
@@ -509,9 +512,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
       rowsByRaidId.set(row.zoneId, rows);
     });
 
-    const presentRaidIndexes = trackedTimelineRows
-      .map((row) => raids.findIndex((raid) => raid.id === row.zoneId))
-      .filter((index) => index !== -1);
+    const presentRaidIndexes = trackedTimelineRows.map((row) => raids.findIndex((raid) => raid.id === row.zoneId)).filter((index) => index !== -1);
     const firstIndex = Math.min(...presentRaidIndexes);
     const lastIndex = Math.max(...presentRaidIndexes);
 
@@ -626,7 +627,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                           <button
                             type="button"
                             onClick={() => setIsNameHistoryOpen((open) => !open)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold text-gray-500 transition-[background-color,color,transform] hover:bg-gray-900 hover:text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold text-gray-500 transition-[background-color,color,transform] hover:bg-gray-900 hover:text-gray-200 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96]"
                             aria-label="Show name history"
                             aria-expanded={isNameHistoryOpen}
                           >
@@ -659,12 +660,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                       ) : null}
                       <div className="flex shrink-0 items-center gap-0">
                         <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
-                        <CharacterExternalLink
-                          href={externalUrls.raiderIo}
-                          title="View on Raider.IO"
-                          src="/raiderio-logo.png"
-                          alt="Raider.IO"
-                        />
+                        <CharacterExternalLink href={externalUrls.raiderIo} title="View on Raider.IO" src="/raiderio-logo.png" alt="Raider.IO" />
                         <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
                       </div>
                     </div>
@@ -749,7 +745,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                         title={`Show ${row.reportCount} reports for ${row.guildName} in ${timelineRow.raid.name}`}
                         onClick={() => handleOpenTimelineReports(timelineRow.raid, row)}
                         onKeyDown={(event) => handleTimelineReportKeyDown(event, timelineRow.raid, row)}
-                        className="group cursor-pointer border-b border-gray-800 transition-colors last:border-0 hover:bg-blue-950/35 focus-visible:bg-blue-950/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                        className="group cursor-pointer border-b border-gray-800 transition-colors last:border-0 hover:bg-blue-950/35 focus-visible:bg-blue-950/35 focus-visible:outline-2 focus-visible:outline-blue-500"
                       >
                         <td className="px-4 py-3">
                           <RaidNameCell raid={timelineRow.raid} />
@@ -798,7 +794,13 @@ export default function CharacterProfilePage({ params }: PageProps) {
               {rankingRaidGroups.map((group) => (
                 <div key={group.zoneId}>
                   <div className="flex items-center gap-3 bg-gray-950/35 px-4 py-3">
-                    <IconImage iconFilename={group.raid?.iconUrl} alt={`${group.raidName} icon`} width={30} height={30} className="h-[30px] w-[30px] shrink-0 rounded object-cover" />
+                    <IconImage
+                      iconFilename={group.raid?.iconUrl}
+                      alt={`${group.raidName} icon`}
+                      width={30}
+                      height={30}
+                      className="h-[30px] w-[30px] shrink-0 rounded object-cover"
+                    />
                     <div className="min-w-0">
                       <h3 className="truncate font-semibold text-gray-100">{group.raidName}</h3>
                       <div className="text-xs text-gray-500">{group.bossColumns.length} bosses</div>
@@ -831,7 +833,13 @@ export default function CharacterProfilePage({ params }: PageProps) {
                         <tr className="border-b border-gray-800 last:border-0">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2 font-semibold text-gray-100">
-                              <IconImage iconFilename={group.raid?.iconUrl} alt={`${group.raidName} icon`} width={24} height={24} className="h-6 w-6 shrink-0 rounded object-cover" />
+                              <IconImage
+                                iconFilename={group.raid?.iconUrl}
+                                alt={`${group.raidName} icon`}
+                                width={24}
+                                height={24}
+                                className="h-6 w-6 shrink-0 rounded object-cover"
+                              />
                               <span>All Stars</span>
                             </div>
                           </td>
