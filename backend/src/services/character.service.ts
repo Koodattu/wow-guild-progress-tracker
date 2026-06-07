@@ -1,4 +1,4 @@
-import { CURRENT_RAID_IDS } from "../config/guilds";
+import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
 import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
 import Character from "../models/Character";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
@@ -704,10 +704,10 @@ class CharacterService {
     if (!character) return null;
 
     const [timelineRows, rankingRows] = await Promise.all([
-      CharacterRaidParticipation.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId })
+      CharacterRaidParticipation.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
         .sort({ firstSeenAt: 1, zoneId: 1 })
         .lean(),
-      CharacterLeaderboard.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId })
+      CharacterLeaderboard.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
         .sort({ zoneId: -1, score: -1 })
         .limit(50)
         .lean(),
@@ -716,6 +716,37 @@ class CharacterService {
     const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter((id): id is number => typeof id === "number");
     const raids = await Raid.find({ id: { $in: raidIds } }).select("id name -_id").lean();
     const raidNameById = new Map(raids.map((raid) => [raid.id, raid.name]));
+    const guildHistoryByGuild = new Map<
+      string,
+      {
+        guildName: string;
+        guildRealm: string;
+        firstSeenAt: Date;
+        lastSeenAt: Date;
+      }
+    >();
+
+    timelineRows.forEach((row) => {
+      const key = `${row.reportGuildName.toLowerCase()}:${row.reportGuildRealm.toLowerCase()}`;
+      const existing = guildHistoryByGuild.get(key);
+
+      if (!existing) {
+        guildHistoryByGuild.set(key, {
+          guildName: row.reportGuildName,
+          guildRealm: row.reportGuildRealm,
+          firstSeenAt: row.firstSeenAt,
+          lastSeenAt: row.lastSeenAt,
+        });
+        return;
+      }
+
+      if (row.firstSeenAt < existing.firstSeenAt) existing.firstSeenAt = row.firstSeenAt;
+      if (row.lastSeenAt > existing.lastSeenAt) existing.lastSeenAt = row.lastSeenAt;
+    });
+
+    const trackedGuildHistory = Array.from(guildHistoryByGuild.values()).sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime());
+    const trackedFirstSeenAt = timelineRows.reduce<Date | undefined>((earliest, row) => (!earliest || row.firstSeenAt < earliest ? row.firstSeenAt : earliest), undefined);
+    const trackedLastSeenAt = timelineRows.reduce<Date | undefined>((latest, row) => (!latest || row.lastSeenAt > latest ? row.lastSeenAt : latest), undefined);
 
     return {
       character: {
@@ -724,9 +755,9 @@ class CharacterService {
         realm: character.realm,
         region: character.region,
         classID: character.classID,
-        firstReportSeenAt: character.firstReportSeenAt,
-        lastReportSeenAt: character.lastReportSeenAt,
-        guildHistory: (character.guildHistory || []).map((entry) => ({
+        firstReportSeenAt: trackedFirstSeenAt,
+        lastReportSeenAt: trackedLastSeenAt,
+        guildHistory: trackedGuildHistory.map((entry) => ({
           guildName: entry.guildName,
           guildRealm: entry.guildRealm,
           firstSeenAt: entry.firstSeenAt,
