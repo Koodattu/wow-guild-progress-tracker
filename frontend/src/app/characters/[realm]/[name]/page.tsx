@@ -145,7 +145,7 @@ function RaidNameCell({ raid, muted = false }: { raid: RaidInfo; muted?: boolean
   );
 }
 
-function CharacterExternalLink({ href, title, src, alt }: { href: string; title: string; src: string; alt: string }) {
+function CharacterExternalLink({ href, title, src, alt, imageClassName = "" }: { href: string; title: string; src: string; alt: string; imageClassName?: string }) {
   return (
     <a
       href={href}
@@ -153,9 +153,9 @@ function CharacterExternalLink({ href, title, src, alt }: { href: string; title:
       rel="noopener noreferrer"
       aria-label={title}
       title={title}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-md opacity-80 transition-opacity hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96] md:h-10 md:w-10"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md opacity-80 transition-[opacity,transform] hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96] md:h-8 md:w-8"
     >
-      <Image src={src} alt={alt} width={24} height={24} className="h-6 w-6 object-contain" />
+      <Image src={src} alt={alt} width={24} height={24} className={`h-5 w-5 object-contain md:h-6 md:w-6 ${imageClassName}`} />
     </a>
   );
 }
@@ -356,16 +356,23 @@ export default function CharacterProfilePage({ params }: PageProps) {
                   <IconImage iconFilename={classInfo.iconUrl} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
                 </span>
                 <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-1">
-                    <h1 className="min-w-0 text-3xl font-bold leading-none md:text-4xl" style={{ color: getClassColor(classInfo.name) }}>
-                      {character.name}
-                    </h1>
-                    <div className="flex shrink-0 items-center gap-1 self-center">
-                      <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
-                      <CharacterExternalLink href={externalUrls.raiderIo} title="View on Raider.IO" src="/raiderio-logo.png" alt="Raider.IO" />
-                      <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
+                      <h1 className="min-w-0 text-3xl font-bold leading-none md:text-4xl" style={{ color: getClassColor(classInfo.name) }}>
+                        {character.name}
+                      </h1>
+                      <div className="flex shrink-0 items-center gap-0">
+                        <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
+                        <CharacterExternalLink
+                          href={externalUrls.raiderIo}
+                          title="View on Raider.IO"
+                          src="/raiderio-logo.png"
+                          alt="Raider.IO"
+                        />
+                        <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
+                      </div>
                     </div>
-                    <span className="pb-0.5 text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
+                    <span className="text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
                   </div>
                   {latestGuild ? (
                     <div className="text-sm font-semibold text-gray-400">
