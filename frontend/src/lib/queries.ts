@@ -50,6 +50,9 @@ export const queryKeys = {
     options: ["characterRankings", "options"] as const,
     list: (query: string) => ["characterRankings", "list", query] as const,
   },
+  characters: {
+    search: (query: string) => ["characters", "search", query] as const,
+  },
   raidAnalytics: {
     raids: ["raidAnalytics", "raids"] as const,
     detail: (raidId: number) => ["raidAnalytics", "detail", raidId] as const,
@@ -253,6 +256,15 @@ export function useCharacterRankings(query: string, enabled: boolean = true) {
     queryKey: queryKeys.characterRankings.list(query),
     queryFn: () => api.getCharacterRankings(query),
     enabled,
+  });
+}
+
+export function useCharacterSearch(query: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: queryKeys.characters.search(query),
+    queryFn: () => api.searchCharacters(query, 10),
+    enabled,
+    staleTime: 60 * 1000,
   });
 }
 

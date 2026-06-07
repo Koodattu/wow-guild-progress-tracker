@@ -4,6 +4,19 @@ import logger from "../utils/logger";
 
 const router = Router();
 
+router.get("/search", async (req: Request, res: Response) => {
+  try {
+    const query = typeof req.query.q === "string" ? req.query.q : "";
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : 10;
+
+    const characters = await characterService.searchCharacters(query, Number.isFinite(limit) ? limit : 10);
+    res.json({ characters });
+  } catch (error) {
+    logger.error("Error searching characters:", error);
+    res.status(500).json({ error: "Failed to search characters" });
+  }
+});
+
 router.get("/:realm/:name", async (req: Request, res: Response) => {
   try {
     const realm = decodeURIComponent(req.params.realm);

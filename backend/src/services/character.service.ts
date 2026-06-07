@@ -227,6 +227,20 @@ export type CharacterProfileResponse = {
   }>;
 };
 
+export type CharacterSearchResult = {
+  wclCanonicalCharacterId: number;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  guild?: {
+    name: string;
+    realm: string;
+  } | null;
+  lastReportSeenAt?: Date;
+  lastMythicSeenAt?: Date;
+};
+
 type WclRankedCharacter = {
   canonicalID?: number;
   name?: string;
@@ -648,6 +662,37 @@ class CharacterService {
         reportCount: character.reportCount,
       })),
     };
+  }
+
+  async searchCharacters(query: string, limit = 10): Promise<CharacterSearchResult[]> {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 3) return [];
+
+    const safeLimit = Math.min(Math.max(limit, 1), 10);
+    const characters = await Character.find({
+      name: new RegExp(`^${this.escapeRegex(trimmedQuery)}`, "i"),
+    })
+      .sort({ lastReportSeenAt: -1, lastMythicSeenAt: -1, name: 1, realm: 1 })
+      .limit(safeLimit)
+      .select("wclCanonicalCharacterId name realm region classID guildName guildRealm lastReportSeenAt lastMythicSeenAt -_id")
+      .lean();
+
+    return characters.map((character) => ({
+      wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+      name: character.name,
+      realm: character.realm,
+      region: character.region,
+      classID: character.classID,
+      guild:
+        character.guildName && character.guildRealm
+          ? {
+              name: character.guildName,
+              realm: character.guildRealm,
+            }
+          : null,
+      lastReportSeenAt: character.lastReportSeenAt,
+      lastMythicSeenAt: character.lastMythicSeenAt,
+    }));
   }
 
   async getCharacterProfileByRealmName(realm: string, name: string): Promise<CharacterProfileResponse | null> {

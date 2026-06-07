@@ -22,7 +22,7 @@ const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRace
 const NAVIGATION_LINKS = [
   { href: "/", labelKey: "progressLeaderboard" },
   { href: "/guilds", labelKey: "allGuilds" },
-  { href: "/character-rankings", labelKey: "characterRankings" },
+  { href: "/characters", labelKey: "characterRankings" },
   { href: "/compare", labelKey: "compare" },
   { href: "/tierlists", labelKey: "tierLists" },
   { href: "/raid-analytics", labelKey: "raidAnalytics" },

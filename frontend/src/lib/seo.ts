@@ -31,7 +31,7 @@ export type PageSeoMetadata = {
 export const PUBLIC_ROUTES = [
   { path: "/", changeFrequency: "hourly", priority: 1 },
   { path: "/guilds", changeFrequency: "daily", priority: 0.9 },
-  { path: "/character-rankings", changeFrequency: "daily", priority: 0.75 },
+  { path: "/characters", changeFrequency: "daily", priority: 0.75 },
   { path: "/compare", changeFrequency: "daily", priority: 0.75 },
   { path: "/raid-analytics", changeFrequency: "daily", priority: 0.75 },
   { path: "/timetable", changeFrequency: "daily", priority: 0.75 },
@@ -78,7 +78,7 @@ export function getPageMetadata(
         ? "Browse Finnish WoW guilds, Suomi WoW kilta listings, realms, factions, and raid progression."
         : "Selaa suomalaisia WoW-kiltoja, realmeja, factioneita ja raid-edistymista.",
     },
-    "/character-rankings": {
+    "/characters": {
       title: isEnglish ? "Character Rankings" : "Hahmorankingit",
       description: isEnglish
         ? "Rank Finnish WoW guild characters by raid performance, roles, specs, and boss progress."

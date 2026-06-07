@@ -58,6 +58,7 @@ import {
   RaidAnalyticsListItem,
   CharacterRankingRow,
   CharacterRankingsFilterOptionsResponse,
+  CharacterSearchResponse,
   GuildRaidCharactersResponse,
   CharacterProfileResponse,
   RateLimitResponse,
@@ -145,6 +146,16 @@ export const api = {
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}`);
     if (!response.ok) throw new Error("Failed to fetch character profile");
+    return response.json();
+  },
+
+  async searchCharacters(query: string, limit = 10): Promise<CharacterSearchResponse> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(limit),
+    });
+    const response = await fetch(`${API_URL}/api/characters/search?${params}`);
+    if (!response.ok) throw new Error("Failed to search characters");
     return response.json();
   },
 

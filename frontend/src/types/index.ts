@@ -1150,6 +1150,24 @@ export type GuildRaidCharactersResponse = {
   characters: GuildRaidCharacter[];
 };
 
+export type CharacterSearchResult = {
+  wclCanonicalCharacterId: number;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  guild?: {
+    name: string;
+    realm: string;
+  } | null;
+  lastReportSeenAt?: string;
+  lastMythicSeenAt?: string;
+};
+
+export type CharacterSearchResponse = {
+  characters: CharacterSearchResult[];
+};
+
 export type CharacterProfileResponse = {
   character: {
     wclCanonicalCharacterId: number;
