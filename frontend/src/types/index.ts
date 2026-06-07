@@ -1212,6 +1212,9 @@ export type CharacterProfileResponse = {
     guildId: string;
     guildName: string;
     guildRealm: string;
+    characterName: string;
+    characterRealm: string;
+    characterRegion: string;
     firstSeenAt: string;
     lastSeenAt: string;
     reportCount: number;

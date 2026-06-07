@@ -468,7 +468,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
     setTimelineReportsLoading(true);
 
     try {
-      const response = await api.getCharacterRaidReportsByRealmName(realm, name, row.zoneId, row.guildId, profile?.character.classID);
+      const response = await api.getCharacterRaidReportsByRealmName(row.characterRealm, row.characterName, row.zoneId, row.guildId, profile?.character.classID);
       if (timelineReportsRequestId.current === requestId) {
         setTimelineReports(response);
       }

@@ -218,6 +218,9 @@ export type CharacterProfileResponse = {
     guildId: string;
     guildName: string;
     guildRealm: string;
+    characterName: string;
+    characterRealm: string;
+    characterRegion: string;
     firstSeenAt: Date;
     lastSeenAt: Date;
     reportCount: number;
@@ -1060,6 +1063,9 @@ class CharacterService {
         guildId: row.reportGuildId.toString(),
         guildName: row.reportGuildName,
         guildRealm: row.reportGuildRealm,
+        characterName: row.characterName,
+        characterRealm: row.characterRealm,
+        characterRegion: row.characterRegion,
         firstSeenAt: row.firstSeenAt,
         lastSeenAt: row.lastSeenAt,
         reportCount: row.reportCount,
