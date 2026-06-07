@@ -227,6 +227,35 @@ export type CharacterProfileResponse = {
   }>;
 };
 
+export type CharacterRaidReportsResponse = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+  };
+  raid: {
+    id: number;
+    name: string;
+  } | null;
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+  };
+  reports: Array<{
+    code: string;
+    url: string;
+    startTime: number;
+    endTime?: number;
+    isOngoing: boolean;
+    durationSeconds?: number;
+    fightCount: number;
+    kills: number;
+    wipes: number;
+  }>;
+};
+
 export type CharacterSearchResult = {
   wclCanonicalCharacterId: number;
   name: string;
@@ -786,6 +815,106 @@ class CharacterService {
         partition: row.partition ?? null,
         updatedAt: row.updatedAt,
       })),
+    };
+  }
+
+  async getCharacterRaidReportsByRealmName(realm: string, name: string, zoneId: number, guildId: string): Promise<CharacterRaidReportsResponse | null> {
+    if (!mongoose.Types.ObjectId.isValid(guildId)) return null;
+
+    const character = await Character.findOne({
+      realm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
+      name: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
+    })
+      .select("wclCanonicalCharacterId name realm region")
+      .lean();
+
+    if (!character) return null;
+
+    const reportGuildId = new mongoose.Types.ObjectId(guildId);
+    const [raid, appearanceRows] = await Promise.all([
+      Raid.findOne({ id: zoneId }).select("id name -_id").lean(),
+      CharacterReportAppearance.aggregate([
+        {
+          $match: {
+            wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+            reportGuildId,
+          },
+        },
+        {
+          $lookup: {
+            from: "reports",
+            let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }, { $eq: ["$zoneId", zoneId] }],
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  code: 1,
+                  startTime: 1,
+                  endTime: 1,
+                  isOngoing: 1,
+                  fightCount: 1,
+                  encounterFights: 1,
+                },
+              },
+            ],
+            as: "report",
+          },
+        },
+        { $unwind: "$report" },
+        { $sort: { reportStartTime: -1, reportCode: 1 } },
+        {
+          $project: {
+            _id: 0,
+            reportGuildName: 1,
+            reportGuildRealm: 1,
+            report: 1,
+          },
+        },
+      ]),
+    ]);
+
+    const guildName = appearanceRows[0]?.reportGuildName ?? "";
+    const guildRealm = appearanceRows[0]?.reportGuildRealm ?? "";
+
+    return {
+      character: {
+        wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+        name: character.name,
+        realm: character.realm,
+        region: character.region,
+      },
+      raid: raid ? { id: raid.id, name: raid.name } : null,
+      guild: {
+        id: guildId,
+        name: guildName,
+        realm: guildRealm,
+      },
+      reports: appearanceRows.map((row) => {
+        const report = row.report;
+        const encounterFights = Object.values(report.encounterFights ?? {}) as Array<{ kills?: number; wipes?: number }>;
+        const kills = encounterFights.reduce((total, encounter) => total + (Number(encounter.kills) || 0), 0);
+        const wipes = encounterFights.reduce((total, encounter) => total + (Number(encounter.wipes) || 0), 0);
+        const durationSeconds = report.endTime && report.startTime ? Math.max(0, Math.round((report.endTime - report.startTime) / 1000)) : undefined;
+
+        return {
+          code: report.code,
+          url: `https://www.warcraftlogs.com/reports/${report.code}`,
+          startTime: report.startTime,
+          endTime: report.endTime,
+          isOngoing: report.isOngoing,
+          durationSeconds,
+          fightCount: report.fightCount,
+          kills,
+          wipes,
+        };
+      }),
     };
   }
 

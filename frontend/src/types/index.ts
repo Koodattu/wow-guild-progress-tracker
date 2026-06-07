@@ -1219,6 +1219,37 @@ export type CharacterProfileResponse = {
   }>;
 };
 
+export type CharacterRaidReport = {
+  code: string;
+  url: string;
+  startTime: number;
+  endTime?: number;
+  isOngoing: boolean;
+  durationSeconds?: number;
+  fightCount: number;
+  kills: number;
+  wipes: number;
+};
+
+export type CharacterRaidReportsResponse = {
+  character: {
+    wclCanonicalCharacterId: number;
+    name: string;
+    realm: string;
+    region: string;
+  };
+  raid: {
+    id: number;
+    name: string;
+  } | null;
+  guild: {
+    id: string;
+    name: string;
+    realm: string;
+  };
+  reports: CharacterRaidReport[];
+};
+
 export type Spec = {
   name: string;
   role: "dps" | "healer" | "tank";

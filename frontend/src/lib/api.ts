@@ -62,6 +62,7 @@ import {
   GlobalSearchResponse,
   GuildRaidCharactersResponse,
   CharacterProfileResponse,
+  CharacterRaidReportsResponse,
   RateLimitResponse,
   RateLimitStatus,
   ProcessingQueueStatsResponse,
@@ -147,6 +148,15 @@ export const api = {
     const encodedName = encodeURIComponent(name);
     const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}`);
     if (!response.ok) throw new Error("Failed to fetch character profile");
+    return response.json();
+  },
+
+  async getCharacterRaidReportsByRealmName(realm: string, name: string, raidId: number, guildId: string): Promise<CharacterRaidReportsResponse> {
+    const encodedRealm = encodeURIComponent(realm);
+    const encodedName = encodeURIComponent(name);
+    const encodedGuildId = encodeURIComponent(guildId);
+    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}/raids/${raidId}/guilds/${encodedGuildId}/reports`);
+    if (!response.ok) throw new Error("Failed to fetch character raid reports");
     return response.json();
   },
 

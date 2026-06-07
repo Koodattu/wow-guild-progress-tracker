@@ -1,12 +1,12 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Boss, CharacterProfileResponse, RaidInfo } from "@/types";
+import { Boss, CharacterProfileResponse, CharacterRaidReportsResponse, RaidInfo } from "@/types";
 import { useRaids } from "@/lib/queries";
-import { formatRealmName, formatSpecName, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
+import { formatRealmName, formatSpecName, formatTime, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import IconImage from "@/components/IconImage";
 
 interface PageProps {
@@ -43,6 +43,11 @@ type DisplayRaidTimelineRow =
       raid: RaidInfo;
     };
 
+type SelectedTimelineReports = {
+  raid: RaidInfo;
+  row: CharacterRaidTimelineRow;
+};
+
 type BossRankingColumn = {
   encounterId: number;
   encounterName: string;
@@ -66,6 +71,20 @@ function formatShortDate(value?: string | null) {
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${day}.${month}.${date.getFullYear()}`;
+}
+
+function formatReportDateTime(value?: number | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("fi-FI", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatRealmSlug(value: string) {
@@ -160,6 +179,102 @@ function CharacterExternalLink({ href, title, src, alt, imageClassName = "" }: {
   );
 }
 
+function CharacterRaidReportsDialog({
+  selected,
+  reports,
+  loading,
+  error,
+  onClose,
+}: {
+  selected: SelectedTimelineReports;
+  reports: CharacterRaidReportsResponse | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-5xl overflow-hidden rounded-lg bg-gray-900 shadow-[0_18px_70px_rgba(0,0,0,0.55)] ring-1 ring-gray-700" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-gray-700 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <IconImage iconFilename={selected.raid.iconUrl} alt={`${selected.raid.name} icon`} width={32} height={32} className="h-8 w-8 shrink-0 rounded object-cover" />
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold text-white">{selected.raid.name} Reports</h2>
+              <p className="truncate text-sm text-gray-400">
+                {selected.row.guildName} <span className="text-gray-600">{formatRealmName(selected.row.guildRealm)}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md bg-gray-800 text-lg leading-none text-gray-200 transition-colors hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+            aria-label="Close reports dialog"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="max-h-[72vh] overflow-y-auto">
+          {loading ? (
+            <div className="px-4 py-10 text-center text-gray-300">Loading reports...</div>
+          ) : error ? (
+            <div className="px-4 py-10 text-center text-red-300">{error}</div>
+          ) : reports?.reports.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-gray-900 shadow-[0_1px_0_rgba(55,65,81,1)]">
+                  <tr className="text-left text-xs font-semibold uppercase text-gray-400">
+                    <th className="px-4 py-3">Report</th>
+                    <th className="px-4 py-3">Started</th>
+                    <th className="px-4 py-3 text-right">Duration</th>
+                    <th className="px-4 py-3 text-right">Pulls</th>
+                    <th className="px-4 py-3 text-right">Kills</th>
+                    <th className="px-4 py-3 text-right">Wipes</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">WCL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.reports.map((report) => (
+                    <tr key={report.code} className="border-b border-gray-800/80 last:border-0 hover:bg-gray-800/45">
+                      <td className="px-4 py-3 font-mono text-sm font-semibold text-gray-100">{report.code}</td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-gray-300">{formatReportDateTime(report.startTime)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-300">{report.durationSeconds !== undefined ? formatTime(report.durationSeconds) : "-"}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-200">{report.fightCount}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-green-300">{report.kills}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-red-300">{report.wipes}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {report.isOngoing ? (
+                          <span className="inline-flex rounded bg-green-900/60 px-2 py-1 text-xs font-semibold uppercase text-green-300">Live</span>
+                        ) : (
+                          <span className="text-gray-500">Complete</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <a
+                          href={report.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-800 px-3 text-sm font-semibold text-blue-300 transition-colors hover:bg-gray-700 hover:text-blue-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+                        >
+                          Open
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-4 py-10 text-center text-gray-400">No report appearances were found for this timeline row.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CharacterProfilePage({ params }: PageProps) {
   const resolvedParams = use(params);
   const realm = decodeURIComponent(resolvedParams.realm);
@@ -168,6 +283,11 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bossesByRaid, setBossesByRaid] = useState<Map<number, Boss[]>>(new Map());
+  const [selectedTimelineReports, setSelectedTimelineReports] = useState<SelectedTimelineReports | null>(null);
+  const [timelineReports, setTimelineReports] = useState<CharacterRaidReportsResponse | null>(null);
+  const [timelineReportsLoading, setTimelineReportsLoading] = useState(false);
+  const [timelineReportsError, setTimelineReportsError] = useState<string | null>(null);
+  const timelineReportsRequestId = useRef(0);
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
 
   useEffect(() => {
@@ -233,6 +353,57 @@ export default function CharacterProfilePage({ params }: PageProps) {
       cancelled = true;
     };
   }, [profile]);
+
+  const handleCloseTimelineReports = useCallback(() => {
+    timelineReportsRequestId.current += 1;
+    setSelectedTimelineReports(null);
+    setTimelineReports(null);
+    setTimelineReportsError(null);
+    setTimelineReportsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTimelineReports) return;
+
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        handleCloseTimelineReports();
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [selectedTimelineReports, handleCloseTimelineReports]);
+
+  async function handleOpenTimelineReports(raid: RaidInfo, row: CharacterRaidTimelineRow) {
+    const requestId = timelineReportsRequestId.current + 1;
+    timelineReportsRequestId.current = requestId;
+    setSelectedTimelineReports({ raid, row });
+    setTimelineReports(null);
+    setTimelineReportsError(null);
+    setTimelineReportsLoading(true);
+
+    try {
+      const response = await api.getCharacterRaidReportsByRealmName(realm, name, row.zoneId, row.guildId);
+      if (timelineReportsRequestId.current === requestId) {
+        setTimelineReports(response);
+      }
+    } catch (err) {
+      if (timelineReportsRequestId.current === requestId) {
+        setTimelineReportsError(err instanceof Error ? err.message : "Failed to load reports");
+      }
+    } finally {
+      if (timelineReportsRequestId.current === requestId) {
+        setTimelineReportsLoading(false);
+      }
+    }
+  }
+
+  function handleTimelineReportKeyDown(event: KeyboardEvent<HTMLTableRowElement>, raid: RaidInfo, row: CharacterRaidTimelineRow) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    handleOpenTimelineReports(raid, row);
+  }
 
   const raidTimelineRows = useMemo<DisplayRaidTimelineRow[]>(() => {
     if (!profile) return [];
@@ -444,12 +615,24 @@ export default function CharacterProfilePage({ params }: PageProps) {
 
                     const row = timelineRow.row;
                     return (
-                      <tr key={`${row.zoneId}-${row.guildId}`} className="border-b border-gray-800 last:border-0">
+                      <tr
+                        key={`${row.zoneId}-${row.guildId}`}
+                        role="button"
+                        tabIndex={0}
+                        title={`Show ${row.reportCount} reports for ${row.guildName} in ${timelineRow.raid.name}`}
+                        onClick={() => handleOpenTimelineReports(timelineRow.raid, row)}
+                        onKeyDown={(event) => handleTimelineReportKeyDown(event, timelineRow.raid, row)}
+                        className="group cursor-pointer border-b border-gray-800 transition-colors last:border-0 hover:bg-blue-950/35 focus-visible:bg-blue-950/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                      >
                         <td className="px-4 py-3">
                           <RaidNameCell raid={timelineRow.raid} />
                         </td>
                         <td className="px-4 py-3 truncate">
-                          <Link href={getGuildProfileUrl(row.guildRealm, row.guildName)} className="font-semibold text-blue-300 transition-colors hover:text-blue-200">
+                          <Link
+                            href={getGuildProfileUrl(row.guildRealm, row.guildName)}
+                            onClick={(event) => event.stopPropagation()}
+                            className="font-semibold text-blue-300 transition-colors hover:text-blue-200"
+                          >
                             {row.guildName}
                           </Link>
                           <span className="ml-2 text-xs text-gray-500">{formatRealmName(row.guildRealm)}</span>
@@ -467,6 +650,16 @@ export default function CharacterProfilePage({ params }: PageProps) {
             <div className="px-4 py-8 text-center text-gray-400">No tracked raid appearances have been calculated yet.</div>
           )}
         </section>
+
+        {selectedTimelineReports ? (
+          <CharacterRaidReportsDialog
+            selected={selectedTimelineReports}
+            reports={timelineReports}
+            loading={timelineReportsLoading}
+            error={timelineReportsError}
+            onClose={handleCloseTimelineReports}
+          />
+        ) : null}
 
         <section className="rounded-lg border border-gray-700 bg-gray-900">
           <div className="border-b border-gray-700 px-4 py-3">

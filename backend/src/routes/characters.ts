@@ -17,6 +17,29 @@ router.get("/search", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/:realm/:name/raids/:raidId/guilds/:guildId/reports", async (req: Request, res: Response) => {
+  try {
+    const realm = decodeURIComponent(req.params.realm);
+    const name = decodeURIComponent(req.params.name);
+    const raidId = parseInt(req.params.raidId, 10);
+    const guildId = req.params.guildId;
+
+    if (!Number.isFinite(raidId)) {
+      return res.status(400).json({ error: "Invalid raid ID" });
+    }
+
+    const result = await characterService.getCharacterRaidReportsByRealmName(realm, name, raidId, guildId);
+    if (!result) {
+      return res.status(404).json({ error: "Character or guild not found" });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching character raid reports:", error);
+    res.status(500).json({ error: "Failed to fetch character raid reports" });
+  }
+});
+
 router.get("/:realm/:name", async (req: Request, res: Response) => {
   try {
     const realm = decodeURIComponent(req.params.realm);
