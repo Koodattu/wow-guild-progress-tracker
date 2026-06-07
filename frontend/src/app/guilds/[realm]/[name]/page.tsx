@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback, useRef, Fragment } from "react";
+import { use, useEffect, useState, useCallback, useRef, Fragment, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Image from "next/image";
 import { Guild, RaidProgressSummary, RaidInfo, Boss, RaidSchedule, GuildRaidCharactersResponse } from "@/types";
@@ -20,11 +20,13 @@ import {
   getEffectiveProgress,
   findOfficialProgressForRaid,
   getClassInfoById,
+  getAllClasses,
 } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
 import HorizontalEventsFeed from "@/components/HorizontalEventsFeed";
 import LatestReportsFeed from "@/components/LatestReportsFeed";
+import IconImage from "@/components/IconImage";
 import { useHorseRaceMode } from "@/lib/horse-race-preferences";
 import { getUmaImageLabel, isUmaImage } from "@/lib/uma-images";
 
@@ -33,6 +35,29 @@ interface PageProps {
 }
 
 const WEEK_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const CLASS_COLORS: Record<string, string> = {
+  "Death Knight": "#C41E3A",
+  "Demon Hunter": "#A330C9",
+  Druid: "#FF7C0A",
+  Evoker: "#33937F",
+  Hunter: "#AAD372",
+  Mage: "#3FC7EB",
+  Monk: "#00FF98",
+  Paladin: "#F48CBA",
+  Priest: "#FFFFFF",
+  Rogue: "#FFF468",
+  Shaman: "#0070DD",
+  Warlock: "#8788EE",
+  Warrior: "#C69B6D",
+};
+
+type CharacterSortKey = "name" | "realm" | "class" | "reportCount" | "firstSeenAt" | "lastSeenAt";
+type SortDirection = "asc" | "desc";
+
+type CharacterSort = {
+  key: CharacterSortKey;
+  direction: SortDirection;
+};
 
 function formatScheduleHour(hour: number): string {
   const totalMinutes = Math.round(hour * 60);
@@ -47,7 +72,24 @@ function formatOptionalTime(seconds?: number | null) {
 
 function formatShortDate(value?: string | Date | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}.${month}.${date.getFullYear()}`;
+}
+
+function formatRealmName(value: string) {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getClassColor(className: string) {
+  return CLASS_COLORS[className] ?? "#D1D5DB";
 }
 
 function StackedTimeValue({ primary, secondary }: { primary?: number | null; secondary?: number | null }) {
@@ -186,10 +228,102 @@ export default function GuildProfilePage({ params }: PageProps) {
   const [raidCharacters, setRaidCharacters] = useState<GuildRaidCharactersResponse | null>(null);
   const [raidCharactersLoading, setRaidCharactersLoading] = useState(false);
   const [raidCharactersError, setRaidCharactersError] = useState<string | null>(null);
+  const [characterSearch, setCharacterSearch] = useState("");
+  const [selectedCharacterClassId, setSelectedCharacterClassId] = useState<number | null>(null);
+  const [characterSort, setCharacterSort] = useState<CharacterSort>({ key: "reportCount", direction: "desc" });
+  const [isCharacterClassFilterOpen, setIsCharacterClassFilterOpen] = useState(false);
+  const characterClassFilterRef = useRef<HTMLDivElement | null>(null);
 
   // Hover state for clickable areas
   const [hoveredRaidInfoRow, setHoveredRaidInfoRow] = useState<number | null>(null);
   const [hoveredRaidProgressRow, setHoveredRaidProgressRow] = useState<number | null>(null);
+
+  const characterClassCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    raidCharacters?.characters.forEach((character) => {
+      counts.set(character.classID, (counts.get(character.classID) ?? 0) + 1);
+    });
+    return counts;
+  }, [raidCharacters]);
+
+  const characterClassOptions = useMemo(() => {
+    return getAllClasses()
+      .map((classInfo) => ({
+        ...classInfo,
+        count: characterClassCounts.get(classInfo.id) ?? 0,
+      }))
+      .filter((classInfo) => classInfo.count > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [characterClassCounts]);
+
+  const filteredRaidCharacters = useMemo(() => {
+    const search = characterSearch.trim().toLowerCase();
+    const characters = raidCharacters?.characters ?? [];
+
+    return [...characters]
+      .filter((character) => {
+        if (selectedCharacterClassId !== null && character.classID !== selectedCharacterClassId) return false;
+        if (!search) return true;
+        return character.name.toLowerCase().includes(search);
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+
+        if (characterSort.key === "reportCount") {
+          comparison = a.reportCount - b.reportCount;
+        } else if (characterSort.key === "firstSeenAt" || characterSort.key === "lastSeenAt") {
+          comparison = new Date(a[characterSort.key]).getTime() - new Date(b[characterSort.key]).getTime();
+        } else if (characterSort.key === "class") {
+          comparison = getClassInfoById(a.classID).name.localeCompare(getClassInfoById(b.classID).name);
+        } else if (characterSort.key === "realm") {
+          comparison = formatRealmName(a.realm).localeCompare(formatRealmName(b.realm));
+        } else {
+          comparison = a.name.localeCompare(b.name);
+        }
+
+        return characterSort.direction === "asc" ? comparison : -comparison;
+      });
+  }, [characterSearch, characterSort, raidCharacters, selectedCharacterClassId]);
+
+  const selectedCharacterClass = selectedCharacterClassId === null ? null : getClassInfoById(selectedCharacterClassId);
+
+  const handleCharacterSort = useCallback((key: CharacterSortKey) => {
+    setCharacterSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  }, []);
+
+  const renderCharacterSortHeader = useCallback(
+    (key: CharacterSortKey, label: string, align: "left" | "right" = "left") => {
+      const isActive = characterSort.key === key;
+      return (
+        <button
+          type="button"
+          onClick={() => handleCharacterSort(key)}
+          className={`inline-flex w-full items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400 transition-colors hover:text-white ${
+            align === "right" ? "justify-end text-right" : "justify-start text-left"
+          }`}
+        >
+          <span>{label}</span>
+          <span className={isActive ? "text-blue-300" : "text-gray-600"}>{isActive ? (characterSort.direction === "asc" ? "^" : "v") : "-"}</span>
+        </button>
+      );
+    },
+    [characterSort.direction, characterSort.key, handleCharacterSort],
+  );
+
+  useEffect(() => {
+    if (!isCharacterClassFilterOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (characterClassFilterRef.current?.contains(event.target as Node)) return;
+      setIsCharacterClassFilterOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isCharacterClassFilterOpen]);
 
   // Scroll to top when component mounts (when navigating to a new guild)
   useEffect(() => {
@@ -276,6 +410,10 @@ export default function GuildProfilePage({ params }: PageProps) {
       setSelectedCharacterRaid(raid);
       setRaidCharacters(null);
       setRaidCharactersError(null);
+      setCharacterSearch("");
+      setSelectedCharacterClassId(null);
+      setCharacterSort({ key: "reportCount", direction: "desc" });
+      setIsCharacterClassFilterOpen(false);
       setRaidCharactersLoading(true);
 
       try {
@@ -296,6 +434,10 @@ export default function GuildProfilePage({ params }: PageProps) {
     setRaidCharacters(null);
     setRaidCharactersLoading(false);
     setRaidCharactersError(null);
+    setCharacterSearch("");
+    setSelectedCharacterClassId(null);
+    setCharacterSort({ key: "reportCount", direction: "desc" });
+    setIsCharacterClassFilterOpen(false);
   }, []);
 
   const handleCharacterNavigate = useCallback(
@@ -963,7 +1105,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                 <div>
                   <h2 className="text-lg font-semibold text-white">{selectedCharacterRaid.name} Characters</h2>
                   <p className="text-sm text-gray-400">
-                    {guildSummary.name} - {raidCharacters?.characters.length ?? 0} characters
+                    {guildSummary.name} - {filteredRaidCharacters.length}
+                    {raidCharacters ? ` of ${raidCharacters.characters.length}` : ""} characters
                   </p>
                 </div>
                 <button
@@ -976,46 +1119,144 @@ export default function GuildProfilePage({ params }: PageProps) {
                 </button>
               </div>
 
+              {raidCharacters?.characters.length ? (
+                <div className="border-b border-gray-800 bg-gray-900/95 px-4 py-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+                      <input
+                        type="search"
+                        value={characterSearch}
+                        onChange={(event) => setCharacterSearch(event.target.value)}
+                        placeholder="Search character"
+                        className="min-h-10 w-full rounded-md border border-gray-700 bg-gray-950 px-3 text-sm text-gray-100 outline-none transition-colors placeholder:text-gray-500 focus:border-blue-500 md:max-w-xs"
+                      />
+
+                      <div ref={characterClassFilterRef} className="relative w-full md:w-64">
+                        <button
+                          type="button"
+                          onClick={() => setIsCharacterClassFilterOpen((isOpen) => !isOpen)}
+                          className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md bg-gray-800 px-3 text-left text-sm font-semibold text-gray-100 shadow-md transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            {selectedCharacterClass ? (
+                              <span className="relative h-5 w-5 shrink-0 overflow-hidden rounded">
+                                <IconImage iconFilename={selectedCharacterClass.iconUrl} alt={selectedCharacterClass.name} fill style={{ objectFit: "cover" }} />
+                              </span>
+                            ) : null}
+                            <span className="truncate">{selectedCharacterClass?.name ?? "All classes"}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+                            {selectedCharacterClassId === null ? raidCharacters.characters.length : (characterClassCounts.get(selectedCharacterClassId) ?? 0)}
+                          </span>
+                        </button>
+
+                        {isCharacterClassFilterOpen ? (
+                          <div className="absolute z-30 mt-1 max-h-80 w-full overflow-y-auto rounded-md bg-gray-800 py-1 text-sm shadow-xl ring-1 ring-black/40">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCharacterClassId(null);
+                                setIsCharacterClassFilterOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left font-semibold text-gray-200 hover:bg-blue-600 hover:text-white"
+                            >
+                              <span>All classes</span>
+                              <span className="text-xs tabular-nums">{raidCharacters.characters.length}</span>
+                            </button>
+                            {characterClassOptions.map((classInfo) => (
+                              <button
+                                key={classInfo.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCharacterClassId(classInfo.id);
+                                  setIsCharacterClassFilterOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left font-semibold text-gray-200 hover:bg-blue-600 hover:text-white"
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="relative h-5 w-5 shrink-0 overflow-hidden rounded">
+                                    <IconImage iconFilename={`${classInfo.iconUrl}.jpg`} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
+                                  </span>
+                                  <span className="truncate" style={{ color: getClassColor(classInfo.name) }}>
+                                    {classInfo.name}
+                                  </span>
+                                </span>
+                                <span className="text-xs tabular-nums">{classInfo.count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {(characterSearch || selectedCharacterClassId !== null) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCharacterSearch("");
+                          setSelectedCharacterClassId(null);
+                        }}
+                        className="min-h-10 rounded-md bg-gray-800 px-3 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="max-h-[70vh] overflow-y-auto">
                 {raidCharactersLoading ? (
                   <div className="px-4 py-10 text-center text-gray-300">Loading characters...</div>
                 ) : raidCharactersError ? (
                   <div className="px-4 py-10 text-center text-red-300">{raidCharactersError}</div>
                 ) : raidCharacters?.characters.length ? (
-                  <table className="w-full min-w-[680px] border-collapse">
-                    <thead className="sticky top-0 bg-gray-900">
-                      <tr className="border-b border-gray-700 text-left text-xs font-semibold text-gray-400">
-                        <th className="px-4 py-3">Class</th>
-                        <th className="px-4 py-3">Character</th>
-                        <th className="px-4 py-3 text-right">Reports</th>
-                        <th className="px-4 py-3">First Seen</th>
-                        <th className="px-4 py-3">Last Seen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {raidCharacters.characters.map((character) => {
-                        const className = getClassInfoById(character.classID)?.name ?? `Class ${character.classID}`;
-                        return (
-                          <tr key={character.wclCanonicalCharacterId} className="border-b border-gray-800 hover:bg-gray-800/60">
-                            <td className="px-4 py-3 text-sm text-gray-300">{className}</td>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => handleCharacterNavigate(character.realm, character.name)}
-                                className="text-left font-semibold text-blue-300 transition-colors hover:text-blue-200"
-                              >
-                                {character.name}
-                                <span className="ml-2 text-xs font-normal text-gray-500">{character.realm}</span>
-                              </button>
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-200">{character.reportCount}</td>
-                            <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(character.firstSeenAt)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(character.lastSeenAt)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  filteredRaidCharacters.length ? (
+                    <table className="w-full min-w-[820px] border-collapse">
+                      <thead className="sticky top-0 z-10 bg-gray-900 shadow-[0_1px_0_rgba(55,65,81,1)]">
+                        <tr>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("name", "Character")}</th>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("realm", "Realm")}</th>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("class", "Class")}</th>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("reportCount", "Reports", "right")}</th>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("firstSeenAt", "First Seen")}</th>
+                          <th className="px-4 py-3">{renderCharacterSortHeader("lastSeenAt", "Last Seen")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRaidCharacters.map((character) => {
+                          const classInfo = getClassInfoById(character.classID);
+                          return (
+                            <tr
+                              key={character.wclCanonicalCharacterId}
+                              onClick={() => handleCharacterNavigate(character.realm, character.name)}
+                              className="group cursor-pointer border-b border-gray-800/80 transition-colors last:border-0 hover:bg-blue-950/40"
+                            >
+                              <td className="px-4 py-3">
+                                <span className="font-semibold text-blue-300 transition-colors group-hover:text-blue-200">{character.name}</span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-400">{formatRealmName(character.realm)}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded">
+                                    <IconImage iconFilename={classInfo.iconUrl} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
+                                  </div>
+                                  <span className="font-bold" style={{ color: getClassColor(classInfo.name) }}>
+                                    {classInfo.name}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-200">{character.reportCount}</td>
+                              <td className="px-4 py-3 text-sm tabular-nums text-gray-400">{formatShortDate(character.firstSeenAt)}</td>
+                              <td className="px-4 py-3 text-sm tabular-nums text-gray-400">{formatShortDate(character.lastSeenAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="px-4 py-10 text-center text-gray-400">No characters match the current filters.</div>
+                  )
                 ) : (
                   <div className="px-4 py-10 text-center text-gray-400">No characters have been calculated for this guild and raid yet.</div>
                 )}
