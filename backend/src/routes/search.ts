@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
-import Character from "../models/Character";
 import Guild from "../models/Guild";
+import characterService from "../services/character.service";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -31,11 +31,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     const [guilds, characters] = await Promise.all([
       Guild.find({ name: namePrefix }).sort({ name: 1, realm: 1 }).limit(perTypeLimit).select("name realm -_id").lean(),
-      Character.find({ name: namePrefix })
-        .sort({ lastReportSeenAt: -1, lastMythicSeenAt: -1, name: 1, realm: 1 })
-        .limit(perTypeLimit)
-        .select("name realm -_id")
-        .lean(),
+      characterService.searchCharacters(query, perTypeLimit),
     ]);
 
     const results: SearchResult[] = [
@@ -46,10 +42,10 @@ router.get("/", async (req: Request, res: Response) => {
         href: `/guilds/${encodeURIComponent(guild.realm)}/${encodeURIComponent(guild.name)}`,
       })),
       ...characters.map((character) => ({
-        name: character.name,
-        realm: character.realm,
+        name: character.matchedName ?? character.name,
+        realm: character.matchedRealm ?? character.realm,
         type: "character" as const,
-        href: `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}`,
+        href: `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}?class=${encodeURIComponent(String(character.classID))}`,
       })),
     ]
       .sort((a, b) => a.name.localeCompare(b.name) || a.realm.localeCompare(b.realm) || a.type.localeCompare(b.type))

@@ -203,6 +203,14 @@ export type CharacterProfileResponse = {
       firstSeenAt: Date;
       lastSeenAt: Date;
     }>;
+    nameHistory: Array<{
+      name: string;
+      realm: string;
+      region: string;
+      firstSeenAt: Date;
+      lastSeenAt: Date;
+      reportCount: number;
+    }>;
   };
   raidTimeline: Array<{
     zoneId: number;
@@ -290,6 +298,8 @@ export type CharacterSearchResult = {
   realm: string;
   region: string;
   classID: number;
+  matchedName?: string;
+  matchedRealm?: string;
   guild?: {
     name: string;
     realm: string;
@@ -727,32 +737,87 @@ class CharacterService {
 
   async searchCharacters(query: string, limit = 10): Promise<CharacterSearchResult[]> {
     const trimmedQuery = query.trim();
-    if (trimmedQuery.length < 3) return [];
+    if (trimmedQuery.length < 2) return [];
 
     const safeLimit = Math.min(Math.max(limit, 1), 10);
-    const characters = await Character.find({
-      name: new RegExp(`^${this.escapeRegex(trimmedQuery)}`, "i"),
-    })
-      .sort({ lastReportSeenAt: -1, lastMythicSeenAt: -1, name: 1, realm: 1 })
-      .limit(safeLimit)
-      .select("wclCanonicalCharacterId name realm region classID guildName guildRealm lastReportSeenAt lastMythicSeenAt -_id")
-      .lean();
+    const namePrefix = new RegExp(`^${this.escapeRegex(trimmedQuery)}`, "i");
 
-    return characters.map((character) => ({
-      wclCanonicalCharacterId: character.wclCanonicalCharacterId,
-      name: character.name,
-      realm: character.realm,
-      region: character.region,
-      classID: character.classID,
-      guild:
-        character.guildName && character.guildRealm
-          ? {
-              name: character.guildName,
-              realm: character.guildRealm,
-            }
-          : null,
-      lastReportSeenAt: character.lastReportSeenAt,
-      lastMythicSeenAt: character.lastMythicSeenAt,
+    const aliasRows = await CharacterRaidParticipation.aggregate([
+      {
+        $match: {
+          characterName: namePrefix,
+        },
+      },
+      { $sort: { lastSeenAt: -1 } },
+      {
+        $group: {
+          _id: {
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+            classID: "$classID",
+          },
+          matchedName: { $first: "$characterName" },
+          matchedRealm: { $first: "$characterRealm" },
+          matchedLastSeenAt: { $max: "$lastSeenAt" },
+        },
+      },
+      {
+        $lookup: {
+          from: "characterraidparticipations",
+          let: {
+            canonicalId: "$_id.wclCanonicalCharacterId",
+            classId: "$_id.classID",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ["$wclCanonicalCharacterId", "$$canonicalId"] }, { $eq: ["$classID", "$$classId"] }],
+                },
+              },
+            },
+            { $sort: { lastSeenAt: -1 } },
+            { $limit: 1 },
+            {
+              $project: {
+                _id: 0,
+                characterName: 1,
+                characterRealm: 1,
+                characterRegion: 1,
+                reportGuildName: 1,
+                reportGuildRealm: 1,
+                lastSeenAt: 1,
+              },
+            },
+          ],
+          as: "current",
+        },
+      },
+      { $unwind: "$current" },
+      {
+        $project: {
+          _id: 0,
+          wclCanonicalCharacterId: "$_id.wclCanonicalCharacterId",
+          name: "$current.characterName",
+          realm: "$current.characterRealm",
+          region: "$current.characterRegion",
+          classID: "$_id.classID",
+          matchedName: 1,
+          matchedRealm: 1,
+          guild: {
+            name: "$current.reportGuildName",
+            realm: "$current.reportGuildRealm",
+          },
+          lastReportSeenAt: "$current.lastSeenAt",
+        },
+      },
+      { $sort: { lastReportSeenAt: -1, name: 1, realm: 1, classID: 1 } },
+      { $limit: safeLimit },
+    ]);
+
+    return (aliasRows as CharacterSearchResult[]).map((character) => ({
+      ...character,
+      matchedName: character.matchedName === character.name && character.matchedRealm === character.realm ? undefined : character.matchedName,
+      matchedRealm: character.matchedName === character.name && character.matchedRealm === character.realm ? undefined : character.matchedRealm,
     }));
   }
 
@@ -832,9 +897,13 @@ class CharacterService {
       region: string;
       classID: number;
     } | null = null;
+    let profileCanonicalIds: number[] = [];
+    let profileClassId: number | undefined;
 
     if (selectedChoice) {
       const canonicalIds = selectedChoice.wclCanonicalCharacterIds;
+      profileCanonicalIds = canonicalIds;
+      profileClassId = selectedChoice.classID;
       character = {
         wclCanonicalCharacterId: canonicalIds[0],
         name: selectedChoice.name,
@@ -872,6 +941,8 @@ class CharacterService {
       if (!fallbackCharacter) return null;
 
       character = fallbackCharacter;
+      profileCanonicalIds = [fallbackCharacter.wclCanonicalCharacterId];
+      profileClassId = fallbackCharacter.classID;
 
       [timelineRows, rankingRows] = await Promise.all([
         CharacterRaidParticipation.find({ wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
@@ -886,6 +957,13 @@ class CharacterService {
           .limit(50)
           .lean(),
       ]);
+    }
+
+    const latestTimelineRow = [...timelineRows].sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())[0];
+    if (latestTimelineRow) {
+      character.name = latestTimelineRow.characterName;
+      character.realm = latestTimelineRow.characterRealm;
+      character.region = latestTimelineRow.characterRegion;
     }
 
     const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter((id): id is number => typeof id === "number");
@@ -922,6 +1000,41 @@ class CharacterService {
     const trackedGuildHistory = Array.from(guildHistoryByGuild.values()).sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime());
     const trackedFirstSeenAt = timelineRows.reduce<Date | undefined>((earliest, row) => (!earliest || row.firstSeenAt < earliest ? row.firstSeenAt : earliest), undefined);
     const trackedLastSeenAt = timelineRows.reduce<Date | undefined>((latest, row) => (!latest || row.lastSeenAt > latest ? row.lastSeenAt : latest), undefined);
+    const nameHistory = await CharacterReportAppearance.aggregate([
+      {
+        $match: {
+          wclCanonicalCharacterId: { $in: profileCanonicalIds },
+          ...(profileClassId ? { classID: profileClassId } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: {
+            name: "$characterName",
+            realm: "$characterRealm",
+            region: "$characterRegion",
+          },
+          name: { $first: "$characterName" },
+          realm: { $first: "$characterRealm" },
+          region: { $first: "$characterRegion" },
+          firstSeenAt: { $min: "$reportStartTime" },
+          lastSeenAt: { $max: "$reportStartTime" },
+          reportCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: 1,
+          realm: 1,
+          region: 1,
+          firstSeenAt: 1,
+          lastSeenAt: 1,
+          reportCount: 1,
+        },
+      },
+      { $sort: { lastSeenAt: -1, name: 1, realm: 1 } },
+    ]);
 
     return {
       type: "profile",
@@ -939,6 +1052,7 @@ class CharacterService {
           firstSeenAt: entry.firstSeenAt,
           lastSeenAt: entry.lastSeenAt,
         })),
+        nameHistory,
       },
       raidTimeline: timelineRows.map((row) => ({
         zoneId: row.zoneId,

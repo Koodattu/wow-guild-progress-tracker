@@ -33,7 +33,7 @@ function buildQuery(filters: Filters) {
 }
 
 function getCharacterHref(character: CharacterSearchResult) {
-  return `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}`;
+  return `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}?class=${encodeURIComponent(String(character.classID))}`;
 }
 
 function CharacterSearchCard() {
@@ -89,9 +89,12 @@ function CharacterSearchCard() {
                 <div className="max-h-96 overflow-y-auto py-1">
                   {characters.map((character) => {
                     const classInfo = getClassInfoById(character.classID);
+                    const displayName = character.matchedName ?? character.name;
+                    const displayRealm = character.matchedRealm ?? character.realm;
+                    const isAlias = displayName !== character.name || displayRealm !== character.realm;
                     return (
                       <Link
-                        key={`${character.wclCanonicalCharacterId}-${character.realm}`}
+                        key={`${character.wclCanonicalCharacterId}-${character.classID}-${displayRealm}-${displayName}`}
                         href={getCharacterHref(character)}
                         className="flex min-h-12 items-center gap-3 px-3 py-2 text-sm text-gray-200 transition-[background-color,color] hover:bg-blue-500/15 hover:text-white"
                       >
@@ -99,11 +102,16 @@ function CharacterSearchCard() {
                           <IconImage iconFilename={classInfo.iconUrl} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium">{character.name}</div>
+                          <div className="truncate font-medium">{displayName}</div>
                           <div className="truncate text-xs text-gray-500">
-                            {character.realm}
+                            {displayRealm}
                             {character.guild ? ` - ${character.guild.name}` : ""}
                           </div>
+                          {isAlias ? (
+                            <div className="truncate text-xs text-gray-600">
+                              Current: {character.name} - {character.realm}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="shrink-0 text-xs text-gray-600">{classInfo.name}</div>
                       </Link>

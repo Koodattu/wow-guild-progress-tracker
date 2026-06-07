@@ -1156,6 +1156,8 @@ export type CharacterSearchResult = {
   realm: string;
   region: string;
   classID: number;
+  matchedName?: string;
+  matchedRealm?: string;
   guild?: {
     name: string;
     realm: string;
@@ -1194,6 +1196,14 @@ export type CharacterProfileResponse = {
       guildRealm: string;
       firstSeenAt: string;
       lastSeenAt: string;
+    }>;
+    nameHistory: Array<{
+      name: string;
+      realm: string;
+      region: string;
+      firstSeenAt: string;
+      lastSeenAt: string;
+      reportCount: number;
     }>;
   };
   raidTimeline: Array<{
