@@ -210,6 +210,14 @@ export function normalizeSpecNameForApi(specName: string): string {
   return specName.replace(/-/g, "");
 }
 
+export function formatRealmName(value: string): string {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 // Format guild name with parent guild if applicable
 // Format: parent_guild (guild_name) - server_name
 // Example: "IHAN SAMA (ST-Raid) - Stormreaver" or "Tuju - Kazzak" (no parent)

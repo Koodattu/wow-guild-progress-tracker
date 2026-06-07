@@ -1168,6 +1168,17 @@ export type CharacterSearchResponse = {
   characters: CharacterSearchResult[];
 };
 
+export type GlobalSearchResult = {
+  name: string;
+  realm: string;
+  type: "guild" | "character";
+  href: string;
+};
+
+export type GlobalSearchResponse = {
+  results: GlobalSearchResult[];
+};
+
 export type CharacterProfileResponse = {
   character: {
     wclCanonicalCharacterId: number;

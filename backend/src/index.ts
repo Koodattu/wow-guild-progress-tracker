@@ -25,6 +25,7 @@ import authRouter from "./routes/auth";
 import adminRouter from "./routes/admin";
 import characterRankingsRouter from "./routes/character-rankings";
 import charactersRouter from "./routes/characters";
+import searchRouter from "./routes/search";
 import pickemsRouter from "./routes/pickems";
 import pickemService from "./services/pickem.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
@@ -170,6 +171,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/pickems", pickemsRouter);
 app.use("/api/character-rankings", characterRankingsRouter);
 app.use("/api/characters", charactersRouter);
+app.use("/api/search", searchRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS

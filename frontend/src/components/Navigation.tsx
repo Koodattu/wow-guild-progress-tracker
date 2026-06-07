@@ -5,11 +5,15 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { FaGlobe, FaMagnifyingGlass } from "react-icons/fa6";
+import { api } from "@/lib/api";
 import { setLocale, getLocale, LOCALE_CHANGE_EVENT, type Locale } from "@/lib/locale";
+import { formatRealmName } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
 import { useHomePagePreferences } from "@/lib/homepage-preferences";
 import { DIFFICULTIES, EVENT_TYPES, useEventFilterPreferences } from "@/lib/useEventFilters";
+import type { GlobalSearchResult } from "@/types";
 
 const HORSE_RACE_MODE_OPTIONS: Array<{ mode: HorseRaceMode; labelKey: "horseRaceRandom" | "horseRaceCrest" | "horseRaceJapanese" | "horseRaceUma" | "horseRaceOff" }> = [
   { mode: "random", labelKey: "horseRaceRandom" },
@@ -119,15 +123,25 @@ export default function Navigation() {
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
+  const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState<Locale>("en");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const searchDropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const settingsDropdownRef = useRef<HTMLDivElement>(null);
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const selectedEventTypeSet = new Set(selectedEventTypes);
   const selectedDifficultySet = new Set(selectedDifficulties);
+  const trimmedSearchQuery = searchQuery.trim();
 
   useEffect(() => {
     setCurrentLocale(getLocale());
@@ -145,8 +159,58 @@ export default function Navigation() {
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsSearchDropdownOpen(false);
     setIsSettingsDropdownOpen(false);
+    setIsLanguageDropdownOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (isSearchDropdownOpen) {
+      searchInputRef.current?.focus();
+      return;
+    }
+
+    setSearchQuery("");
+    setSearchResults([]);
+    setIsSearchLoading(false);
+    setSearchError(false);
+  }, [isSearchDropdownOpen]);
+
+  useEffect(() => {
+    if (!isSearchDropdownOpen || trimmedSearchQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearchLoading(false);
+      setSearchError(false);
+      return;
+    }
+
+    let isActiveRequest = true;
+    setIsSearchLoading(true);
+    setSearchError(false);
+
+    const timeoutId = window.setTimeout(() => {
+      api
+        .searchSite(trimmedSearchQuery, 5)
+        .then((data) => {
+          if (!isActiveRequest) return;
+          setSearchResults(data.results);
+        })
+        .catch(() => {
+          if (!isActiveRequest) return;
+          setSearchResults([]);
+          setSearchError(true);
+        })
+        .finally(() => {
+          if (!isActiveRequest) return;
+          setIsSearchLoading(false);
+        });
+    }, 180);
+
+    return () => {
+      isActiveRequest = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [isSearchDropdownOpen, trimmedSearchQuery]);
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
@@ -168,22 +232,28 @@ export default function Navigation() {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
+      if (searchDropdownRef.current && !searchDropdownRef.current.contains(event.target as Node)) {
+        setIsSearchDropdownOpen(false);
+      }
       if (settingsDropdownRef.current && !settingsDropdownRef.current.contains(event.target as Node)) {
         setIsSettingsDropdownOpen(false);
+      }
+      if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
+        setIsLanguageDropdownOpen(false);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setIsMobileMenuOpen(false);
       }
     };
 
-    if (isContactDropdownOpen || isUserDropdownOpen || isSettingsDropdownOpen || isMobileMenuOpen) {
+    if (isContactDropdownOpen || isUserDropdownOpen || isSearchDropdownOpen || isSettingsDropdownOpen || isLanguageDropdownOpen || isMobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isContactDropdownOpen, isSettingsDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
+  }, [isContactDropdownOpen, isSearchDropdownOpen, isSettingsDropdownOpen, isLanguageDropdownOpen, isUserDropdownOpen, isMobileMenuOpen]);
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -194,9 +264,8 @@ export default function Navigation() {
 
   const handleLanguageChange = (newLocale: Locale) => {
     setLocale(newLocale);
+    setIsLanguageDropdownOpen(false);
   };
-
-  const isFrontpage = pathname === "/";
 
   const toggleEventType = (type: string) => {
     const nextTypes = new Set(selectedEventTypeSet);
@@ -266,7 +335,63 @@ export default function Navigation() {
 
             {/* Right side buttons */}
             <div className="flex items-center gap-2">
-              <div className={`relative h-9 w-9 shrink-0 ${isFrontpage ? "" : "pointer-events-none invisible"}`} ref={settingsDropdownRef}>
+              <div className="relative h-9 w-9 shrink-0" ref={searchDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSearchDropdownOpen((isOpen) => !isOpen)}
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-emerald-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-emerald-500 active:scale-[0.96]"
+                  title={t("search")}
+                  aria-label={t("search")}
+                  aria-expanded={isSearchDropdownOpen}
+                >
+                  <FaMagnifyingGlass className="h-[17px] w-[17px]" aria-hidden="true" />
+                </button>
+
+                {isSearchDropdownOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-md bg-gray-950/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/10">
+                    <input
+                      ref={searchInputRef}
+                      type="search"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder={t("searchPlaceholder")}
+                      className="h-9 w-full rounded bg-gray-900 px-3 text-sm text-white outline-none ring-1 ring-white/10 transition-shadow placeholder:text-gray-500 focus:ring-2 focus:ring-emerald-500/70"
+                    />
+                    <div className="mt-2 overflow-hidden rounded bg-gray-900/70 ring-1 ring-white/5">
+                      {trimmedSearchQuery.length < 2 ? (
+                        <div className="px-3 py-2.5 text-sm text-gray-500">{t("searchMinCharacters")}</div>
+                      ) : isSearchLoading ? (
+                        <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-400">
+                          <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-500 border-t-transparent animate-spin" />
+                          {t("searching")}
+                        </div>
+                      ) : searchError ? (
+                        <div className="px-3 py-2.5 text-sm text-red-300">{t("searchError")}</div>
+                      ) : searchResults.length === 0 ? (
+                        <div className="px-3 py-2.5 text-sm text-gray-500">{t("noSearchResults")}</div>
+                      ) : (
+                        searchResults.map((result) => (
+                          <Link
+                            key={`${result.type}:${result.realm}:${result.name}`}
+                            href={result.href}
+                            onClick={() => setIsSearchDropdownOpen(false)}
+                            className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-white/10"
+                          >
+                            <span className="min-w-0 truncate text-gray-100">
+                              {result.name} - {formatRealmName(result.realm)}
+                            </span>
+                            <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold uppercase ${result.type === "guild" ? "bg-orange-500/20 text-orange-200" : "bg-blue-500/20 text-blue-200"}`}>
+                              {result.type === "guild" ? t("guildType") : t("characterType")}
+                            </span>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative h-9 w-9 shrink-0" ref={settingsDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsSettingsDropdownOpen((isOpen) => !isOpen)}
@@ -284,7 +409,7 @@ export default function Navigation() {
                   </svg>
                 </button>
 
-                {isFrontpage && isSettingsDropdownOpen && (
+                {isSettingsDropdownOpen && (
                   <div className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-1.5rem))] rounded-md bg-[#182235] p-3 shadow-2xl shadow-black/70 ring-1 ring-blue-300/15">
                     <div className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t("generalSettings")}</div>
                     <div className="space-y-1.5">
@@ -347,19 +472,58 @@ export default function Navigation() {
               </div>
 
               {/* Language Switcher - Always visible */}
-              <div className="flex h-9 items-center gap-1 rounded-md border border-white/10 bg-black/25 p-1 shadow-inner shadow-black/20">
+              <div className="relative h-9 w-9 shrink-0" ref={languageDropdownRef}>
                 <button
-                  onClick={() => handleLanguageChange("en")}
-                  className={`h-7 cursor-pointer rounded px-2 text-xs font-medium transition-[background-color,color,transform] active:scale-[0.96] ${currentLocale === "en" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
+                  type="button"
+                  onClick={() => setIsLanguageDropdownOpen((isOpen) => !isOpen)}
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-cyan-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-cyan-500 active:scale-[0.96]"
+                  title={t("language")}
+                  aria-label={t("language")}
+                  aria-expanded={isLanguageDropdownOpen}
                 >
-                  EN
+                  <FaGlobe className="h-[18px] w-[18px]" aria-hidden="true" />
                 </button>
-                <button
-                  onClick={() => handleLanguageChange("fi")}
-                  className={`h-7 cursor-pointer rounded px-2 text-xs font-medium transition-[background-color,color,transform] active:scale-[0.96] ${currentLocale === "fi" ? "bg-blue-500 text-white shadow-sm shadow-blue-950/50" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}
-                >
-                  FI
-                </button>
+
+                {isLanguageDropdownOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-28 overflow-hidden rounded-md border border-white/10 bg-gray-950/95 p-1 shadow-2xl shadow-black/40">
+                    <button
+                      type="button"
+                      onClick={() => handleLanguageChange("en")}
+                      className={`flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-2 text-sm font-medium transition-colors ${
+                        currentLocale === "en" ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      EN
+                      {currentLocale === "en" && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.25 7.31a1 1 0 0 1-1.42.002L3.29 9.266a1 1 0 1 1 1.414-1.414l4.04 4.04l6.546-6.596a1 1 0 0 1 1.414-.006Z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLanguageChange("fi")}
+                      className={`mt-1 flex w-full cursor-pointer items-center justify-between rounded px-2.5 py-2 text-sm font-medium transition-colors ${
+                        currentLocale === "fi" ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      FI
+                      {currentLocale === "fi" && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.25 7.31a1 1 0 0 1-1.42.002L3.29 9.266a1 1 0 1 1 1.414-1.414l4.04 4.04l6.546-6.596a1 1 0 0 1 1.414-.006Z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Desktop-only buttons */}
@@ -368,31 +532,19 @@ export default function Navigation() {
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setIsContactDropdownOpen(!isContactDropdownOpen)}
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-orange-600 px-3 text-sm font-medium text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-orange-500 active:scale-[0.96]"
+                    className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-black/30 transition-[background-color,transform] hover:bg-orange-500 active:scale-[0.96]"
                     aria-label={t("community")}
+                    aria-expanded={isContactDropdownOpen}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                       <path d="M13 6a3 3 0 1 1-6 0a3 3 0 0 1 6 0Z" />
                       <path d="M18 8a2 2 0 1 1-4 0a2 2 0 0 1 4 0ZM14 15a4 4 0 0 0-8 0v.25c0 .414.336.75.75.75h6.5a.75.75 0 0 0 .75-.75V15ZM6 8a2 2 0 1 1-4 0a2 2 0 0 1 4 0ZM4.75 16A.75.75 0 0 1 4 15.25V15c0-1.01.292-1.953.797-2.746A3.99 3.99 0 0 0 1 16h3.75ZM19 16a3.99 3.99 0 0 0-3.797-3.746A5.971 5.971 0 0 1 16 15v.25a.75.75 0 0 1-.75.75H19Z" />
                     </svg>
-                    {t("community")}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className={`h-4 w-4 transition-transform ${isContactDropdownOpen ? "rotate-180" : ""}`}
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
                   </button>
 
                   {/* Dropdown Menu */}
                   {isContactDropdownOpen && (
-                    <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/40">
+                    <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-md border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/40">
                       <div>
                         <button
                           type="button"
@@ -467,10 +619,10 @@ export default function Navigation() {
                   <div className="relative" ref={userDropdownRef}>
                     <button
                       onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                      className="hidden h-9 cursor-pointer items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2 text-sm shadow-sm shadow-black/20 transition-colors hover:border-blue-400/35 hover:bg-white/[0.08] md:flex"
+                      className="hidden h-9 cursor-pointer items-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-2 text-sm shadow-sm shadow-black/30 transition-[background-color,border-color,transform] hover:border-indigo-500/60 hover:bg-gray-700 active:scale-[0.96] md:flex"
                       aria-label="User menu"
                     >
-                      <img src={user.discord.avatarUrl} alt={user.discord.username} className="w-7 h-7 rounded-full" />
+                      <img src={user.discord.avatarUrl} alt={user.discord.username} className="h-7 w-7 rounded-full ring-1 ring-indigo-500/70" />
                       <span className="text-sm text-white font-medium pr-1">{user.discord.username}</span>
                       <svg
                         xmlns="http://www.w3.org/2000/svg"

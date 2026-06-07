@@ -21,6 +21,7 @@ import {
   findOfficialProgressForRaid,
   getClassInfoById,
   getAllClasses,
+  formatRealmName,
 } from "@/lib/utils";
 import RaidDetailModal from "@/components/RaidDetailModal";
 import GuildCrest from "@/components/GuildCrest";
@@ -78,14 +79,6 @@ function formatShortDate(value?: string | Date | null) {
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${day}.${month}.${date.getFullYear()}`;
-}
-
-function formatRealmName(value: string) {
-  return value
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
 }
 
 function getClassColor(className: string) {

@@ -54,7 +54,7 @@ function CharacterSearchCard() {
   }, [trimmedSearch]);
 
   return (
-    <section className="mb-4 rounded-md bg-gray-900/80 px-3 py-3 shadow-lg shadow-black/20 ring-1 ring-white/10 md:px-4">
+    <section className="mb-4 ml-auto max-w-xl rounded-md bg-gray-900/80 px-3 py-3 shadow-lg shadow-black/20 ring-1 ring-white/10 md:px-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="min-w-0 md:w-72">
           <h2 className="text-sm font-semibold text-white">Find a character</h2>

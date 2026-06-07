@@ -6,7 +6,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Boss, CharacterProfileResponse, RaidInfo } from "@/types";
 import { useRaids } from "@/lib/queries";
-import { formatSpecName, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
+import { formatRealmName, formatSpecName, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import IconImage from "@/components/IconImage";
 
 interface PageProps {
@@ -68,12 +68,20 @@ function formatShortDate(value?: string | null) {
   return `${day}.${month}.${date.getFullYear()}`;
 }
 
-function formatRealmName(value: string) {
-  return value
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
+function formatRealmSlug(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "-");
+}
+
+function getCharacterExternalUrls(region: string, realm: string, name: string) {
+  const encodedRegion = encodeURIComponent(region.toLowerCase());
+  const encodedRealm = encodeURIComponent(formatRealmSlug(realm));
+  const encodedName = encodeURIComponent(name);
+
+  return {
+    wcl: `https://www.warcraftlogs.com/character/${encodedRegion}/${encodedRealm}/${encodedName}`,
+    raiderIo: `https://raider.io/characters/${encodedRegion}/${encodedRealm}/${encodedName}`,
+    armory: `https://worldofwarcraft.blizzard.com/en-gb/character/${encodedRegion}/${encodedRealm}/${encodedName}`,
+  };
 }
 
 function getClassColor(className: string) {
@@ -134,6 +142,21 @@ function RaidNameCell({ raid, muted = false }: { raid: RaidInfo; muted?: boolean
       <IconImage iconFilename={raid.iconUrl} alt={`${raid.name} icon`} width={24} height={24} className="h-6 w-6 shrink-0 rounded object-cover" />
       <span className={`truncate font-semibold ${muted ? "" : "text-gray-100"}`}>{raid.name}</span>
     </div>
+  );
+}
+
+function CharacterExternalLink({ href, title, src, alt }: { href: string; title: string; src: string; alt: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={title}
+      title={title}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md opacity-80 transition-opacity hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96] md:h-10 md:w-10"
+    >
+      <Image src={src} alt={alt} width={24} height={24} className="h-6 w-6 object-contain" />
+    </a>
   );
 }
 
@@ -320,6 +343,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const classInfo = getClassInfoById(character.classID);
   const seenRange = `${formatShortDate(character.firstReportSeenAt)} - ${formatShortDate(character.lastReportSeenAt)}`;
   const latestGuild = [...character.guildHistory].sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())[0];
+  const externalUrls = getCharacterExternalUrls(character.region, character.realm, character.name);
 
   return (
     <main className="min-h-screen px-4 py-8">
@@ -336,6 +360,11 @@ export default function CharacterProfilePage({ params }: PageProps) {
                     <h1 className="min-w-0 text-3xl font-bold leading-none md:text-4xl" style={{ color: getClassColor(classInfo.name) }}>
                       {character.name}
                     </h1>
+                    <div className="flex shrink-0 items-center gap-1 self-center">
+                      <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
+                      <CharacterExternalLink href={externalUrls.raiderIo} title="View on Raider.IO" src="/raiderio-logo.png" alt="Raider.IO" />
+                      <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
+                    </div>
                     <span className="pb-0.5 text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
                   </div>
                   {latestGuild ? (

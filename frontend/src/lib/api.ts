@@ -59,6 +59,7 @@ import {
   CharacterRankingRow,
   CharacterRankingsFilterOptionsResponse,
   CharacterSearchResponse,
+  GlobalSearchResponse,
   GuildRaidCharactersResponse,
   CharacterProfileResponse,
   RateLimitResponse,
@@ -156,6 +157,16 @@ export const api = {
     });
     const response = await fetch(`${API_URL}/api/characters/search?${params}`);
     if (!response.ok) throw new Error("Failed to search characters");
+    return response.json();
+  },
+
+  async searchSite(query: string, limit = 5): Promise<GlobalSearchResponse> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(limit),
+    });
+    const response = await fetch(`${API_URL}/api/search?${params}`);
+    if (!response.ok) throw new Error("Failed to search site");
     return response.json();
   },
 

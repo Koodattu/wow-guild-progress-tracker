@@ -467,7 +467,7 @@ function CompareTable({ compare, t }: { compare: RaidCompare; t: ReturnType<type
 export default function ComparePage() {
   const t = useTranslations("comparePage");
   const [selectedRaidId, setSelectedRaidId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("visual");
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [showAllTotalEffort, setShowAllTotalEffort] = useState(false);
   const [showAllWorldRanks, setShowAllWorldRanks] = useState(false);
   const { data: raids = [], isLoading: raidsLoading } = useRaids();
@@ -505,16 +505,16 @@ export default function ComparePage() {
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="flex rounded bg-gray-900 border border-gray-800 p-1">
             <button
-              onClick={() => setViewMode("visual")}
-              className={`px-3 py-2 text-sm rounded transition-colors ${viewMode === "visual" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
-            >
-              {t("visual")}
-            </button>
-            <button
               onClick={() => setViewMode("table")}
               className={`px-3 py-2 text-sm rounded transition-colors ${viewMode === "table" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
             >
               {t("table")}
+            </button>
+            <button
+              onClick={() => setViewMode("visual")}
+              className={`px-3 py-2 text-sm rounded transition-colors ${viewMode === "visual" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
+            >
+              {t("visual")}
             </button>
           </div>
           <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={setSelectedRaidId} />
