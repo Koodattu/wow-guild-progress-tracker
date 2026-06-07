@@ -47,7 +47,7 @@ type BossRankingColumn = {
   encounterId: number;
   encounterName: string;
   boss?: Boss;
-  bestRanking: CharacterRanking;
+  bestRanking?: CharacterRanking;
 };
 
 type RankingRaidGroup = {
@@ -274,30 +274,25 @@ export default function CharacterProfilePage({ params }: PageProps) {
       .sort((a, b) => b.zoneId - a.zoneId)
       .map((group) => {
         const bosses = bossesByRaid.get(group.zoneId) ?? [];
-        const bossById = new Map(bosses.map((boss) => [boss.id, boss]));
-        const bossOrder = new Map(bosses.map((boss, index) => [boss.id, index]));
+        const bossEntries =
+          bosses.length > 0
+            ? bosses.map((boss) => [boss.id, boss.name, boss] as const)
+            : Array.from(group.bossRankings.entries()).map(([encounterId, rankings]) => {
+                const bestRanking = [...rankings].sort(getBetterRanking)[0];
+                return [encounterId, bestRanking.encounterName ?? `Encounter ${encounterId}`, undefined] as const;
+              });
 
         return {
           zoneId: group.zoneId,
           raidName: group.raidName,
           raid: group.raid,
           bestAllStars: [...group.allStars].sort(getBetterRanking)[0],
-          bossColumns: Array.from(group.bossRankings.entries())
-            .map(([encounterId, rankings]) => {
-              const bestRanking = [...rankings].sort(getBetterRanking)[0];
-              return {
-                encounterId,
-                encounterName: bestRanking.encounterName ?? `Encounter ${encounterId}`,
-                boss: bossById.get(encounterId),
-                bestRanking,
-              };
-            })
-            .sort((a, b) => {
-              const aOrder = bossOrder.get(a.encounterId) ?? Number.MAX_SAFE_INTEGER;
-              const bOrder = bossOrder.get(b.encounterId) ?? Number.MAX_SAFE_INTEGER;
-              if (aOrder !== bOrder) return aOrder - bOrder;
-              return a.encounterName.localeCompare(b.encounterName);
-            }),
+          bossColumns: bossEntries.map(([encounterId, encounterName, boss]) => ({
+            encounterId,
+            encounterName,
+            boss,
+            bestRanking: [...(group.bossRankings.get(encounterId) ?? [])].sort(getBetterRanking)[0],
+          })),
         };
       });
   }, [profile, raids, bossesByRaid]);
@@ -450,7 +445,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                     <IconImage iconFilename={group.raid?.iconUrl} alt={`${group.raidName} icon`} width={30} height={30} className="h-[30px] w-[30px] shrink-0 rounded object-cover" />
                     <div className="min-w-0">
                       <h3 className="truncate font-semibold text-gray-100">{group.raidName}</h3>
-                      <div className="text-xs text-gray-500">{group.bossColumns.length} boss parses</div>
+                      <div className="text-xs text-gray-500">{group.bossColumns.length} bosses</div>
                     </div>
                   </div>
 
