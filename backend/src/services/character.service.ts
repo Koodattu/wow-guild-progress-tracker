@@ -688,10 +688,11 @@ class CharacterService {
       },
     ]);
 
-    // Drops stale unique indexes before inserting canonical-id-plus-class rows.
+    const deleteResult = await CharacterRaidParticipation.deleteMany({});
+
+    // Drops stale unique indexes while the materialized collection is empty.
     await CharacterRaidParticipation.syncIndexes();
 
-    const deleteResult = await CharacterRaidParticipation.deleteMany({});
     if (rows.length > 0) {
       await CharacterRaidParticipation.insertMany(rows, { ordered: false });
     }
