@@ -621,28 +621,16 @@ export default function CharacterProfilePage({ params }: PageProps) {
                       <h1 className="min-w-0 text-3xl font-bold leading-none md:text-4xl" style={{ color: getClassColor(classInfo.name) }}>
                         {character.name}
                       </h1>
-                      <div className="flex shrink-0 items-center gap-0">
-                        <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
-                        <CharacterExternalLink
-                          href={externalUrls.raiderIo}
-                          title="View on Raider.IO"
-                          src="/raiderio-logo.png"
-                          alt="Raider.IO"
-                        />
-                        <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
-                      </div>
-                    </div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <span className="text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
                       {nameHistory.length > 1 ? (
-                        <div className="relative">
+                        <div className="relative shrink-0">
                           <button
                             type="button"
                             onClick={() => setIsNameHistoryOpen((open) => !open)}
-                            className="inline-flex min-h-8 items-center gap-1 rounded-md bg-gray-900 px-2 text-xs font-semibold text-gray-300 shadow-sm shadow-black/20 ring-1 ring-gray-700 transition-[background-color,color,transform] hover:bg-gray-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold text-gray-500 transition-[background-color,color,transform] hover:bg-gray-900 hover:text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+                            aria-label="Show name history"
                             aria-expanded={isNameHistoryOpen}
                           >
-                            Name history <span className={`transition-transform ${isNameHistoryOpen ? "rotate-180" : ""}`}>v</span>
+                            <span className={`transition-transform ${isNameHistoryOpen ? "rotate-180" : ""}`}>v</span>
                           </button>
                           {isNameHistoryOpen ? (
                             <div className="absolute left-0 top-9 z-20 w-72 overflow-hidden rounded-lg bg-gray-950 shadow-[0_18px_55px_rgba(0,0,0,0.45)] ring-1 ring-gray-700">
@@ -669,6 +657,19 @@ export default function CharacterProfilePage({ params }: PageProps) {
                           ) : null}
                         </div>
                       ) : null}
+                      <div className="flex shrink-0 items-center gap-0">
+                        <CharacterExternalLink href={externalUrls.wcl} title="View on Warcraft Logs" src="/wcl-logo.png" alt="Warcraft Logs" />
+                        <CharacterExternalLink
+                          href={externalUrls.raiderIo}
+                          title="View on Raider.IO"
+                          src="/raiderio-logo.png"
+                          alt="Raider.IO"
+                        />
+                        <CharacterExternalLink href={externalUrls.armory} title="View on World of Warcraft Armory" src="/wow_logo.png" alt="World of Warcraft" />
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
                     </div>
                   </div>
                   {latestGuild ? (

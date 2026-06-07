@@ -8,7 +8,8 @@ import { useTranslations } from "next-intl";
 import { FaGlobe, FaMagnifyingGlass } from "react-icons/fa6";
 import { api } from "@/lib/api";
 import { setLocale, getLocale, LOCALE_CHANGE_EVENT, type Locale } from "@/lib/locale";
-import { formatRealmName } from "@/lib/utils";
+import { formatRealmName, getClassInfoById } from "@/lib/utils";
+import IconImage from "@/components/IconImage";
 import { useAuth } from "@/context/AuthContext";
 import { HorseRaceMode, useHorseRaceMode } from "@/lib/horse-race-preferences";
 import { useHomePagePreferences } from "@/lib/homepage-preferences";
@@ -377,8 +378,15 @@ export default function Navigation() {
                             onClick={() => setIsSearchDropdownOpen(false)}
                             className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-white/10"
                           >
-                            <span className="min-w-0 truncate text-gray-100">
-                              {result.name} - {formatRealmName(result.realm)}
+                            <span className="flex min-w-0 items-center gap-2">
+                              {result.type === "character" && result.classID ? (
+                                <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded shadow-sm shadow-black/30 ring-1 ring-white/10">
+                                  <IconImage iconFilename={getClassInfoById(result.classID).iconUrl} alt="" fill style={{ objectFit: "cover" }} />
+                                </span>
+                              ) : null}
+                              <span className="min-w-0 truncate text-gray-100">
+                                {result.name} - {formatRealmName(result.realm)}
+                              </span>
                             </span>
                             <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold uppercase ${result.type === "guild" ? "bg-orange-500/20 text-orange-200" : "bg-blue-500/20 text-blue-200"}`}>
                               {result.type === "guild" ? t("guildType") : t("characterType")}

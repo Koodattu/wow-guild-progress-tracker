@@ -12,6 +12,7 @@ type SearchResult = {
   realm: string;
   type: SearchResultType;
   href: string;
+  classID?: number;
 };
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,7 +46,8 @@ router.get("/", async (req: Request, res: Response) => {
         name: character.matchedName ?? character.name,
         realm: character.matchedRealm ?? character.realm,
         type: "character" as const,
-        href: `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}?class=${encodeURIComponent(String(character.classID))}`,
+        href: `/characters/${encodeURIComponent(character.realm)}/${encodeURIComponent(character.name)}`,
+        classID: character.classID,
       })),
     ]
       .sort((a, b) => a.name.localeCompare(b.name) || a.realm.localeCompare(b.realm) || a.type.localeCompare(b.type))

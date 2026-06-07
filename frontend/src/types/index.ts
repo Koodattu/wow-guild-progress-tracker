@@ -1175,6 +1175,7 @@ export type GlobalSearchResult = {
   realm: string;
   type: "guild" | "character";
   href: string;
+  classID?: number;
 };
 
 export type GlobalSearchResponse = {
