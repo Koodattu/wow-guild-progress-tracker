@@ -1,11 +1,12 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { CharacterProfileResponse, RaidInfo } from "@/types";
+import { Boss, CharacterProfileResponse, RaidInfo } from "@/types";
 import { useRaids } from "@/lib/queries";
-import { formatSpecName, getClassInfoById, getGuildProfileUrl, getParseColor } from "@/lib/utils";
+import { formatSpecName, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import IconImage from "@/components/IconImage";
 
 interface PageProps {
@@ -29,6 +30,7 @@ const CLASS_COLORS: Record<string, string> = {
 };
 
 type CharacterRaidTimelineRow = CharacterProfileResponse["raidTimeline"][number];
+type CharacterRanking = CharacterProfileResponse["rankings"][number];
 
 type DisplayRaidTimelineRow =
   | {
@@ -40,6 +42,21 @@ type DisplayRaidTimelineRow =
       type: "missing";
       raid: RaidInfo;
     };
+
+type BossRankingColumn = {
+  encounterId: number;
+  encounterName: string;
+  boss?: Boss;
+  bestRanking: CharacterRanking;
+};
+
+type RankingRaidGroup = {
+  zoneId: number;
+  raidName: string;
+  raid?: RaidInfo;
+  bestAllStars?: CharacterRanking;
+  bossColumns: BossRankingColumn[];
+};
 
 function formatShortDate(value?: string | null) {
   if (!value) return "-";
@@ -67,6 +84,50 @@ function formatScore(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+function getBossKey(zoneId: number, encounterId: number) {
+  return `${zoneId}:${encounterId}`;
+}
+
+function getRankingParse(row: CharacterRanking) {
+  return row.rankPercent ?? -1;
+}
+
+function getBetterRanking(a: CharacterRanking, b: CharacterRanking) {
+  const parseDiff = getRankingParse(b) - getRankingParse(a);
+  if (parseDiff !== 0) return parseDiff;
+  return b.score - a.score;
+}
+
+function getMetricIcon(metric: string | null) {
+  if (metric === "hps") return "/icons/roleicon_healer.png";
+  return "/icons/roleicon_damage.png";
+}
+
+function RankingsMetricCell({ row }: { row: CharacterRanking }) {
+  const metric = row.metric?.toUpperCase() ?? "DPS";
+
+  return (
+    <div className="flex items-center gap-2 text-gray-300">
+      <Image src={getMetricIcon(row.metric)} alt={metric} width={18} height={18} className="h-[18px] w-[18px] shrink-0" />
+      <span className="font-semibold">{metric}</span>
+    </div>
+  );
+}
+
+function RankingsBossParseCell({ row, classId }: { row?: CharacterRanking; classId: number }) {
+  if (!row || row.rankPercent === null) return <span className="text-gray-600">-</span>;
+
+  const parsePercent = Math.round(row.rankPercent);
+  const specIcon = row.specName ? getSpecIconUrl(classId, row.specName) : undefined;
+
+  return (
+    <span className="inline-flex items-center justify-end gap-1 font-semibold tabular-nums" style={{ color: getParseColor(parsePercent) }}>
+      {parsePercent}
+      {specIcon ? <IconImage iconFilename={specIcon} alt={`${formatSpecName(row.specName!)} icon`} width={16} height={16} className="h-4 w-4 rounded" /> : null}
+    </span>
+  );
+}
+
 function RaidNameCell({ raid, muted = false }: { raid: RaidInfo; muted?: boolean }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -83,6 +144,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const [profile, setProfile] = useState<CharacterProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bossesByRaid, setBossesByRaid] = useState<Map<number, Boss[]>>(new Map());
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
 
   useEffect(() => {
@@ -111,6 +173,43 @@ export default function CharacterProfilePage({ params }: PageProps) {
       cancelled = true;
     };
   }, [realm, name]);
+
+  useEffect(() => {
+    if (!profile?.rankings.length) {
+      setBossesByRaid(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    const rankedRaidIds = Array.from(new Set(profile.rankings.map((row) => row.zoneId)));
+    if (!rankedRaidIds.length) return;
+    setBossesByRaid(new Map());
+
+    async function loadBosses() {
+      const entries = await Promise.all(
+        rankedRaidIds.map(async (zoneId) => {
+          try {
+            return [zoneId, await api.getBosses(zoneId)] as const;
+          } catch {
+            return [zoneId, [] as Boss[]] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setBossesByRaid((current) => {
+        const next = new Map(current);
+        entries.forEach(([zoneId, bosses]) => next.set(zoneId, bosses));
+        return next;
+      });
+    }
+
+    loadBosses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   const raidTimelineRows = useMemo<DisplayRaidTimelineRow[]>(() => {
     if (!profile) return [];
@@ -145,6 +244,63 @@ export default function CharacterProfilePage({ params }: PageProps) {
     });
   }, [profile, raids]);
   const raidReportCount = raidTimelineRows.reduce((total, row) => (row.type === "appearance" ? total + row.row.reportCount : total), 0);
+  const rankingRaidGroups = useMemo<RankingRaidGroup[]>(() => {
+    if (!profile?.rankings.length) return [];
+
+    const raidById = new Map(raids.map((raid) => [raid.id, raid]));
+    const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; allStars: CharacterRanking[]; bossRankings: Map<number, CharacterRanking[]> }>();
+
+    profile.rankings.forEach((row) => {
+      const group = groups.get(row.zoneId) ?? {
+        zoneId: row.zoneId,
+        raidName: row.raidName,
+        raid: raidById.get(row.zoneId),
+        allStars: [],
+        bossRankings: new Map<number, CharacterRanking[]>(),
+      };
+
+      if (row.encounterId === null) {
+        group.allStars.push(row);
+      } else {
+        const rankings = group.bossRankings.get(row.encounterId) ?? [];
+        rankings.push(row);
+        group.bossRankings.set(row.encounterId, rankings);
+      }
+
+      groups.set(row.zoneId, group);
+    });
+
+    return Array.from(groups.values())
+      .sort((a, b) => b.zoneId - a.zoneId)
+      .map((group) => {
+        const bosses = bossesByRaid.get(group.zoneId) ?? [];
+        const bossById = new Map(bosses.map((boss) => [boss.id, boss]));
+        const bossOrder = new Map(bosses.map((boss, index) => [boss.id, index]));
+
+        return {
+          zoneId: group.zoneId,
+          raidName: group.raidName,
+          raid: group.raid,
+          bestAllStars: [...group.allStars].sort(getBetterRanking)[0],
+          bossColumns: Array.from(group.bossRankings.entries())
+            .map(([encounterId, rankings]) => {
+              const bestRanking = [...rankings].sort(getBetterRanking)[0];
+              return {
+                encounterId,
+                encounterName: bestRanking.encounterName ?? `Encounter ${encounterId}`,
+                boss: bossById.get(encounterId),
+                bestRanking,
+              };
+            })
+            .sort((a, b) => {
+              const aOrder = bossOrder.get(a.encounterId) ?? Number.MAX_SAFE_INTEGER;
+              const bOrder = bossOrder.get(b.encounterId) ?? Number.MAX_SAFE_INTEGER;
+              if (aOrder !== bOrder) return aOrder - bOrder;
+              return a.encounterName.localeCompare(b.encounterName);
+            }),
+        };
+      });
+  }, [profile, raids, bossesByRaid]);
 
   if (loading || isLoadingRaids) {
     return (
@@ -284,42 +440,74 @@ export default function CharacterProfilePage({ params }: PageProps) {
         <section className="rounded-lg border border-gray-700 bg-gray-900">
           <div className="border-b border-gray-700 px-4 py-3">
             <h2 className="text-lg font-semibold text-white">Rankings</h2>
-            <p className="text-sm text-gray-400">Existing ranking data, when this character has been processed by the ranking job.</p>
+            <p className="text-sm text-gray-400">Best available parses grouped by raid and boss.</p>
           </div>
-          {profile.rankings.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-700 text-left text-xs font-semibold text-gray-400">
-                    <th className="px-4 py-3">Raid</th>
-                    <th className="px-4 py-3">View</th>
-                    <th className="px-4 py-3">Spec</th>
-                    <th className="px-4 py-3">Metric</th>
-                    <th className="px-4 py-3 text-right">Score</th>
-                    <th className="px-4 py-3 text-right">Parse</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.rankings.map((row, index) => {
-                    const parsePercent = row.rankPercent ? Math.round(row.rankPercent) : null;
-                    return (
-                      <tr
-                        key={`${row.zoneId}-${row.encounterId ?? "all"}-${row.metric ?? "metric"}-${row.partition ?? "all"}-${index}`}
-                        className="border-b border-gray-800 last:border-0"
-                      >
-                        <td className="px-4 py-3 font-semibold text-gray-100">{row.raidName}</td>
-                        <td className="px-4 py-3 text-gray-300">{row.encounterName ?? "All Stars"}</td>
-                        <td className="px-4 py-3 text-gray-300">{row.specName ? formatSpecName(row.specName) : "-"}</td>
-                        <td className="px-4 py-3 text-gray-300">{row.metric?.toUpperCase() ?? "-"}</td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-100">{formatScore(row.score)}</td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums" style={parsePercent !== null ? { color: getParseColor(parsePercent) } : undefined}>
-                          {parsePercent !== null ? parsePercent : "-"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {rankingRaidGroups.length ? (
+            <div className="divide-y divide-gray-800">
+              {rankingRaidGroups.map((group) => (
+                <div key={group.zoneId}>
+                  <div className="flex items-center gap-3 bg-gray-950/35 px-4 py-3">
+                    <IconImage iconFilename={group.raid?.iconUrl} alt={`${group.raidName} icon`} width={30} height={30} className="h-[30px] w-[30px] shrink-0 rounded object-cover" />
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-gray-100">{group.raidName}</h3>
+                      <div className="text-xs text-gray-500">{group.bossColumns.length} boss parses</div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
+                          <th className="px-4 py-3">View</th>
+                          <th className="px-4 py-3">Metric</th>
+                          <th className="px-4 py-3 text-right">Score</th>
+                          {group.bossColumns.map((bossColumn) => (
+                            <th key={getBossKey(group.zoneId, bossColumn.encounterId)} className="px-4 py-3">
+                              <div className="flex justify-center" title={bossColumn.encounterName}>
+                                <IconImage
+                                  iconFilename={bossColumn.boss?.iconUrl}
+                                  alt={`${bossColumn.encounterName} icon`}
+                                  width={24}
+                                  height={24}
+                                  className="h-6 w-6 rounded object-cover"
+                                />
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-800 last:border-0">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 font-semibold text-gray-100">
+                              <IconImage iconFilename={group.raid?.iconUrl} alt={`${group.raidName} icon`} width={24} height={24} className="h-6 w-6 shrink-0 rounded object-cover" />
+                              <span>All Stars</span>
+                            </div>
+                          </td>
+                          {group.bestAllStars ? (
+                            <>
+                              <td className="px-4 py-3">
+                                <RankingsMetricCell row={group.bestAllStars} />
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 text-gray-600">-</td>
+                              <td className="px-4 py-3 text-right text-gray-600">-</td>
+                            </>
+                          )}
+                          {group.bossColumns.map((bossColumn) => (
+                            <td key={getBossKey(group.zoneId, bossColumn.encounterId)} className="px-4 py-3 text-center">
+                              <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} />
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="px-4 py-8 text-center text-gray-400">No rankings have been fetched for this character.</div>
