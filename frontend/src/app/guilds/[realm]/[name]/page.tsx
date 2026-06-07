@@ -816,7 +816,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                             <tr key={raid.id} className="border-b border-gray-800">
                               {/* First clickable area: Raid Name, Rank, World Rank */}
                               <td
-                                className={`px-2 md:px-4 py-2 md:py-3 cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""} ${
+                                className={`px-2 md:px-4 py-2 md:py-3 cursor-pointer transition-colors ${hoveredRaidInfoRow === raid.id ? "bg-gray-700/45" : ""} ${
                                   !hasProgress ? "opacity-40" : ""
                                 }`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
@@ -830,7 +830,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base cursor-pointer transition-colors ${
-                                  hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidInfoRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${!hasProgress ? "opacity-40" : ""}`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
@@ -840,7 +840,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base cursor-pointer transition-colors ${
-                                  hoveredRaidInfoRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidInfoRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${!hasProgress ? "opacity-40" : ""}`}
                                 onClick={() => handleRaidInfoClick(raid.id)}
                                 onMouseEnter={() => setHoveredRaidInfoRow(raid.id)}
@@ -858,7 +858,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               {/* Second clickable area: Raid Progress columns */}
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors border-l-2 border-gray-700 ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -871,7 +871,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-base transition-colors ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -884,7 +884,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -894,7 +894,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -904,7 +904,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -914,7 +914,7 @@ export default function GuildProfilePage({ params }: PageProps) {
                               </td>
                               <td
                                 className={`px-2 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-sm text-gray-300 transition-colors ${
-                                  hoveredRaidProgressRow === raid.id ? "bg-gray-800/30" : ""
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
                                 } ${hasProgress ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                                 onClick={() => hasProgress && handleRaidClick(raid.id)}
                                 onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
@@ -922,10 +922,20 @@ export default function GuildProfilePage({ params }: PageProps) {
                               >
                                 {bestProgress}
                               </td>
-                              <td className={`px-2 md:px-4 py-2 md:py-3 text-center ${!hasProgress ? "opacity-60" : ""}`}>
+                              <td
+                                className={`px-2 md:px-4 py-2 md:py-3 text-center transition-colors ${
+                                  hoveredRaidProgressRow === raid.id ? "bg-gray-700/45" : ""
+                                } ${hasProgress ? "cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
+                                onClick={() => hasProgress && handleRaidClick(raid.id)}
+                                onMouseEnter={() => hasProgress && setHoveredRaidProgressRow(raid.id)}
+                                onMouseLeave={() => setHoveredRaidProgressRow(null)}
+                              >
                                 <button
                                   type="button"
-                                  onClick={() => handleRaidCharactersClick(raid)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleRaidCharactersClick(raid);
+                                  }}
                                   className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-800 px-3 text-xs font-semibold text-gray-100 transition-colors hover:bg-gray-700 active:scale-[0.98]"
                                 >
                                   View
