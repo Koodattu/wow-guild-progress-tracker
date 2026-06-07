@@ -9,6 +9,7 @@ import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
 import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
 import Character from "../models/Character";
+import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import Raid from "../models/Raid";
 import logger, { getGuildLogger } from "../utils/logger";
 import mongoose from "mongoose";
@@ -102,6 +103,8 @@ class BackgroundGuildProcessor {
 
   // Track when global rankings were last calculated
   private lastGlobalRankingsUpdate: Date | null = null;
+
+  private characterAppearanceIndexesSynced: boolean = false;
 
   /**
    * Start the background processor
@@ -813,6 +816,11 @@ class BackgroundGuildProcessor {
         return;
       }
 
+      if (!this.characterAppearanceIndexesSynced) {
+        await CharacterReportAppearance.syncIndexes();
+        this.characterAppearanceIndexesSynced = true;
+      }
+
       const jobStartedAt = new Date();
       const pendingReportQuery = {
         guildId: guild._id,
@@ -822,6 +830,14 @@ class BackgroundGuildProcessor {
           { charactersFetchStatus: "pending" },
           { charactersFetchStatus: { $exists: false } },
           { charactersFetchStatus: "failed", charactersFetchFailedAt: { $lt: jobStartedAt } },
+          {
+            charactersFetchStatus: "fetched",
+            $and: [
+              { $or: [{ rankedCharacterCount: 0 }, { rankedCharacterCount: { $exists: false } }] },
+              { $or: [{ characterAppearanceCount: 0 }, { characterAppearanceCount: { $exists: false } }] },
+            ],
+            charactersFetchSource: { $exists: false },
+          },
         ],
       };
 
@@ -839,7 +855,10 @@ class BackgroundGuildProcessor {
       let appearancesSaved = 0;
 
       while (true) {
-        const report = await Report.findOne(pendingReportQuery).sort({ startTime: 1 }).select("code startTime").lean();
+        const report = await Report.findOne(pendingReportQuery)
+          .sort({ startTime: 1 })
+          .select("code startTime endTime charactersFetchStatus rankedCharacterCount characterAppearanceCount charactersFetchSource")
+          .lean();
         if (!report) {
           break;
         }
@@ -861,37 +880,84 @@ class BackgroundGuildProcessor {
         }
 
         try {
-          const reportData = await wclService.getReportByCodeAllDifficulties(report.code, { includeRankedCharacters: true });
-          const wclReport = reportData.reportData?.report;
+          const isZeroCharacterRetry =
+            report.charactersFetchStatus === "fetched" &&
+            !report.charactersFetchSource &&
+            (report.rankedCharacterCount ?? 0) === 0 &&
+            (report.characterAppearanceCount ?? 0) === 0;
 
-          if (!wclReport) {
-            throw new Error("WCL report not found or inaccessible");
+          let wclReport: any = null;
+          let rankedCharacters: any[] = [];
+          let rankedResult: { processed: number; skipped: number } = { processed: 0, skipped: 0 };
+
+          if (!isZeroCharacterRetry) {
+            const reportData = await wclService.getReportByCodeAllDifficulties(report.code, { includeRankedCharacters: true });
+            wclReport = reportData.reportData?.report;
+
+            if (!wclReport) {
+              throw new Error("WCL report not found or inaccessible");
+            }
+
+            rankedCharacters = Array.isArray(wclReport.rankedCharacters) ? wclReport.rankedCharacters : [];
+            rankedResult = await characterService.upsertCharactersFromReportAppearances({
+              reportCode: wclReport.code,
+              reportStartTime: wclReport.startTime || report.startTime,
+              reportGuildId: guild._id as mongoose.Types.ObjectId,
+              reportGuildName: guild.name,
+              reportGuildRealm: guild.realm,
+              rankedCharacters,
+            });
           }
 
-          const rankedCharacters = Array.isArray(wclReport.rankedCharacters) ? wclReport.rankedCharacters : [];
-          const result = await characterService.upsertCharactersFromReportAppearances({
-            reportCode: wclReport.code,
-            reportStartTime: wclReport.startTime || report.startTime,
-            reportGuildId: guild._id as mongoose.Types.ObjectId,
-            reportGuildName: guild.name,
-            reportGuildRealm: guild.realm,
-            rankedCharacters,
-          });
+          let rankingsCharacterCount = 0;
+          let fallbackResult: { processed: number; skipped: number; matched: number; unmatched: number } | null = null;
+          let charactersFetchSource: "rankedCharacters" | "reportRankings" | "none" = rankedResult.processed > 0 ? "rankedCharacters" : "none";
+
+          if (rankedResult.processed === 0) {
+            if (!rateLimitService.canProceedBackground()) {
+              guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached before report rankings fallback, pausing...`);
+              await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+              await queueItem.pause();
+              await rateLimitService.waitForReset();
+              await queueItem.resume();
+              guildLog.info("[ReportCharacterBackfill] Resuming report rankings fallback after rate limit reset");
+            }
+
+            const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
+            rankingsCharacterCount = rankingCharacters.length;
+            fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
+              reportCode: wclReport?.code || report.code,
+              reportStartTime: wclReport?.startTime || report.startTime,
+              reportGuildId: guild._id as mongoose.Types.ObjectId,
+              reportGuildName: guild.name,
+              reportGuildRealm: guild.realm,
+              rankingCharacters,
+            });
+            charactersFetchSource = fallbackResult.processed > 0 ? "reportRankings" : "none";
+          }
+
+          const processedAppearances = rankedResult.processed + (fallbackResult?.processed ?? 0);
+          const reportUpdateSet: Record<string, unknown> = {
+            charactersFetchStatus: "fetched",
+            charactersFetchedAt: new Date(),
+            rankedCharacterCount: rankedCharacters.length,
+            rankingsCharacterCount,
+            characterAppearanceCount: processedAppearances,
+            charactersFetchSource,
+            lastProcessed: new Date(),
+          };
+
+          if (wclReport) {
+            reportUpdateSet.startTime = wclReport.startTime || report.startTime;
+            reportUpdateSet.endTime = wclReport.endTime || 0;
+            reportUpdateSet.fightCount = wclReport.fights?.length || 0;
+            reportUpdateSet.fightSequence = this.buildReportFightSequence(wclReport);
+          }
 
           await Report.updateOne(
             { _id: report._id },
             {
-              $set: {
-                startTime: wclReport.startTime || report.startTime,
-                endTime: wclReport.endTime || 0,
-                fightCount: wclReport.fights?.length || 0,
-                fightSequence: this.buildReportFightSequence(wclReport),
-                charactersFetchStatus: "fetched",
-                charactersFetchedAt: new Date(),
-                rankedCharacterCount: rankedCharacters.length,
-                characterAppearanceCount: result.processed,
-                lastProcessed: new Date(),
-              },
+              $set: reportUpdateSet,
               $unset: {
                 charactersFetchFailedAt: "",
                 charactersFetchError: "",
@@ -900,9 +966,11 @@ class BackgroundGuildProcessor {
           );
 
           reportsProcessed++;
-          appearancesSaved += result.processed;
+          appearancesSaved += processedAppearances;
           await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
-          guildLog.info(`[ReportCharacterBackfill] ${report.code}: saved ${result.processed}/${rankedCharacters.length} appearances`);
+          guildLog.info(
+            `[ReportCharacterBackfill] ${report.code}: saved ${processedAppearances} appearances (rankedCharacters=${rankedResult.processed}/${rankedCharacters.length}, reportRankings=${fallbackResult?.processed ?? 0}/${rankingsCharacterCount}, matched=${fallbackResult?.matched ?? 0}, unmatched=${fallbackResult?.unmatched ?? 0})`,
+          );
 
           await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
         } catch (error) {

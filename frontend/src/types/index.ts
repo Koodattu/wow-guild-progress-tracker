@@ -1127,7 +1127,7 @@ export type CharacterRankingRow = {
 };
 
 export type GuildRaidCharacter = {
-  wclCanonicalCharacterId: number;
+  wclCanonicalCharacterId: number | null;
   name: string;
   realm: string;
   region: string;
@@ -1151,7 +1151,7 @@ export type GuildRaidCharactersResponse = {
 };
 
 export type CharacterSearchResult = {
-  wclCanonicalCharacterId: number;
+  wclCanonicalCharacterId: number | null;
   name: string;
   realm: string;
   region: string;
@@ -1185,7 +1185,7 @@ export type GlobalSearchResponse = {
 export type CharacterProfileResponse = {
   type: "profile";
   character: {
-    wclCanonicalCharacterId: number;
+    wclCanonicalCharacterId: number | null;
     name: string;
     realm: string;
     region: string;
@@ -1275,7 +1275,7 @@ export type CharacterRaidReport = {
 
 export type CharacterRaidReportsResponse = {
   character: {
-    wclCanonicalCharacterId: number;
+    wclCanonicalCharacterId: number | null;
     name: string;
     realm: string;
     region: string;

@@ -7,8 +7,10 @@ export interface ICharacterReportGuildSnapshot {
 }
 
 export interface ICharacterReportAppearance extends Document {
-  characterId: mongoose.Types.ObjectId;
-  wclCanonicalCharacterId: number;
+  characterId?: mongoose.Types.ObjectId | null;
+  wclCanonicalCharacterId?: number | null;
+  sourceIdentityKey: string;
+  appearanceSource: "rankedCharacters" | "reportRankings";
   reportCode: string;
   reportStartTime: Date;
   reportGuildId: mongoose.Types.ObjectId;
@@ -35,8 +37,10 @@ const CharacterReportGuildSnapshotSchema = new Schema<ICharacterReportGuildSnaps
 
 const CharacterReportAppearanceSchema = new Schema<ICharacterReportAppearance>(
   {
-    characterId: { type: Schema.Types.ObjectId, ref: "Character", required: true, index: true },
-    wclCanonicalCharacterId: { type: Number, required: true, index: true },
+    characterId: { type: Schema.Types.ObjectId, ref: "Character", default: null, index: true },
+    wclCanonicalCharacterId: { type: Number, default: null, index: true },
+    sourceIdentityKey: { type: String, required: true },
+    appearanceSource: { type: String, enum: ["rankedCharacters", "reportRankings"], required: true, default: "rankedCharacters", index: true },
     reportCode: { type: String, required: true, index: true },
     reportStartTime: { type: Date, required: true, index: true },
     reportGuildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true, index: true },
@@ -52,8 +56,10 @@ const CharacterReportAppearanceSchema = new Schema<ICharacterReportAppearance>(
   { timestamps: true },
 );
 
-CharacterReportAppearanceSchema.index({ reportCode: 1, wclCanonicalCharacterId: 1 }, { unique: true });
-CharacterReportAppearanceSchema.index({ wclCanonicalCharacterId: 1, reportStartTime: 1 });
+CharacterReportAppearanceSchema.index({ reportCode: 1, sourceIdentityKey: 1 }, { unique: true, partialFilterExpression: { sourceIdentityKey: { $type: "string" } } });
+CharacterReportAppearanceSchema.index({ reportCode: 1, wclCanonicalCharacterId: 1 }, { unique: true, partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
+CharacterReportAppearanceSchema.index({ wclCanonicalCharacterId: 1, reportStartTime: 1 }, { partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
 CharacterReportAppearanceSchema.index({ reportGuildId: 1, reportStartTime: 1 });
+CharacterReportAppearanceSchema.index({ characterName: 1, characterRealm: 1, characterRegion: 1, classID: 1 });
 
 export default mongoose.model<ICharacterReportAppearance>("CharacterReportAppearance", CharacterReportAppearanceSchema);

@@ -421,6 +421,98 @@ class WarcraftLogsService {
     return this.query<any>(query, variables);
   }
 
+  async getReportRankingsCharacters(reportCode: string, difficulty = 5): Promise<
+    Array<{
+      name: string;
+      className: string;
+      specName?: string;
+      server: {
+        name: string;
+        region: string;
+      };
+      fightIds: number[];
+    }>
+  > {
+    logger.info(`[API REQUEST] WarcraftLogsService.getReportRankingsCharacters - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, difficulty: ${difficulty})`);
+    const query = `
+      query($reportCode: String!, $difficulty: Int!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            rankings(compare: Rankings, timeframe: Historical, difficulty: $difficulty)
+          }
+        }
+      }
+    `;
+
+    const result = await this.query<any>(query, { reportCode, difficulty });
+    const rankingRows = Array.isArray(result?.reportData?.report?.rankings?.data) ? result.reportData.report.rankings.data : [];
+    const getStringValue = (value: any): string | undefined => {
+      if (typeof value === "string") return value;
+      if (typeof value?.slug === "string") return value.slug;
+      if (typeof value?.name === "string") return value.name;
+      return undefined;
+    };
+    const charactersByKey = new Map<
+      string,
+      {
+        name: string;
+        className: string;
+        specName?: string;
+        server: {
+          name: string;
+          region: string;
+        };
+        fightIds: Set<number>;
+      }
+    >();
+
+    for (const row of rankingRows) {
+      const fightId = typeof row?.fightID === "number" ? row.fightID : undefined;
+      const roleGroups = row?.roles && typeof row.roles === "object" ? Object.values(row.roles) : [];
+
+      for (const roleGroup of roleGroups as any[]) {
+        const roleCharacters = Array.isArray(roleGroup?.characters) ? roleGroup.characters : [];
+
+        for (const character of roleCharacters) {
+          const name = getStringValue(character?.name);
+          const className = getStringValue(character?.class ?? character?.className);
+          const serverName = getStringValue(character?.server?.name);
+          const serverRegion = getStringValue(character?.server?.region);
+
+          if (!name || !className || !serverName || !serverRegion) continue;
+
+          const key = `${String(serverRegion).toLowerCase()}:${String(serverName).toLowerCase()}:${String(name).toLowerCase()}:${String(className).toLowerCase()}`;
+          const existing = charactersByKey.get(key);
+          if (existing) {
+            if (fightId !== undefined) existing.fightIds.add(fightId);
+            continue;
+          }
+
+          charactersByKey.set(key, {
+            name,
+            className,
+            specName: getStringValue(character?.spec),
+            server: {
+              name: serverName,
+              region: serverRegion,
+            },
+            fightIds: new Set(fightId !== undefined ? [fightId] : []),
+          });
+        }
+      }
+    }
+
+    return Array.from(charactersByKey.values()).map((character) => ({
+      ...character,
+      fightIds: Array.from(character.fightIds).sort((a, b) => a - b),
+    }));
+  }
+
   // Get guild info and recent reports for a specific raid - ALL difficulties (not filtered)
   // Note: Limit kept low (10) to avoid WCL query complexity limits when fetching phase data
   async getGuildReportsAllDifficulties(guildName: string, serverSlug: string, serverRegion: string, zoneId: number, limit: number = 10, page: number = 1) {

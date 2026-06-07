@@ -32,7 +32,9 @@ export interface IReport extends Document {
   charactersFetchFailedAt?: Date;
   charactersFetchError?: string;
   rankedCharacterCount?: number;
+  rankingsCharacterCount?: number;
   characterAppearanceCount?: number;
+  charactersFetchSource?: "rankedCharacters" | "reportRankings" | "none";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,7 +73,13 @@ const ReportSchema: Schema = new Schema(
     charactersFetchFailedAt: { type: Date },
     charactersFetchError: { type: String },
     rankedCharacterCount: { type: Number, default: 0 },
+    rankingsCharacterCount: { type: Number, default: 0 },
     characterAppearanceCount: { type: Number, default: 0 },
+    charactersFetchSource: {
+      type: String,
+      enum: ["rankedCharacters", "reportRankings", "none"],
+      index: true,
+    },
   },
   {
     timestamps: true,

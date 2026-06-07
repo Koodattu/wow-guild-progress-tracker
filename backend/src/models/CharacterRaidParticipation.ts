@@ -1,8 +1,8 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface ICharacterRaidParticipation extends Document {
-  characterId: mongoose.Types.ObjectId;
-  wclCanonicalCharacterId: number;
+  characterId?: mongoose.Types.ObjectId | null;
+  wclCanonicalCharacterId?: number | null;
   zoneId: number;
   reportGuildId: mongoose.Types.ObjectId;
   reportGuildName: string;
@@ -20,8 +20,8 @@ export interface ICharacterRaidParticipation extends Document {
 
 const CharacterRaidParticipationSchema = new Schema<ICharacterRaidParticipation>(
   {
-    characterId: { type: Schema.Types.ObjectId, ref: "Character", required: true, index: true },
-    wclCanonicalCharacterId: { type: Number, required: true, index: true },
+    characterId: { type: Schema.Types.ObjectId, ref: "Character", default: null, index: true },
+    wclCanonicalCharacterId: { type: Number, default: null, index: true },
     zoneId: { type: Number, required: true, index: true },
     reportGuildId: { type: Schema.Types.ObjectId, ref: "Guild", required: true, index: true },
     reportGuildName: { type: String, required: true },
@@ -46,7 +46,17 @@ CharacterRaidParticipationSchema.index(
     reportGuildId: 1,
     classID: 1,
   },
-  { unique: true },
+  { unique: true, partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } },
+);
+CharacterRaidParticipationSchema.index(
+  {
+    characterRealm: 1,
+    characterName: 1,
+    classID: 1,
+    zoneId: 1,
+    reportGuildId: 1,
+  },
+  { unique: true, partialFilterExpression: { wclCanonicalCharacterId: null } },
 );
 
 export default mongoose.model<ICharacterRaidParticipation>("CharacterRaidParticipation", CharacterRaidParticipationSchema);
