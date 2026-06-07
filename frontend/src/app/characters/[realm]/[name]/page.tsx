@@ -3,8 +3,9 @@
 import { type KeyboardEvent, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { Boss, CharacterProfileResponse, CharacterRaidReportsResponse, RaidInfo } from "@/types";
+import { Boss, CharacterProfileChoice, CharacterProfileLookupResponse, CharacterProfileResponse, CharacterRaidReportsResponse, RaidInfo } from "@/types";
 import { useRaids } from "@/lib/queries";
 import { formatRealmName, formatSpecName, formatTime, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import IconImage from "@/components/IconImage";
@@ -113,6 +114,10 @@ function formatScore(value: number) {
 
 function getBossKey(zoneId: number, encounterId: number) {
   return `${zoneId}:${encounterId}`;
+}
+
+function getCharacterProfileHref(realm: string, name: string, classID: number) {
+  return `/characters/${encodeURIComponent(realm)}/${encodeURIComponent(name)}?class=${encodeURIComponent(String(classID))}`;
 }
 
 function getRankingParse(row: CharacterRanking) {
@@ -275,11 +280,87 @@ function CharacterRaidReportsDialog({
   );
 }
 
+function CharacterChoiceCard({ choice }: { choice: CharacterProfileChoice }) {
+  const classInfo = getClassInfoById(choice.classID);
+
+  return (
+    <Link
+      href={getCharacterProfileHref(choice.realm, choice.name, choice.classID)}
+      className="group flex min-h-[136px] flex-col justify-between rounded-lg bg-gray-900 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.24)] ring-1 ring-gray-700 transition-[background-color,box-shadow,transform] hover:bg-gray-800/80 hover:shadow-[0_16px_42px_rgba(0,0,0,0.34)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 active:scale-[0.96]"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md shadow-sm shadow-black/35 ring-1 ring-white/10">
+          <IconImage iconFilename={classInfo.iconUrl} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-lg font-bold" style={{ color: getClassColor(classInfo.name) }}>
+            {choice.name}
+          </div>
+          <div className="truncate text-sm font-semibold text-gray-400">
+            {classInfo.name} <span className="text-gray-600">{formatRealmName(choice.realm)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <div className="text-xs text-gray-500">Reports</div>
+          <div className="font-bold tabular-nums text-gray-100">{choice.reportCount}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">Guilds</div>
+          <div className="font-bold tabular-nums text-gray-100">{choice.guildCount}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">Last Seen</div>
+          <div className="font-bold tabular-nums text-gray-100">{formatShortDate(choice.lastSeenAt)}</div>
+        </div>
+      </div>
+
+      {choice.latestGuild ? (
+        <div className="mt-3 truncate text-xs font-semibold text-gray-500">
+          {choice.latestGuild.name} <span className="text-gray-700">{formatRealmName(choice.latestGuild.realm)}</span>
+        </div>
+      ) : null}
+    </Link>
+  );
+}
+
+function CharacterChoicesView({ name, realm, choices }: { name: string; realm: string; choices: CharacterProfileChoice[] }) {
+  return (
+    <main className="min-h-screen px-4 py-8">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <header className="py-2">
+          <h1 className="text-3xl font-bold text-white md:text-4xl">{name}</h1>
+          <p className="mt-1 text-lg font-semibold text-gray-500">{formatRealmName(realm)}</p>
+        </header>
+
+        <section className="rounded-lg bg-gray-950/35 p-4 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset] ring-1 ring-gray-800">
+          <h2 className="text-lg font-semibold text-white">Select Character</h2>
+          <p className="text-sm text-gray-400">Multiple classes have appeared with this character name and realm in raid reports.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {choices.map((choice) => (
+              <CharacterChoiceCard key={`${choice.region}-${choice.realm}-${choice.name}-${choice.classID}`} choice={choice} />
+            ))}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 export default function CharacterProfilePage({ params }: PageProps) {
   const resolvedParams = use(params);
   const realm = decodeURIComponent(resolvedParams.realm);
   const name = decodeURIComponent(resolvedParams.name);
-  const [profile, setProfile] = useState<CharacterProfileResponse | null>(null);
+  const searchParams = useSearchParams();
+  const classParam = searchParams.get("class");
+  const selectedClassId = useMemo(() => {
+    if (!classParam) return undefined;
+    const parsed = Number(classParam);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [classParam]);
+  const [lookup, setLookup] = useState<CharacterProfileLookupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bossesByRaid, setBossesByRaid] = useState<Map<number, Boss[]>>(new Map());
@@ -289,6 +370,8 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const [timelineReportsError, setTimelineReportsError] = useState<string | null>(null);
   const timelineReportsRequestId = useRef(0);
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
+  const profile = lookup?.type === "profile" ? lookup : null;
+  const choices = lookup?.type === "choices" ? lookup : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -298,12 +381,12 @@ export default function CharacterProfilePage({ params }: PageProps) {
       setError(null);
 
       try {
-        const response = await api.getCharacterProfileByRealmName(realm, name);
-        if (!cancelled) setProfile(response);
+        const response = await api.getCharacterProfileByRealmName(realm, name, selectedClassId);
+        if (!cancelled) setLookup(response);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load character profile");
-          setProfile(null);
+          setLookup(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -315,7 +398,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
     return () => {
       cancelled = true;
     };
-  }, [realm, name]);
+  }, [realm, name, selectedClassId]);
 
   useEffect(() => {
     if (!profile?.rankings.length) {
@@ -384,7 +467,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
     setTimelineReportsLoading(true);
 
     try {
-      const response = await api.getCharacterRaidReportsByRealmName(realm, name, row.zoneId, row.guildId);
+      const response = await api.getCharacterRaidReportsByRealmName(realm, name, row.zoneId, row.guildId, profile?.character.classID);
       if (timelineReportsRequestId.current === requestId) {
         setTimelineReports(response);
       }
@@ -497,6 +580,10 @@ export default function CharacterProfilePage({ params }: PageProps) {
         <div className="mx-auto max-w-6xl text-center text-gray-300">Loading character...</div>
       </main>
     );
+  }
+
+  if (choices) {
+    return <CharacterChoicesView name={choices.character.name} realm={choices.character.realm} choices={choices.choices} />;
   }
 
   if (error || raidsError || !profile) {

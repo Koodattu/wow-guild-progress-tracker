@@ -1180,6 +1180,7 @@ export type GlobalSearchResponse = {
 };
 
 export type CharacterProfileResponse = {
+  type: "profile";
   character: {
     wclCanonicalCharacterId: number;
     name: string;
@@ -1218,6 +1219,33 @@ export type CharacterProfileResponse = {
     updatedAt?: string;
   }>;
 };
+
+export type CharacterProfileChoice = {
+  wclCanonicalCharacterIds: number[];
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  reportCount: number;
+  guildCount: number;
+  latestGuild?: {
+    name: string;
+    realm: string;
+  } | null;
+};
+
+export type CharacterProfileChoicesResponse = {
+  type: "choices";
+  character: {
+    name: string;
+    realm: string;
+  };
+  choices: CharacterProfileChoice[];
+};
+
+export type CharacterProfileLookupResponse = CharacterProfileResponse | CharacterProfileChoicesResponse;
 
 export type CharacterRaidReport = {
   code: string;

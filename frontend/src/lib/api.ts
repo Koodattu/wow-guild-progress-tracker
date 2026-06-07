@@ -61,7 +61,7 @@ import {
   CharacterSearchResponse,
   GlobalSearchResponse,
   GuildRaidCharactersResponse,
-  CharacterProfileResponse,
+  CharacterProfileLookupResponse,
   CharacterRaidReportsResponse,
   RateLimitResponse,
   RateLimitStatus,
@@ -143,19 +143,25 @@ export const api = {
     return response.json();
   },
 
-  async getCharacterProfileByRealmName(realm: string, name: string): Promise<CharacterProfileResponse> {
+  async getCharacterProfileByRealmName(realm: string, name: string, classId?: number): Promise<CharacterProfileLookupResponse> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}`);
+    const params = new URLSearchParams();
+    if (classId !== undefined) params.set("class", String(classId));
+    const query = params.toString();
+    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}${query ? `?${query}` : ""}`);
     if (!response.ok) throw new Error("Failed to fetch character profile");
     return response.json();
   },
 
-  async getCharacterRaidReportsByRealmName(realm: string, name: string, raidId: number, guildId: string): Promise<CharacterRaidReportsResponse> {
+  async getCharacterRaidReportsByRealmName(realm: string, name: string, raidId: number, guildId: string, classId?: number): Promise<CharacterRaidReportsResponse> {
     const encodedRealm = encodeURIComponent(realm);
     const encodedName = encodeURIComponent(name);
     const encodedGuildId = encodeURIComponent(guildId);
-    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}/raids/${raidId}/guilds/${encodedGuildId}/reports`);
+    const params = new URLSearchParams();
+    if (classId !== undefined) params.set("class", String(classId));
+    const query = params.toString();
+    const response = await fetch(`${API_URL}/api/characters/${encodedRealm}/${encodedName}/raids/${raidId}/guilds/${encodedGuildId}/reports${query ? `?${query}` : ""}`);
     if (!response.ok) throw new Error("Failed to fetch character raid reports");
     return response.json();
   },

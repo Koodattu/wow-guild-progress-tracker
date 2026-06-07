@@ -434,8 +434,8 @@ export default function GuildProfilePage({ params }: PageProps) {
   }, []);
 
   const handleCharacterNavigate = useCallback(
-    (characterRealm: string, characterName: string) => {
-      router.push(`/characters/${encodeURIComponent(characterRealm)}/${encodeURIComponent(characterName)}`);
+    (characterRealm: string, characterName: string, classID: number) => {
+      router.push(`/characters/${encodeURIComponent(characterRealm)}/${encodeURIComponent(characterName)}?class=${encodeURIComponent(String(classID))}`);
     },
     [router],
   );
@@ -1221,8 +1221,8 @@ export default function GuildProfilePage({ params }: PageProps) {
                           const classInfo = getClassInfoById(character.classID);
                           return (
                             <tr
-                              key={character.wclCanonicalCharacterId}
-                              onClick={() => handleCharacterNavigate(character.realm, character.name)}
+                              key={`${character.wclCanonicalCharacterId}-${character.region}-${character.realm}-${character.name}-${character.classID}`}
+                              onClick={() => handleCharacterNavigate(character.realm, character.name, character.classID)}
                               className="group cursor-pointer border-b border-gray-800/80 transition-colors last:border-0 hover:bg-blue-950/40"
                             >
                               <td className="px-4 py-3">

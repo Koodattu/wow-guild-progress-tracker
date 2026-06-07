@@ -188,6 +188,7 @@ export type GuildRaidCharacterRosterResponse = {
 };
 
 export type CharacterProfileResponse = {
+  type: "profile";
   character: {
     wclCanonicalCharacterId: number;
     name: string;
@@ -226,6 +227,33 @@ export type CharacterProfileResponse = {
     updatedAt?: Date;
   }>;
 };
+
+export type CharacterProfileChoice = {
+  wclCanonicalCharacterIds: number[];
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  firstSeenAt?: Date;
+  lastSeenAt?: Date;
+  reportCount: number;
+  guildCount: number;
+  latestGuild?: {
+    name: string;
+    realm: string;
+  } | null;
+};
+
+export type CharacterProfileChoicesResponse = {
+  type: "choices";
+  character: {
+    name: string;
+    realm: string;
+  };
+  choices: CharacterProfileChoice[];
+};
+
+export type CharacterProfileLookupResponse = CharacterProfileResponse | CharacterProfileChoicesResponse;
 
 export type CharacterRaidReportsResponse = {
   character: {
@@ -610,6 +638,10 @@ class CharacterService {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             zoneId: "$report.zoneId",
             reportGuildId: "$reportGuildId",
+            characterName: "$characterName",
+            characterRealm: "$characterRealm",
+            characterRegion: "$characterRegion",
+            classID: "$classID",
           },
           characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
@@ -645,6 +677,9 @@ class CharacterService {
         },
       },
     ]);
+
+    // Drops the previous canonical-id-only unique index before inserting split rows.
+    await CharacterRaidParticipation.syncIndexes();
 
     const deleteResult = await CharacterRaidParticipation.deleteMany({});
     if (rows.length > 0) {
@@ -724,23 +759,141 @@ class CharacterService {
     }));
   }
 
-  async getCharacterProfileByRealmName(realm: string, name: string): Promise<CharacterProfileResponse | null> {
-    const character = await Character.findOne({
-      realm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
-      name: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
-    }).lean();
+  async getCharacterProfileByRealmName(realm: string, name: string, classId?: number): Promise<CharacterProfileLookupResponse | null> {
+    const realmRegex = new RegExp(`^${this.escapeRegex(realm)}$`, "i");
+    const nameRegex = new RegExp(`^${this.escapeRegex(name)}$`, "i");
 
-    if (!character) return null;
-
-    const [timelineRows, rankingRows] = await Promise.all([
-      CharacterRaidParticipation.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
-        .sort({ firstSeenAt: 1, zoneId: 1 })
-        .lean(),
-      CharacterLeaderboard.find({ wclCanonicalCharacterId: character.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
-        .sort({ zoneId: -1, score: -1 })
-        .limit(50)
-        .lean(),
+    const identityRows = await CharacterRaidParticipation.aggregate([
+      {
+        $match: {
+          characterRealm: realmRegex,
+          characterName: nameRegex,
+          zoneId: { $in: TRACKED_RAIDS },
+        },
+      },
+      { $sort: { lastSeenAt: -1 } },
+      {
+        $group: {
+          _id: {
+            characterName: "$characterName",
+            characterRealm: "$characterRealm",
+            characterRegion: "$characterRegion",
+            classID: "$classID",
+          },
+          wclCanonicalCharacterIds: { $addToSet: "$wclCanonicalCharacterId" },
+          name: { $first: "$characterName" },
+          realm: { $first: "$characterRealm" },
+          region: { $first: "$characterRegion" },
+          classID: { $first: "$classID" },
+          firstSeenAt: { $min: "$firstSeenAt" },
+          lastSeenAt: { $max: "$lastSeenAt" },
+          reportCount: { $sum: "$reportCount" },
+          guilds: { $addToSet: { name: "$reportGuildName", realm: "$reportGuildRealm" } },
+          latestGuildName: { $first: "$reportGuildName" },
+          latestGuildRealm: { $first: "$reportGuildRealm" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          wclCanonicalCharacterIds: 1,
+          name: 1,
+          realm: 1,
+          region: 1,
+          classID: 1,
+          firstSeenAt: 1,
+          lastSeenAt: 1,
+          reportCount: 1,
+          guildCount: { $size: "$guilds" },
+          latestGuild: {
+            name: "$latestGuildName",
+            realm: "$latestGuildRealm",
+          },
+        },
+      },
+      { $sort: { lastSeenAt: -1, classID: 1 } },
     ]);
+
+    const choices = identityRows as CharacterProfileChoice[];
+    if (!classId && choices.length > 1) {
+      return {
+        type: "choices",
+        character: {
+          name: choices[0]?.name ?? name,
+          realm: choices[0]?.realm ?? realm,
+        },
+        choices,
+      };
+    }
+
+    const selectedChoice = classId ? choices.find((choice) => choice.classID === classId) : choices[0];
+
+    let timelineRows: any[] = [];
+    let rankingRows: any[] = [];
+    let character: {
+      wclCanonicalCharacterId: number;
+      name: string;
+      realm: string;
+      region: string;
+      classID: number;
+    } | null = null;
+
+    if (selectedChoice) {
+      const canonicalIds = selectedChoice.wclCanonicalCharacterIds;
+      character = {
+        wclCanonicalCharacterId: canonicalIds[0],
+        name: selectedChoice.name,
+        realm: selectedChoice.realm,
+        region: selectedChoice.region,
+        classID: selectedChoice.classID,
+      };
+
+      [timelineRows, rankingRows] = await Promise.all([
+        CharacterRaidParticipation.find({
+          characterName: selectedChoice.name,
+          characterRealm: selectedChoice.realm,
+          characterRegion: selectedChoice.region,
+          classID: selectedChoice.classID,
+          zoneId: { $in: TRACKED_RAIDS },
+        })
+          .sort({ firstSeenAt: 1, zoneId: 1 })
+          .lean(),
+        CharacterLeaderboard.find({
+          wclCanonicalCharacterId: { $in: canonicalIds },
+          classID: selectedChoice.classID,
+          zoneId: { $in: TRACKED_RAIDS },
+        })
+          .sort({ zoneId: -1, score: -1 })
+          .limit(50)
+          .lean(),
+      ]);
+    } else {
+      const fallbackCharacter = await Character.findOne({
+        realm: realmRegex,
+        name: nameRegex,
+        ...(classId ? { classID: classId } : {}),
+      })
+        .select("wclCanonicalCharacterId name realm region classID")
+        .lean();
+
+      if (!fallbackCharacter) return null;
+
+      character = fallbackCharacter;
+
+      [timelineRows, rankingRows] = await Promise.all([
+        CharacterRaidParticipation.find({ wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
+          .sort({ firstSeenAt: 1, zoneId: 1 })
+          .lean(),
+        CharacterLeaderboard.find({
+          wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId,
+          classID: fallbackCharacter.classID,
+          zoneId: { $in: TRACKED_RAIDS },
+        })
+          .sort({ zoneId: -1, score: -1 })
+          .limit(50)
+          .lean(),
+      ]);
+    }
 
     const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter((id): id is number => typeof id === "number");
     const raids = await Raid.find({ id: { $in: raidIds } }).select("id name -_id").lean();
@@ -778,6 +931,7 @@ class CharacterService {
     const trackedLastSeenAt = timelineRows.reduce<Date | undefined>((latest, row) => (!latest || row.lastSeenAt > latest ? row.lastSeenAt : latest), undefined);
 
     return {
+      type: "profile",
       character: {
         wclCanonicalCharacterId: character.wclCanonicalCharacterId,
         name: character.name,
@@ -818,26 +972,21 @@ class CharacterService {
     };
   }
 
-  async getCharacterRaidReportsByRealmName(realm: string, name: string, zoneId: number, guildId: string): Promise<CharacterRaidReportsResponse | null> {
+  async getCharacterRaidReportsByRealmName(realm: string, name: string, zoneId: number, guildId: string, classId?: number): Promise<CharacterRaidReportsResponse | null> {
     if (!mongoose.Types.ObjectId.isValid(guildId)) return null;
 
-    const character = await Character.findOne({
-      realm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
-      name: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
-    })
-      .select("wclCanonicalCharacterId name realm region")
-      .lean();
-
-    if (!character) return null;
-
+    const realmRegex = new RegExp(`^${this.escapeRegex(realm)}$`, "i");
+    const nameRegex = new RegExp(`^${this.escapeRegex(name)}$`, "i");
     const reportGuildId = new mongoose.Types.ObjectId(guildId);
     const [raid, appearanceRows] = await Promise.all([
       Raid.findOne({ id: zoneId }).select("id name -_id").lean(),
       CharacterReportAppearance.aggregate([
         {
           $match: {
-            wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+            characterRealm: realmRegex,
+            characterName: nameRegex,
             reportGuildId,
+            ...(classId ? { classID: classId } : {}),
           },
         },
         {
@@ -872,6 +1021,10 @@ class CharacterService {
         {
           $project: {
             _id: 0,
+            wclCanonicalCharacterId: 1,
+            characterName: 1,
+            characterRealm: 1,
+            characterRegion: 1,
             reportGuildName: 1,
             reportGuildRealm: 1,
             report: 1,
@@ -880,15 +1033,18 @@ class CharacterService {
       ]),
     ]);
 
+    if (!appearanceRows.length) return null;
+
+    const firstAppearance = appearanceRows[0];
     const guildName = appearanceRows[0]?.reportGuildName ?? "";
     const guildRealm = appearanceRows[0]?.reportGuildRealm ?? "";
 
     return {
       character: {
-        wclCanonicalCharacterId: character.wclCanonicalCharacterId,
-        name: character.name,
-        realm: character.realm,
-        region: character.region,
+        wclCanonicalCharacterId: firstAppearance.wclCanonicalCharacterId,
+        name: firstAppearance.characterName,
+        realm: firstAppearance.characterRealm,
+        region: firstAppearance.characterRegion,
       },
       raid: raid ? { id: raid.id, name: raid.name } : null,
       guild: {
