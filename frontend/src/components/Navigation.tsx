@@ -349,7 +349,7 @@ export default function Navigation() {
                 </button>
 
                 {isSearchDropdownOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-md bg-gray-950/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/10">
+                  <div className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-1.5rem))] rounded-md bg-gray-950/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/10">
                     <input
                       ref={searchInputRef}
                       type="search"
