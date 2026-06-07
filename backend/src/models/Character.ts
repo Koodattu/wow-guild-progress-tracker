@@ -41,7 +41,7 @@ const GuildHistoryEntrySchema: Schema = new Schema(
 
 const CharacterSchema: Schema = new Schema(
   {
-    wclCanonicalCharacterId: { type: Number, required: true, unique: true },
+    wclCanonicalCharacterId: { type: Number, required: true },
     name: { type: String, required: true },
     realm: { type: String, required: true },
     region: { type: String, required: true },
@@ -61,6 +61,7 @@ const CharacterSchema: Schema = new Schema(
   { timestamps: true },
 );
 
+CharacterSchema.index({ wclCanonicalCharacterId: 1, classID: 1 }, { unique: true });
 CharacterSchema.index({ name: 1, realm: 1, region: 1 });
 CharacterSchema.index({
   lastMythicSeenAt: -1,

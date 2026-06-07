@@ -455,11 +455,26 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Refresh character rankings (at 8 AM Finnish time)
-    // Updates zone rankings and encounter rankings for eligible tracked characters
-    // Independent of guild data - does not affect guild rankings or tier lists
+    // NIGHTLY: Rebuild materialized character raid participation data (at 8 AM Finnish time)
     cron.schedule(
       "0 8 * * *",
+      async () => {
+        if (this.isUpdatingCharacterRaidParticipations) {
+          logger.info("[Nightly/CharacterRaidParticipation] Previous rebuild still in progress, skipping...");
+          return;
+        }
+        await this.rebuildCharacterRaidParticipations();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Refresh character rankings (at 08:30 Finnish time)
+    // Updates zone rankings and encounter rankings for eligible tracked characters
+    // Then rebuilds the materialized leaderboard after character identities have been repaired.
+    cron.schedule(
+      "30 8 * * *",
       async () => {
         if (this.isUpdatingCharacterRankings) {
           logger.info("[Nightly/CharacterRankings] Previous update still in progress, skipping...");
@@ -483,21 +498,6 @@ class UpdateScheduler {
           return;
         }
         await this.updateAllGuildCrests();
-      },
-      {
-        timezone: "Europe/Helsinki",
-      },
-    );
-
-    // NIGHTLY: Rebuild materialized character raid participation data (at 08:30 Finnish time)
-    cron.schedule(
-      "30 8 * * *",
-      async () => {
-        if (this.isUpdatingCharacterRaidParticipations) {
-          logger.info("[Nightly/CharacterRaidParticipation] Previous rebuild still in progress, skipping...");
-          return;
-        }
-        await this.rebuildCharacterRaidParticipations();
       },
       {
         timezone: "Europe/Helsinki",
@@ -560,9 +560,9 @@ class UpdateScheduler {
     logger.info("    * Raider.IO guilds update: daily at 05:00");
     logger.info("    * Tier lists calculation: daily at 06:00");
     logger.info("    * Raid analytics calculation: daily at 07:00");
-    logger.info("    * Character rankings refresh: daily at 08:00");
+    logger.info("    * Character raid participation rebuild: daily at 08:00");
     logger.info("    * Guild crests update: daily at 08:00");
-    logger.info("    * Character raid participation rebuild: daily at 08:30");
+    logger.info("    * Character rankings refresh + leaderboard rebuild: daily at 08:30");
     logger.info("    * Hiatus event check: daily at 09:00");
     logger.info("    * Full cache warmup: daily at 11:00");
 
@@ -1194,7 +1194,7 @@ class UpdateScheduler {
     }
   }
 
-  // Refresh character rankings (at 7 AM Finnish time)
+  // Refresh character rankings (at 08:30 Finnish time)
   // Updates zone rankings and encounter rankings for eligible tracked characters
   // Then rebuilds the materialized leaderboard collection for fast queries
   private async refreshCharacterRankings(): Promise<void> {

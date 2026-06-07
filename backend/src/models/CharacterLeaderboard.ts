@@ -126,7 +126,7 @@ const CharacterLeaderboardSchema: Schema = new Schema(
 );
 
 // ── Unique constraint ──────────────────────────────────────────────
-CharacterLeaderboardSchema.index({ zoneId: 1, difficulty: 1, type: 1, encounterId: 1, partition: 1, metric: 1, wclCanonicalCharacterId: 1 }, { unique: true });
+CharacterLeaderboardSchema.index({ zoneId: 1, difficulty: 1, type: 1, encounterId: 1, partition: 1, metric: 1, characterId: 1 }, { unique: true });
 
 // ── Primary leaderboard query (no optional filters) ────────────────
 CharacterLeaderboardSchema.index({

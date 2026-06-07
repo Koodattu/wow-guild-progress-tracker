@@ -346,6 +346,8 @@ type WclReportRankingCharacter = {
 };
 
 class CharacterService {
+  private characterIdentityIndexesSynced: boolean = false;
+
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -355,7 +357,7 @@ class CharacterService {
   }
 
   private getSourceIdentityKey(parts: { canonicalID?: number | null; region: string; realm: string; name: string; classID: number; source: string }): string {
-    if (typeof parts.canonicalID === "number") return `canonical:${parts.canonicalID}`;
+    if (typeof parts.canonicalID === "number") return `canonical:${parts.canonicalID}:${parts.classID}`;
     return `${parts.source}:${this.normalizeIdentityPart(parts.region)}:${this.normalizeIdentityPart(parts.realm)}:${this.normalizeIdentityPart(parts.name)}:${parts.classID}`;
   }
 
@@ -363,6 +365,14 @@ class CharacterService {
     const normalized = className.toLowerCase().replace(/[^a-z]/g, "");
     const classInfo = CLASSES.find((entry) => entry.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
     return classInfo?.id ?? null;
+  }
+
+  private async ensureCharacterIdentityIndexes(): Promise<void> {
+    if (this.characterIdentityIndexesSynced) return;
+
+    await Character.syncIndexes();
+    await CharacterReportAppearance.syncIndexes();
+    this.characterIdentityIndexesSynced = true;
   }
 
   /**
@@ -387,10 +397,12 @@ class CharacterService {
 
     const initialGuildHistory = guildName && guildRealm ? [{ guildName, guildRealm, firstSeenAt: now, lastSeenAt: now }] : [];
 
+    await this.ensureCharacterIdentityIndexes();
+
     // Atomic upsert: core fields always updated via $set,
     // guild fields set only on insert via $setOnInsert (existing chars handled separately)
     const character = await Character.findOneAndUpdate(
-      { wclCanonicalCharacterId: canonicalID },
+      { wclCanonicalCharacterId: canonicalID, classID },
       {
         $set: {
           name,
@@ -442,6 +454,8 @@ class CharacterService {
     let processed = 0;
     let skipped = 0;
 
+    await this.ensureCharacterIdentityIndexes();
+
     for (const rankedCharacter of params.rankedCharacters) {
       const canonicalID = rankedCharacter.canonicalID;
       const name = rankedCharacter.name;
@@ -455,7 +469,7 @@ class CharacterService {
       }
 
       const character = await Character.findOneAndUpdate(
-        { wclCanonicalCharacterId: canonicalID },
+        { wclCanonicalCharacterId: canonicalID, classID },
         {
           $set: {
             name,
@@ -501,6 +515,7 @@ class CharacterService {
         {
           reportCode: params.reportCode,
           wclCanonicalCharacterId: canonicalID,
+          classID,
         },
         {
           $set: {
@@ -780,6 +795,177 @@ class CharacterService {
     await Character.updateOne({ _id: characterId }, { $set: update });
   }
 
+  private async relinkMultiClassCanonicalCharactersFromReportAppearances(): Promise<{ canonicalIds: number; groups: number; relinkedGroups: number }> {
+    await this.ensureCharacterIdentityIndexes();
+
+    const collisionRows = await CharacterReportAppearance.aggregate([
+      { $match: { wclCanonicalCharacterId: { $type: "number" }, classID: { $type: "number" } } },
+      {
+        $group: {
+          _id: "$wclCanonicalCharacterId",
+          classes: { $addToSet: "$classID" },
+        },
+      },
+      {
+        $project: {
+          canonicalID: "$_id",
+          classCount: { $size: "$classes" },
+        },
+      },
+      { $match: { classCount: { $gt: 1 } } },
+    ]).allowDiskUse(true);
+
+    const canonicalIds = collisionRows.map((row) => row.canonicalID).filter((id): id is number => typeof id === "number");
+    if (canonicalIds.length === 0) {
+      return { canonicalIds: 0, groups: 0, relinkedGroups: 0 };
+    }
+
+    const [identityRows, guildRows] = await Promise.all([
+      CharacterReportAppearance.aggregate([
+        { $match: { wclCanonicalCharacterId: { $in: canonicalIds }, classID: { $type: "number" } } },
+        { $sort: { reportStartTime: 1, reportCode: 1 } },
+        {
+          $group: {
+            _id: {
+              canonicalID: "$wclCanonicalCharacterId",
+              classID: "$classID",
+            },
+            name: { $last: "$characterName" },
+            realm: { $last: "$characterRealm" },
+            region: { $last: "$characterRegion" },
+            hidden: { $last: "$hidden" },
+            guildName: { $last: "$reportGuildName" },
+            guildRealm: { $last: "$reportGuildRealm" },
+            firstReportSeenAt: { $min: "$reportStartTime" },
+            lastReportSeenAt: { $max: "$reportStartTime" },
+          },
+        },
+      ]).allowDiskUse(true),
+      CharacterReportAppearance.aggregate([
+        { $match: { wclCanonicalCharacterId: { $in: canonicalIds }, classID: { $type: "number" } } },
+        {
+          $group: {
+            _id: {
+              canonicalID: "$wclCanonicalCharacterId",
+              classID: "$classID",
+              guildName: "$reportGuildName",
+              guildRealm: "$reportGuildRealm",
+            },
+            firstSeenAt: { $min: "$reportStartTime" },
+            lastSeenAt: { $max: "$reportStartTime" },
+          },
+        },
+        { $sort: { firstSeenAt: 1, "_id.guildName": 1, "_id.guildRealm": 1 } },
+      ]).allowDiskUse(true),
+    ]);
+
+    const guildHistoryByIdentity = new Map<
+      string,
+      Array<{
+        guildName: string;
+        guildRealm: string;
+        firstSeenAt: Date;
+        lastSeenAt: Date;
+      }>
+    >();
+
+    for (const row of guildRows) {
+      const canonicalID = row._id?.canonicalID;
+      const classID = row._id?.classID;
+      const guildName = row._id?.guildName;
+      const guildRealm = row._id?.guildRealm;
+      if (typeof canonicalID !== "number" || typeof classID !== "number" || !guildName || !guildRealm) continue;
+
+      const key = `${canonicalID}:${classID}`;
+      const history = guildHistoryByIdentity.get(key) ?? [];
+      history.push({
+        guildName,
+        guildRealm,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+      });
+      guildHistoryByIdentity.set(key, history);
+    }
+
+    let relinkedGroups = 0;
+    let appearanceBulkOps: any[] = [];
+
+    const flushAppearanceUpdates = async () => {
+      if (appearanceBulkOps.length === 0) return;
+      await CharacterReportAppearance.bulkWrite(appearanceBulkOps, { ordered: false });
+      appearanceBulkOps = [];
+    };
+
+    for (const row of identityRows) {
+      const canonicalID = row._id?.canonicalID;
+      const classID = row._id?.classID;
+      if (typeof canonicalID !== "number" || typeof classID !== "number" || !row.name || !row.realm || !row.region) continue;
+
+      const identityKey = `${canonicalID}:${classID}`;
+      const guildHistory = guildHistoryByIdentity.get(identityKey) ?? [];
+      const character = await Character.findOneAndUpdate(
+        { wclCanonicalCharacterId: canonicalID, classID },
+        {
+          $set: {
+            name: row.name,
+            realm: row.realm,
+            region: row.region,
+            classID,
+            wclProfileHidden: row.hidden === true,
+            guildName: row.guildName ?? null,
+            guildRealm: row.guildRealm ?? null,
+            guildUpdatedAt: row.lastReportSeenAt,
+            firstReportSeenAt: row.firstReportSeenAt,
+            lastReportSeenAt: row.lastReportSeenAt,
+            guildHistory,
+          },
+          $setOnInsert: {
+            wclCanonicalCharacterId: canonicalID,
+            lastMythicSeenAt: new Date(0),
+            rankingsAvailable: null,
+            nextEligibleRefreshAt: new Date("2100-01-01T00:00:00.000Z"),
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      if (!character) continue;
+
+      appearanceBulkOps.push({
+        updateMany: {
+          filter: {
+            wclCanonicalCharacterId: canonicalID,
+            classID,
+          },
+          update: [
+            {
+              $set: {
+                characterId: character._id,
+                sourceIdentityKey: this.getSourceIdentityKey({
+                  canonicalID,
+                  region: row.region,
+                  realm: row.realm,
+                  name: row.name,
+                  classID,
+                  source: "rankedCharacters",
+                }),
+                appearanceSource: { $ifNull: ["$appearanceSource", "rankedCharacters"] },
+              },
+            },
+          ],
+        },
+      });
+      relinkedGroups += 1;
+
+      if (appearanceBulkOps.length >= 500) {
+        await flushAppearanceUpdates();
+      }
+    }
+
+    await flushAppearanceUpdates();
+    return { canonicalIds: canonicalIds.length, groups: identityRows.length, relinkedGroups };
+  }
+
   private async matchReportRankingAppearancesToCanonicalCharacters(): Promise<number> {
     let matched = 0;
     const unmatchedAppearances = await CharacterReportAppearance.find({
@@ -833,6 +1019,7 @@ class CharacterService {
 
   async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
     logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
+    const relinkedCanonicalClasses = await this.relinkMultiClassCanonicalCharactersFromReportAppearances();
     const matchedFallbackAppearances = await this.matchReportRankingAppearancesToCanonicalCharacters();
 
     const rows = await CharacterReportAppearance.aggregate([
@@ -921,7 +1108,9 @@ class CharacterService {
       await CharacterRaidParticipation.insertMany(rows, { ordered: false });
     }
 
-    logger.info(`[CharacterRaidParticipation] Rebuild complete: matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`);
+    logger.info(
+      `[CharacterRaidParticipation] Rebuild complete: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`,
+    );
     return { deleted: deleteResult.deletedCount ?? 0, inserted: rows.length };
   }
 
@@ -1379,15 +1568,16 @@ class CharacterService {
       zoneId,
       ...(classId ? { classID: classId } : {}),
     })
-      .select("wclCanonicalCharacterId -_id")
+      .select("wclCanonicalCharacterId classID -_id")
       .lean();
     const canonicalIds = Array.from(new Set(participationRows.map((row) => row.wclCanonicalCharacterId).filter((id): id is number => typeof id === "number")));
+    const participationClassIds = Array.from(new Set(participationRows.map((row) => row.classID).filter((id): id is number => typeof id === "number")));
     const appearanceMatch =
       canonicalIds.length > 0
         ? {
             wclCanonicalCharacterId: { $in: canonicalIds },
             reportGuildId,
-            ...(classId ? { classID: classId } : {}),
+            ...(classId ? { classID: classId } : participationClassIds.length > 0 ? { classID: { $in: participationClassIds } } : {}),
           }
         : {
             characterRealm: realmRegex,
@@ -2032,7 +2222,8 @@ class CharacterService {
       // ── Boss leaderboards (per encounter × per partition × per metric) ─
       for (const encId of encounterIds) {
         for (const part of partitions) {
-          // Group by (wclCanonicalCharacterId, metric) to keep only the best spec per character per metric
+          // Group by (characterId, metric) to keep only the best spec per character per metric.
+          // WCL canonical IDs can be shared across different classes, so canonical ID alone is not a safe identity key.
           const rows = await Ranking.aggregate([
             {
               $match: {
@@ -2047,7 +2238,7 @@ class CharacterService {
             { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1 } },
             {
               $group: {
-                _id: { char: "$wclCanonicalCharacterId", metric: "$metric" },
+                _id: { characterId: "$characterId", metric: "$metric" },
                 characterId: { $first: "$characterId" },
                 wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
                 name: { $first: "$name" },
@@ -2113,7 +2304,7 @@ class CharacterService {
           { $sort: { bestAmount: -1, rankPercent: -1, totalKills: -1, partition: -1 } },
           {
             $group: {
-              _id: { char: "$wclCanonicalCharacterId", metric: "$metric" },
+              _id: { characterId: "$characterId", metric: "$metric" },
               characterId: { $first: "$characterId" },
               wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
               name: { $first: "$name" },
@@ -2274,7 +2465,7 @@ class CharacterService {
         { $sort: { "allStars.points": -1, partition: -1 } },
         {
           $group: {
-            _id: { wclCanonicalCharacterId: "$wclCanonicalCharacterId", encounterId: "$encounter.id", metric: "$metric" },
+            _id: { characterId: "$characterId", encounterId: "$encounter.id", metric: "$metric" },
             characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
@@ -2294,7 +2485,7 @@ class CharacterService {
         },
         {
           $group: {
-            _id: { wclCanonicalCharacterId: "$_id.wclCanonicalCharacterId", metric: "$_id.metric" },
+            _id: { characterId: "$_id.characterId", metric: "$_id.metric" },
             characterId: { $first: "$characterId" },
             wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
             name: { $first: "$name" },
@@ -2362,7 +2553,7 @@ class CharacterService {
       // ── Deduplicate entries by unique key ──────────────────────────
       const deduped = new Map<string, (typeof entries)[0]>();
       for (const e of entries) {
-        const key = `${e.zoneId}|${e.difficulty}|${e.type}|${e.encounterId}|${e.partition}|${e.metric}|${e.wclCanonicalCharacterId}`;
+        const key = `${e.zoneId}|${e.difficulty}|${e.type}|${e.encounterId}|${e.partition}|${e.metric}|${e.characterId}`;
         const existing = deduped.get(key);
         if (!existing || e.score > existing.score) {
           deduped.set(key, e);
@@ -2373,9 +2564,9 @@ class CharacterService {
       // ── Atomic swap: drop old data, insert new ─────────────────────
       logger.info(`[Leaderboard] Inserting ${dedupedEntries.length} leaderboard entries (deduped from ${entries.length})...`);
 
-      // Sync indexes to drop any stale indexes that no longer match the schema
-      await CharacterLeaderboard.syncIndexes();
       await CharacterLeaderboard.deleteMany({ zoneId: CURRENT_TIER_ID });
+      // Sync after clearing this materialized tier so stale rows cannot block new unique indexes.
+      await CharacterLeaderboard.syncIndexes();
 
       if (dedupedEntries.length > 0) {
         // Insert in batches of 5000 to avoid memory pressure

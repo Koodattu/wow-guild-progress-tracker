@@ -57,7 +57,7 @@ const CharacterReportAppearanceSchema = new Schema<ICharacterReportAppearance>(
 );
 
 CharacterReportAppearanceSchema.index({ reportCode: 1, sourceIdentityKey: 1 }, { unique: true, partialFilterExpression: { sourceIdentityKey: { $type: "string" } } });
-CharacterReportAppearanceSchema.index({ reportCode: 1, wclCanonicalCharacterId: 1 }, { unique: true, partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
+CharacterReportAppearanceSchema.index({ reportCode: 1, wclCanonicalCharacterId: 1, classID: 1 }, { unique: true, partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
 CharacterReportAppearanceSchema.index({ wclCanonicalCharacterId: 1, reportStartTime: 1 }, { partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
 CharacterReportAppearanceSchema.index({ reportGuildId: 1, reportStartTime: 1 });
 CharacterReportAppearanceSchema.index({ characterName: 1, characterRealm: 1, characterRegion: 1, classID: 1 });
