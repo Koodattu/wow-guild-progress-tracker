@@ -33,6 +33,7 @@ export interface IReport extends Document {
   charactersFetchError?: string;
   rankedCharacterCount?: number;
   rankingsCharacterCount?: number;
+  rankingsFetchedAt?: Date;
   characterAppearanceCount?: number;
   charactersFetchSource?: "rankedCharacters" | "reportRankings" | "none";
   createdAt: Date;
@@ -74,6 +75,7 @@ const ReportSchema: Schema = new Schema(
     charactersFetchError: { type: String },
     rankedCharacterCount: { type: Number, default: 0 },
     rankingsCharacterCount: { type: Number, default: 0 },
+    rankingsFetchedAt: { type: Date },
     characterAppearanceCount: { type: Number, default: 0 },
     charactersFetchSource: {
       type: String,

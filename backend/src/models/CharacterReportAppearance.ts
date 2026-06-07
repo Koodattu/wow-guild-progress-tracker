@@ -20,6 +20,8 @@ export interface ICharacterReportAppearance extends Document {
   characterRealm: string;
   characterRegion: string;
   classID: number;
+  specNames: string[];
+  rankingFightIds: number[];
   hidden: boolean;
   wclGuilds: ICharacterReportGuildSnapshot[];
   createdAt: Date;
@@ -50,6 +52,8 @@ const CharacterReportAppearanceSchema = new Schema<ICharacterReportAppearance>(
     characterRealm: { type: String, required: true },
     characterRegion: { type: String, required: true },
     classID: { type: Number, required: true },
+    specNames: { type: [String], default: [] },
+    rankingFightIds: { type: [Number], default: [] },
     hidden: { type: Boolean, required: true, default: false },
     wclGuilds: { type: [CharacterReportGuildSnapshotSchema], default: [] },
   },

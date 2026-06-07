@@ -426,6 +426,7 @@ class WarcraftLogsService {
       name: string;
       className: string;
       specName?: string;
+      specNames: string[];
       server: {
         name: string;
         region: string;
@@ -463,6 +464,7 @@ class WarcraftLogsService {
         name: string;
         className: string;
         specName?: string;
+        specNames: Set<string>;
         server: {
           name: string;
           region: string;
@@ -481,6 +483,7 @@ class WarcraftLogsService {
         for (const character of roleCharacters) {
           const name = getStringValue(character?.name);
           const className = getStringValue(character?.class ?? character?.className);
+          const specName = getStringValue(character?.spec);
           const serverName = getStringValue(character?.server?.name);
           const serverRegion = getStringValue(character?.server?.region);
 
@@ -490,13 +493,15 @@ class WarcraftLogsService {
           const existing = charactersByKey.get(key);
           if (existing) {
             if (fightId !== undefined) existing.fightIds.add(fightId);
+            if (specName) existing.specNames.add(specName);
             continue;
           }
 
           charactersByKey.set(key, {
             name,
             className,
-            specName: getStringValue(character?.spec),
+            specName,
+            specNames: new Set(specName ? [specName] : []),
             server: {
               name: serverName,
               region: serverRegion,
@@ -509,6 +514,7 @@ class WarcraftLogsService {
 
     return Array.from(charactersByKey.values()).map((character) => ({
       ...character,
+      specNames: Array.from(character.specNames).sort(),
       fightIds: Array.from(character.fightIds).sort((a, b) => a - b),
     }));
   }

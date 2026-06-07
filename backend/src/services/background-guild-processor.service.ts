@@ -830,14 +830,7 @@ class BackgroundGuildProcessor {
           { charactersFetchStatus: "pending" },
           { charactersFetchStatus: { $exists: false } },
           { charactersFetchStatus: "failed", charactersFetchFailedAt: { $lt: jobStartedAt } },
-          {
-            charactersFetchStatus: "fetched",
-            $and: [
-              { $or: [{ rankedCharacterCount: 0 }, { rankedCharacterCount: { $exists: false } }] },
-              { $or: [{ characterAppearanceCount: 0 }, { characterAppearanceCount: { $exists: false } }] },
-            ],
-            charactersFetchSource: { $exists: false },
-          },
+          { charactersFetchStatus: "fetched", rankingsFetchedAt: { $exists: false } },
         ],
       };
 
@@ -857,7 +850,7 @@ class BackgroundGuildProcessor {
       while (true) {
         const report = await Report.findOne(pendingReportQuery)
           .sort({ startTime: 1 })
-          .select("code startTime endTime charactersFetchStatus rankedCharacterCount characterAppearanceCount charactersFetchSource")
+          .select("code startTime endTime charactersFetchStatus rankedCharacterCount rankingsCharacterCount rankingsFetchedAt characterAppearanceCount charactersFetchSource")
           .lean();
         if (!report) {
           break;
@@ -880,17 +873,14 @@ class BackgroundGuildProcessor {
         }
 
         try {
-          const isZeroCharacterRetry =
-            report.charactersFetchStatus === "fetched" &&
-            !report.charactersFetchSource &&
-            (report.rankedCharacterCount ?? 0) === 0 &&
-            (report.characterAppearanceCount ?? 0) === 0;
+          const isRankingsOnlyRetry = report.charactersFetchStatus === "fetched" && !report.rankingsFetchedAt;
 
           let wclReport: any = null;
           let rankedCharacters: any[] = [];
           let rankedResult: { processed: number; skipped: number } = { processed: 0, skipped: 0 };
+          let canonicalMatches = isRankingsOnlyRetry ? await characterService.getCanonicalMatchesFromReportAppearances(report.code) : [];
 
-          if (!isZeroCharacterRetry) {
+          if (!isRankingsOnlyRetry) {
             const reportData = await wclService.getReportByCodeAllDifficulties(report.code, { includeRankedCharacters: true });
             wclReport = reportData.reportData?.report;
 
@@ -899,6 +889,7 @@ class BackgroundGuildProcessor {
             }
 
             rankedCharacters = Array.isArray(wclReport.rankedCharacters) ? wclReport.rankedCharacters : [];
+            canonicalMatches = characterService.buildCanonicalMatchesFromRankedCharacters(rankedCharacters);
             rankedResult = await characterService.upsertCharactersFromReportAppearances({
               reportCode: wclReport.code,
               reportStartTime: wclReport.startTime || report.startTime,
@@ -913,36 +904,39 @@ class BackgroundGuildProcessor {
           let fallbackResult: { processed: number; skipped: number; matched: number; unmatched: number } | null = null;
           let charactersFetchSource: "rankedCharacters" | "reportRankings" | "none" = rankedResult.processed > 0 ? "rankedCharacters" : "none";
 
-          if (rankedResult.processed === 0) {
-            if (!rateLimitService.canProceedBackground()) {
-              guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached before report rankings fallback, pausing...`);
-              await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
-              await queueItem.pause();
-              await rateLimitService.waitForReset();
-              await queueItem.resume();
-              guildLog.info("[ReportCharacterBackfill] Resuming report rankings fallback after rate limit reset");
-            }
-
-            const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
-            rankingsCharacterCount = rankingCharacters.length;
-            fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
-              reportCode: wclReport?.code || report.code,
-              reportStartTime: wclReport?.startTime || report.startTime,
-              reportGuildId: guild._id as mongoose.Types.ObjectId,
-              reportGuildName: guild.name,
-              reportGuildRealm: guild.realm,
-              rankingCharacters,
-            });
-            charactersFetchSource = fallbackResult.processed > 0 ? "reportRankings" : "none";
+          // report.rankings carries the historical class/spec for the report. rankedCharacters can resolve
+          // a reused WCL canonical ID to the wrong current class, so use rankings when it is available.
+          if (!rateLimitService.canProceedBackground()) {
+            guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached before report rankings fallback, pausing...`);
+            await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+            await queueItem.pause();
+            await rateLimitService.waitForReset();
+            await queueItem.resume();
+            guildLog.info("[ReportCharacterBackfill] Resuming report rankings fallback after rate limit reset");
           }
 
+          const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
+          rankingsCharacterCount = rankingCharacters.length;
+          fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
+            reportCode: wclReport?.code || report.code,
+            reportStartTime: wclReport?.startTime || report.startTime,
+            reportGuildId: guild._id as mongoose.Types.ObjectId,
+            reportGuildName: guild.name,
+            reportGuildRealm: guild.realm,
+            rankingCharacters,
+            canonicalMatches,
+          });
+          charactersFetchSource = fallbackResult.processed > 0 ? "reportRankings" : rankedResult.processed > 0 || (report.rankedCharacterCount ?? 0) > 0 ? "rankedCharacters" : "none";
+
           const processedAppearances = rankedResult.processed + (fallbackResult?.processed ?? 0);
+          const storedAppearanceCount = await CharacterReportAppearance.countDocuments({ reportCode: report.code });
           const reportUpdateSet: Record<string, unknown> = {
             charactersFetchStatus: "fetched",
             charactersFetchedAt: new Date(),
-            rankedCharacterCount: rankedCharacters.length,
+            rankedCharacterCount: rankedCharacters.length || report.rankedCharacterCount || 0,
             rankingsCharacterCount,
-            characterAppearanceCount: processedAppearances,
+            rankingsFetchedAt: new Date(),
+            characterAppearanceCount: storedAppearanceCount,
             charactersFetchSource,
             lastProcessed: new Date(),
           };
@@ -969,7 +963,7 @@ class BackgroundGuildProcessor {
           appearancesSaved += processedAppearances;
           await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
           guildLog.info(
-            `[ReportCharacterBackfill] ${report.code}: saved ${processedAppearances} appearances (rankedCharacters=${rankedResult.processed}/${rankedCharacters.length}, reportRankings=${fallbackResult?.processed ?? 0}/${rankingsCharacterCount}, matched=${fallbackResult?.matched ?? 0}, unmatched=${fallbackResult?.unmatched ?? 0})`,
+            `[ReportCharacterBackfill] ${report.code}: saved ${processedAppearances} appearances (rankedCharacters=${rankedResult.processed}/${rankedCharacters.length || report.rankedCharacterCount || 0}, reportRankings=${fallbackResult?.processed ?? 0}/${rankingsCharacterCount}, matched=${fallbackResult?.matched ?? 0}, unmatched=${fallbackResult?.unmatched ?? 0})`,
           );
 
           await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
