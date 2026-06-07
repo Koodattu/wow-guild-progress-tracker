@@ -37,16 +37,13 @@ const CharacterRaidParticipationSchema = new Schema<ICharacterRaidParticipation>
   { timestamps: true },
 );
 
-CharacterRaidParticipationSchema.index({ reportGuildId: 1, zoneId: 1, characterRealm: 1, characterName: 1, classID: 1 });
+CharacterRaidParticipationSchema.index({ reportGuildId: 1, zoneId: 1, classID: 1, characterName: 1 });
 CharacterRaidParticipationSchema.index({ characterRealm: 1, characterName: 1, classID: 1 });
 CharacterRaidParticipationSchema.index(
   {
     wclCanonicalCharacterId: 1,
     zoneId: 1,
     reportGuildId: 1,
-    characterName: 1,
-    characterRealm: 1,
-    characterRegion: 1,
     classID: 1,
   },
   { unique: true },

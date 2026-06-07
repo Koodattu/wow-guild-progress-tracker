@@ -638,9 +638,6 @@ class CharacterService {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             zoneId: "$report.zoneId",
             reportGuildId: "$reportGuildId",
-            characterName: "$characterName",
-            characterRealm: "$characterRealm",
-            characterRegion: "$characterRegion",
             classID: "$classID",
           },
           characterId: { $first: "$characterId" },
@@ -678,7 +675,7 @@ class CharacterService {
       },
     ]);
 
-    // Drops the previous canonical-id-only unique index before inserting split rows.
+    // Drops stale unique indexes before inserting canonical-id-plus-class rows.
     await CharacterRaidParticipation.syncIndexes();
 
     const deleteResult = await CharacterRaidParticipation.deleteMany({});
@@ -775,9 +772,7 @@ class CharacterService {
       {
         $group: {
           _id: {
-            characterName: "$characterName",
-            characterRealm: "$characterRealm",
-            characterRegion: "$characterRegion",
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             classID: "$classID",
           },
           wclCanonicalCharacterIds: { $addToSet: "$wclCanonicalCharacterId" },
@@ -850,9 +845,7 @@ class CharacterService {
 
       [timelineRows, rankingRows] = await Promise.all([
         CharacterRaidParticipation.find({
-          characterName: selectedChoice.name,
-          characterRealm: selectedChoice.realm,
-          characterRegion: selectedChoice.region,
+          wclCanonicalCharacterId: { $in: canonicalIds },
           classID: selectedChoice.classID,
           zoneId: { $in: TRACKED_RAIDS },
         })
@@ -978,16 +971,35 @@ class CharacterService {
     const realmRegex = new RegExp(`^${this.escapeRegex(realm)}$`, "i");
     const nameRegex = new RegExp(`^${this.escapeRegex(name)}$`, "i");
     const reportGuildId = new mongoose.Types.ObjectId(guildId);
-    const [raid, appearanceRows] = await Promise.all([
-      Raid.findOne({ id: zoneId }).select("id name -_id").lean(),
-      CharacterReportAppearance.aggregate([
-        {
-          $match: {
+    const participationRows = await CharacterRaidParticipation.find({
+      characterRealm: realmRegex,
+      characterName: nameRegex,
+      reportGuildId,
+      zoneId,
+      ...(classId ? { classID: classId } : {}),
+    })
+      .select("wclCanonicalCharacterId -_id")
+      .lean();
+    const canonicalIds = Array.from(new Set(participationRows.map((row) => row.wclCanonicalCharacterId).filter((id): id is number => typeof id === "number")));
+    const appearanceMatch =
+      canonicalIds.length > 0
+        ? {
+            wclCanonicalCharacterId: { $in: canonicalIds },
+            reportGuildId,
+            ...(classId ? { classID: classId } : {}),
+          }
+        : {
             characterRealm: realmRegex,
             characterName: nameRegex,
             reportGuildId,
             ...(classId ? { classID: classId } : {}),
-          },
+          };
+
+    const [raid, appearanceRows] = await Promise.all([
+      Raid.findOne({ id: zoneId }).select("id name -_id").lean(),
+      CharacterReportAppearance.aggregate([
+        {
+          $match: appearanceMatch,
         },
         {
           $lookup: {
