@@ -392,7 +392,7 @@ class CharacterService {
         const lower = char.toLowerCase();
         const characterClass = characterClasses[lower];
         const token = characterClass ? `[${characterClass}]` : this.escapeRegex(char);
-        return `${token}[\\u0300-\\u036f]*`;
+        return `${token}[\u0300-\u036f]*`;
       })
       .join("");
 
