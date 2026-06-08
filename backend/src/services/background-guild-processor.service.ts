@@ -10,6 +10,7 @@ import cacheWarmerService from "./cache-warmer.service";
 import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
 import Character from "../models/Character";
 import CharacterReportAppearance from "../models/CharacterReportAppearance";
+import ProcessorState from "../models/ProcessorState";
 import Raid from "../models/Raid";
 import logger, { getGuildLogger } from "../utils/logger";
 import mongoose from "mongoose";
@@ -84,6 +85,7 @@ export interface QueueItemSummary {
  * Runs as a background process separate from the main scheduler.
  */
 class BackgroundGuildProcessor {
+  private readonly processorStateKey = "guild-processing";
   private isRunning: boolean = false;
   private isPaused: boolean = false;
   private currentGuildQueue: IGuildProcessingQueue | null = null;
@@ -158,6 +160,9 @@ class BackgroundGuildProcessor {
     if (!this.isRunning) return;
 
     try {
+      await this.refreshProcessorPauseState();
+      await rateLimitService.refreshSharedState();
+
       // Check if we should pause due to rate limits
       if (!rateLimitService.canProceedBackground()) {
         logger.debug("[BackgroundProcessor] Rate limit near threshold, waiting...");
@@ -856,6 +861,9 @@ class BackgroundGuildProcessor {
           break;
         }
 
+        await this.refreshProcessorPauseState();
+        await rateLimitService.refreshSharedState();
+
         if (!rateLimitService.canProceedBackground()) {
           guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached, pausing...`);
           await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
@@ -906,6 +914,9 @@ class BackgroundGuildProcessor {
 
           // report.rankings carries the historical class/spec for the report. rankedCharacters can resolve
           // a reused WCL canonical ID to the wrong current class, so use rankings when it is available.
+          await this.refreshProcessorPauseState();
+          await rateLimitService.refreshSharedState();
+
           if (!rateLimitService.canProceedBackground()) {
             guildLog.info(`[ReportCharacterBackfill] Rate limit threshold reached before report rankings fallback, pausing...`);
             await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
@@ -913,6 +924,13 @@ class BackgroundGuildProcessor {
             await rateLimitService.waitForReset();
             await queueItem.resume();
             guildLog.info("[ReportCharacterBackfill] Resuming report rankings fallback after rate limit reset");
+          }
+
+          if (this.isPaused) {
+            guildLog.info(`[ReportCharacterBackfill] Manually paused before report rankings fallback at ${reportsProcessed}/${totalReports} reports`);
+            await queueItem.updateProgress(reportsProcessed, appearancesSaved, reportsProcessed, totalReports);
+            await queueItem.pause();
+            return;
           }
 
           const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
@@ -1261,19 +1279,46 @@ class BackgroundGuildProcessor {
     return result.deletedCount > 0;
   }
 
+  private async refreshProcessorPauseState(): Promise<void> {
+    const state = await ProcessorState.findOne({ key: this.processorStateKey }).lean();
+    if (state) {
+      this.isPaused = state.isPaused === true;
+    }
+  }
+
   /**
    * Pause all background processing
    */
-  pauseAll(): void {
+  async pauseAll(): Promise<void> {
     this.isPaused = true;
+    await ProcessorState.updateOne(
+      { key: this.processorStateKey },
+      {
+        $set: {
+          isPaused: true,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
     logger.info("[BackgroundProcessor] All background processing paused");
   }
 
   /**
    * Resume all background processing
    */
-  resumeAll(): void {
+  async resumeAll(): Promise<void> {
     this.isPaused = false;
+    await ProcessorState.updateOne(
+      { key: this.processorStateKey },
+      {
+        $set: {
+          isPaused: false,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
     logger.info("[BackgroundProcessor] All background processing resumed");
   }
 

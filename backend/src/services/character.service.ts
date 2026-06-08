@@ -1150,14 +1150,90 @@ class CharacterService {
       `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: loaded ${unmatchedAppearances.length} unmatched appearances (${elapsed()})`,
     );
 
+    const getMatchKey = (name: string, realm: string, region: string, classID: number) =>
+      `${name.toLowerCase()}:${realm.toLowerCase()}:${region.toLowerCase()}:${classID}`;
+    const canonicalMatchesByIdentity = new Map<string, { characterId: mongoose.Types.ObjectId; wclCanonicalCharacterId: number }>();
+
+    logger.info("[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: building canonical match map");
+    const canonicalCharacters = await Character.find({ wclCanonicalCharacterId: { $ne: null } } as any)
+      .select("_id wclCanonicalCharacterId name realm region classID")
+      .lean();
+
+    for (const character of canonicalCharacters) {
+      if (!character.wclCanonicalCharacterId || !character.name || !character.realm || !character.region || !character.classID) continue;
+      canonicalMatchesByIdentity.set(getMatchKey(character.name, character.realm, character.region, character.classID), {
+        characterId: character._id as mongoose.Types.ObjectId,
+        wclCanonicalCharacterId: character.wclCanonicalCharacterId,
+      });
+    }
+
+    const canonicalAppearanceRows = await CharacterReportAppearance.aggregate([
+      { $match: { wclCanonicalCharacterId: { $type: "number" }, characterId: { $ne: null }, classID: { $type: "number" } } },
+      { $sort: { reportStartTime: -1 } },
+      {
+        $group: {
+          _id: {
+            name: { $toLower: "$characterName" },
+            realm: { $toLower: "$characterRealm" },
+            region: { $toLower: "$characterRegion" },
+            classID: "$classID",
+          },
+          characterId: { $first: "$characterId" },
+          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+        },
+      },
+    ]).allowDiskUse(true);
+
+    for (const row of canonicalAppearanceRows) {
+      const name = row._id?.name;
+      const realm = row._id?.realm;
+      const region = row._id?.region;
+      const classID = row._id?.classID;
+      if (!name || !realm || !region || typeof classID !== "number" || !row.characterId || typeof row.wclCanonicalCharacterId !== "number") continue;
+
+      const key = getMatchKey(name, realm, region, classID);
+      if (!canonicalMatchesByIdentity.has(key)) {
+        canonicalMatchesByIdentity.set(key, {
+          characterId: row.characterId as mongoose.Types.ObjectId,
+          wclCanonicalCharacterId: row.wclCanonicalCharacterId,
+        });
+      }
+    }
+    logger.info(
+      `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: built ${canonicalMatchesByIdentity.size} canonical identity matches (${elapsed()})`,
+    );
+
+    let appearanceBulkOps: any[] = [];
+    const characterDateUpdatesById = new Map<string, { characterId: mongoose.Types.ObjectId; firstSeenAt: Date; lastSeenAt: Date }>();
+    const guildHistoryUpdatesByKey = new Map<
+      string,
+      {
+        characterId: mongoose.Types.ObjectId;
+        guildName: string;
+        guildRealm: string;
+        firstSeenAt: Date;
+        lastSeenAt: Date;
+      }
+    >();
+
+    const flushAppearanceUpdates = async () => {
+      if (appearanceBulkOps.length === 0) return;
+      try {
+        await CharacterReportAppearance.bulkWrite(appearanceBulkOps, { ordered: false });
+      } catch (error) {
+        const writeErrors = (error as any)?.writeErrors?.length ?? 0;
+        logger.warn(
+          `[CharacterRaidParticipation] Matching report.rankings fallback appearances: ${writeErrors || "some"} batched appearance updates failed, likely duplicate legacy rows`,
+        );
+      }
+      appearanceBulkOps = [];
+    };
+
     for (const appearance of unmatchedAppearances) {
       scanned += 1;
-      const canonicalMatch = await this.findCanonicalCharacterForReportRankingAppearance({
-        name: appearance.characterName,
-        realm: appearance.characterRealm,
-        region: appearance.characterRegion,
-        classID: appearance.classID,
-      });
+      const canonicalMatch = canonicalMatchesByIdentity.get(
+        getMatchKey(appearance.characterName, appearance.characterRealm, appearance.characterRegion, appearance.classID),
+      );
 
       if (scanned % 1000 === 0) {
         logger.info(
@@ -1167,37 +1243,93 @@ class CharacterService {
 
       if (!canonicalMatch) continue;
 
-      await CharacterReportAppearance.updateOne(
-        { _id: appearance._id },
-        {
-          $set: {
-            characterId: canonicalMatch.characterId,
-            wclCanonicalCharacterId: canonicalMatch.wclCanonicalCharacterId,
-            sourceIdentityKey: this.getSourceIdentityKey({
-              canonicalID: canonicalMatch.wclCanonicalCharacterId,
-              region: appearance.characterRegion,
-              realm: appearance.characterRealm,
-              name: appearance.characterName,
-              classID: appearance.classID,
-              source: "reportRankings",
-            }),
+      appearanceBulkOps.push({
+        updateOne: {
+          filter: { _id: appearance._id },
+          update: {
+            $set: {
+              characterId: canonicalMatch.characterId,
+              wclCanonicalCharacterId: canonicalMatch.wclCanonicalCharacterId,
+              sourceIdentityKey: this.getSourceIdentityKey({
+                canonicalID: canonicalMatch.wclCanonicalCharacterId,
+                region: appearance.characterRegion,
+                realm: appearance.characterRealm,
+                name: appearance.characterName,
+                classID: appearance.classID,
+                source: "reportRankings",
+              }),
+            },
           },
         },
-      );
+      });
 
-      await Character.updateOne(
-        { _id: canonicalMatch.characterId },
-        {
-          $min: { firstReportSeenAt: appearance.reportStartTime },
-          $max: { lastReportSeenAt: appearance.reportStartTime },
-        },
-      );
-      await this.updateReportGuildHistory(canonicalMatch.characterId, appearance.reportGuildName, appearance.reportGuildRealm, appearance.reportStartTime);
+      const characterDateKey = canonicalMatch.characterId.toString();
+      const characterDateUpdate = characterDateUpdatesById.get(characterDateKey);
+      if (!characterDateUpdate) {
+        characterDateUpdatesById.set(characterDateKey, {
+          characterId: canonicalMatch.characterId,
+          firstSeenAt: appearance.reportStartTime,
+          lastSeenAt: appearance.reportStartTime,
+        });
+      } else {
+        if (appearance.reportStartTime < characterDateUpdate.firstSeenAt) characterDateUpdate.firstSeenAt = appearance.reportStartTime;
+        if (appearance.reportStartTime > characterDateUpdate.lastSeenAt) characterDateUpdate.lastSeenAt = appearance.reportStartTime;
+      }
+
+      const guildHistoryKey = `${characterDateKey}:${appearance.reportGuildName.toLowerCase()}:${appearance.reportGuildRealm.toLowerCase()}`;
+      const guildHistoryUpdate = guildHistoryUpdatesByKey.get(guildHistoryKey);
+      if (!guildHistoryUpdate) {
+        guildHistoryUpdatesByKey.set(guildHistoryKey, {
+          characterId: canonicalMatch.characterId,
+          guildName: appearance.reportGuildName,
+          guildRealm: appearance.reportGuildRealm,
+          firstSeenAt: appearance.reportStartTime,
+          lastSeenAt: appearance.reportStartTime,
+        });
+      } else {
+        if (appearance.reportStartTime < guildHistoryUpdate.firstSeenAt) guildHistoryUpdate.firstSeenAt = appearance.reportStartTime;
+        if (appearance.reportStartTime > guildHistoryUpdate.lastSeenAt) guildHistoryUpdate.lastSeenAt = appearance.reportStartTime;
+      }
+
       matched += 1;
+
+      if (appearanceBulkOps.length >= 1000) {
+        await flushAppearanceUpdates();
+      }
+    }
+
+    await flushAppearanceUpdates();
+
+    if (characterDateUpdatesById.size > 0) {
+      const dateUpdateOps = Array.from(characterDateUpdatesById.values()).map((update) => ({
+        updateOne: {
+          filter: { _id: update.characterId },
+          update: {
+            $min: { firstReportSeenAt: update.firstSeenAt },
+            $max: { lastReportSeenAt: update.lastSeenAt },
+          },
+        },
+      }));
+      await Character.bulkWrite(dateUpdateOps, { ordered: false });
+    }
+
+    let guildHistoryUpdates = 0;
+    for (const update of guildHistoryUpdatesByKey.values()) {
+      await this.updateReportGuildHistory(update.characterId, update.guildName, update.guildRealm, update.firstSeenAt);
+      if (update.lastSeenAt > update.firstSeenAt) {
+        await this.updateReportGuildHistory(update.characterId, update.guildName, update.guildRealm, update.lastSeenAt);
+      }
+      guildHistoryUpdates += 1;
+
+      if (guildHistoryUpdates % 1000 === 0) {
+        logger.info(
+          `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: updated ${guildHistoryUpdates}/${guildHistoryUpdatesByKey.size} guild history groups (${elapsed()})`,
+        );
+      }
     }
 
     logger.info(
-      `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: complete, scanned ${scanned}, matched ${matched} (${elapsed()})`,
+      `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: complete, scanned ${scanned}, matched ${matched}, updated ${guildHistoryUpdatesByKey.size} guild history groups (${elapsed()})`,
     );
     return matched;
   }

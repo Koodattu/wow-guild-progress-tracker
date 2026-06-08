@@ -174,7 +174,7 @@ class RateLimitService {
   /**
    * Set manual pause state (admin control)
    */
-  setManualPause(paused: boolean): void {
+  async setManualPause(paused: boolean): Promise<void> {
     if (this.manualPause !== paused) {
       this.manualPause = paused;
       if (paused) {
@@ -187,6 +187,18 @@ class RateLimitService {
         }
       }
     }
+    await this.persistState({ includeManualPause: true });
+  }
+
+  async refreshSharedState(): Promise<void> {
+    const state = await RateLimitState.findOne({ key: this.stateKey }).lean();
+    if (!state) return;
+
+    this.manualPause = state.manualPause === true;
+    this.pointsUsed = Date.now() > state.resetAt.getTime() ? 0 : state.pointsUsed;
+    this.pointsMax = state.pointsMax;
+    this.resetAt = state.resetAt;
+    this.lastUpdated = state.lastUpdated;
   }
 
   /**
@@ -239,23 +251,32 @@ class RateLimitService {
       resetAt: state.resetAt,
       resetInSeconds,
       isNearLimit: percentUsed >= this.config.pauseThreshold,
-      isPaused: this.manualPause || percentUsed >= this.config.pauseThreshold,
+      isPaused: state.manualPause === true || this.manualPause || percentUsed >= this.config.pauseThreshold,
       lastUpdated: state.lastUpdated,
     };
   }
 
-  private async persistState(): Promise<void> {
+  private async persistState(options: { includeManualPause?: boolean } = {}): Promise<void> {
     try {
+      const updateSet: Record<string, unknown> = {
+        pointsUsed: this.pointsUsed,
+        pointsMax: this.pointsMax,
+        resetAt: this.resetAt,
+        lastUpdated: this.lastUpdated,
+      };
+      if (options.includeManualPause) {
+        updateSet.manualPause = this.manualPause;
+      }
+      const update: Record<string, unknown> = { $set: updateSet };
+      if (!options.includeManualPause) {
+        update.$setOnInsert = {
+          manualPause: this.manualPause,
+        };
+      }
+
       await RateLimitState.updateOne(
         { key: this.stateKey },
-        {
-          $set: {
-            pointsUsed: this.pointsUsed,
-            pointsMax: this.pointsMax,
-            resetAt: this.resetAt,
-            lastUpdated: this.lastUpdated,
-          },
-        },
+        update,
         { upsert: true },
       );
     } catch (error) {
@@ -308,6 +329,13 @@ class RateLimitService {
    * Returns a promise that resolves when it's safe to proceed
    */
   async waitForReset(): Promise<void> {
+    await this.refreshSharedState();
+    while (this.manualPause) {
+      logger.info("[RateLimit] Background processing manually paused, waiting before resuming...");
+      await new Promise((resolve) => setTimeout(resolve, 30000));
+      await this.refreshSharedState();
+    }
+
     const timeUntilReset = this.getTimeUntilReset();
 
     if (timeUntilReset <= 0) {
@@ -318,6 +346,13 @@ class RateLimitService {
     logger.info(`[RateLimit] Waiting ${Math.ceil(timeUntilReset / 1000)}s for rate limit reset...`);
 
     await new Promise((resolve) => setTimeout(resolve, timeUntilReset + 1000)); // Add 1s buffer
+
+    await this.refreshSharedState();
+    while (this.manualPause) {
+      logger.info("[RateLimit] Rate limit reset, but background processing is manually paused...");
+      await new Promise((resolve) => setTimeout(resolve, 30000));
+      await this.refreshSharedState();
+    }
 
     this.pointsUsed = 0;
     logger.info("[RateLimit] Rate limit reset, resuming operations");

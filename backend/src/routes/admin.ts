@@ -1674,7 +1674,7 @@ router.post("/rate-limit/pause", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "paused must be a boolean" });
     }
 
-    rateLimitService.setManualPause(paused);
+    await rateLimitService.setManualPause(paused);
 
     res.json({
       success: true,
@@ -1832,9 +1832,9 @@ router.post("/processing-queue/pause-all", async (req: Request, res: Response) =
     }
 
     if (paused) {
-      backgroundGuildProcessor.pauseAll();
+      await backgroundGuildProcessor.pauseAll();
     } else {
-      backgroundGuildProcessor.resumeAll();
+      await backgroundGuildProcessor.resumeAll();
     }
 
     res.json({

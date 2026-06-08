@@ -6,6 +6,7 @@ export interface IRateLimitState extends Document {
   pointsMax: number;
   resetAt: Date;
   lastUpdated: Date;
+  manualPause: boolean;
 }
 
 const RateLimitStateSchema = new Schema<IRateLimitState>(
@@ -34,6 +35,11 @@ const RateLimitStateSchema = new Schema<IRateLimitState>(
       type: Date,
       required: true,
       default: Date.now,
+    },
+    manualPause: {
+      type: Boolean,
+      required: true,
+      default: false,
     },
   },
   {
