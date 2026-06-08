@@ -53,7 +53,7 @@ const DiscordGuildIntegrationSchema = new Schema<IDiscordGuildIntegration>(
       eventTypes: {
         type: [String],
         enum: ["boss_kill", "best_pull", "milestone", "hiatus", "regress", "reproge"],
-        default: ["boss_kill", "best_pull", "milestone"],
+        default: ["boss_kill", "best_pull"],
       },
       difficulties: {
         type: [String],

@@ -25,7 +25,7 @@ const EVENT_TYPE_LABELS: Record<DiscordEventType, string> = {
   reproge: "Reprog",
 };
 
-const DEFAULT_EVENT_TYPES: DiscordEventType[] = ["boss_kill", "best_pull", "milestone"];
+const DEFAULT_EVENT_TYPES: DiscordEventType[] = ["boss_kill", "best_pull"];
 const DEFAULT_DIFFICULTIES: DiscordEventDifficulty[] = ["mythic"];
 
 type FormState = {
@@ -92,6 +92,11 @@ export default function DiscordProfilePage() {
   const [guildFilter, setGuildFilter] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const integrationByGuildId = useMemo(() => new Map(integrations.map((integration) => [integration.discordGuildId, integration])), [integrations]);
+  const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId);
+  const selectedIntegration = integrationByGuildId.get(selectedGuildId) ?? settings?.integration ?? null;
+  const botInstalledForSelected = Boolean(selectedGuild?.botInstalled || selectedIntegration?.isInstalled);
+
   const loadOverview = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -121,6 +126,15 @@ export default function DiscordProfilePage() {
       const data = await api.getDiscordIntegrationSettings(guildId);
       setSettings(data);
       setForm(integrationToForm(data.integration));
+      if (data.integration) {
+        setIntegrations((current) => {
+          const next = current.filter((integration) => integration.discordGuildId !== data.integration?.discordGuildId);
+          return [...next, data.integration!].sort((a, b) => a.discordGuildName.localeCompare(b.discordGuildName));
+        });
+        if (!data.integration.isInstalled) {
+          setGuilds((current) => current.map((guild) => (guild.id === data.integration?.discordGuildId ? { ...guild, botInstalled: false } : guild)));
+        }
+      }
     } catch (error) {
       console.error("Failed to load Discord integration settings:", error);
       setSettings(null);
@@ -144,10 +158,13 @@ export default function DiscordProfilePage() {
   }, [authLoading, user, loadOverview]);
 
   useEffect(() => {
-    if (selectedGuildId && status?.enabled && !needsReconnect) {
+    if (selectedGuildId && status?.enabled && !needsReconnect && botInstalledForSelected) {
       void loadSettings(selectedGuildId);
+    } else {
+      setSettings(null);
+      setForm(emptyForm);
     }
-  }, [selectedGuildId, status?.enabled, needsReconnect, loadSettings]);
+  }, [selectedGuildId, status?.enabled, needsReconnect, botInstalledForSelected, loadSettings]);
 
   useEffect(() => {
     const installed = searchParams.get("installed");
@@ -161,10 +178,6 @@ export default function DiscordProfilePage() {
     }
   }, [searchParams, router]);
 
-  const integrationByGuildId = useMemo(() => new Map(integrations.map((integration) => [integration.discordGuildId, integration])), [integrations]);
-  const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId);
-  const selectedIntegration = integrationByGuildId.get(selectedGuildId) ?? settings?.integration ?? null;
-  const botInstalledForSelected = Boolean(selectedGuild?.botInstalled || selectedIntegration);
   const filteredGuildOptions = useMemo(() => {
     const query = guildFilter.trim().toLowerCase();
     const options = settings?.guildOptions ?? [];
@@ -311,7 +324,7 @@ export default function DiscordProfilePage() {
                   <div className="rounded-md bg-gray-900/70 px-3 py-4 text-sm text-gray-400">No manageable Discord servers found.</div>
                 ) : (
                   guilds.map((guild) => {
-                    const installed = Boolean(guild.botInstalled || integrationByGuildId.has(guild.id));
+                    const installed = Boolean(guild.botInstalled || integrationByGuildId.get(guild.id)?.isInstalled);
                     const selected = guild.id === selectedGuildId;
                     return (
                       <button

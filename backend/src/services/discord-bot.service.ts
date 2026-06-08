@@ -15,7 +15,7 @@ const INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
 const EPHEMERAL_FLAG = 1 << 6;
 const MAX_DELIVERY_ATTEMPTS = 5;
 const EVENT_PUBLISHER_STATE_KEY = "eventPublisher";
-const VALID_EVENT_TYPES: EventType[] = ["boss_kill", "best_pull", "milestone", "hiatus", "regress", "reproge"];
+const VALID_EVENT_TYPES: EventType[] = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"];
 const VALID_DIFFICULTIES = ["mythic", "heroic"] as const;
 const TEXT_CHANNEL_TYPES = new Set([0, 5]);
 
@@ -304,7 +304,7 @@ class DiscordBotService {
       const guilds = await this.discordRequest<DiscordUserGuildResponse[]>("GET", "/users/@me/guilds", undefined, "Bearer", accessToken);
       const manageableGuilds = guilds.filter((guild) => this.canManageGuild(guild));
       const integrations = await DiscordGuildIntegration.find({ discordGuildId: { $in: manageableGuilds.map((guild) => guild.id) } }).lean();
-      const installedGuildIds = new Set(integrations.filter((integration) => integration.isInstalled).map((integration) => integration.discordGuildId));
+      const installedGuildIds = await this.getAccessibleInstalledGuildIds(integrations.filter((integration) => integration.isInstalled));
 
       return {
         needsReconnect: false,
@@ -342,15 +342,32 @@ class DiscordBotService {
   async getIntegrationSettings(user: IUser, discordGuildId: string): Promise<DiscordIntegrationSettingsResponse> {
     await this.ensureCanManageGuild(user, discordGuildId);
 
-    const [integration, channels, guildOptions, raidOptions] = await Promise.all([
+    const [integration, guildOptions, raidOptions] = await Promise.all([
       DiscordGuildIntegration.findOne({ discordGuildId }).lean(),
-      this.getChannelOptions(discordGuildId),
       this.getTrackedGuildOptions(),
       this.getRaidOptions(),
     ]);
 
+    let serializedIntegration = integration ? this.serializeIntegration(integration) : null;
+    let channels: DiscordChannelOption[] = [];
+
+    if (integration?.isInstalled) {
+      try {
+        await this.getBotGuild(discordGuildId);
+        channels = await this.getChannelOptions(discordGuildId);
+      } catch (error) {
+        if (this.isDiscordMissingAccessError(error)) {
+          const lastError = "Bot is not installed in this server or no longer has access. Reinstall the bot from this page.";
+          await this.markIntegrationUnavailable(discordGuildId, lastError, false);
+          serializedIntegration = { ...serializedIntegration!, isInstalled: false, lastError };
+        } else {
+          throw error;
+        }
+      }
+    }
+
     return {
-      integration: integration ? this.serializeIntegration(integration) : null,
+      integration: serializedIntegration,
       channels,
       guildOptions,
       raidOptions,
@@ -802,7 +819,7 @@ class DiscordBotService {
           eventConfig: {
             enabled: false,
             guildIds: [],
-            eventTypes: ["boss_kill", "best_pull", "milestone"],
+            eventTypes: ["boss_kill", "best_pull"],
             difficulties: ["mythic"],
             raidIds: [],
           },
@@ -861,9 +878,54 @@ class DiscordBotService {
           parentId: channel.parent_id ?? null,
         }));
     } catch (error) {
+      if (this.isDiscordMissingAccessError(error)) {
+        const lastError = "Bot cannot read this server's channels. Reinstall the bot or grant its role View Channels permission.";
+        await this.markIntegrationUnavailable(discordGuildId, lastError);
+        logger.warn(`[DiscordBot] Missing channel access for guild ${discordGuildId}: ${lastError}`);
+        return [];
+      }
+
       logger.warn(`[DiscordBot] Failed to fetch channels for guild ${discordGuildId}:`, error);
       return [];
     }
+  }
+
+  private async getAccessibleInstalledGuildIds(integrations: Array<{ _id: unknown; discordGuildId: string }>): Promise<Set<string>> {
+    const accessibleGuildIds = await Promise.all(
+      integrations.map(async (integration) => {
+        try {
+          await this.getBotGuild(integration.discordGuildId);
+          return integration.discordGuildId;
+        } catch (error) {
+          if (this.isDiscordMissingAccessError(error)) {
+            await this.markIntegrationUnavailable(
+              integration.discordGuildId,
+              "Bot is not installed in this server or no longer has access. Reinstall the bot from the Discord bot settings page.",
+              false,
+            );
+            return null;
+          }
+
+          logger.warn(`[DiscordBot] Could not verify bot access for guild ${integration.discordGuildId}:`, error);
+          return integration.discordGuildId;
+        }
+      }),
+    );
+
+    return new Set(accessibleGuildIds.filter((guildId): guildId is string => Boolean(guildId)));
+  }
+
+  private async markIntegrationUnavailable(discordGuildId: string, lastError: string, isInstalled?: boolean): Promise<void> {
+    await DiscordGuildIntegration.updateOne(
+      { discordGuildId },
+      {
+        $set: {
+          ...(typeof isInstalled === "boolean" ? { isInstalled } : {}),
+          lastError,
+          lastSyncedAt: new Date(),
+        },
+      },
+    );
   }
 
   private async getTrackedGuildOptions(): Promise<DiscordGuildOption[]> {
@@ -944,6 +1006,10 @@ class DiscordBotService {
 
   private hasDiscordScope(user: IUser, scope: string): boolean {
     return Boolean(user.discord.scope?.split(/\s+/).includes(scope));
+  }
+
+  private isDiscordMissingAccessError(error: unknown): boolean {
+    return error instanceof DiscordBotError && error.statusCode === 403 && (error.message.includes('"code": 50001') || error.message.includes("Missing Access"));
   }
 
   private async getValidUserAccessToken(user: IUser): Promise<string | null> {
