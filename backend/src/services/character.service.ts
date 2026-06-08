@@ -505,6 +505,7 @@ class CharacterService {
   async upsertCharactersFromReportAppearances(params: {
     reportCode: string;
     reportStartTime: number | Date;
+    reportZoneId?: number;
     reportGuildId: mongoose.Types.ObjectId;
     reportGuildName: string;
     reportGuildRealm: string;
@@ -585,6 +586,7 @@ class CharacterService {
             appearanceSource: "rankedCharacters",
             reportCode: params.reportCode,
             reportStartTime: reportSeenAt,
+            reportZoneId: params.reportZoneId,
             reportGuildId: params.reportGuildId,
             reportGuildName: params.reportGuildName,
             reportGuildRealm: params.reportGuildRealm,
@@ -704,6 +706,7 @@ class CharacterService {
   async upsertCharactersFromReportRankingAppearances(params: {
     reportCode: string;
     reportStartTime: number | Date;
+    reportZoneId?: number;
     reportGuildId: mongoose.Types.ObjectId;
     reportGuildName: string;
     reportGuildRealm: string;
@@ -793,6 +796,7 @@ class CharacterService {
             appearanceSource: "reportRankings",
             reportCode: params.reportCode,
             reportStartTime: reportSeenAt,
+            reportZoneId: params.reportZoneId,
             reportGuildId: params.reportGuildId,
             reportGuildName: params.reportGuildName,
             reportGuildRealm: params.reportGuildRealm,
@@ -1334,24 +1338,25 @@ class CharacterService {
     return matched;
   }
 
-  async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
-    const startedAt = Date.now();
-    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
-    logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
-    logger.info("[CharacterRaidParticipation] Step 1/6: relinking multi-class canonical characters");
-    const relinkedCanonicalClasses = await this.relinkMultiClassCanonicalCharactersFromReportAppearances();
-    logger.info(`[CharacterRaidParticipation] Step 1/6 complete (${elapsed()})`);
-
-    logger.info("[CharacterRaidParticipation] Step 2/6: matching fallback report.rankings appearances");
-    const matchedFallbackAppearances = await this.matchReportRankingAppearancesToCanonicalCharacters();
-    logger.info(`[CharacterRaidParticipation] Step 2/6 complete (${elapsed()})`);
-
-    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating report appearances into raid participations");
+  private async backfillAppearanceReportZoneIds(): Promise<number> {
     const rows = await CharacterReportAppearance.aggregate([
+      {
+        $match: {
+          $or: [{ reportZoneId: { $exists: false } }, { reportZoneId: null }, { reportZoneId: 0 }],
+        },
+      },
+      {
+        $group: {
+          _id: {
+            reportCode: "$reportCode",
+            reportGuildId: "$reportGuildId",
+          },
+        },
+      },
       {
         $lookup: {
           from: "reports",
-          let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
+          let: { reportCode: "$_id.reportCode", guildId: "$_id.reportGuildId" },
           pipeline: [
             {
               $match: {
@@ -1368,6 +1373,65 @@ class CharacterService {
       { $unwind: "$report" },
       { $match: { "report.zoneId": { $gt: 0 } } },
       {
+        $project: {
+          _id: 0,
+          reportCode: "$_id.reportCode",
+          reportGuildId: "$_id.reportGuildId",
+          reportZoneId: "$report.zoneId",
+        },
+      },
+    ]).allowDiskUse(true);
+
+    if (rows.length === 0) return 0;
+
+    let updatedReports = 0;
+    const batchSize = 1000;
+    for (let index = 0; index < rows.length; index += batchSize) {
+      const batch = rows.slice(index, index + batchSize);
+      const bulkOps: any[] = batch.map((row) => ({
+        updateMany: {
+          filter: {
+            reportCode: row.reportCode,
+            reportGuildId: row.reportGuildId,
+            $or: [{ reportZoneId: { $exists: false } }, { reportZoneId: null }, { reportZoneId: 0 }],
+          },
+          update: {
+            $set: {
+              reportZoneId: row.reportZoneId,
+            },
+          },
+        },
+      }));
+      await CharacterReportAppearance.bulkWrite(
+        bulkOps,
+        { ordered: false },
+      );
+      updatedReports += batch.length;
+    }
+
+    return updatedReports;
+  }
+
+  async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
+    const startedAt = Date.now();
+    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
+    logger.info("[CharacterRaidParticipation] Step 1/6: relinking multi-class canonical characters");
+    const relinkedCanonicalClasses = await this.relinkMultiClassCanonicalCharactersFromReportAppearances();
+    logger.info(`[CharacterRaidParticipation] Step 1/6 complete (${elapsed()})`);
+
+    logger.info("[CharacterRaidParticipation] Step 2/6: matching fallback report.rankings appearances");
+    const matchedFallbackAppearances = await this.matchReportRankingAppearancesToCanonicalCharacters();
+    logger.info(`[CharacterRaidParticipation] Step 2/6 complete (${elapsed()})`);
+
+    logger.info("[CharacterRaidParticipation] Step 3/6: ensuring report zone IDs are denormalized on appearances");
+    const zoneBackfilledReports = await this.backfillAppearanceReportZoneIds();
+    logger.info(`[CharacterRaidParticipation] Step 3/6 zone ID fill complete: updated ${zoneBackfilledReports} report groups (${elapsed()})`);
+
+    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating report appearances into raid participations");
+    const rows = await CharacterReportAppearance.aggregate([
+      { $match: { reportZoneId: { $gt: 0 } } },
+      {
         $sort: {
           reportStartTime: 1,
         },
@@ -1376,7 +1440,7 @@ class CharacterService {
         $group: {
           _id: {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
-            zoneId: "$report.zoneId",
+            zoneId: "$reportZoneId",
             reportGuildId: "$reportGuildId",
             classID: "$classID",
             fallbackName: {
@@ -1391,7 +1455,7 @@ class CharacterService {
           },
           characterId: { $first: "$characterId" },
           wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-          zoneId: { $first: "$report.zoneId" },
+          zoneId: { $first: "$reportZoneId" },
           reportGuildId: { $first: "$reportGuildId" },
           reportGuildName: { $last: "$reportGuildName" },
           reportGuildRealm: { $last: "$reportGuildRealm" },
@@ -1422,7 +1486,7 @@ class CharacterService {
           reportCount: 1,
         },
       },
-    ]);
+    ]).allowDiskUse(true);
     logger.info(`[CharacterRaidParticipation] Step 3/6 complete: aggregated ${rows.length} participation rows (${elapsed()})`);
 
     logger.info("[CharacterRaidParticipation] Step 4/6: deleting existing materialized participation rows");

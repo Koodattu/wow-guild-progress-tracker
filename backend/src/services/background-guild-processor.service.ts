@@ -855,7 +855,7 @@ class BackgroundGuildProcessor {
       while (true) {
         const report = await Report.findOne(pendingReportQuery)
           .sort({ startTime: 1 })
-          .select("code startTime endTime charactersFetchStatus rankedCharacterCount rankingsCharacterCount rankingsFetchedAt characterAppearanceCount charactersFetchSource")
+          .select("code zoneId startTime endTime charactersFetchStatus rankedCharacterCount rankingsCharacterCount rankingsFetchedAt characterAppearanceCount charactersFetchSource")
           .lean();
         if (!report) {
           break;
@@ -901,6 +901,7 @@ class BackgroundGuildProcessor {
             rankedResult = await characterService.upsertCharactersFromReportAppearances({
               reportCode: wclReport.code,
               reportStartTime: wclReport.startTime || report.startTime,
+              reportZoneId: report.zoneId,
               reportGuildId: guild._id as mongoose.Types.ObjectId,
               reportGuildName: guild.name,
               reportGuildRealm: guild.realm,
@@ -938,6 +939,7 @@ class BackgroundGuildProcessor {
           fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
             reportCode: wclReport?.code || report.code,
             reportStartTime: wclReport?.startTime || report.startTime,
+            reportZoneId: report.zoneId,
             reportGuildId: guild._id as mongoose.Types.ObjectId,
             reportGuildName: guild.name,
             reportGuildRealm: guild.realm,
