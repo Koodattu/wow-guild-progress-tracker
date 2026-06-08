@@ -772,11 +772,19 @@ class CharacterService {
         });
       }
 
+      const appearanceFilter = canonicalMatch?.wclCanonicalCharacterId
+        ? {
+            reportCode: params.reportCode,
+            wclCanonicalCharacterId: canonicalMatch.wclCanonicalCharacterId,
+            classID,
+          }
+        : {
+            reportCode: params.reportCode,
+            sourceIdentityKey,
+          };
+
       await CharacterReportAppearance.findOneAndUpdate(
-        {
-          reportCode: params.reportCode,
-          sourceIdentityKey,
-        },
+        appearanceFilter,
         {
           $set: {
             characterId: canonicalMatch?.characterId ?? null,
@@ -937,8 +945,12 @@ class CharacterService {
   }
 
   private async relinkMultiClassCanonicalCharactersFromReportAppearances(): Promise<{ canonicalIds: number; groups: number; relinkedGroups: number }> {
+    const startedAt = Date.now();
+    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    logger.info("[CharacterRaidParticipation] Relink multi-class canonical characters: ensuring indexes");
     await this.ensureCharacterIdentityIndexes();
 
+    logger.info(`[CharacterRaidParticipation] Relink multi-class canonical characters: finding canonical ID collisions (${elapsed()})`);
     const collisionRows = await CharacterReportAppearance.aggregate([
       { $match: { wclCanonicalCharacterId: { $type: "number" }, classID: { $type: "number" } } },
       {
@@ -957,10 +969,13 @@ class CharacterService {
     ]).allowDiskUse(true);
 
     const canonicalIds = collisionRows.map((row) => row.canonicalID).filter((id): id is number => typeof id === "number");
+    logger.info(`[CharacterRaidParticipation] Relink multi-class canonical characters: found ${canonicalIds.length} multi-class canonical IDs (${elapsed()})`);
     if (canonicalIds.length === 0) {
+      logger.info(`[CharacterRaidParticipation] Relink multi-class canonical characters: complete (${elapsed()})`);
       return { canonicalIds: 0, groups: 0, relinkedGroups: 0 };
     }
 
+    logger.info(`[CharacterRaidParticipation] Relink multi-class canonical characters: aggregating identities and guild histories (${elapsed()})`);
     const [identityRows, guildRows] = await Promise.all([
       CharacterReportAppearance.aggregate([
         { $match: { wclCanonicalCharacterId: { $in: canonicalIds }, classID: { $type: "number" } } },
@@ -999,6 +1014,9 @@ class CharacterService {
         { $sort: { firstSeenAt: 1, "_id.guildName": 1, "_id.guildRealm": 1 } },
       ]).allowDiskUse(true),
     ]);
+    logger.info(
+      `[CharacterRaidParticipation] Relink multi-class canonical characters: aggregated ${identityRows.length} identity groups and ${guildRows.length} guild rows (${elapsed()})`,
+    );
 
     const guildHistoryByIdentity = new Map<
       string,
@@ -1030,10 +1048,16 @@ class CharacterService {
 
     let relinkedGroups = 0;
     let appearanceBulkOps: any[] = [];
+    let appearanceUpdateGroups = 0;
 
     const flushAppearanceUpdates = async () => {
       if (appearanceBulkOps.length === 0) return;
+      const batchSize = appearanceBulkOps.length;
       await CharacterReportAppearance.bulkWrite(appearanceBulkOps, { ordered: false });
+      appearanceUpdateGroups += batchSize;
+      logger.info(
+        `[CharacterRaidParticipation] Relink multi-class canonical characters: relinked ${appearanceUpdateGroups}/${identityRows.length} appearance groups (${elapsed()})`,
+      );
       appearanceBulkOps = [];
     };
 
@@ -1104,25 +1128,42 @@ class CharacterService {
     }
 
     await flushAppearanceUpdates();
+    logger.info(
+      `[CharacterRaidParticipation] Relink multi-class canonical characters: complete, relinked ${relinkedGroups}/${identityRows.length} groups (${elapsed()})`,
+    );
     return { canonicalIds: canonicalIds.length, groups: identityRows.length, relinkedGroups };
   }
 
   private async matchReportRankingAppearancesToCanonicalCharacters(): Promise<number> {
+    const startedAt = Date.now();
+    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
     let matched = 0;
+    let scanned = 0;
+    logger.info("[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: loading unmatched appearances");
     const unmatchedAppearances = await CharacterReportAppearance.find({
       appearanceSource: "reportRankings",
       wclCanonicalCharacterId: null,
     })
       .select("_id characterName characterRealm characterRegion classID reportGuildName reportGuildRealm reportStartTime")
       .lean();
+    logger.info(
+      `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: loaded ${unmatchedAppearances.length} unmatched appearances (${elapsed()})`,
+    );
 
     for (const appearance of unmatchedAppearances) {
+      scanned += 1;
       const canonicalMatch = await this.findCanonicalCharacterForReportRankingAppearance({
         name: appearance.characterName,
         realm: appearance.characterRealm,
         region: appearance.characterRegion,
         classID: appearance.classID,
       });
+
+      if (scanned % 1000 === 0) {
+        logger.info(
+          `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: scanned ${scanned}/${unmatchedAppearances.length}, matched ${matched} (${elapsed()})`,
+        );
+      }
 
       if (!canonicalMatch) continue;
 
@@ -1155,14 +1196,25 @@ class CharacterService {
       matched += 1;
     }
 
+    logger.info(
+      `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: complete, scanned ${scanned}, matched ${matched} (${elapsed()})`,
+    );
     return matched;
   }
 
   async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
+    const startedAt = Date.now();
+    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
     logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
+    logger.info("[CharacterRaidParticipation] Step 1/6: relinking multi-class canonical characters");
     const relinkedCanonicalClasses = await this.relinkMultiClassCanonicalCharactersFromReportAppearances();
-    const matchedFallbackAppearances = await this.matchReportRankingAppearancesToCanonicalCharacters();
+    logger.info(`[CharacterRaidParticipation] Step 1/6 complete (${elapsed()})`);
 
+    logger.info("[CharacterRaidParticipation] Step 2/6: matching fallback report.rankings appearances");
+    const matchedFallbackAppearances = await this.matchReportRankingAppearancesToCanonicalCharacters();
+    logger.info(`[CharacterRaidParticipation] Step 2/6 complete (${elapsed()})`);
+
+    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating report appearances into raid participations");
     const rows = await CharacterReportAppearance.aggregate([
       {
         $lookup: {
@@ -1239,18 +1291,32 @@ class CharacterService {
         },
       },
     ]);
+    logger.info(`[CharacterRaidParticipation] Step 3/6 complete: aggregated ${rows.length} participation rows (${elapsed()})`);
 
+    logger.info("[CharacterRaidParticipation] Step 4/6: deleting existing materialized participation rows");
     const deleteResult = await CharacterRaidParticipation.deleteMany({});
+    logger.info(`[CharacterRaidParticipation] Step 4/6 complete: deleted ${deleteResult.deletedCount ?? 0} rows (${elapsed()})`);
 
     // Drops stale unique indexes while the materialized collection is empty.
+    logger.info("[CharacterRaidParticipation] Step 5/6: syncing participation indexes");
     await CharacterRaidParticipation.syncIndexes();
+    logger.info(`[CharacterRaidParticipation] Step 5/6 complete (${elapsed()})`);
 
+    logger.info("[CharacterRaidParticipation] Step 6/6: inserting rebuilt participation rows");
     if (rows.length > 0) {
-      await CharacterRaidParticipation.insertMany(rows, { ordered: false });
+      const batchSize = 5000;
+      for (let index = 0; index < rows.length; index += batchSize) {
+        const batch = rows.slice(index, index + batchSize);
+        await CharacterRaidParticipation.insertMany(batch, { ordered: false });
+        logger.info(
+          `[CharacterRaidParticipation] Step 6/6 progress: inserted ${Math.min(index + batch.length, rows.length)}/${rows.length} rows (${elapsed()})`,
+        );
+      }
     }
+    logger.info(`[CharacterRaidParticipation] Step 6/6 complete (${elapsed()})`);
 
     logger.info(
-      `[CharacterRaidParticipation] Rebuild complete: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`,
+      `[CharacterRaidParticipation] Rebuild complete in ${elapsed()}: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`,
     );
     return { deleted: deleteResult.deletedCount ?? 0, inserted: rows.length };
   }
