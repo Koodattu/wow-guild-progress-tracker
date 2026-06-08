@@ -43,13 +43,21 @@ class DiscordService {
   /**
    * Get the Discord OAuth authorization URL
    */
-  getAuthorizationUrl(): string {
+  getAuthorizationUrl(options: { scope?: string; state?: string; prompt?: string } = {}): string {
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: "code",
-      scope: "identify guilds",
+      scope: options.scope ?? "identify",
     });
+
+    if (options.state) {
+      params.set("state", options.state);
+    }
+
+    if (options.prompt) {
+      params.set("prompt", options.prompt);
+    }
 
     return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
   }

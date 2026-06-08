@@ -449,6 +449,23 @@ class DiscordBotService {
     return { success: true, messageId: message.id };
   }
 
+  async uninstallIntegration(user: IUser, discordGuildId: string) {
+    this.assertConfigured();
+    await this.ensureCanManageGuild(user, discordGuildId);
+
+    try {
+      await this.discordRequest("DELETE", `/users/@me/guilds/${discordGuildId}`, undefined, "Bot");
+    } catch (error) {
+      if (!this.isDiscordMissingAccessError(error)) {
+        throw error;
+      }
+    }
+
+    await this.markIntegrationUnavailable(discordGuildId, "Bot uninstalled from this server.", false);
+    const integration = await DiscordGuildIntegration.findOne({ discordGuildId });
+    return integration ? this.serializeIntegration(integration) : null;
+  }
+
   async handleInteraction(rawBody: string, signature: string | undefined, timestamp: string | undefined) {
     this.assertConfigured();
 

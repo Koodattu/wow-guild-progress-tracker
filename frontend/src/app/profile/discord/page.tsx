@@ -73,7 +73,7 @@ function toggleNumberValue(values: number[], value: number): number[] {
 }
 
 export default function DiscordProfilePage() {
-  const { user, isLoading: authLoading, login } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -88,6 +88,8 @@ export default function DiscordProfilePage() {
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isReauthorizing, setIsReauthorizing] = useState(false);
+  const [isUninstalling, setIsUninstalling] = useState(false);
   const [installingGuildId, setInstallingGuildId] = useState<string | null>(null);
   const [guildFilter, setGuildFilter] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -107,10 +109,11 @@ export default function DiscordProfilePage() {
       setIntegrations(integrationData.integrations);
 
       const requestedGuildId = searchParams.get("guildId");
+      const firstInstalledIntegrationId = integrationData.integrations.find((integration) => integration.isInstalled)?.discordGuildId;
       const preferredGuildId =
         requestedGuildId && guildData.guilds.some((guild) => guild.id === requestedGuildId)
           ? requestedGuildId
-          : integrationData.integrations[0]?.discordGuildId || guildData.guilds[0]?.id || "";
+          : firstInstalledIntegrationId || guildData.guilds[0]?.id || "";
       setSelectedGuildId((current) => current || preferredGuildId);
     } catch (error) {
       console.error("Failed to load Discord bot overview:", error);
@@ -172,6 +175,9 @@ export default function DiscordProfilePage() {
     if (installed) {
       setMessage({ type: "success", text: "Discord bot installed. Choose a channel and save event settings to start announcements." });
       router.replace("/profile/discord");
+    } else if (searchParams.get("connected") === "guilds") {
+      setMessage({ type: "success", text: "Discord server access connected." });
+      router.replace("/profile/discord");
     } else if (error) {
       setMessage({ type: "error", text: `Discord install failed: ${error.replaceAll("_", " ")}` });
       router.replace("/profile/discord");
@@ -197,6 +203,44 @@ export default function DiscordProfilePage() {
       console.error("Failed to create Discord install URL:", error);
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to start Discord install." });
       setInstallingGuildId(null);
+    }
+  };
+
+  const handleReconnectDiscord = async () => {
+    setIsReauthorizing(true);
+    try {
+      const { url } = await api.getDiscordGuildsLoginUrl();
+      window.location.href = url;
+    } catch (error) {
+      console.error("Failed to create Discord server authorization URL:", error);
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to connect Discord server access." });
+      setIsReauthorizing(false);
+    }
+  };
+
+  const handleUninstall = async () => {
+    if (!selectedGuildId || !selectedGuild) return;
+    const confirmed = window.confirm(`Uninstall the bot from ${selectedGuild.name}? Event announcements and slash commands will stop working there.`);
+    if (!confirmed) return;
+
+    setIsUninstalling(true);
+    try {
+      const { integration } = await api.uninstallDiscordIntegration(selectedGuildId);
+      if (integration) {
+        setIntegrations((current) => {
+          const next = current.filter((item) => item.discordGuildId !== integration.discordGuildId);
+          return [...next, integration].sort((a, b) => a.discordGuildName.localeCompare(b.discordGuildName));
+        });
+      }
+      setGuilds((current) => current.map((guild) => (guild.id === selectedGuildId ? { ...guild, botInstalled: false } : guild)));
+      setSettings(null);
+      setForm(emptyForm);
+      setMessage({ type: "success", text: "Discord bot uninstalled from this server." });
+    } catch (error) {
+      console.error("Failed to uninstall Discord bot:", error);
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to uninstall Discord bot." });
+    } finally {
+      setIsUninstalling(false);
     }
   };
 
@@ -306,18 +350,19 @@ export default function DiscordProfilePage() {
           <div className="rounded-lg bg-gray-800 p-6 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_16px_40px_rgba(0,0,0,0.24)]">
             <h2 className="text-lg font-semibold text-white">Reconnect Discord</h2>
             <p className="mt-2 text-sm leading-6 text-gray-400">Server management needs the Discord guilds permission. Reconnect Discord, then return here.</p>
-            <button onClick={() => void login()} className="mt-5 min-h-10 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.96]">
-              Reconnect Discord
+            <button
+              onClick={() => void handleReconnectDiscord()}
+              disabled={isReauthorizing}
+              className="mt-5 min-h-10 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isReauthorizing ? "Opening Discord..." : "Connect server access"}
             </button>
           </div>
         ) : (
           <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
             <aside className="rounded-lg bg-gray-800 p-4 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_16px_40px_rgba(0,0,0,0.24)]">
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3">
                 <h2 className="font-semibold text-white">Servers</h2>
-                <button onClick={() => void handleInstall()} className="min-h-10 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.96]">
-                  Add bot
-                </button>
               </div>
               <div className="space-y-2">
                 {guilds.length === 0 ? (
@@ -376,6 +421,13 @@ export default function DiscordProfilePage() {
                       {selectedIntegration?.lastError && <p className="mt-2 max-w-2xl text-sm text-red-300">{selectedIntegration.lastError}</p>}
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => void handleUninstall()}
+                        disabled={isUninstalling}
+                        className="min-h-10 rounded-md bg-red-950/60 px-4 py-2 text-sm font-medium text-red-100 ring-1 ring-red-800/80 transition-colors hover:bg-red-900/70 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isUninstalling ? "Uninstalling..." : "Uninstall"}
+                      </button>
                       <button
                         onClick={() => void handleTest()}
                         disabled={isTesting || !form.channelId}

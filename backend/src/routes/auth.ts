@@ -275,14 +275,43 @@ router.get("/discord/login", (req: Request, res: Response) => {
   }
 });
 
+// Get Discord OAuth authorization URL for bot server management
+router.get("/discord/guilds/login", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const state = generateState(user._id.toString());
+    const authUrl = discordService.getAuthorizationUrl({
+      scope: "identify guilds",
+      state,
+      prompt: "consent",
+    });
+
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error("Error generating Discord guild authorization URL:", error);
+    res.status(500).json({ error: "Failed to generate authorization URL" });
+  }
+});
+
 // Discord OAuth callback
 router.get("/discord/callback", async (req: Request, res: Response) => {
   try {
-    const { code } = req.query;
+    const { code, state } = req.query;
+    const oauthError = typeof req.query.error === "string" ? req.query.error : null;
+    const callbackState = typeof state === "string" && state.length > 0 ? state : null;
+    const hasState = Boolean(callbackState);
+
+    if (oauthError) {
+      return res.redirect(getFrontendUrl() + (hasState ? `/profile/discord?error=${encodeURIComponent(oauthError)}` : `?error=${encodeURIComponent(oauthError)}`));
+    }
 
     if (!code || typeof code !== "string") {
       logger.warn("Discord callback missing code parameter");
-      return res.redirect(getFrontendUrl() + "?error=missing_code");
+      return res.redirect(getFrontendUrl() + (hasState ? "/profile/discord?error=missing_code" : "?error=missing_code"));
     }
 
     // Exchange code for tokens
@@ -290,6 +319,28 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
 
     // Get user info from Discord
     const discordUser = await discordService.getUserInfo(tokens.access_token);
+
+    let redirectPath = "/profile";
+    if (callbackState) {
+      const expectedUserId = validateState(callbackState);
+      if (!expectedUserId) {
+        logger.warn("Discord guild authorization callback invalid or expired state");
+        return res.redirect(getFrontendUrl() + "/profile/discord?error=invalid_state");
+      }
+
+      const expectedUser = await discordService.getUserFromSession(expectedUserId);
+      if (!expectedUser) {
+        logger.warn(`Discord guild authorization callback user not found: ${expectedUserId}`);
+        return res.redirect(getFrontendUrl() + "/profile/discord?error=session_expired");
+      }
+
+      if (discordUser.id !== expectedUser.discord.id) {
+        logger.warn(`Discord guild authorization account mismatch: expected ${expectedUser.discord.id}, got ${discordUser.id}`);
+        return res.redirect(getFrontendUrl() + "/profile/discord?error=discord_user_mismatch");
+      }
+
+      redirectPath = "/profile/discord?connected=guilds";
+    }
 
     // Find or create user in database
     const user = await discordService.findOrCreateUser(discordUser, tokens);
@@ -305,8 +356,8 @@ router.get("/discord/callback", async (req: Request, res: Response) => {
         logger.error("Error saving session:", err);
         return res.redirect(getFrontendUrl() + "?error=session_error");
       }
-      logger.info(`Session saved successfully, redirecting to profile. Session ID: ${req.sessionID}`);
-      res.redirect(getFrontendUrl() + "/profile");
+      logger.info(`Session saved successfully, redirecting to ${redirectPath}. Session ID: ${req.sessionID}`);
+      res.redirect(getFrontendUrl() + redirectPath);
     });
   } catch (error) {
     logger.error("Error in Discord OAuth callback:", error);

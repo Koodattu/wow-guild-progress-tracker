@@ -472,6 +472,14 @@ export const api = {
     return response.json();
   },
 
+  async getDiscordGuildsLoginUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/auth/discord/guilds/login`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to get Discord server authorization URL");
+    return response.json();
+  },
+
   async getCurrentUser(): Promise<AuthUser | null> {
     try {
       const response = await fetch(`${API_URL}/api/auth/me`, {
@@ -616,6 +624,18 @@ export const api = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Failed to send Discord test message" }));
       throw new Error(errorData.error || "Failed to send Discord test message");
+    }
+    return response.json();
+  },
+
+  async uninstallDiscordIntegration(guildId: string): Promise<{ integration: DiscordIntegrationSettings["integration"] }> {
+    const response = await fetch(`${API_URL}/api/discord/integrations/${guildId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to uninstall Discord bot" }));
+      throw new Error(errorData.error || "Failed to uninstall Discord bot");
     }
     return response.json();
   },

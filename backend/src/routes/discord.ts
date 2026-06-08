@@ -127,6 +127,20 @@ router.post("/integrations/:guildId/test-message", async (req: Request, res: Res
   }
 });
 
+router.delete("/integrations/:guildId", async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const integration = await discordBotService.uninstallIntegration(user, req.params.guildId);
+    res.json({ integration });
+  } catch (error) {
+    handleRouteError(res, error, "Failed to uninstall Discord bot");
+  }
+});
+
 router.post("/interactions", async (req: Request, res: Response) => {
   try {
     const rawBody = (req as Request & { rawBody?: string }).rawBody;
