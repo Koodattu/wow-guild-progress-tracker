@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
+import { CLASSES } from "../config/classes";
 import DiscordBotState from "../models/DiscordBotState";
 import DiscordEventDelivery from "../models/DiscordEventDelivery";
 import DiscordGuildIntegration, { IDiscordGuildIntegration } from "../models/DiscordGuildIntegration";
@@ -12,12 +13,34 @@ import searchService, { SearchResult } from "./search.service";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 const INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
-const EPHEMERAL_FLAG = 1 << 6;
+const SUPPRESS_EMBEDS_FLAG = 1 << 2;
 const MAX_DELIVERY_ATTEMPTS = 5;
 const EVENT_PUBLISHER_STATE_KEY = "eventPublisher";
 const VALID_EVENT_TYPES: EventType[] = ["boss_kill", "best_pull", "hiatus", "regress", "reproge"];
 const VALID_DIFFICULTIES = ["mythic", "heroic"] as const;
 const TEXT_CHANNEL_TYPES = new Set([0, 5]);
+const CLASS_COLORS: Record<number, number> = {
+  1: 0xc41e3a,
+  2: 0xff7c0a,
+  3: 0xaad372,
+  4: 0x3fc7eb,
+  5: 0x00ff98,
+  6: 0xf48cba,
+  7: 0xffffff,
+  8: 0xfff468,
+  9: 0x0070dd,
+  10: 0x8788ee,
+  11: 0xc69b6d,
+  12: 0xa330c9,
+  13: 0x33937f,
+};
+
+type DiscordInteractionMessageData = {
+  content?: string;
+  embeds?: unknown[];
+  flags?: number;
+  allowed_mentions?: { parse: string[] };
+};
 
 type DiscordDifficulty = (typeof VALID_DIFFICULTIES)[number];
 
@@ -526,24 +549,24 @@ class DiscordBotService {
     }
 
     if (interaction.type !== 2 || interaction.data?.name !== "suomiwow") {
-      return this.ephemeralResponse("Unknown command.");
+      return this.interactionResponse("Unknown command.");
     }
 
     const subcommand = interaction.data.options?.find((option: { type: number }) => option.type === 1);
     if (!subcommand) {
-      return this.ephemeralResponse("Use `/suomiwow search` or `/suomiwow settings`.");
+      return this.interactionResponse("Use `/suomiwow search`.");
     }
 
     if (subcommand.name === "settings") {
-      return this.ephemeralResponse(`Open settings: ${this.getFrontendBaseUrl()}/profile/discord`);
+      return this.interactionResponse("Settings are managed from the website profile page.");
     }
 
     if (subcommand.name === "search") {
       void this.respondToSearchInteraction(interaction, subcommand);
-      return this.deferredEphemeralResponse();
+      return this.deferredInteractionResponse();
     }
 
-    return this.ephemeralResponse("Unknown subcommand.");
+    return this.interactionResponse("Unknown subcommand.");
   }
 
   private async publishPendingEvents(): Promise<void> {
@@ -656,14 +679,14 @@ class DiscordBotService {
       "POST",
       `/channels/${integration.eventConfig.channelId}/messages`,
       {
-        embeds: [this.buildEventEmbed(event)],
+        embeds: [await this.buildEventEmbed(event)],
         allowed_mentions: { parse: [] },
       },
       "Bot",
     );
   }
 
-  private buildEventEmbed(event: IEvent) {
+  private async buildEventEmbed(event: IEvent) {
     const guildUrl = event.guildRealm ? `${this.getFrontendBaseUrl()}/guilds/${encodeURIComponent(event.guildRealm)}/${encodeURIComponent(event.guildName)}` : this.getFrontendBaseUrl();
     const title = this.getEventTitle(event);
     const fields = [
@@ -677,6 +700,11 @@ class DiscordBotService {
       fields.push({ name: "Details", value: detail, inline: false });
     }
 
+    const liveStreamLinks = await this.getLiveStreamerLinks(event.guildId);
+    if (liveStreamLinks.length > 0) {
+      fields.push({ name: "Live", value: liveStreamLinks.join("\n"), inline: false });
+    }
+
     return {
       title,
       url: guildUrl,
@@ -686,6 +714,17 @@ class DiscordBotService {
       timestamp: event.timestamp.toISOString(),
       footer: { text: "Suomi WoW" },
     };
+  }
+
+  private async getLiveStreamerLinks(guildId: mongoose.Types.ObjectId): Promise<string[]> {
+    const guild = await Guild.findById(guildId).select("streamers.channelName streamers.isLive streamers.gameName").lean();
+    const liveStreamers = (guild?.streamers ?? []).filter((streamer) => streamer.isLive).slice(0, 5);
+
+    return liveStreamers.map((streamer) => {
+      const channelName = streamer.channelName.trim();
+      const label = streamer.gameName ? `${channelName} (${streamer.gameName})` : channelName;
+      return `[${label}](https://www.twitch.tv/${encodeURIComponent(channelName)})`;
+    });
   }
 
   private getEventTitle(event: IEvent): string {
@@ -763,34 +802,41 @@ class DiscordBotService {
   private async handleSearchInteraction(interaction: any, subcommand: any) {
     const discordGuildId = interaction.guild_id;
     if (!discordGuildId) {
-      return this.ephemeralResponse("Search is available inside Discord servers.");
+      return this.interactionResponse("Search is available inside Discord servers.");
     }
 
     const integration = await DiscordGuildIntegration.findOne({ discordGuildId }).lean();
     if (integration && !integration.features.search) {
-      return this.ephemeralResponse("Search is disabled for this server.");
+      return this.interactionResponse("Search is disabled for this server.");
     }
 
     const query = this.getStringOption(subcommand, "query");
     if (!query || query.trim().length < 2) {
-      return this.ephemeralResponse("Search query must be at least 2 characters.");
+      return this.interactionResponse("Search query must be at least 2 characters.");
     }
 
     const results = await searchService.searchSite(query, 5);
     if (results.length === 0) {
-      return this.ephemeralResponse(`No guilds or characters found for "${query}".`);
+      return this.interactionResponse(`No guilds or characters found for "${query}".`);
     }
 
-    return this.ephemeralResponse(this.formatSearchResults(results));
+    if (results.length === 1 && results[0].type === "character") {
+      return this.interactionResponse(undefined, {
+        embeds: [this.buildCharacterSearchEmbed(results[0])],
+        suppressEmbeds: false,
+      });
+    }
+
+    return this.interactionResponse(this.formatSearchResults(results));
   }
 
   private async respondToSearchInteraction(interaction: any, subcommand: any): Promise<void> {
     try {
       const response = await this.handleSearchInteraction(interaction, subcommand);
-      await this.editInteractionResponse(interaction.token, response.data.content);
+      await this.editInteractionResponse(interaction.token, response.data);
     } catch (error) {
       logger.error("[DiscordBot] Failed to send search interaction response:", error);
-      await this.editInteractionResponse(interaction.token, "Search failed. Please try again.").catch((followupError) => {
+      await this.editInteractionResponse(interaction.token, { content: "Search failed. Please try again.", flags: SUPPRESS_EMBEDS_FLAG }).catch((followupError) => {
         logger.error("[DiscordBot] Failed to send search error response:", followupError);
       });
     }
@@ -826,27 +872,50 @@ class DiscordBotService {
     return `Found ${results.length} result${results.length === 1 ? "" : "s"}:\n${lines.join("\n")}`;
   }
 
+  private buildCharacterSearchEmbed(result: SearchResult) {
+    const url = `${this.getFrontendBaseUrl()}${result.href}`;
+    const classInfo = typeof result.classID === "number" ? CLASSES.find((classItem) => classItem.id === result.classID) : null;
+    const fields = [
+      { name: "Realm", value: result.realm, inline: true },
+      { name: "Class", value: classInfo?.name ?? "Unknown", inline: true },
+    ];
+
+    if (result.guild) {
+      const guildUrl = `${this.getFrontendBaseUrl()}/guilds/${encodeURIComponent(result.guild.realm)}/${encodeURIComponent(result.guild.name)}`;
+      fields.push({ name: "Latest guild", value: `[${result.guild.name}-${result.guild.realm}](${guildUrl})`, inline: false });
+    }
+
+    return {
+      title: `${result.name}-${result.realm}`,
+      url,
+      color: typeof result.classID === "number" ? CLASS_COLORS[result.classID] ?? 0x818cf8 : 0x818cf8,
+      fields,
+      footer: { text: "Suomi WoW character" },
+    };
+  }
+
   private getStringOption(subcommand: any, name: string): string | null {
     const option = subcommand.options?.find((item: { name: string }) => item.name === name);
     return typeof option?.value === "string" ? option.value : null;
   }
 
-  private ephemeralResponse(content: string) {
+  private interactionResponse(content?: string, options: { embeds?: unknown[]; suppressEmbeds?: boolean } = {}) {
     return {
       type: 4,
       data: {
-        content,
-        flags: EPHEMERAL_FLAG,
+        ...(content ? { content } : {}),
+        ...(options.embeds ? { embeds: options.embeds } : {}),
+        flags: options.suppressEmbeds === false ? 0 : SUPPRESS_EMBEDS_FLAG,
         allowed_mentions: { parse: [] },
       },
     };
   }
 
-  private deferredEphemeralResponse() {
+  private deferredInteractionResponse() {
     return {
       type: 5,
       data: {
-        flags: EPHEMERAL_FLAG,
+        flags: SUPPRESS_EMBEDS_FLAG,
       },
     };
   }
@@ -855,7 +924,7 @@ class DiscordBotService {
     return {
       name: "suomiwow",
       type: 1,
-      description: "Search Suomi WoW and manage bot settings.",
+      description: "Search Suomi WoW.",
       integration_types: [0],
       contexts: [0],
       options: [
@@ -872,11 +941,6 @@ class DiscordBotService {
               autocomplete: true,
             },
           ],
-        },
-        {
-          type: 1,
-          name: "settings",
-          description: "Open the Suomi WoW bot settings page.",
         },
       ],
     };
@@ -1166,10 +1230,12 @@ class DiscordBotService {
     return this.discordRequest<DiscordGuildResponse>("GET", `/guilds/${discordGuildId}`, undefined, "Bot");
   }
 
-  private async editInteractionResponse(interactionToken: string, content: string): Promise<void> {
+  private async editInteractionResponse(interactionToken: string, data: DiscordInteractionMessageData): Promise<void> {
     await this.discordWebhookRequest("PATCH", `/webhooks/${this.clientId}/${interactionToken}/messages/@original`, {
-      content,
-      allowed_mentions: { parse: [] },
+      content: data.content ?? "",
+      embeds: data.embeds ?? [],
+      flags: data.flags ?? SUPPRESS_EMBEDS_FLAG,
+      allowed_mentions: data.allowed_mentions ?? { parse: [] },
     });
   }
 
