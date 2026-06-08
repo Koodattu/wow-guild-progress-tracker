@@ -143,8 +143,11 @@ router.delete("/integrations/:guildId", async (req: Request, res: Response) => {
 
 router.post("/interactions", async (req: Request, res: Response) => {
   try {
+    logger.info(`[DiscordBot] Interaction POST received: type=${req.body?.type ?? "unknown"} guild=${req.body?.guild_id ?? "none"}`);
+
     const rawBody = (req as Request & { rawBody?: string }).rawBody;
     if (!rawBody) {
+      logger.warn("[DiscordBot] Interaction request missing raw body");
       return res.status(400).json({ error: "Missing raw request body" });
     }
 

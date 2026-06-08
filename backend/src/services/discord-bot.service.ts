@@ -185,9 +185,45 @@ class DiscordBotService {
         logger.info("[DiscordBot] Registered global /suomiwow command");
       }
 
+      logger.info(`[DiscordBot] Interaction endpoint should be configured as ${this.getApiBaseUrl()}/api/discord/interactions`);
+      await this.registerInstalledGuildCommands();
       this.commandsRegistered = true;
     } catch (error) {
       logger.error("[DiscordBot] Failed to register application commands:", error);
+    }
+  }
+
+  async registerGuildCommands(discordGuildId: string): Promise<void> {
+    if (!this.isConfigured()) {
+      return;
+    }
+
+    try {
+      const command = this.getApplicationCommandDefinition();
+      const existingCommands = await this.discordRequest<Array<{ id: string; name: string }>>(
+        "GET",
+        `/applications/${this.clientId}/guilds/${discordGuildId}/commands`,
+        undefined,
+        "Bot",
+      );
+      const existingCommand = existingCommands.find((item) => item.name === command.name);
+
+      if (existingCommand) {
+        await this.discordRequest("PATCH", `/applications/${this.clientId}/guilds/${discordGuildId}/commands/${existingCommand.id}`, command, "Bot");
+        logger.info(`[DiscordBot] Updated guild /suomiwow command for ${discordGuildId}`);
+      } else {
+        await this.discordRequest("POST", `/applications/${this.clientId}/guilds/${discordGuildId}/commands`, command, "Bot");
+        logger.info(`[DiscordBot] Registered guild /suomiwow command for ${discordGuildId}`);
+      }
+    } catch (error) {
+      logger.error(`[DiscordBot] Failed to register guild command for ${discordGuildId}:`, error);
+    }
+  }
+
+  private async registerInstalledGuildCommands(): Promise<void> {
+    const integrations = await DiscordGuildIntegration.find({ isInstalled: true }).select("discordGuildId").lean();
+    for (const integration of integrations) {
+      await this.registerGuildCommands(integration.discordGuildId);
     }
   }
 
@@ -278,6 +314,7 @@ class DiscordBotService {
 
       const discordGuild = await this.getBotGuild(discordGuildId);
       await this.upsertInstalledIntegration(user, discordGuild);
+      void this.registerGuildCommands(discordGuildId);
 
       return this.createSettingsRedirect({ installed: "1", guildId: discordGuildId });
     } catch (error) {
@@ -470,10 +507,15 @@ class DiscordBotService {
     this.assertConfigured();
 
     if (!signature || !timestamp || !this.verifyInteractionSignature(rawBody, signature, timestamp)) {
+      logger.warn("[DiscordBot] Interaction rejected because signature verification failed");
       throw new DiscordBotError("invalid request signature", 401);
     }
 
     const interaction = JSON.parse(rawBody);
+    const subcommandName = interaction.data?.options?.find((option: { type: number }) => option.type === 1)?.name;
+    logger.info(
+      `[DiscordBot] Interaction verified: type=${interaction.type} command=${interaction.data?.name ?? "none"} subcommand=${subcommandName ?? "none"} guild=${interaction.guild_id ?? "none"}`,
+    );
 
     if (interaction.type === 1) {
       return { type: 1 };
@@ -497,7 +539,8 @@ class DiscordBotService {
     }
 
     if (subcommand.name === "search") {
-      return this.handleSearchInteraction(interaction, subcommand);
+      void this.respondToSearchInteraction(interaction, subcommand);
+      return this.deferredEphemeralResponse();
     }
 
     return this.ephemeralResponse("Unknown subcommand.");
@@ -741,6 +784,18 @@ class DiscordBotService {
     return this.ephemeralResponse(this.formatSearchResults(results));
   }
 
+  private async respondToSearchInteraction(interaction: any, subcommand: any): Promise<void> {
+    try {
+      const response = await this.handleSearchInteraction(interaction, subcommand);
+      await this.editInteractionResponse(interaction.token, response.data.content);
+    } catch (error) {
+      logger.error("[DiscordBot] Failed to send search interaction response:", error);
+      await this.editInteractionResponse(interaction.token, "Search failed. Please try again.").catch((followupError) => {
+        logger.error("[DiscordBot] Failed to send search error response:", followupError);
+      });
+    }
+  }
+
   private async handleAutocompleteInteraction(interaction: any) {
     const subcommand = interaction.data?.options?.find((option: { type: number }) => option.type === 1);
     if (interaction.data?.name !== "suomiwow" || subcommand?.name !== "search") {
@@ -783,6 +838,15 @@ class DiscordBotService {
         content,
         flags: EPHEMERAL_FLAG,
         allowed_mentions: { parse: [] },
+      },
+    };
+  }
+
+  private deferredEphemeralResponse() {
+    return {
+      type: 5,
+      data: {
+        flags: EPHEMERAL_FLAG,
       },
     };
   }
@@ -1102,6 +1166,13 @@ class DiscordBotService {
     return this.discordRequest<DiscordGuildResponse>("GET", `/guilds/${discordGuildId}`, undefined, "Bot");
   }
 
+  private async editInteractionResponse(interactionToken: string, content: string): Promise<void> {
+    await this.discordWebhookRequest("PATCH", `/webhooks/${this.clientId}/${interactionToken}/messages/@original`, {
+      content,
+      allowed_mentions: { parse: [] },
+    });
+  }
+
   private async discordRequest<T = unknown>(
     method: string,
     path: string,
@@ -1134,6 +1205,32 @@ class DiscordBotService {
     if (!response.ok) {
       const errorText = await response.text();
       throw new DiscordBotError(`Discord API ${method} ${path} failed (${response.status}): ${errorText}`, response.status >= 500 ? 502 : response.status);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  private async discordWebhookRequest<T = unknown>(method: string, path: string, body?: unknown, retryCount = 0): Promise<T> {
+    const response = await fetch(`${DISCORD_API_BASE}${path}`, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (response.status === 429 && retryCount < 1) {
+      const rateLimit = (await response.json().catch(() => null)) as { retry_after?: number } | null;
+      const retryAfterMs = Math.ceil((rateLimit?.retry_after ?? 1) * 1000);
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      return this.discordWebhookRequest<T>(method, path, body, retryCount + 1);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new DiscordBotError(`Discord webhook ${method} ${path} failed (${response.status}): ${errorText}`, response.status >= 500 ? 502 : response.status);
     }
 
     if (response.status === 204) {

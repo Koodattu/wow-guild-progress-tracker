@@ -72,7 +72,6 @@ const DiscordGuildIntegrationSchema = new Schema<IDiscordGuildIntegration>(
   },
 );
 
-DiscordGuildIntegrationSchema.index({ discordGuildId: 1 }, { unique: true });
 DiscordGuildIntegrationSchema.index({ isInstalled: 1 });
 DiscordGuildIntegrationSchema.index({ "features.events": 1, "eventConfig.enabled": 1 });
 

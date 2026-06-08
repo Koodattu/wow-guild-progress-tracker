@@ -17,6 +17,4 @@ const DiscordBotStateSchema = new Schema<IDiscordBotState>(
   },
 );
 
-DiscordBotStateSchema.index({ key: 1 }, { unique: true });
-
 export default mongoose.model<IDiscordBotState>("DiscordBotState", DiscordBotStateSchema);
