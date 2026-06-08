@@ -48,7 +48,7 @@ class DiscordService {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: "code",
-      scope: "identify",
+      scope: "identify guilds",
     });
 
     return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
@@ -120,6 +120,7 @@ class DiscordService {
       user.discord.accessToken = tokens.access_token;
       user.discord.refreshToken = tokens.refresh_token;
       user.discord.tokenExpiresAt = tokenExpiresAt;
+      user.discord.scope = tokens.scope;
       user.lastLoginAt = new Date();
       await user.save();
       logger.info(`User logged in: ${discordUser.username} (${discordUser.id})`);
@@ -134,6 +135,7 @@ class DiscordService {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           tokenExpiresAt,
+          scope: tokens.scope,
         },
         lastLoginAt: new Date(),
       });

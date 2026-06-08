@@ -8,6 +8,7 @@ export interface IDiscordAccount {
   accessToken: string;
   refreshToken: string;
   tokenExpiresAt: Date;
+  scope?: string;
 }
 
 export interface ITwitchAccount {
@@ -82,6 +83,7 @@ const DiscordAccountSchema = new Schema<IDiscordAccount>(
     accessToken: { type: String, required: true },
     refreshToken: { type: String, required: true },
     tokenExpiresAt: { type: Date, required: true },
+    scope: { type: String },
   },
   { _id: false },
 );

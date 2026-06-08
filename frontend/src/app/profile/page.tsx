@@ -8,8 +8,7 @@ import { api } from "@/lib/api";
 import CharacterSelectorDialog from "@/components/CharacterSelectorDialog";
 import { WoWCharacter, UserProfile, UserPickemEntry, StreamerSettings } from "@/types";
 import Link from "next/link";
-import { FaBattleNet } from "react-icons/fa";
-import { FaTwitch } from "react-icons/fa";
+import { FaBattleNet, FaDiscord, FaTwitch } from "react-icons/fa";
 
 // WoW Class colors
 const CLASS_COLORS: { [key: string]: string } = {
@@ -580,6 +579,27 @@ export default function ProfilePage() {
                 })}
               </p>
             )}
+          </div>
+        </div>
+
+        {/* Discord Bot Section */}
+        <div className="mt-8 bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-[#5865F2]/15 text-[#AAB4FF]">
+                <FaDiscord className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">{t("discordBot")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{t("discordBotDescription")}</p>
+              </div>
+            </div>
+            <Link
+              href="/profile/discord"
+              className="inline-flex min-h-10 items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.96]"
+            >
+              {t("manageDiscordBot")}
+            </Link>
           </div>
         </div>
 

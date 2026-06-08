@@ -27,7 +27,9 @@ import characterRankingsRouter from "./routes/character-rankings";
 import charactersRouter from "./routes/characters";
 import searchRouter from "./routes/search";
 import pickemsRouter from "./routes/pickems";
+import discordRouter from "./routes/discord";
 import pickemService from "./services/pickem.service";
+import discordBotService from "./services/discord-bot.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
 import { analyticsMiddleware, flushAnalytics } from "./middleware/analytics.middleware";
 import cacheService from "./services/cache.service";
@@ -114,7 +116,13 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: string }).rawBody = buf.toString("utf8");
+    },
+  }),
+);
 
 // Session configuration with MongoDB store
 const sessionConfig: any = {
@@ -172,6 +180,7 @@ app.use("/api/pickems", pickemsRouter);
 app.use("/api/character-rankings", characterRankingsRouter);
 app.use("/api/characters", charactersRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/discord", discordRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS
@@ -315,6 +324,10 @@ async function runBackgroundInitialization(): Promise<void> {
   // Start background guild processor (handles initial data fetch for new guilds)
   await runStartupTask("Start background guild processor", async () => {
     backgroundGuildProcessor.start();
+  });
+
+  await runStartupTask("Start Discord event publisher", async () => {
+    discordBotService.startEventPublisher();
   });
 
   // Log death events fetching status
@@ -492,6 +505,8 @@ const startServer = async () => {
         logger.info(`[Startup] Health check: http://localhost:${PORT}/health`);
         logger.info("[Startup] API is now accepting requests");
       });
+
+      void discordBotService.registerCommands();
     }
 
     if (isWorkerProcess && WORKER_MODE === "worker") {
@@ -553,6 +568,7 @@ process.on("SIGINT", async () => {
   if (isWorkerProcess) {
     scheduler.stop();
     backgroundGuildProcessor.stop();
+    discordBotService.stopEventPublisher();
   }
   if (isApiProcess) {
     await flushAnalytics();
@@ -565,6 +581,7 @@ process.on("SIGTERM", async () => {
   if (isWorkerProcess) {
     scheduler.stop();
     backgroundGuildProcessor.stop();
+    discordBotService.stopEventPublisher();
   }
   if (isApiProcess) {
     await flushAnalytics();

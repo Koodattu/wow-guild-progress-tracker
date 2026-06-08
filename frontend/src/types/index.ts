@@ -747,6 +747,106 @@ export interface StreamerSettings {
   };
 }
 
+export type DiscordEventType = "boss_kill" | "best_pull" | "milestone" | "hiatus" | "regress" | "reproge";
+export type DiscordEventDifficulty = "mythic" | "heroic";
+
+export interface DiscordBotStatus {
+  enabled: boolean;
+  missing: {
+    clientId: boolean;
+    clientSecret: boolean;
+    botToken: boolean;
+    publicKey: boolean;
+  };
+  installRedirectUri: string;
+  interactionsEndpointUrl: string;
+}
+
+export interface DiscordManageableGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  permissions: string;
+  canManage: boolean;
+  botInstalled: boolean;
+}
+
+export interface DiscordGuildsResponse {
+  needsReconnect: boolean;
+  guilds: DiscordManageableGuild[];
+}
+
+export interface DiscordIntegration {
+  id: string;
+  discordGuildId: string;
+  discordGuildName: string;
+  discordGuildIcon: string | null;
+  features: {
+    search: boolean;
+    events: boolean;
+  };
+  eventConfig: {
+    enabled: boolean;
+    channelId: string | null;
+    channelName: string | null;
+    guildIds: string[];
+    eventTypes: DiscordEventType[];
+    difficulties: DiscordEventDifficulty[];
+    raidIds: number[];
+  };
+  isInstalled: boolean;
+  installedAt: string;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+}
+
+export interface DiscordIntegrationsResponse {
+  needsReconnect: boolean;
+  integrations: DiscordIntegration[];
+}
+
+export interface DiscordChannelOption {
+  id: string;
+  name: string;
+  type: number;
+  parentId?: string | null;
+}
+
+export interface DiscordTrackedGuildOption {
+  id: string;
+  name: string;
+  realm: string;
+  region: string;
+  parent_guild?: string;
+}
+
+export interface DiscordRaidOption {
+  id: number;
+  name: string;
+  expansion: string;
+  iconUrl?: string;
+}
+
+export interface DiscordIntegrationSettings {
+  integration: DiscordIntegration | null;
+  channels: DiscordChannelOption[];
+  guildOptions: DiscordTrackedGuildOption[];
+  raidOptions: DiscordRaidOption[];
+  validEventTypes: DiscordEventType[];
+  validDifficulties: DiscordEventDifficulty[];
+}
+
+export interface UpdateDiscordIntegrationInput {
+  searchEnabled: boolean;
+  eventsEnabled: boolean;
+  channelId: string | null;
+  guildIds: string[];
+  eventTypes: DiscordEventType[];
+  difficulties: DiscordEventDifficulty[];
+  raidIds: number[];
+}
+
 // Alias for backwards compatibility
 export type User = AuthUser;
 

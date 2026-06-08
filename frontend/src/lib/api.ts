@@ -33,6 +33,11 @@ import {
   AuthUser,
   UserProfile,
   StreamerSettings,
+  DiscordBotStatus,
+  DiscordGuildsResponse,
+  DiscordIntegrationsResponse,
+  DiscordIntegrationSettings,
+  UpdateDiscordIntegrationInput,
   WoWCharacter,
   AdminUsersResponse,
   AdminUserPickemsResponse,
@@ -536,6 +541,81 @@ export const api = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Failed to update streamer settings" }));
       throw new Error(errorData.error || "Failed to update streamer settings");
+    }
+    return response.json();
+  },
+
+  async getDiscordBotStatus(): Promise<DiscordBotStatus> {
+    const response = await fetch(`${API_URL}/api/discord/status`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch Discord bot status");
+    return response.json();
+  },
+
+  async getDiscordManageableGuilds(): Promise<DiscordGuildsResponse> {
+    const response = await fetch(`${API_URL}/api/discord/guilds`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch Discord servers");
+    return response.json();
+  },
+
+  async getDiscordIntegrations(): Promise<DiscordIntegrationsResponse> {
+    const response = await fetch(`${API_URL}/api/discord/integrations`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch Discord bot integrations");
+    return response.json();
+  },
+
+  async getDiscordInstallUrl(guildId?: string): Promise<{ url: string }> {
+    const params = new URLSearchParams();
+    if (guildId) params.set("guildId", guildId);
+    const response = await fetch(`${API_URL}/api/discord/install-url${params.toString() ? `?${params.toString()}` : ""}`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to create Discord install URL" }));
+      throw new Error(errorData.error || "Failed to create Discord install URL");
+    }
+    return response.json();
+  },
+
+  async getDiscordIntegrationSettings(guildId: string): Promise<DiscordIntegrationSettings> {
+    const response = await fetch(`${API_URL}/api/discord/integrations/${guildId}/settings`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to fetch Discord integration settings" }));
+      throw new Error(errorData.error || "Failed to fetch Discord integration settings");
+    }
+    return response.json();
+  },
+
+  async updateDiscordIntegrationSettings(guildId: string, input: UpdateDiscordIntegrationInput): Promise<DiscordIntegrationSettings["integration"]> {
+    const response = await fetch(`${API_URL}/api/discord/integrations/${guildId}/settings`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to update Discord integration settings" }));
+      throw new Error(errorData.error || "Failed to update Discord integration settings");
+    }
+    const data = await response.json();
+    return data.integration;
+  },
+
+  async sendDiscordTestMessage(guildId: string): Promise<{ success: boolean; messageId: string }> {
+    const response = await fetch(`${API_URL}/api/discord/integrations/${guildId}/test-message`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Failed to send Discord test message" }));
+      throw new Error(errorData.error || "Failed to send Discord test message");
     }
     return response.json();
   },
