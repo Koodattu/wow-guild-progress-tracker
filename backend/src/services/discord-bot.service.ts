@@ -827,6 +827,13 @@ class DiscordBotService {
       });
     }
 
+    if (results.length === 1 && results[0].type === "guild") {
+      return this.interactionResponse(undefined, {
+        embeds: [this.buildGuildSearchEmbed(results[0])],
+        suppressEmbeds: false,
+      });
+    }
+
     return this.interactionResponse(this.formatSearchResults(results));
   }
 
@@ -856,7 +863,7 @@ class DiscordBotService {
       type: 8,
       data: {
         choices: results.map((result) => ({
-          name: `${this.capitalize(result.type)}: ${result.name}-${result.realm}`.slice(0, 100),
+          name: `${this.capitalize(result.type)}: ${this.formatSearchResultTitle(result)}`.slice(0, 100),
           value: `${result.name}-${result.realm}`.slice(0, 100),
         })),
       },
@@ -866,7 +873,7 @@ class DiscordBotService {
   private formatSearchResults(results: SearchResult[]): string {
     const lines = results.map((result) => {
       const url = `${this.getFrontendBaseUrl()}${result.href}`;
-      return `- ${this.capitalize(result.type)}: [${result.name}-${result.realm}](${url})`;
+      return `- ${this.capitalize(result.type)}: [${this.formatSearchResultTitle(result)}](${url})`;
     });
 
     return `Found ${results.length} result${results.length === 1 ? "" : "s"}:\n${lines.join("\n")}`;
@@ -876,22 +883,94 @@ class DiscordBotService {
     const url = `${this.getFrontendBaseUrl()}${result.href}`;
     const classInfo = typeof result.classID === "number" ? CLASSES.find((classItem) => classItem.id === result.classID) : null;
     const fields = [
-      { name: "Realm", value: result.realm, inline: true },
+      { name: "Realm", value: this.formatRealmName(result.realm), inline: true },
       { name: "Class", value: classInfo?.name ?? "Unknown", inline: true },
     ];
 
     if (result.guild) {
       const guildUrl = `${this.getFrontendBaseUrl()}/guilds/${encodeURIComponent(result.guild.realm)}/${encodeURIComponent(result.guild.name)}`;
-      fields.push({ name: "Latest guild", value: `[${result.guild.name}-${result.guild.realm}](${guildUrl})`, inline: false });
+      fields.push({ name: "Latest guild", value: `[${result.guild.name}-${this.formatRealmName(result.guild.realm)}](${guildUrl})`, inline: false });
     }
 
+    const classIconUrl = classInfo ? this.getClassIconUrl(classInfo.iconUrl) : undefined;
+
     return {
-      title: `${result.name}-${result.realm}`,
+      title: this.formatSearchResultTitle(result),
       url,
       color: typeof result.classID === "number" ? CLASS_COLORS[result.classID] ?? 0x818cf8 : 0x818cf8,
       fields,
+      thumbnail: classIconUrl ? { url: classIconUrl } : undefined,
       footer: { text: "Suomi WoW character" },
     };
+  }
+
+  private buildGuildSearchEmbed(result: SearchResult) {
+    const url = `${this.getFrontendBaseUrl()}${result.href}`;
+    const thumbnailUrl = this.getGuildThumbnailUrl(result);
+
+    return {
+      title: this.formatSearchResultTitle(result),
+      url,
+      color: this.getGuildEmbedColor(result),
+      fields: [{ name: "Realm", value: this.formatRealmName(result.realm), inline: true }],
+      thumbnail: thumbnailUrl ? { url: thumbnailUrl } : undefined,
+      footer: { text: "Suomi WoW guild" },
+    };
+  }
+
+  private formatSearchResultTitle(result: SearchResult): string {
+    return `${result.name}-${this.formatRealmName(result.realm)}`;
+  }
+
+  private formatRealmName(value: string): string {
+    return value
+      .split("-")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  private getClassIconUrl(iconName: string): string {
+    const filename = /\.[a-z0-9]+$/i.test(iconName) ? iconName : `${iconName}.jpg`;
+    return this.getFrontendAssetUrl(`icons/${filename}`);
+  }
+
+  private getGuildThumbnailUrl(result: SearchResult): string {
+    if (result.iconUrl) {
+      if (/^https?:\/\//i.test(result.iconUrl)) return result.iconUrl;
+      const iconPath = result.iconUrl.replace(/^\/+/, "");
+      return this.getFrontendAssetUrl(iconPath.startsWith("icons/") ? iconPath : `icons/${iconPath}`);
+    }
+
+    if (result.crest?.emblem?.imageName) {
+      return this.getFrontendAssetUrl(`components/${result.crest.emblem.imageName}`);
+    }
+
+    return this.getFrontendAssetUrl("logo.png");
+  }
+
+  private getGuildEmbedColor(result: SearchResult): number {
+    const color = result.crest?.background?.color ?? result.crest?.emblem?.color;
+    if (!color) return 0x38bdf8;
+
+    const red = this.clampDiscordColorChannel(color.r);
+    const green = this.clampDiscordColorChannel(color.g);
+    const blue = this.clampDiscordColorChannel(color.b);
+    return (red << 16) + (green << 8) + blue;
+  }
+
+  private clampDiscordColorChannel(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(255, Math.round(value)));
+  }
+
+  private getFrontendAssetUrl(path: string): string {
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${this.getFrontendBaseUrl()}/${path
+      .replace(/^\/+/, "")
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/")}`;
   }
 
   private getStringOption(subcommand: any, name: string): string | null {

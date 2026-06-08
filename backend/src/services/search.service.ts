@@ -1,4 +1,4 @@
-import Guild from "../models/Guild";
+import Guild, { IGuildCrest } from "../models/Guild";
 import characterService from "./character.service";
 
 export type SearchResultType = "guild" | "character";
@@ -8,6 +8,9 @@ export type SearchResult = {
   realm: string;
   type: SearchResultType;
   href: string;
+  iconUrl?: string;
+  crest?: IGuildCrest;
+  faction?: string;
   classID?: number;
   guild?: {
     name: string;
@@ -35,7 +38,7 @@ class SearchService {
     const perTypeLimit = limit;
 
     const [guilds, characters] = await Promise.all([
-      Guild.find({ name: namePrefix }).sort({ name: 1, realm: 1 }).limit(perTypeLimit).select("name realm -_id").lean(),
+      Guild.find({ name: namePrefix }).sort({ name: 1, realm: 1 }).limit(perTypeLimit).select("name realm iconUrl crest faction -_id").lean(),
       characterService.searchCharacters(trimmedQuery, perTypeLimit),
     ]);
 
@@ -45,6 +48,9 @@ class SearchService {
         realm: guild.realm,
         type: "guild" as const,
         href: `/guilds/${encodeURIComponent(guild.realm)}/${encodeURIComponent(guild.name)}`,
+        iconUrl: guild.iconUrl,
+        crest: guild.crest,
+        faction: guild.faction,
       })),
       ...characters.map((character) => ({
         name: character.matchedName ?? character.name,
@@ -76,7 +82,7 @@ class SearchService {
         name: new RegExp(`^${escapeRegex(name)}$`, "i"),
         realm: new RegExp(`^${escapeRegex(realm)}$`, "i"),
       })
-        .select("name realm -_id")
+        .select("name realm iconUrl crest faction -_id")
         .lean(),
       characterService.getCharacterProfileByRealmName(realm, name),
     ]);
@@ -87,6 +93,9 @@ class SearchService {
         realm: guild.realm,
         type: "guild",
         href: `/guilds/${encodeURIComponent(guild.realm)}/${encodeURIComponent(guild.name)}`,
+        iconUrl: guild.iconUrl,
+        crest: guild.crest,
+        faction: guild.faction,
       };
     }
 
