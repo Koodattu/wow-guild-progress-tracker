@@ -602,7 +602,6 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const character = profile.character;
   const classInfo = getClassInfoById(character.classID);
   const seenRange = `${formatShortDate(character.firstReportSeenAt)} - ${formatShortDate(character.lastReportSeenAt)}`;
-  const latestGuild = [...character.guildHistory].sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())[0];
   const externalUrls = getCharacterExternalUrls(character.region, character.realm, character.name);
   const nameHistory = character.nameHistory ?? [];
 
@@ -668,14 +667,6 @@ export default function CharacterProfilePage({ params }: PageProps) {
                       <span className="text-lg font-semibold leading-none text-gray-500 md:text-xl">{formatRealmName(character.realm)}</span>
                     </div>
                   </div>
-                  {latestGuild ? (
-                    <div className="text-sm font-semibold text-gray-400">
-                      <Link href={getGuildProfileUrl(latestGuild.guildRealm, latestGuild.guildName)} className="text-blue-300 transition-colors hover:text-blue-200">
-                        {latestGuild.guildName}
-                      </Link>
-                      <span className="ml-2 text-xs text-gray-600">{formatRealmName(latestGuild.guildRealm)}</span>
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </div>

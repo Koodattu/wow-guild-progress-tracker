@@ -361,6 +361,44 @@ class CharacterService {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
+  private getAccentInsensitiveRegex(value: string, options: { prefix?: boolean } = {}): RegExp {
+    const characterClasses: Record<string, string> = {
+      a: "aàáâãäåāăąǎǟǡǻȁȃạảấầẩẫậắằẳẵặ",
+      c: "cçćĉċč",
+      d: "dďđḍ",
+      e: "eèéêëēĕėęěȅȇẹẻẽếềểễệ",
+      g: "gĝğġģǧ",
+      h: "hĥħḥ",
+      i: "iìíîïĩīĭįıǐȉȋịỉ",
+      j: "jĵ",
+      k: "kķǩḳ",
+      l: "lĺļľŀłḷ",
+      n: "nñńņňŉŋǹṇ",
+      o: "oòóôõöøōŏőơǒǫǭȍȏọỏốồổỗộớờởỡợ",
+      r: "rŕŗřṛ",
+      s: "sśŝşšșṣ",
+      t: "tţťŧțṭ",
+      u: "uùúûüũūŭůűųưǔȕȗụủứừửữự",
+      w: "wŵẁẃẅ",
+      y: "yýÿŷỳỵỷỹ",
+      z: "zźżžẓ",
+    };
+
+    const source = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .split("")
+      .map((char) => {
+        const lower = char.toLowerCase();
+        const characterClass = characterClasses[lower];
+        const token = characterClass ? `[${characterClass}]` : this.escapeRegex(char);
+        return `${token}[\\u0300-\\u036f]*`;
+      })
+      .join("");
+
+    return new RegExp(`${options.prefix ? "^" : ""}${source}`, "i");
+  }
+
   private normalizeIdentityPart(value: string): string {
     return value.trim().toLowerCase().replace(/\s+/g, "-");
   }
@@ -1560,7 +1598,7 @@ class CharacterService {
     if (trimmedQuery.length < 2) return [];
 
     const safeLimit = Math.min(Math.max(limit, 1), 10);
-    const namePrefix = new RegExp(`^${this.escapeRegex(trimmedQuery)}`, "i");
+    const namePrefix = this.getAccentInsensitiveRegex(trimmedQuery, { prefix: true });
 
     const aliasRows = await CharacterRaidParticipation.aggregate([
       {
@@ -3015,7 +3053,7 @@ class CharacterService {
     const normalizedCharacterName = characterName?.trim();
     const normalizedGuildName = guildName?.trim();
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const partialNameRegex = normalizedCharacterName ? new RegExp(escapeRegex(normalizedCharacterName), "i") : undefined;
+    const partialNameRegex = normalizedCharacterName ? this.getAccentInsensitiveRegex(normalizedCharacterName) : undefined;
     const partialGuildNameRegex = normalizedGuildName ? new RegExp(escapeRegex(normalizedGuildName), "i") : undefined;
 
     const safeLimit = Math.min(Math.max(limit, 1), 500);
