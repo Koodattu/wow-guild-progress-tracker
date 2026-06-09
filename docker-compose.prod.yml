@@ -3,6 +3,8 @@ services:
     image: mongo:7
     container_name: wow-prog-db
     restart: unless-stopped
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.5"]
+    mem_limit: 1024m
     ports:
       - "27017:27017"
     volumes:
@@ -46,9 +48,9 @@ services:
     # Lower CPU share = OS deprioritizes this when API needs CPU
     # nice -n 15 further lowers kernel scheduling priority
     cpu_shares: 256
-    mem_limit: 3g
+    mem_limit: 2g
     command:
-      ["nice", "-n", "15", "node", "--max-old-space-size=2048", "dist/index.js"]
+      ["nice", "-n", "15", "node", "--max-old-space-size=1536", "dist/index.js"]
     volumes:
       - ./data/icons:/app/data/icons
       - ./backend/logs:/app/logs

@@ -3,7 +3,6 @@ import FightVodLink from "../models/FightVodLink";
 import Fight from "../models/Fight";
 import Guild from "../models/Guild";
 import TwitchVodProfile, { TwitchBroadcasterType, TwitchVodRetentionSource } from "../models/TwitchVodProfile";
-import type { IFight } from "../models/Fight";
 import type { IBossProgress, IGuild, IRaidProgress } from "../models/Guild";
 import type { IStreamer } from "../models/Streamer";
 import twitchService, { TwitchUserData, TwitchVideoData } from "./twitch.service";
@@ -63,6 +62,12 @@ interface VodAvailabilityFields {
   hardExpiresAt: Date;
   expiresAt: Date;
   nextAvailabilityCheckAt?: Date;
+}
+
+interface FightVodCandidate {
+  reportCode: string;
+  fightId: number;
+  timestamp: Date;
 }
 
 export interface FightVodBackfillResult {
@@ -270,7 +275,7 @@ class FightVodService {
       .filter((snapshot) => this.getHardExpiresAt(snapshot.streamStartedAt).getTime() > now);
   }
 
-  async enqueueForFights(guild: IGuild, raidProgress: IRaidProgress, boss: IBossProgress, fights: IFight[]): Promise<void> {
+  async enqueueForFights(guild: IGuild, raidProgress: IRaidProgress, boss: IBossProgress, fights: FightVodCandidate[]): Promise<void> {
     if (!guild.streamers || guild.streamers.length === 0 || fights.length === 0) return;
 
     for (const fight of fights) {

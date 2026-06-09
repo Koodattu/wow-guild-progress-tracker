@@ -2055,6 +2055,11 @@ router.post("/trigger/calculate-all-statistics", async (req: Request, res: Respo
     const raidId = req.body.raidId ? Number(req.body.raidId) : undefined;
     const scope: string = req.body.scope || "current";
 
+    if (guildService.isExistingGuildStatisticsRecalculationRunning()) {
+      res.status(409).json({ error: "Statistics recalculation is already running" });
+      return;
+    }
+
     // Determine recalculation mode
     const currentTierOnly = raidId ? true : scope === "current";
     const raidIds = raidId ? [raidId] : undefined;

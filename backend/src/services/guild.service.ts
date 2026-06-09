@@ -3,7 +3,7 @@ import type { IStreamer } from "../models/Streamer";
 import Event from "../models/Event";
 import Raid, { IRaid } from "../models/Raid";
 import Report, { IReportFightSequenceEntry } from "../models/Report";
-import Fight, { IFight } from "../models/Fight";
+import Fight from "../models/Fight";
 import FightVodLink from "../models/FightVodLink";
 import TierList from "../models/TierList";
 import GuildProcessingQueue from "../models/GuildProcessingQueue";
@@ -18,7 +18,7 @@ import backgroundGuildProcessor from "./background-guild-processor.service";
 import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES, RAID_RIO_SLUG_OVERRIDES } from "../config/guilds";
 import { filterUniqueGuilds } from "../utils/filterUniqueGuilds";
 import mongoose from "mongoose";
-import logger, { getGuildLogger } from "../utils/logger";
+import logger, { getGuildLogger, releaseGuildLogger } from "../utils/logger";
 import Character from "../models/Character";
 import characterService from "./character.service";
 import fightVodService from "./fight-vod.service";
@@ -48,6 +48,50 @@ interface RaidTimeInterval {
   startMs: number;
   endMs: number;
 }
+
+interface StatisticsFight {
+  reportCode: string;
+  guildId: mongoose.Types.ObjectId;
+  fightId: number;
+  zoneId: number;
+  encounterID: number;
+  encounterName: string;
+  difficulty: number;
+  isKill: boolean;
+  bossPercentage: number;
+  fightPercentage: number;
+  reportStartTime: number;
+  reportEndTime?: number;
+  fightStartTime: number;
+  fightEndTime: number;
+  duration: number;
+  timestamp: Date;
+  lastPhaseId?: number;
+  lastPhaseName?: string;
+  progressDisplay?: string;
+}
+
+const STATISTICS_FIGHT_PROJECTION = [
+  "reportCode",
+  "guildId",
+  "fightId",
+  "zoneId",
+  "encounterID",
+  "encounterName",
+  "difficulty",
+  "isKill",
+  "bossPercentage",
+  "fightPercentage",
+  "reportStartTime",
+  "reportEndTime",
+  "fightStartTime",
+  "fightEndTime",
+  "duration",
+  "timestamp",
+  "lastPhaseId",
+  "lastPhaseName",
+  "progressDisplay",
+].join(" ");
 
 interface GuildProgressUpdateResult {
   guild: IGuild;
@@ -134,6 +178,22 @@ interface LatestReportLinkAggregation {
 class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
+  private existingGuildStatisticsRecalculationRunning = false;
+
+  isExistingGuildStatisticsRecalculationRunning(): boolean {
+    return this.existingGuildStatisticsRecalculationRunning;
+  }
+
+  private formatMemoryUsage(): string {
+    const memory = process.memoryUsage();
+    return `rss=${Math.round(memory.rss / 1024 / 1024)}MB heapUsed=${Math.round(memory.heapUsed / 1024 / 1024)}MB heapTotal=${Math.round(memory.heapTotal / 1024 / 1024)}MB external=${Math.round(
+      memory.external / 1024 / 1024,
+    )}MB`;
+  }
+
+  private logMemoryUsage(context: string): void {
+    logger.info(`[Memory] ${context}: ${this.formatMemoryUsage()}`);
+  }
 
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -929,26 +989,36 @@ class GuildService {
   // Recalculate statistics for existing guilds on startup
   // This is used when CALCULATE_GUILD_STATISTICS_ON_STARTUP is set to true
   async recalculateExistingGuildStatistics(currentTierOnly: boolean = true, raidIds?: number[]): Promise<void> {
+    if (this.existingGuildStatisticsRecalculationRunning) {
+      logger.warn("Statistics recalculation is already running, skipping duplicate request");
+      return;
+    }
+
+    this.existingGuildStatisticsRecalculationRunning = true;
     logger.info("Recalculating statistics for existing guilds...");
     if (raidIds) {
       logger.info(`Mode: Specific raids [${raidIds.join(", ")}]`);
     } else {
       logger.info(`Mode: ${currentTierOnly ? "Current tier only" : "All tracked raids"}`);
     }
+    this.logMemoryUsage("statistics recalculation start");
 
     try {
-      // Get all guilds from database
-      const guilds = await Guild.find();
+      const totalGuilds = await Guild.countDocuments();
 
-      if (guilds.length === 0) {
+      if (totalGuilds === 0) {
         logger.info("No guilds found in database, skipping statistics recalculation");
         return;
       }
 
-      logger.info(`Found ${guilds.length} guilds to recalculate statistics for`);
+      logger.info(`Found ${totalGuilds} guilds to recalculate statistics for`);
 
-      // Process each guild
-      for (const guild of guilds) {
+      let processedGuilds = 0;
+      const guildCursor = Guild.find().cursor({ batchSize: 1 });
+
+      // Process each guild without keeping all guild documents in memory.
+      for await (const guild of guildCursor) {
+        processedGuilds++;
         // Yield to event loop between guilds so HTTP requests can be served
         await yieldToEventLoop();
         try {
@@ -979,6 +1049,11 @@ class GuildService {
         } catch (error) {
           getGuildLogger(guild.name, guild.realm).error("Error recalculating statistics:", error instanceof Error ? error.message : "Unknown error");
           // Continue with next guild even if one fails
+        } finally {
+          releaseGuildLogger(guild.name, guild.realm);
+          if (processedGuilds % 10 === 0 || processedGuilds === totalGuilds) {
+            this.logMemoryUsage(`statistics recalculation progress ${processedGuilds}/${totalGuilds}`);
+          }
         }
       }
 
@@ -993,6 +1068,9 @@ class GuildService {
     } catch (error) {
       logger.error("Error in recalculateExistingGuildStatistics:", error);
       throw error;
+    } finally {
+      this.logMemoryUsage("statistics recalculation finish");
+      this.existingGuildStatisticsRecalculationRunning = false;
     }
   }
 
@@ -3143,14 +3221,15 @@ class GuildService {
 
     // Get all fights from database for this guild, raid, and difficulty
     // IMPORTANT: Also filter by encounterID to ensure we only get bosses that belong to this raid
-    const fights = await Fight.find({
+    const fights = (await Fight.find({
       guildId: guild._id as mongoose.Types.ObjectId,
       zoneId: raidData.id,
       difficulty: difficultyId,
       encounterID: { $in: Array.from(validBossIds) }, // Only include fights for bosses in this raid
     })
+      .select(STATISTICS_FIGHT_PROJECTION)
       .sort({ timestamp: 1 })
-      .lean(); // Sort by timestamp (oldest first) for proper kill order tracking
+      .lean()) as StatisticsFight[]; // Sort by timestamp (oldest first) for proper kill order tracking
 
     if (fights.length === 0) {
       guildLog.info(`No ${difficulty} fights found for ${raidData.name}`);
@@ -3294,12 +3373,12 @@ class GuildService {
 
     // Track kill order - which boss was killed first, second, etc.
     const killOrderTracker: Array<{ encounterId: number; killTime: Date }> = [];
-    const vodCandidateFightsByBoss = new Map<number, IFight[]>();
+    const vodCandidateFightsByBoss = new Map<number, StatisticsFight[]>();
 
     // FIRST PASS: Filter out duplicate fights
     // Create a map to track seen fight characteristics
     const seenFights = new Map<string, any>();
-    const uniqueFights: any[] = [];
+    const uniqueFights: StatisticsFight[] = [];
     let duplicateCount = 0;
 
     for (const fight of filteredFights) {
@@ -3338,7 +3417,7 @@ class GuildService {
 
     // THIRD PASS: Process all unique fights and build statistics
     let totalCombatTime = 0;
-    const progressionFights: any[] = [];
+    const progressionFights: StatisticsFight[] = [];
     for (let i = 0; i < uniqueFights.length; i++) {
       // Yield every 50 fights to let the event loop process HTTP requests
       if (i % 50 === 0 && i > 0) await yieldToEventLoop();
@@ -3438,7 +3517,7 @@ class GuildService {
         });
 
         const vodCandidates = vodCandidateFightsByBoss.get(encounterId) || [];
-        vodCandidates.push(fight as IFight);
+        vodCandidates.push(fight);
         vodCandidateFightsByBoss.set(encounterId, vodCandidates);
       }
 
@@ -3645,7 +3724,7 @@ class GuildService {
     }
   }
 
-  private async enqueueBestPullVodLinks(guild: IGuild, raidProgress: IRaidProgress, vodCandidateFightsByBoss: Map<number, IFight[]>): Promise<void> {
+  private async enqueueBestPullVodLinks(guild: IGuild, raidProgress: IRaidProgress, vodCandidateFightsByBoss: Map<number, StatisticsFight[]>): Promise<void> {
     if (!guild.streamers || guild.streamers.length === 0 || vodCandidateFightsByBoss.size === 0) return;
 
     for (const [bossId, fights] of vodCandidateFightsByBoss.entries()) {

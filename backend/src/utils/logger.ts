@@ -99,6 +99,21 @@ export function getGuildLogger(guildName: string, realm: string): winston.Logger
 }
 
 /**
+ * Close and remove a cached guild logger after long bulk operations.
+ *
+ * Guild-specific loggers keep file transports open. Bulk jobs that touch every
+ * guild should not retain one logger per guild for the lifetime of the worker.
+ */
+export function releaseGuildLogger(guildName: string, realm: string): void {
+  const loggerKey = `${guildName}-${realm}`;
+  const guildLogger = guildLoggers.get(loggerKey);
+  if (!guildLogger) return;
+
+  guildLogger.close();
+  guildLoggers.delete(loggerKey);
+}
+
+/**
  * Main logger instance for general application logs
  */
 export const logger = generalLogger;
