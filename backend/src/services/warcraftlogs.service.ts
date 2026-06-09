@@ -93,7 +93,7 @@ class WarcraftLogsService {
     };
   }
 
-  async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false): Promise<T> {
+  async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false, serverErrorRetries: number = 0): Promise<T> {
     // Add delay between requests to avoid bursting
     await this.requestDelay();
 
@@ -114,18 +114,25 @@ class WarcraftLogsService {
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default to 60s if not specified
       logger.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
+      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
     }
 
     // Handle gateway timeouts with infinite retry (only for initial fetch)
     if (retryOnGatewayTimeout && (response.status === 504 || response.statusText === "Gateway Time-out")) {
       logger.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
       await new Promise((resolve) => setTimeout(resolve, 15000)); // Wait 15 seconds
-      return this.query<T>(query, variables, retryOnGatewayTimeout); // Retry the request
+      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
+    }
+
+    if (response.status >= 500 && response.status < 600 && serverErrorRetries > 0) {
+      const waitTime = (4 - serverErrorRetries) * 2000;
+      logger.warn(`⚠️  WCL API ${response.status} ${response.statusText}; retrying in ${waitTime}ms (${serverErrorRetries} retries left)`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries - 1);
     }
 
     if (!response.ok) {
-      throw new Error(`WCL API request failed: ${response.statusText}`);
+      throw new Error(`WCL API request failed: ${response.status} ${response.statusText}`);
     }
 
     const result = (await response.json()) as any;
@@ -450,7 +457,7 @@ class WarcraftLogsService {
       }
     `;
 
-    const result = await this.query<any>(query, { reportCode, difficulty });
+    const result = await this.query<any>(query, { reportCode, difficulty }, false, 2);
     const rankingRows = Array.isArray(result?.reportData?.report?.rankings?.data) ? result.reportData.report.rankings.data : [];
     const getStringValue = (value: any): string | undefined => {
       if (typeof value === "string") return value;

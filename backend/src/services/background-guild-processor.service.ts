@@ -911,7 +911,7 @@ class BackgroundGuildProcessor {
 
           let rankingsCharacterCount = 0;
           let fallbackResult: { processed: number; skipped: number; matched: number; unmatched: number } | null = null;
-          let charactersFetchSource: "rankedCharacters" | "reportRankings" | "none" = rankedResult.processed > 0 ? "rankedCharacters" : "none";
+          let charactersFetchSource: "rankedCharacters" | "reportRankings" | "none" = rankedResult.processed > 0 ? "rankedCharacters" : report.charactersFetchSource || "none";
 
           // report.rankings carries the historical class/spec for the report. rankedCharacters can resolve
           // a reused WCL canonical ID to the wrong current class, so use rankings when it is available.
@@ -934,19 +934,25 @@ class BackgroundGuildProcessor {
             return;
           }
 
-          const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
-          rankingsCharacterCount = rankingCharacters.length;
-          fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
-            reportCode: wclReport?.code || report.code,
-            reportStartTime: wclReport?.startTime || report.startTime,
-            reportZoneId: report.zoneId,
-            reportGuildId: guild._id as mongoose.Types.ObjectId,
-            reportGuildName: guild.name,
-            reportGuildRealm: guild.realm,
-            rankingCharacters,
-            canonicalMatches,
-          });
-          charactersFetchSource = fallbackResult.processed > 0 ? "reportRankings" : rankedResult.processed > 0 || (report.rankedCharacterCount ?? 0) > 0 ? "rankedCharacters" : "none";
+          try {
+            const rankingCharacters = await wclService.getReportRankingsCharacters(report.code, 5);
+            rankingsCharacterCount = rankingCharacters.length;
+            fallbackResult = await characterService.upsertCharactersFromReportRankingAppearances({
+              reportCode: wclReport?.code || report.code,
+              reportStartTime: wclReport?.startTime || report.startTime,
+              reportZoneId: report.zoneId,
+              reportGuildId: guild._id as mongoose.Types.ObjectId,
+              reportGuildName: guild.name,
+              reportGuildRealm: guild.realm,
+              rankingCharacters,
+              canonicalMatches,
+            });
+            charactersFetchSource = fallbackResult.processed > 0 ? "reportRankings" : rankedResult.processed > 0 || (report.rankedCharacterCount ?? 0) > 0 ? "rankedCharacters" : "none";
+          } catch (error) {
+            const rankingsErrorMessage = error instanceof Error ? error.message || error.name : String(error);
+            guildLog.warn(`[ReportCharacterBackfill] Report rankings fallback failed for ${report.code}; continuing without rankings data: ${rankingsErrorMessage}`);
+            charactersFetchSource = rankedResult.processed > 0 || (report.rankedCharacterCount ?? 0) > 0 ? "rankedCharacters" : charactersFetchSource;
+          }
 
           const processedAppearances = rankedResult.processed + (fallbackResult?.processed ?? 0);
           const storedAppearanceCount = await CharacterReportAppearance.countDocuments({ reportCode: report.code });
