@@ -1187,8 +1187,8 @@ class GuildService {
       getGuildLogger(guild.name, guild.realm).info("Successfully updated guild progress");
       return { guild, hasNewData, raidingStatusChanged, isInitialFetch };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      getGuildLogger(guild.name, guild.realm).error("Error updating guild:", errorMessage);
+      const errorMessage = error instanceof Error ? error.message || error.name : "Unknown error";
+      getGuildLogger(guild.name, guild.realm).error("Error updating guild:", error);
 
       // Classify the error for better handling
       const { classifyError, ErrorType } = require("../utils/error-classifier");
@@ -1826,7 +1826,6 @@ class GuildService {
   async calculateGuildRankingsForRaid(raidId: number): Promise<void> {
     logger.info(`Calculating guild rankings for raid ${raidId}...`);
 
-    // Get all guilds (need documents to save, so no .lean())
     // Exclude guilds that have this raid in their excludedRaidIds
     const guilds = await Guild.find({ excludedRaidIds: { $ne: raidId } });
 
@@ -1835,20 +1834,14 @@ class GuildService {
       return;
     }
 
-    // Also clear guildRank for guilds excluded from this raid
-    const excludedGuilds = await Guild.find({ excludedRaidIds: raidId });
-    for (const guild of excludedGuilds) {
-      let needsSave = false;
-      for (const progress of guild.progress) {
-        if (progress.raidId === raidId && progress.guildRank != null) {
-          progress.guildRank = null as any;
-          needsSave = true;
-        }
-      }
-      if (needsSave) {
-        await guild.save();
-      }
-    }
+    // Also clear guildRank for guilds excluded from this raid. Use targeted
+    // updates instead of saving full guild documents so concurrent progress
+    // updates do not trip Mongoose version conflicts.
+    await Guild.updateMany(
+      { excludedRaidIds: raidId, "progress.raidId": raidId },
+      { $set: { "progress.$[progress].guildRank": null } },
+      { arrayFilters: [{ "progress.raidId": raidId }] },
+    );
 
     // Look up raid slug for matching official progress from Raider.IO
     const raid = await Raid.findOne({ id: raidId }).lean();
@@ -1904,20 +1897,26 @@ class GuildService {
     // This covers: heroic entries of mythic-ranked guilds, mythic entries of heroic-only guilds
     // with old stale ranks, and guilds that dropped out of ranking entirely.
     const rankedGuildIds = new Set(rankEntries.map((e) => e.guild._id.toString()));
+    const clearRankOperations: mongoose.mongo.AnyBulkWriteOperation[] = [];
     for (const guild of guilds) {
-      let needsSave = false;
       for (const progress of guild.progress) {
         if (progress.raidId !== raidId) continue;
         const isRankedEntry =
           rankedGuildIds.has(guild._id.toString()) && rankEntries.some((e) => e.guild._id.toString() === guild._id.toString() && e.progress.difficulty === progress.difficulty);
         if (!isRankedEntry && progress.guildRank != null) {
-          progress.guildRank = null as any;
-          needsSave = true;
+          clearRankOperations.push({
+            updateOne: {
+              filter: { _id: guild._id },
+              update: { $set: { "progress.$[progress].guildRank": null } },
+              arrayFilters: [{ "progress.raidId": raidId, "progress.difficulty": progress.difficulty }],
+            },
+          });
         }
       }
-      if (needsSave) {
-        await guild.save();
-      }
+    }
+
+    if (clearRankOperations.length > 0) {
+      await Guild.bulkWrite(clearRankOperations, { ordered: false });
     }
 
     if (rankEntries.length === 0) {
@@ -1988,10 +1987,20 @@ class GuildService {
       entry.progress.guildRank = index + 1;
     });
 
-    // Save all guilds with updated ranks
-    for (const entry of sortedEntries) {
+    // Save rank fields with targeted updates. This preserves the existing
+    // ranking logic but avoids saving stale full guild documents while guild
+    // progress updates are running concurrently.
+    const rankOperations: mongoose.mongo.AnyBulkWriteOperation[] = sortedEntries.map((entry, index) => ({
+      updateOne: {
+        filter: { _id: entry.guild._id },
+        update: { $set: { "progress.$[progress].guildRank": index + 1 } },
+        arrayFilters: [{ "progress.raidId": raidId, "progress.difficulty": entry.progress.difficulty }],
+      },
+    }));
+
+    for (let i = 0; i < rankOperations.length; i += 100) {
       await yieldToEventLoop();
-      await entry.guild.save();
+      await Guild.bulkWrite(rankOperations.slice(i, i + 100), { ordered: false });
     }
 
     const mythicCount = sortedEntries.filter((e) => e.difficulty === "mythic").length;

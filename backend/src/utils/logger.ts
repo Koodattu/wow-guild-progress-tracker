@@ -1,6 +1,7 @@
 import winston from "winston";
 import path from "path";
 import fs from "fs";
+import util from "util";
 
 // Ensure logs directory exists
 const logsDir = path.join(__dirname, "../../logs");
@@ -8,15 +9,29 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+function formatLogValue(value: unknown): string {
+  if (value instanceof Error) {
+    return value.stack || value.message || value.name;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return util.inspect(value, { depth: 6, breakLength: Infinity });
+}
+
 // Common format for all loggers
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   winston.format.errors({ stack: true }),
-  winston.format.printf(({ timestamp, level, message, stack }) => {
+  winston.format.printf((info) => {
+    const { timestamp, level, message, stack } = info;
+    const extra = (info[Symbol.for("splat")] as unknown[] | undefined)?.map(formatLogValue).filter(Boolean).join(" ");
+    const baseMessage = extra ? `${message} ${extra}` : message;
+
     if (stack) {
-      return `${timestamp} [${level.toUpperCase()}]: ${message}\n${stack}`;
+      return `${timestamp} [${level.toUpperCase()}]: ${baseMessage}\n${stack}`;
     }
-    return `${timestamp} [${level.toUpperCase()}]: ${message}`;
+    return `${timestamp} [${level.toUpperCase()}]: ${baseMessage}`;
   }),
 );
 
