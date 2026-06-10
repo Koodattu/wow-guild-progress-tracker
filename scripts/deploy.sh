@@ -9,6 +9,8 @@ REPO_URL="https://github.com/Koodattu/wow-guild-progress-tracker.git"
 LOCKFILE="$PROJECT_DIR/.deploy.lock"
 COMPOSE_FILE="docker-compose.prod.yml"
 LOCK_TIMEOUT=1200
+DOCKER_BUILD_CACHE_KEEP_STORAGE="${DOCKER_BUILD_CACHE_KEEP_STORAGE:-10GB}"
+DOCKER_IMAGE_PRUNE_UNTIL="${DOCKER_IMAGE_PRUNE_UNTIL:-168h}"
 
 # --- BACKUP CONFIGURATION ---
 BACKUP_DIR="$HOME/wow-backups"
@@ -91,6 +93,18 @@ backup_db() {
     ls -lh "$BACKUP_DIR" | grep "wow_db_backup"
 }
 
+cleanup_docker() {
+    log "Pruning Docker build cache, keeping up to $DOCKER_BUILD_CACHE_KEEP_STORAGE..."
+    docker builder prune -af --keep-storage "$DOCKER_BUILD_CACHE_KEEP_STORAGE" || {
+        warn "Docker build cache prune failed. Continuing deployment."
+    }
+
+    log "Pruning unused Docker images older than $DOCKER_IMAGE_PRUNE_UNTIL..."
+    docker image prune -af --filter "until=$DOCKER_IMAGE_PRUNE_UNTIL" || {
+        warn "Docker image prune failed. Continuing deployment."
+    }
+}
+
 deploy() {
     log "Starting deployment check..."
 
@@ -146,6 +160,8 @@ deploy() {
     sleep 5
     RUNNING_COUNT=$(docker ps -q | wc -l)
     log "Deployment completed. Running containers: $RUNNING_COUNT"
+
+    cleanup_docker
 }
 
 main() {
