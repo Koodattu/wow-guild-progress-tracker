@@ -1697,6 +1697,69 @@ export interface TriggerResponse {
   currentTierOnly?: boolean;
 }
 
+export type CharacterRankingBackfillItemStatus = "pending" | "in_progress" | "completed" | "skipped" | "failed";
+
+export interface CharacterRankingBackfillItem {
+  id: string;
+  characterId: string;
+  wclCanonicalCharacterId: number;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  zoneId: number;
+  raidName?: string | null;
+  status: CharacterRankingBackfillItemStatus;
+  attempts: number;
+  maxAttempts: number;
+  aliasesQueried: number;
+  rankingsWritten: number;
+  leaderboardEntriesWritten: number;
+  completionReason?: string | null;
+  lastError?: string | null;
+  lastErrorAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  lastActivityAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CharacterRankingBackfillStatusResponse {
+  processor: {
+    isRunning: boolean;
+    isWaitingForRateLimit: boolean;
+    currentItem: CharacterRankingBackfillItem | null;
+    lastMessage: string | null;
+  };
+  queue: {
+    pending: number;
+    inProgress: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+    total: number;
+    terminal: number;
+    aliasesQueried: number;
+    rankingsWritten: number;
+    leaderboardEntriesWritten: number;
+  };
+  recentFailures: CharacterRankingBackfillItem[];
+  updatedAt: string;
+}
+
+export interface CharacterRankingBackfillTriggerResponse extends TriggerResponse {
+  started: boolean;
+  enqueue: {
+    candidates: number;
+    queued: number;
+    existing: number;
+    updated: number;
+    skippedWithoutCharacter: number;
+  };
+  status: CharacterRankingBackfillStatusResponse;
+}
+
 export interface AdminRaidOption {
   id: number;
   name: string;

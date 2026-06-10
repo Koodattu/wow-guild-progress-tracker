@@ -24,6 +24,7 @@ import {
   triggerRescanDeathEvents,
   triggerRescanCharacters,
   triggerBackfillReportCharacters,
+  triggerBackfillCharacterRankings,
   triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
   triggerUpdateRaiderIOGuilds,
@@ -69,6 +70,7 @@ import {
   DeleteGuildResponse,
   AdminCharacter,
   AdminCharacterStats,
+  CharacterRankingBackfillStatusResponse,
   AdminRaidOption,
   DeleteCharacterRankingsPreviewResponse,
   TaskLogEntry,
@@ -171,6 +173,7 @@ export default function AdminPage() {
   const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitConfig | null>(null);
   const [processorStatus, setProcessorStatus] = useState<ProcessorStatus | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStatistics | null>(null);
+  const [characterRankingBackfillStatus, setCharacterRankingBackfillStatus] = useState<CharacterRankingBackfillStatusResponse | null>(null);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [queuePage, setQueuePage] = useState(1);
   const [queueTotalPages, setQueueTotalPages] = useState(1);
@@ -310,11 +313,12 @@ export default function AdminPage() {
       try {
         switch (activeTab) {
           case "overview": {
-            const [overviewData, rateLimitData, queueStatsData, adminRaidsData] = await Promise.all([
+            const [overviewData, rateLimitData, queueStatsData, adminRaidsData, characterRankingBackfillData] = await Promise.all([
               api.getAdminOverview(),
               api.getAdminRateLimitStatus(),
               api.getAdminProcessingQueueStats(),
               getAdminRaids(),
+              api.getAdminCharacterRankingBackfillStatus(),
             ]);
             setOverview(overviewData);
             setRateLimitStatus(rateLimitData.status);
@@ -322,6 +326,7 @@ export default function AdminPage() {
             setProcessorStatus(queueStatsData.processor);
             setQueueStats(queueStatsData.queue);
             setAdminRaids(adminRaidsData.raids);
+            setCharacterRankingBackfillStatus(characterRankingBackfillData);
             break;
           }
 
@@ -358,11 +363,12 @@ export default function AdminPage() {
           }
 
           case "system": {
-            const [rateLimitData, queueStatsData, queueData, errorsData] = await Promise.all([
+            const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData] = await Promise.all([
               api.getAdminRateLimitStatus(),
               api.getAdminProcessingQueueStats(),
               api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
               api.getAdminProcessingQueueErrors(1, 50),
+              api.getAdminCharacterRankingBackfillStatus(),
             ]);
             setRateLimitStatus(rateLimitData.status);
             setRateLimitConfig(rateLimitData.config);
@@ -371,6 +377,7 @@ export default function AdminPage() {
             setQueueItems(queueData.items);
             setQueueTotalPages(queueData.pagination.totalPages);
             setErrorItems(errorsData.items);
+            setCharacterRankingBackfillStatus(characterRankingBackfillData);
             break;
           }
 
@@ -425,11 +432,12 @@ export default function AdminPage() {
     if (activeTab === "system" && user?.isAdmin) {
       const interval = setInterval(async () => {
         try {
-          const [rateLimitData, queueStatsData, queueData, errorsData] = await Promise.all([
+          const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData] = await Promise.all([
             api.getAdminRateLimitStatus(),
             api.getAdminProcessingQueueStats(),
             api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
             api.getAdminProcessingQueueErrors(1, 50),
+            api.getAdminCharacterRankingBackfillStatus(),
           ]);
           setRateLimitStatus(rateLimitData.status);
           setRateLimitConfig(rateLimitData.config);
@@ -438,6 +446,7 @@ export default function AdminPage() {
           setQueueItems(queueData.items);
           setQueueTotalPages(queueData.pagination.totalPages);
           setErrorItems(errorsData.items);
+          setCharacterRankingBackfillStatus(characterRankingBackfillData);
         } catch (err) {
           console.error("Error refreshing system data:", err);
         }
@@ -450,6 +459,24 @@ export default function AdminPage() {
       setSystemRefreshInterval(null);
     }
   }, [activeTab, user?.isAdmin, queuePage, queueFilter]);
+
+  // Auto-refresh lightweight backfill/rate-limit status on the overview tab
+  useEffect(() => {
+    if (activeTab !== "overview" || !user?.isAdmin) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const [rateLimitData, characterRankingBackfillData] = await Promise.all([api.getAdminRateLimitStatus(), api.getAdminCharacterRankingBackfillStatus()]);
+        setRateLimitStatus(rateLimitData.status);
+        setRateLimitConfig(rateLimitData.config);
+        setCharacterRankingBackfillStatus(characterRankingBackfillData);
+      } catch (err) {
+        console.error("Error refreshing overview status:", err);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, user?.isAdmin]);
 
   // Auto-refresh tasks tab every 10 seconds
   useEffect(() => {
@@ -494,6 +521,9 @@ export default function AdminPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
+  const characterBackfillQueue = characterRankingBackfillStatus?.queue;
+  const characterBackfillPercent = characterBackfillQueue && characterBackfillQueue.total > 0 ? Math.round((characterBackfillQueue.terminal / characterBackfillQueue.total) * 100) : 0;
+
   // Handler for scheduler triggers with 10-second cooldown per button
   const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
     setTriggerLoading(triggerName);
@@ -501,6 +531,10 @@ export default function AdminPage() {
     try {
       const result = await triggerFn();
       setTriggerMessage({ type: "success", text: result.message });
+      if (triggerName === "backfill-character-rankings") {
+        const status = await api.getAdminCharacterRankingBackfillStatus();
+        setCharacterRankingBackfillStatus(status);
+      }
 
       // Set cooldown for this specific button
       setTriggerCooldowns((prev) => ({ ...prev, [triggerName]: true }));
@@ -1192,6 +1226,64 @@ export default function AdminPage() {
                       {triggerLoading === "backfill-report-characters" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["backfill-report-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
+                    <button
+                      onClick={() => handleTrigger("backfill-character-rankings", triggerBackfillCharacterRankings)}
+                      disabled={triggerLoading === "backfill-character-rankings" || triggerCooldowns["backfill-character-rankings"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Backfill Character Rankings</span>
+                      {triggerLoading === "backfill-character-rankings" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["backfill-character-rankings"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    {characterRankingBackfillStatus && characterBackfillQueue && (
+                      <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-white">Character ranking backfill</span>
+                          <span className={characterRankingBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
+                            {characterRankingBackfillStatus.processor.isWaitingForRateLimit
+                              ? "Waiting for WCL reset"
+                              : characterRankingBackfillStatus.processor.isRunning
+                                ? "Running"
+                                : "Idle"}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, characterBackfillPercent)}%` }} />
+                        </div>
+                        <div className="grid grid-cols-5 gap-2 text-center">
+                          <div>
+                            <div className="text-amber-400 font-semibold">{characterBackfillQueue.pending}</div>
+                            <div className="text-gray-500">pending</div>
+                          </div>
+                          <div>
+                            <div className="text-blue-400 font-semibold">{characterBackfillQueue.inProgress}</div>
+                            <div className="text-gray-500">running</div>
+                          </div>
+                          <div>
+                            <div className="text-green-400 font-semibold">{characterBackfillQueue.completed}</div>
+                            <div className="text-gray-500">done</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 font-semibold">{characterBackfillQueue.skipped}</div>
+                            <div className="text-gray-500">skipped</div>
+                          </div>
+                          <div>
+                            <div className="text-red-400 font-semibold">{characterBackfillQueue.failed}</div>
+                            <div className="text-gray-500">failed</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-gray-500">
+                          <span>{characterBackfillPercent}% complete</span>
+                          <span>{characterBackfillQueue.rankingsWritten} rankings written</span>
+                        </div>
+                        {characterRankingBackfillStatus.processor.currentItem && (
+                          <div className="text-gray-400 truncate">
+                            Current: {characterRankingBackfillStatus.processor.currentItem.name}-{characterRankingBackfillStatus.processor.currentItem.realm} /{" "}
+                            {characterRankingBackfillStatus.processor.currentItem.raidName ?? `Raid ${characterRankingBackfillStatus.processor.currentItem.zoneId}`}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <button
                       onClick={() => handleTrigger("rebuild-character-raid-participations", triggerRebuildCharacterRaidParticipations)}
                       disabled={triggerLoading === "rebuild-character-raid-participations" || triggerCooldowns["rebuild-character-raid-participations"]}

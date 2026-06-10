@@ -24,6 +24,7 @@ import logger from "../utils/logger";
 import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
 import characterService from "../services/character.service";
+import characterRankingBackfillService from "../services/character-ranking-backfill.service";
 import wclService from "../services/warcraftlogs.service";
 import blizzardService from "../services/blizzard.service";
 
@@ -1688,6 +1689,20 @@ router.post("/rate-limit/pause", async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// CHARACTER RANKING BACKFILL
+// ============================================================
+
+router.get("/character-ranking-backfill/status", async (req: Request, res: Response) => {
+  try {
+    const status = await characterRankingBackfillService.getStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error("Error fetching character ranking backfill status:", error);
+    res.status(500).json({ error: "Failed to fetch character ranking backfill status" });
+  }
+});
+
+// ============================================================
 // GUILD PROCESSING QUEUE
 // ============================================================
 
@@ -2324,6 +2339,23 @@ router.post("/trigger/backfill-report-characters", async (req: Request, res: Res
   } catch (error) {
     logger.error("Error triggering report character backfill:", error);
     res.status(500).json({ error: "Failed to trigger report character backfill" });
+  }
+});
+
+// Queue and start historical character ranking backfill
+router.post("/trigger/backfill-character-rankings", async (req: Request, res: Response) => {
+  try {
+    const result = await characterRankingBackfillService.triggerBackfill();
+    res.json({
+      success: true,
+      message: result.started
+        ? `Character ranking backfill started: ${result.enqueue.queued} new character/raid items queued, ${result.enqueue.existing} already tracked`
+        : `Character ranking backfill is already running: ${result.enqueue.queued} new character/raid items queued, ${result.enqueue.existing} already tracked`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering character ranking backfill:", error);
+    res.status(500).json({ error: "Failed to trigger character ranking backfill" });
   }
 });
 
