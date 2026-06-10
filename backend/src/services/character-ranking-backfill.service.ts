@@ -433,6 +433,7 @@ class CharacterRankingBackfillService {
               region: character.region,
               classID: character.classID,
               raidName: raidNameById.get(row.zoneId) ?? null,
+              source: "raid_participation",
               observedSpecNames,
               evidence: {
                 appearanceCount: row.appearanceCount,

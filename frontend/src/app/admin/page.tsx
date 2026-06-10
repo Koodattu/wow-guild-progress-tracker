@@ -531,7 +531,7 @@ export default function AdminPage() {
     try {
       const result = await triggerFn();
       setTriggerMessage({ type: "success", text: result.message });
-      if (triggerName === "backfill-character-rankings") {
+      if (triggerName === "backfill-character-rankings" || triggerName === "refresh-character-ranking-candidates") {
         const status = await api.getAdminCharacterRankingBackfillStatus();
         setCharacterRankingBackfillStatus(status);
       }
@@ -1234,6 +1234,15 @@ export default function AdminPage() {
                       <span>Backfill Character Rankings</span>
                       {triggerLoading === "backfill-character-rankings" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["backfill-character-rankings"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("refresh-character-ranking-candidates", () => triggerBackfillCharacterRankings(true))}
+                      disabled={triggerLoading === "refresh-character-ranking-candidates" || triggerCooldowns["refresh-character-ranking-candidates"]}
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Discover Missing Ranking Pairs</span>
+                      {triggerLoading === "refresh-character-ranking-candidates" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["refresh-character-ranking-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     {characterRankingBackfillStatus && characterBackfillQueue && (
                       <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">

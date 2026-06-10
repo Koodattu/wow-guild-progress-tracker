@@ -1477,10 +1477,12 @@ export async function triggerBackfillReportCharacters(): Promise<TriggerResponse
   return response.json();
 }
 
-export async function triggerBackfillCharacterRankings(): Promise<CharacterRankingBackfillTriggerResponse> {
+export async function triggerBackfillCharacterRankings(refreshCandidates = false): Promise<CharacterRankingBackfillTriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/backfill-character-rankings`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshCandidates }),
   });
   if (!response.ok) throw new Error("Failed to trigger character ranking backfill");
   return response.json();
