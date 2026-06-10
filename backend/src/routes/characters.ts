@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import characterService from "../services/character.service";
 import logger from "../utils/logger";
+import cacheService from "../services/cache.service";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -45,26 +47,42 @@ router.get("/:realm/:name/raids/:raidId/guilds/:guildId/reports", async (req: Re
   }
 });
 
-router.get("/:realm/:name", async (req: Request, res: Response) => {
-  try {
-    const realm = decodeURIComponent(req.params.realm);
-    const name = decodeURIComponent(req.params.name);
-    const classId = typeof req.query.class === "string" ? Number(req.query.class) : undefined;
+router.get(
+  "/:realm/:name",
+  cacheMiddleware(
+    (req) => {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      const classParam = typeof req.query.class === "string" ? req.query.class : undefined;
+      const classId = classParam !== undefined ? Number(classParam) : undefined;
+      if (classId !== undefined && !Number.isFinite(classId)) {
+        return `characters:profile:${realm.toLowerCase()}:${name.toLowerCase()}:class:invalid:${classParam}`;
+      }
+      return cacheService.getCharacterProfileKey(realm, name, classId);
+    },
+    () => cacheService.CHARACTER_PROFILE_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const realm = decodeURIComponent(req.params.realm);
+      const name = decodeURIComponent(req.params.name);
+      const classId = typeof req.query.class === "string" ? Number(req.query.class) : undefined;
 
-    if (classId !== undefined && !Number.isFinite(classId)) {
-      return res.status(400).json({ error: "Invalid class ID" });
+      if (classId !== undefined && !Number.isFinite(classId)) {
+        return res.status(400).json({ error: "Invalid class ID" });
+      }
+
+      const profile = await characterService.getCharacterProfileByRealmName(realm, name, classId);
+      if (!profile) {
+        return res.status(404).json({ error: "Character not found" });
+      }
+
+      res.json(profile);
+    } catch (error) {
+      logger.error("Error fetching character profile:", error);
+      res.status(500).json({ error: "Failed to fetch character profile" });
     }
-
-    const profile = await characterService.getCharacterProfileByRealmName(realm, name, classId);
-    if (!profile) {
-      return res.status(404).json({ error: "Character not found" });
-    }
-
-    res.json(profile);
-  } catch (error) {
-    logger.error("Error fetching character profile:", error);
-    res.status(500).json({ error: "Failed to fetch character profile" });
-  }
-});
+  },
+);
 
 export default router;

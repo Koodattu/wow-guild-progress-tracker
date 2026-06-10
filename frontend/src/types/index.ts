@@ -409,6 +409,7 @@ export interface HomePageData {
     expansion: string;
     iconUrl?: string;
   };
+  raids: RaidInfo[];
   dates: RaidDates;
   guilds: GuildListItem[];
   events: Event[];

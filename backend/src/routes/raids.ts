@@ -8,18 +8,25 @@ import { cacheMiddleware } from "../middleware/cache.middleware";
 const router = Router();
 
 // Get all tracked raids (minimal data, without bosses or dates)
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    // Get only the tracked raids from the database, excluding unnecessary fields
-    const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
-      .select("id name slug rioSlug expansion iconUrl partitions -_id")
-      .sort({ id: -1 });
-    res.json(raids);
-  } catch (error) {
-    logger.error("Error fetching raids:", error);
-    res.status(500).json({ error: "Failed to fetch raids" });
-  }
-});
+router.get(
+  "/",
+  cacheMiddleware(
+    () => cacheService.getRaidsKey(),
+    () => cacheService.STATIC_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      // Get only the tracked raids from the database, excluding unnecessary fields
+      const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
+        .select("id name slug rioSlug expansion iconUrl partitions -_id")
+        .sort({ id: -1 });
+      res.json(raids);
+    } catch (error) {
+      logger.error("Error fetching raids:", error);
+      res.status(500).json({ error: "Failed to fetch raids" });
+    }
+  },
+);
 
 // Get single raid by ID
 router.get("/:id", async (req: Request, res: Response) => {
@@ -39,29 +46,39 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // Get bosses for a specific raid
-router.get("/:id/bosses", async (req: Request, res: Response) => {
-  try {
-    const raidId = parseInt(req.params.id);
-    const raid = await Raid.findOne({ id: raidId }).select("bosses -_id");
+router.get(
+  "/:id/bosses",
+  cacheMiddleware(
+    (req) => {
+      const raidId = parseInt(req.params.id);
+      return cacheService.getRaidBossesKey(raidId);
+    },
+    () => cacheService.STATIC_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const raidId = parseInt(req.params.id);
+      const raid = await Raid.findOne({ id: raidId }).select("bosses -_id");
 
-    if (!raid) {
-      return res.status(404).json({ error: "Raid not found" });
+      if (!raid) {
+        return res.status(404).json({ error: "Raid not found" });
+      }
+
+      // Return only the bosses array without _id fields
+      const bosses = raid.bosses.map((boss: any) => ({
+        id: boss.id,
+        name: boss.name,
+        slug: boss.slug,
+        iconUrl: boss.iconUrl,
+      }));
+
+      res.json(bosses);
+    } catch (error) {
+      logger.error("Error fetching raid bosses:", error);
+      res.status(500).json({ error: "Failed to fetch raid bosses" });
     }
-
-    // Return only the bosses array without _id fields
-    const bosses = raid.bosses.map((boss: any) => ({
-      id: boss.id,
-      name: boss.name,
-      slug: boss.slug,
-      iconUrl: boss.iconUrl,
-    }));
-
-    res.json(bosses);
-  } catch (error) {
-    logger.error("Error fetching raid bosses:", error);
-    res.status(500).json({ error: "Failed to fetch raid bosses" });
-  }
-});
+  },
+);
 
 // Get start/end dates for a specific raid
 router.get(

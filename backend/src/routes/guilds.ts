@@ -105,15 +105,22 @@ router.get(
 );
 
 // Get all manually reserved Uma images so random horse race assignments do not reuse them
-router.get("/horse-race-uma-reservations", async (req: Request, res: Response) => {
-  try {
-    const reservedImages = await guildService.getReservedHorseRaceUmaImages();
-    res.json(reservedImages);
-  } catch (error) {
-    logger.error("Error fetching horse race Uma reservations:", error);
-    res.status(500).json({ error: "Failed to fetch horse race Uma reservations" });
-  }
-});
+router.get(
+  "/horse-race-uma-reservations",
+  cacheMiddleware(
+    () => cacheService.getHorseRaceUmaReservationsKey(),
+    () => cacheService.GUILD_LIST_TTL,
+  ),
+  async (req: Request, res: Response) => {
+    try {
+      const reservedImages = await guildService.getReservedHorseRaceUmaImages();
+      res.json(reservedImages);
+    } catch (error) {
+      logger.error("Error fetching horse race Uma reservations:", error);
+      res.status(500).json({ error: "Failed to fetch horse race Uma reservations" });
+    }
+  },
+);
 
 // Get all guilds with their progress for a specific raid
 // Required query param: raidId

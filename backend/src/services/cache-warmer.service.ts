@@ -22,6 +22,111 @@ import Guild from "../models/Guild";
  * All cache operations are async since they hit MongoDB.
  */
 class CacheWarmerService {
+  constructor() {
+    this.registerWarmers();
+  }
+
+  private registerWarmers(): void {
+    cacheService.registerWarmer(cacheService.getHomeKey(), () => this.buildHomeCacheData());
+    cacheService.registerWarmer(cacheService.getGuildListKey(), () => guildService.getGuildListMinimal());
+    cacheService.registerWarmer(cacheService.getSchedulesKey(), () => guildService.getAllGuildSchedules());
+    cacheService.registerWarmer(cacheService.getLiveStreamersKey(), () => guildService.getLiveStreamers());
+    cacheService.registerWarmer(cacheService.getHorseRaceUmaReservationsKey(), () => guildService.getReservedHorseRaceUmaImages());
+    cacheService.registerWarmer(cacheService.getRaidsKey(), () => this.getTrackedRaids());
+
+    for (const raidId of TRACKED_RAIDS) {
+      cacheService.registerWarmer(cacheService.getProgressKey(raidId), () => guildService.getAllGuildsForRaid(raidId));
+      cacheService.registerWarmer(cacheService.getGuildsKey(raidId), () => guildService.getAllGuildsForRaid(raidId));
+      cacheService.registerWarmer(cacheService.getCompareKey(raidId), async () => {
+        const data = await compareService.getRaidCompare(raidId);
+        if (!data) throw new Error(`Compare data not found for raid ${raidId}`);
+        return data;
+      });
+      cacheService.registerWarmer(cacheService.getRaidDatesKey(raidId), () => this.getRaidDates(raidId));
+      cacheService.registerWarmer(cacheService.getRaidBossesKey(raidId), () => this.getRaidBosses(raidId));
+    }
+  }
+
+  private async getTrackedRaids(): Promise<any[]> {
+    return Raid.find({ id: { $in: TRACKED_RAIDS } })
+      .select("id name slug rioSlug expansion iconUrl partitions -_id")
+      .sort({ id: -1 })
+      .lean();
+  }
+
+  private async getRaidDates(raidId: number): Promise<{ starts: unknown; ends: unknown } | null> {
+    const raid = await Raid.findOne({ id: raidId }).select("starts ends -_id").lean();
+    if (!raid) throw new Error(`Raid dates not found for raid ${raidId}`);
+    return {
+      starts: (raid as any).starts,
+      ends: (raid as any).ends,
+    };
+  }
+
+  private async getRaidBosses(raidId: number): Promise<any[] | null> {
+    const raid = await Raid.findOne({ id: raidId }).select("bosses -_id").lean();
+    if (!raid) throw new Error(`Raid bosses not found for raid ${raidId}`);
+
+    return ((raid as any).bosses ?? []).map((boss: any) => ({
+      id: boss.id,
+      name: boss.name,
+      slug: boss.slug,
+      iconUrl: boss.iconUrl,
+    }));
+  }
+
+  private async buildHomeCacheData(): Promise<any> {
+    const currentRaidId = CURRENT_RAID_IDS[0];
+
+    // Fetch all data needed for home page
+    const [guilds, events, raid, raidDatesDoc, raids] = await Promise.all([
+      guildService.getAllGuildsForRaid(currentRaidId),
+      Event.find().sort({ timestamp: -1 }).limit(5).lean(),
+      Raid.findOne({ id: currentRaidId }).lean(),
+      Raid.findOne({ id: currentRaidId }).select("starts ends").lean(),
+      this.getTrackedRaids(),
+    ]);
+
+    if (!raid) {
+      throw new Error("Current raid not found");
+    }
+
+    // Enrich events with live streamer data - must match what the home route handler produces.
+    const guildIds = [...new Set(events.map((e: any) => String(e.guildId)))];
+    const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1, isCurrentlyRaiding: 1 }).lean();
+    const guildMap = new Map<string, { realm: string; liveStreamers: string[]; isCurrentlyRaiding: boolean }>();
+    for (const g of eventGuilds) {
+      const liveStreamers = (g.streamers || []).filter((s: any) => s.isLive).map((s: any) => s.channelName);
+      guildMap.set(String(g._id), { realm: g.realm, liveStreamers, isCurrentlyRaiding: g.isCurrentlyRaiding ?? false });
+    }
+    const enrichedEvents = events.map((event: any) => {
+      const guildData = guildMap.get(String(event.guildId));
+      return {
+        ...event,
+        guildRealm: event.guildRealm || guildData?.realm,
+        liveStreamers: guildData?.liveStreamers || [],
+        isCurrentlyRaiding: guildData?.isCurrentlyRaiding || false,
+      };
+    });
+
+    return {
+      raid: {
+        id: (raid as any).id,
+        name: (raid as any).name,
+        slug: (raid as any).slug,
+        expansion: (raid as any).expansion,
+        iconUrl: (raid as any).iconUrl,
+      },
+      raids,
+      dates: {
+        starts: (raidDatesDoc as any)?.starts,
+        ends: (raidDatesDoc as any)?.ends,
+      },
+      guilds,
+      events: enrichedEvents,
+    };
+  }
+
   /**
    * Warm all critical caches on server startup or nightly refresh.
    * This should be called after all services are initialized.
@@ -101,57 +206,7 @@ class CacheWarmerService {
     logger.info("[Cache Warmer] Warming home page cache...");
 
     try {
-      const currentRaidId = CURRENT_RAID_IDS[0];
-
-      // Fetch all data needed for home page
-      const [guilds, events, raid, raidDatesDoc] = await Promise.all([
-        guildService.getAllGuildsForRaid(currentRaidId),
-        Event.find().sort({ timestamp: -1 }).limit(5).lean(),
-        Raid.findOne({ id: currentRaidId }).lean(),
-        Raid.findOne({ id: currentRaidId }).select("starts ends").lean(),
-      ]);
-
-      if (!raid) {
-        logger.warn("[Cache Warmer] Current raid not found, skipping home cache");
-        return;
-      }
-
-      // Enrich events with live streamer data - must match what the home route handler produces.
-      const guildIds = [...new Set(events.map((e: any) => String(e.guildId)))];
-      const eventGuilds = await Guild.find({ _id: { $in: guildIds } }, { _id: 1, realm: 1, streamers: 1, isCurrentlyRaiding: 1 }).lean();
-      const guildMap = new Map<string, { realm: string; liveStreamers: string[]; isCurrentlyRaiding: boolean }>();
-      for (const g of eventGuilds) {
-        const liveStreamers = (g.streamers || []).filter((s: any) => s.isLive).map((s: any) => s.channelName);
-        guildMap.set(String(g._id), { realm: g.realm, liveStreamers, isCurrentlyRaiding: g.isCurrentlyRaiding ?? false });
-      }
-      const enrichedEvents = events.map((event: any) => {
-        const guildData = guildMap.get(String(event.guildId));
-        return {
-          ...event,
-          guildRealm: event.guildRealm || guildData?.realm,
-          liveStreamers: guildData?.liveStreamers || [],
-          isCurrentlyRaiding: guildData?.isCurrentlyRaiding || false,
-        };
-      });
-
-      // guilds are already sorted by unified guildRank via the aggregation pipeline
-
-      const response = {
-        raid: {
-          id: (raid as any).id,
-          name: (raid as any).name,
-          slug: (raid as any).slug,
-          expansion: (raid as any).expansion,
-          iconUrl: (raid as any).iconUrl,
-        },
-        dates: {
-          starts: (raidDatesDoc as any)?.starts,
-          ends: (raidDatesDoc as any)?.ends,
-        },
-        guilds: guilds,
-        events: enrichedEvents,
-      };
-
+      const response = await this.buildHomeCacheData();
       await cacheService.set(cacheService.getHomeKey(), response, cacheService.CURRENT_RAID_TTL);
       logger.info("[Cache Warmer] Home page cache warmed");
     } catch (error) {

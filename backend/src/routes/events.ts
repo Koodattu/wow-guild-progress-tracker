@@ -135,8 +135,11 @@ router.get(
       const page = parseInt(req.query.page as string) || 1;
       const skip = (page - 1) * limit;
 
-      // Find the guild by realm and name to get the guildId
-      const guild = await Guild.findOne({ realm, name });
+      // Find only the guild id; event enrichment loads the small guild fields it needs later.
+      const guild = await Guild.findOne({ realm, name })
+        .select("_id")
+        .collation({ locale: "en", strength: 2 })
+        .lean();
 
       if (!guild) {
         return res.status(404).json({ error: "Guild not found" });

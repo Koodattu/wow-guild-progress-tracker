@@ -1,0 +1,1058 @@
+{
+  "generatedAt": "2026-06-10T14:39:08.554Z",
+  "options": {
+    "baseUrl": "https://suomiwow.vaarattu.tv",
+    "runs": 10,
+    "warmup": 1,
+    "delayMs": 250,
+    "from": null,
+    "output": ".perf\\detail-endpoints-before.json",
+    "cacheBust": false,
+    "endpoints": [
+      "/api/raids/46/bosses",
+      "/api/guilds/Stormreaver/Noni/raids/46/bosses",
+      "/api/guilds/Stormreaver/Noni/summary",
+      "/api/events/guild/Stormreaver/Noni",
+      "/api/characters/bloodfeather/Darkjukka"
+    ]
+  },
+  "endpoints": [
+    {
+      "name": "custom-1",
+      "path": "/api/raids/46/bosses"
+    },
+    {
+      "name": "custom-2",
+      "path": "/api/guilds/Stormreaver/Noni/raids/46/bosses"
+    },
+    {
+      "name": "custom-3",
+      "path": "/api/guilds/Stormreaver/Noni/summary"
+    },
+    {
+      "name": "custom-4",
+      "path": "/api/events/guild/Stormreaver/Noni"
+    },
+    {
+      "name": "custom-5",
+      "path": "/api/characters/bloodfeather/Darkjukka"
+    }
+  ],
+  "results": [
+    {
+      "name": "custom-1",
+      "path": "/api/raids/46/bosses",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 206.1024,
+          "totalMs": 208.5751,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": false
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.47350000000006,
+          "totalMs": 34.913099999999986,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.64339999999993,
+          "totalMs": 37.07869999999991,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 35.932399999999916,
+          "totalMs": 36.319999999999936,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.13959999999997,
+          "totalMs": 36.55619999999999,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 46.372499999999945,
+          "totalMs": 46.68509999999992,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.43380000000002,
+          "totalMs": 34.75130000000013,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.83440000000019,
+          "totalMs": 35.14980000000014,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 30.336099999999988,
+          "totalMs": 32.18949999999995,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 9,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.553499999999985,
+          "totalMs": 34.899999999999636,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 10,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 32.10829999999987,
+          "totalMs": 33.03870000000006,
+          "bytes": 1090,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 11,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "statusCodes": {
+          "200": 10
+        },
+        "totalMs": {
+          "min": 32.2,
+          "p50": 34.9,
+          "p95": 46.7,
+          "max": 46.7,
+          "avg": 36.2
+        },
+        "headersMs": {
+          "p50": 34.6,
+          "p95": 46.4,
+          "avg": 35.6
+        },
+        "bytes": {
+          "min": 1090,
+          "p50": 1090,
+          "p95": 1090,
+          "max": 1090,
+          "avg": 1090
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "-"
+        }
+      }
+    },
+    {
+      "name": "custom-2",
+      "path": "/api/guilds/Stormreaver/Noni/raids/46/bosses",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.422399999999925,
+          "totalMs": 34.79959999999983,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=64, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": false
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.60530000000017,
+          "totalMs": 36.9985999999999,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=63, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 38.489300000000185,
+          "totalMs": 39.163800000000265,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=63, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.98090000000002,
+          "totalMs": 37.28780000000006,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=63, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 37.54820000000018,
+          "totalMs": 37.86710000000039,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=63, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 40.420099999999366,
+          "totalMs": 40.89350000000013,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=62, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 98.94579999999951,
+          "totalMs": 99.28030000000035,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=62, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 41.22620000000006,
+          "totalMs": 41.70049999999992,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=62, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 38.803100000000086,
+          "totalMs": 39.241799999999785,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=61, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 9,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 38.98749999999927,
+          "totalMs": 39.40799999999945,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=61, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 10,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/raids/46/bosses",
+          "ok": true,
+          "status": 200,
+          "headersMs": 35.45690000000013,
+          "totalMs": 36.04059999999936,
+          "bytes": 23003,
+          "error": null,
+          "cacheControl": "public, max-age=61, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 11,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "statusCodes": {
+          "200": 10
+        },
+        "totalMs": {
+          "min": 36,
+          "p50": 39.2,
+          "p95": 99.3,
+          "max": 99.3,
+          "avg": 44.8
+        },
+        "headersMs": {
+          "p50": 38.5,
+          "p95": 98.9,
+          "avg": 44.3
+        },
+        "bytes": {
+          "min": 23003,
+          "p50": 23003,
+          "p95": 23003,
+          "max": 23003,
+          "avg": 23003
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "public, max-age=63, stale-while-revalidate=300"
+        }
+      }
+    },
+    {
+      "name": "custom-3",
+      "path": "/api/guilds/Stormreaver/Noni/summary",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 39.47950000000037,
+          "totalMs": 39.853799999999865,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=733, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": false
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 39.47199999999975,
+          "totalMs": 40.08289999999943,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=732, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.707900000000336,
+          "totalMs": 35.206200000000536,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=732, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 33.581199999999626,
+          "totalMs": 33.88659999999982,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=732, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.19579999999951,
+          "totalMs": 36.9378999999999,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=731, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 31.199099999999817,
+          "totalMs": 31.436899999999696,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=731, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 33.93299999999999,
+          "totalMs": 34.17320000000018,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=731, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 36.99419999999918,
+          "totalMs": 37.39039999999841,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=731, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.17020000000048,
+          "totalMs": 34.395400000001246,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=730, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 9,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 33.973299999999654,
+          "totalMs": 34.33309999999983,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=730, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 10,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/guilds/Stormreaver/Noni/summary",
+          "ok": true,
+          "status": 200,
+          "headersMs": 38.08629999999903,
+          "totalMs": 38.34430000000066,
+          "bytes": 19476,
+          "error": null,
+          "cacheControl": "public, max-age=730, stale-while-revalidate=900",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 11,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "statusCodes": {
+          "200": 10
+        },
+        "totalMs": {
+          "min": 31.4,
+          "p50": 34.4,
+          "p95": 40.1,
+          "max": 40.1,
+          "avg": 35.6
+        },
+        "headersMs": {
+          "p50": 34.2,
+          "p95": 39.5,
+          "avg": 35.2
+        },
+        "bytes": {
+          "min": 19476,
+          "p50": 19476,
+          "p95": 19476,
+          "max": 19476,
+          "avg": 19476
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "public, max-age=731, stale-while-revalidate=900"
+        }
+      }
+    },
+    {
+      "name": "custom-4",
+      "path": "/api/events/guild/Stormreaver/Noni",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 536.5527999999995,
+          "totalMs": 536.8197,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=60, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": false
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 39.44890000000123,
+          "totalMs": 39.78640000000087,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=59, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 40.368899999999485,
+          "totalMs": 40.88849999999911,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=59, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 40.958300000000236,
+          "totalMs": 41.58259999999973,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=59, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 38.957399999999325,
+          "totalMs": 39.328599999998914,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=58, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 37.15400000000045,
+          "totalMs": 37.42820000000029,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=58, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.750700000000506,
+          "totalMs": 35.166800000000876,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=58, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 39.61959999999999,
+          "totalMs": 40.52679999999964,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=57, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 42.33269999999902,
+          "totalMs": 42.59769999999844,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=57, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 9,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 39.83709999999883,
+          "totalMs": 40.27089999999953,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=57, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 10,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/events/guild/Stormreaver/Noni",
+          "ok": true,
+          "status": 200,
+          "headersMs": 34.364299999999275,
+          "totalMs": 34.621900000000096,
+          "bytes": 33859,
+          "error": null,
+          "cacheControl": "public, max-age=57, stale-while-revalidate=60",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 11,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "statusCodes": {
+          "200": 10
+        },
+        "totalMs": {
+          "min": 34.6,
+          "p50": 39.8,
+          "p95": 42.6,
+          "max": 42.6,
+          "avg": 39.2
+        },
+        "headersMs": {
+          "p50": 39.4,
+          "p95": 42.3,
+          "avg": 38.8
+        },
+        "bytes": {
+          "min": 33859,
+          "p50": 33859,
+          "p95": 33859,
+          "max": 33859,
+          "avg": 33859
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "public, max-age=57, stale-while-revalidate=60"
+        }
+      }
+    },
+    {
+      "name": "custom-5",
+      "path": "/api/characters/bloodfeather/Darkjukka",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 483.8034000000007,
+          "totalMs": 484.0618000000013,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": false
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 376.35100000000057,
+          "totalMs": 376.8752999999997,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 2880.8534999999993,
+          "totalMs": 9038.658399999998,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 428.99029999999766,
+          "totalMs": 429.3200999999972,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 591.1187000000027,
+          "totalMs": 591.3765999999996,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 385.788700000001,
+          "totalMs": 386.07150000000183,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 387.8087000000014,
+          "totalMs": 388.2121999999981,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 398.91949999999997,
+          "totalMs": 399.1803,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 395.27700000000186,
+          "totalMs": 395.77160000000003,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 9,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 403.663700000001,
+          "totalMs": 403.9811000000009,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 10,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/characters/bloodfeather/Darkjukka",
+          "ok": true,
+          "status": 200,
+          "headersMs": 365.6435999999994,
+          "totalMs": 365.91119999999864,
+          "bytes": 46940,
+          "error": null,
+          "cacheControl": null,
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 11,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "statusCodes": {
+          "200": 10
+        },
+        "totalMs": {
+          "min": 365.9,
+          "p50": 395.8,
+          "p95": 9038.7,
+          "max": 9038.7,
+          "avg": 1277.5
+        },
+        "headersMs": {
+          "p50": 395.3,
+          "p95": 2880.9,
+          "avg": 661.4
+        },
+        "bytes": {
+          "min": 46940,
+          "p50": 46940,
+          "p95": 46940,
+          "max": 46940,
+          "avg": 46940
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "-"
+        }
+      }
+    }
+  ]
+}

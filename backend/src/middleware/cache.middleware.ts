@@ -93,22 +93,24 @@ export function cacheMiddleware(getKey: (req: Request) => string, getTTL?: (req:
 
       // Override res.json to cache the response before sending
       res.json = function (body: any): Response {
-        // Generate ETag for fresh response
-        const etag = generateETag(body);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          // Generate ETag for fresh response
+          const etag = generateETag(body);
 
-        // Set HTTP cache headers for fresh response
-        const cacheHeaders = getCacheHeaders(ttl);
-        Object.entries(cacheHeaders).forEach(([key, value]) => {
-          res.setHeader(key, value);
-        });
-        res.setHeader("ETag", etag);
+          // Set HTTP cache headers for fresh response
+          const cacheHeaders = getCacheHeaders(ttl);
+          Object.entries(cacheHeaders).forEach(([key, value]) => {
+            res.setHeader(key, value);
+          });
+          res.setHeader("ETag", etag);
 
-        // Cache the response data (async, but we don't wait for it)
-        // This is fire-and-forget to avoid blocking the response
-        cacheService.set(cacheKey, body, ttl).catch((error) => {
-          // Log error but don't fail the response
-          console.error(`Failed to cache response for ${cacheKey}:`, error);
-        });
+          // Cache the response data (async, but we don't wait for it)
+          // This is fire-and-forget to avoid blocking the response
+          cacheService.set(cacheKey, body, ttl).catch((error) => {
+            // Log error but don't fail the response
+            console.error(`Failed to cache response for ${cacheKey}:`, error);
+          });
+        }
 
         // Send the response using the original function
         return originalJson(body);

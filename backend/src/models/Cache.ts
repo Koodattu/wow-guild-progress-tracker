@@ -4,7 +4,8 @@ import mongoose, { Document, Schema } from "mongoose";
  * Cache entry stored in MongoDB.
  *
  * Uses MongoDB TTL index for automatic expiration of entries.
- * The TTL index deletes documents based on the expiresAt field.
+ * The TTL index deletes documents based on staleExpiresAt so stale data can
+ * still be served while a background refresh is running.
  *
  * Cache keys are API endpoint identifiers that uniquely identify
  * the cached response (e.g., "home:data", "progress:raid:44").
@@ -19,10 +20,10 @@ export interface ICache extends Document {
   /** When this cache entry was created/updated */
   cachedAt: Date;
 
-  /** When this cache entry should expire (used by MongoDB TTL index) */
+  /** When this cache entry becomes stale and should be refreshed */
   expiresAt: Date;
 
-  /** When the cached data becomes completely unusable (beyond the stale-while-revalidate window) */
+  /** When the cached data becomes completely unusable and can be deleted */
   staleExpiresAt?: Date;
 
   /** TTL in milliseconds (for reference, actual expiration handled by expiresAt) */
@@ -73,9 +74,9 @@ const CacheSchema = new Schema<ICache>(
   },
 );
 
-// TTL index - MongoDB will automatically delete documents when expiresAt is reached
+// TTL index - MongoDB will automatically delete documents after the stale window.
 // MongoDB checks TTL indexes every 60 seconds
-CacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+CacheSchema.index({ staleExpiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Compound index for efficient pattern-based queries
 CacheSchema.index({ endpoint: 1, key: 1 });

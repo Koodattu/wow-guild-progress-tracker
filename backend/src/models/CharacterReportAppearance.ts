@@ -1,5 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 export interface ICharacterReportGuildSnapshot {
   name: string;
   realm: string;
@@ -70,5 +72,7 @@ CharacterReportAppearanceSchema.index({ reportZoneId: 1, reportStartTime: 1 });
 CharacterReportAppearanceSchema.index({ reportZoneId: 1, reportGuildId: 1, classID: 1, reportStartTime: 1 });
 CharacterReportAppearanceSchema.index({ reportGuildId: 1, reportStartTime: 1 });
 CharacterReportAppearanceSchema.index({ characterName: 1, characterRealm: 1, characterRegion: 1, classID: 1 });
+CharacterReportAppearanceSchema.index({ characterRealm: 1, characterName: 1, classID: 1, reportStartTime: -1 }, { collation: CASE_INSENSITIVE_COLLATION });
+CharacterReportAppearanceSchema.index({ wclCanonicalCharacterId: 1, classID: 1, reportStartTime: -1 }, { partialFilterExpression: { wclCanonicalCharacterId: { $type: "number" } } });
 
 export default mongoose.model<ICharacterReportAppearance>("CharacterReportAppearance", CharacterReportAppearanceSchema);

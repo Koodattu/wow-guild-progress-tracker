@@ -235,7 +235,7 @@ export const api = {
   },
 
   async getHorseRaceUmaReservations(): Promise<string[]> {
-    const response = await fetch(`${API_URL}/api/guilds/horse-race-uma-reservations`, { cache: "no-store" });
+    const response = await fetch(`${API_URL}/api/guilds/horse-race-uma-reservations`);
     if (!response.ok) throw new Error("Failed to fetch horse race Uma reservations");
     return response.json();
   },

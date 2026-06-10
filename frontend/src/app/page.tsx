@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { GuildListItem, Guild, Boss } from "@/types";
 import { api } from "@/lib/api";
-import { useRaids, useEventsPaginated, useGuilds, useRaidDates, useHorseRaceUmaReservations } from "@/lib/queries";
+import { useHomeData, useEventsPaginated, useGuilds, useRaidDates, useHorseRaceUmaReservations } from "@/lib/queries";
 import { useEventFiltersFromLocalStorage } from "@/lib/useEventFilters";
 import { useHomePagePreferences } from "@/lib/homepage-preferences";
 import GuildTable from "@/components/GuildTable";
@@ -32,18 +32,24 @@ function HomeContent() {
   const hasInitializedRaid = useRef(false);
 
   // ─── React Query hooks ──────────────────────────────────────────────────────
-  const { data: raids = [], isLoading: raidsLoading, error: raidsError } = useRaids();
+  const { data: homeData, isLoading: homeLoading, error: homeError } = useHomeData();
+  const raids = homeData?.raids ?? [];
+  const homeRaidId = homeData?.raid.id ?? null;
   const { showEvents, showLivestreams, showRaidingToday } = useHomePagePreferences();
   const eventFilters = useEventFiltersFromLocalStorage();
-  const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters);
-  const events = eventsData?.events ?? [];
-  const { data: guilds = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined);
+  const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters, showEvents);
+  const events = eventsData?.events ?? homeData?.events ?? [];
+  const useHomeGuilds = selectedRaidId !== null && selectedRaidId === homeRaidId;
+  const { data: guildsData = [], error: guildsError } = useGuilds(selectedRaidId ?? undefined, !useHomeGuilds);
+  const guilds = useHomeGuilds ? (homeData?.guilds ?? []) : guildsData;
   const { data: reservedUmaImages = [] } = useHorseRaceUmaReservations();
-  const { data: raidDates, error: raidDatesError } = useRaidDates(selectedRaidId);
+  const useHomeRaidDates = selectedRaidId !== null && selectedRaidId === homeRaidId;
+  const { data: raidDatesData, error: raidDatesError } = useRaidDates(selectedRaidId, !useHomeRaidDates);
+  const raidDates = useHomeRaidDates ? (homeData?.dates ?? null) : raidDatesData;
 
   // Combined loading/error state
-  const loading = raidsLoading;
-  const queryError = raidsError || eventsError || guildsError || raidDatesError;
+  const loading = homeLoading;
+  const queryError = homeError || eventsError || guildsError || raidDatesError;
   const error = queryError ? "Failed to load data. Make sure the backend server is running." : modalError;
 
   // ─── Initialize selectedRaidId from URL params or first raid ────────────────

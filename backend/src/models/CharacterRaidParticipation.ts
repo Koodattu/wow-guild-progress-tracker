@@ -1,5 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 export interface ICharacterRaidParticipation extends Document {
   characterId?: mongoose.Types.ObjectId | null;
   wclCanonicalCharacterId?: number | null;
@@ -39,6 +41,9 @@ const CharacterRaidParticipationSchema = new Schema<ICharacterRaidParticipation>
 
 CharacterRaidParticipationSchema.index({ reportGuildId: 1, zoneId: 1, classID: 1, characterName: 1 });
 CharacterRaidParticipationSchema.index({ characterRealm: 1, characterName: 1, classID: 1 });
+CharacterRaidParticipationSchema.index({ characterRealm: 1, characterName: 1, zoneId: 1, lastSeenAt: -1 }, { collation: CASE_INSENSITIVE_COLLATION });
+CharacterRaidParticipationSchema.index({ characterRealm: 1, characterName: 1, reportGuildId: 1, zoneId: 1, classID: 1 }, { collation: CASE_INSENSITIVE_COLLATION });
+CharacterRaidParticipationSchema.index({ wclCanonicalCharacterId: 1, classID: 1, zoneId: 1, firstSeenAt: 1 });
 CharacterRaidParticipationSchema.index(
   {
     wclCanonicalCharacterId: 1,

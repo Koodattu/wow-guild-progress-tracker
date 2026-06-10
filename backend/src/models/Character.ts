@@ -1,5 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 export interface IGuildHistoryEntry {
   guildName: string;
   guildRealm: string;
@@ -63,6 +65,7 @@ const CharacterSchema: Schema = new Schema(
 
 CharacterSchema.index({ wclCanonicalCharacterId: 1, classID: 1 }, { unique: true });
 CharacterSchema.index({ name: 1, realm: 1, region: 1 });
+CharacterSchema.index({ realm: 1, name: 1, classID: 1 }, { collation: CASE_INSENSITIVE_COLLATION });
 CharacterSchema.index({
   lastMythicSeenAt: -1,
   rankingsAvailable: 1,

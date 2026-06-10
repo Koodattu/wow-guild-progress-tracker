@@ -96,7 +96,9 @@ async function invalidateStreamerGuildCaches(guilds: EligibleStreamerGuild[]): P
   const uniqueGuilds = Array.from(new Map(guilds.map((guild) => [guild.id, guild])).values());
 
   await Promise.all(uniqueGuilds.map((guild) => cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name)));
-  await cacheService.invalidateCurrentRaidCaches();
+  cacheService.refreshCurrentRaidCaches().catch((error) => {
+    logger.warn("Failed to refresh current raid caches after streamer update:", error);
+  });
 }
 
 async function removeStreamerChannel(channelName: string): Promise<void> {

@@ -113,7 +113,22 @@ class CacheService {
    * Keys that should be prioritized for in-memory caching
    * These patterns are checked first and less likely to be evicted
    */
-  private readonly HOT_PATH_PATTERNS = [/^home:/, /^progress:raid:/, /^compare:raid:/, /^guilds:list$/, /^guilds:raid:/, /^guilds:schedules$/, /^guilds:raiding-today:/];
+  private readonly HOT_PATH_PATTERNS = [
+    /^home:/,
+    /^progress:raid:/,
+    /^compare:raid:/,
+    /^guilds:list$/,
+    /^guilds:raid:/,
+    /^guilds:schedules$/,
+    /^guilds:raiding-today:/,
+    /^guilds:live-streamers$/,
+    /^guilds:horse-race-uma-reservations$/,
+    /^events:/,
+    /^characters:profile:/,
+    /^raids:list$/,
+    /^raid:\d+:dates$/,
+    /^raid:\d+:bosses$/,
+  ];
 
   // ============================================================================
   // STALE-WHILE-REVALIDATE TRACKING
@@ -157,6 +172,7 @@ class CacheService {
   public readonly CURRENT_RAID_TTL = 5 * 60 * 1000; // 5 minutes for current raid
   public readonly LIVE_STREAMERS_TTL = 60 * 1000; // 1 minute
   public readonly EVENTS_TTL = 60 * 1000; // 1 minute
+  public readonly CHARACTER_PROFILE_TTL = 5 * 60 * 1000; // 5 minutes
   public readonly PICKEM_LEADERBOARD_TTL = 5 * 60 * 1000;
   public readonly PICKEM_RANKINGS_TTL = 5 * 60 * 1000;
 
@@ -175,6 +191,8 @@ class CacheService {
     }
 
     try {
+      await this.migrateStaleExpirationIndex();
+
       // Ensure indexes are created (TTL index is critical)
       await Cache.createIndexes();
       this.isInitialized = true;
@@ -182,6 +200,41 @@ class CacheService {
     } catch (error) {
       logger.error("Failed to initialize cache service:", error);
       throw error;
+    }
+  }
+
+  private async migrateStaleExpirationIndex(): Promise<void> {
+    const collection = Cache.collection;
+
+    try {
+      // Existing deployments may have documents written before staleExpiresAt
+      // was the TTL field. Give those entries the same stale window new writes use.
+      await collection.updateMany(
+        { staleExpiresAt: { $exists: false }, expiresAt: { $exists: true }, ttlMs: { $exists: true } },
+        [
+          {
+            $set: {
+              staleExpiresAt: {
+                $toDate: {
+                  $add: [{ $toLong: "$expiresAt" }, "$ttlMs"],
+                },
+              },
+            },
+          },
+        ],
+      );
+
+      const indexes = await collection.indexes();
+      const oldExpiresAtTtlIndex = indexes.find(
+        (index) => index.expireAfterSeconds === 0 && Object.keys(index.key ?? {}).length === 1 && index.key?.expiresAt === 1,
+      );
+
+      if (oldExpiresAtTtlIndex?.name) {
+        await collection.dropIndex(oldExpiresAtTtlIndex.name);
+        logger.info(`[Cache] Dropped old expiresAt TTL index: ${oldExpiresAtTtlIndex.name}`);
+      }
+    } catch (error) {
+      logger.warn("[Cache] Failed to migrate stale expiration index:", error);
     }
   }
 
@@ -719,6 +772,13 @@ class CacheService {
   }
 
   /**
+   * Get cache key for tracked raids list.
+   */
+  getRaidsKey(): string {
+    return "raids:list";
+  }
+
+  /**
    * Get cache key for progress page by raid.
    */
   getProgressKey(raidId: number): string {
@@ -803,10 +863,32 @@ class CacheService {
   }
 
   /**
+   * Get cache key for character profile lookups.
+   */
+  getCharacterProfileKey(realm: string, name: string, classId?: number): string {
+    const classKey = Number.isFinite(classId) ? String(classId) : "any";
+    return `characters:profile:${realm.toLowerCase()}:${name.toLowerCase()}:class:${classKey}`;
+  }
+
+  /**
    * Get cache key for raid dates.
    */
   getRaidDatesKey(raidId: number): string {
     return `raid:${raidId}:dates`;
+  }
+
+  /**
+   * Get cache key for raid bosses.
+   */
+  getRaidBossesKey(raidId: number): string {
+    return `raid:${raidId}:bosses`;
+  }
+
+  /**
+   * Get cache key for horse race Uma image reservations.
+   */
+  getHorseRaceUmaReservationsKey(): string {
+    return "guilds:horse-race-uma-reservations";
   }
 
   /**
@@ -941,11 +1023,31 @@ class CacheService {
       await this.refreshCache(guildListKey, this.warmers.get(guildListKey)!);
     }
 
+    const schedulesKey = this.getSchedulesKey();
+    if (this.warmers.has(schedulesKey)) {
+      await this.refreshCache(schedulesKey, this.warmers.get(schedulesKey)!);
+    }
+
+    const liveStreamersKey = this.getLiveStreamersKey();
+    if (this.warmers.has(liveStreamersKey)) {
+      await this.refreshCache(liveStreamersKey, this.warmers.get(liveStreamersKey)!);
+    }
+
+    const umaReservationsKey = this.getHorseRaceUmaReservationsKey();
+    if (this.warmers.has(umaReservationsKey)) {
+      await this.refreshCache(umaReservationsKey, this.warmers.get(umaReservationsKey)!);
+    }
+
     // Refresh progress for all tracked raids
     for (const raidId of TRACKED_RAIDS) {
       const progressKey = this.getProgressKey(raidId);
       if (this.warmers.has(progressKey)) {
         await this.refreshCache(progressKey, this.warmers.get(progressKey)!);
+      }
+
+      const guildsKey = this.getGuildsKey(raidId);
+      if (this.warmers.has(guildsKey)) {
+        await this.refreshCache(guildsKey, this.warmers.get(guildsKey)!);
       }
 
       const compareKey = this.getCompareKey(raidId);
@@ -1015,12 +1117,9 @@ class CacheService {
    * - progress:* (ALL raid progress including older raids)
    */
   async invalidateAllGuildCaches(): Promise<void> {
-    await this.invalidatePattern(/^guilds:/);
-    await this.invalidatePattern(/^home:/);
+    await this.refreshAllGuildCaches();
     await this.invalidatePattern(/^guild:/);
-    await this.invalidatePattern(/^progress:/);
-    await this.invalidatePattern(/^compare:/);
-    logger.info("All guild-related caches invalidated (including older raids)");
+    logger.info("All guild-related list/progress caches refreshed; guild-specific caches invalidated");
   }
 
   /**
@@ -1037,14 +1136,8 @@ class CacheService {
    * ⚠️ DEPRECATED: Prefer refreshCurrentRaidCaches() to avoid cache miss windows.
    */
   async invalidateCurrentRaidCaches(): Promise<void> {
-    for (const raidId of CURRENT_RAID_IDS) {
-      await this.invalidate(this.getProgressKey(raidId));
-      await this.invalidate(this.getGuildsKey(raidId));
-      await this.invalidate(this.getCompareKey(raidId));
-    }
-    await this.invalidate(this.getHomeKey());
-    await this.invalidate(this.getLiveStreamersKey());
-    logger.info("Current raid caches invalidated");
+    await this.refreshCurrentRaidCaches();
+    logger.info("Current raid caches refreshed in place");
   }
 
   /**
@@ -1315,8 +1408,13 @@ class CacheService {
     if (key === "guilds:schedules") return this.SCHEDULES_TTL;
     if (key.startsWith("guilds:raiding-today:")) return this.RAIDING_TODAY_TTL;
     if (key === "guilds:live-streamers") return this.LIVE_STREAMERS_TTL;
+    if (key === "guilds:horse-race-uma-reservations") return this.GUILD_LIST_TTL;
     if (key.startsWith("events:")) return this.EVENTS_TTL;
+    if (key.startsWith("characters:profile:")) return this.CHARACTER_PROFILE_TTL;
     if (key.startsWith("home:")) return this.CURRENT_RAID_TTL;
+    if (key === "raids:list") return this.STATIC_TTL;
+    if (/^raid:\d+:bosses$/.test(key)) return this.STATIC_TTL;
+    if (/^raid:\d+:dates$/.test(key)) return this.STATIC_TTL;
     if (key.startsWith("guild:")) return this.GUILD_SUMMARY_TTL;
 
     return this.DEFAULT_TTL;

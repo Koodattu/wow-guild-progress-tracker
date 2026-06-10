@@ -16,6 +16,7 @@ const LAYER_CONFIG = {
 
 // Default neutral color for guilds without crest data
 const DEFAULT_BANNER_COLOR = { r: 120, g: 120, b: 140, a: 1 };
+const imagePromiseCache = new Map<string, Promise<HTMLImageElement>>();
 
 interface GuildCrestProps {
   crest: GuildCrestType | undefined;
@@ -23,6 +24,30 @@ interface GuildCrestProps {
   size?: number; // Size in pixels (width and height will be the same)
   className?: string;
   drawFactionCircle?: boolean;
+}
+
+type SettledImage = PromiseSettledResult<HTMLImageElement> | undefined;
+
+function loadCachedImage(src: string): Promise<HTMLImageElement> {
+  const cached = imagePromiseCache.get(src);
+  if (cached) return cached;
+
+  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+  });
+
+  imagePromiseCache.set(src, promise);
+  return promise;
+}
+
+async function settleImage(promise?: Promise<HTMLImageElement>): Promise<SettledImage> {
+  if (!promise) return undefined;
+  const [result] = await Promise.allSettled([promise]);
+  return result;
 }
 
 /**
@@ -56,29 +81,11 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
 
     // Helper function to load an image with fallback
     const loadImage = (imageName: string, isApiImage: boolean): Promise<HTMLImageElement> => {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
+      if (!isApiImage) {
+        return loadCachedImage(imageName);
+      }
 
-        const tryLoad = (src: string, isFallback: boolean = false) => {
-          img.src = src;
-          img.onload = () => resolve(img);
-          img.onerror = () => {
-            if (!isFallback && isApiImage) {
-              // Try backend as fallback
-              tryLoad(`${apiUrl}/icons/${imageName}`, true);
-            } else {
-              reject(new Error(`Failed to load image: ${src}`));
-            }
-          };
-        };
-
-        if (isApiImage) {
-          tryLoad(`/components/${imageName}`);
-        } else {
-          tryLoad(imageName);
-        }
-      });
+      return loadCachedImage(`/components/${imageName}`).catch(() => loadCachedImage(`${apiUrl}/icons/${imageName}`));
     };
 
     // Apply multiply blend mode color to an image
@@ -136,25 +143,14 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
         // Determine faction circle
         const factionCirclePath = faction?.toLowerCase() === "horde" ? "/custom_components/horde_circle.png" : "/custom_components/alliance_circle.png";
 
-        // Load all images - only load border/emblem if crest data exists
-        const imagePromises: Promise<HTMLImageElement>[] = [
-          loadImage(factionCirclePath, false),
-          loadImage("/custom_components/circle_border.png", false),
-          loadImage("/custom_components/banner.png", false),
-          ...(crest ? [loadImage(crest.border.imageName, true)] : []),
-          ...(crest ? [loadImage(crest.emblem.imageName, true)] : []),
-          loadImage("/custom_components/rings.png", false),
-        ];
-
-        const results = await Promise.allSettled(imagePromises);
-
-        // Map results back to named variables
-        const factionCircle = results[0];
-        const circleBorder = results[1];
-        const banner = results[2];
-        const borderImg = crest ? results[3] : undefined;
-        const emblemImg = crest ? results[4] : undefined;
-        const rings = crest ? results[5] : results[3];
+        const [factionCircle, circleBorder, banner, borderImg, emblemImg, rings] = await Promise.all([
+          settleImage(drawFactionCircle ? loadImage(factionCirclePath, false) : undefined),
+          settleImage(drawFactionCircle ? loadImage("/custom_components/circle_border.png", false) : undefined),
+          settleImage(loadImage("/custom_components/banner.png", false)),
+          settleImage(crest ? loadImage(crest.border.imageName, true) : undefined),
+          settleImage(crest ? loadImage(crest.emblem.imageName, true) : undefined),
+          settleImage(drawFactionCircle ? loadImage("/custom_components/rings.png", false) : undefined),
+        ]);
 
         if (!isMounted) return;
 
@@ -171,20 +167,20 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
 
         if (drawFactionCircle) {
           // Layer 1: Faction circle base
-          if (factionCircle.status === "fulfilled") {
+          if (factionCircle?.status === "fulfilled") {
             const dims = getLayerDimensions(LAYER_CONFIG.factionCircle);
             ctx.drawImage(factionCircle.value, dims.x, dims.y, dims.width, dims.height);
           }
 
           // Layer 2: Circle border
-          if (circleBorder.status === "fulfilled") {
+          if (circleBorder?.status === "fulfilled") {
             const dims = getLayerDimensions(LAYER_CONFIG.circleBorder);
             ctx.drawImage(circleBorder.value, dims.x, dims.y, dims.width, dims.height);
           }
         }
 
         // Layer 3: Banner with background color (multiply blend)
-        if (banner.status === "fulfilled") {
+        if (banner?.status === "fulfilled") {
           const dims = getLayerDimensions(LAYER_CONFIG.banner);
           const bannerColor = crest ? crest.background.color : DEFAULT_BANNER_COLOR;
           applyMultiplyBlend(ctx, banner.value, dims.x, dims.y, dims.width, dims.height, bannerColor);
@@ -204,7 +200,7 @@ const GuildCrest = ({ crest, faction, size = 48, className = "", drawFactionCirc
 
         if (drawFactionCircle) {
           // Layer 6: Rings (top layer)
-          if (rings.status === "fulfilled") {
+          if (rings?.status === "fulfilled") {
             const dims = getLayerDimensions(LAYER_CONFIG.rings);
             ctx.drawImage(rings.value, dims.x, dims.y, dims.width, dims.height);
           }

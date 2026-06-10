@@ -183,4 +183,12 @@ CharacterLeaderboardSchema.index({
   name: 1,
 });
 
+// ── Character profile lookup ───────────────────────────────────────
+CharacterLeaderboardSchema.index({
+  wclCanonicalCharacterId: 1,
+  classID: 1,
+  zoneId: -1,
+  score: -1,
+});
+
 export default mongoose.model<ICharacterLeaderboard>("CharacterLeaderboard", CharacterLeaderboardSchema);

@@ -24,6 +24,8 @@ import characterService from "./character.service";
 import fightVodService from "./fight-vod.service";
 import { yieldToEventLoop } from "../utils/yield";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 interface GuildRaidingTodayItem {
   _id: string;
   name: string;
@@ -4773,13 +4775,8 @@ class GuildService {
   // Excludes pullHistory to reduce payload size
   // For current raid tier, also includes worldRankHistory for the modal chart
   async getGuildBossProgressForRaidByRealmName(realm: string, name: string, raidId: number): Promise<{ progress: any[]; worldRankHistory?: any[] } | null> {
-    const escapedName = this.escapeRegex(name);
-    const escapedRealm = this.escapeRegex(realm);
-
-    const guild = await Guild.findOne({
-      name: { $regex: new RegExp(`^${escapedName}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${escapedRealm}$`, "i") }, // Case-insensitive exact match
-    })
+    const guild = await Guild.findOne({ name, realm })
+      .collation(CASE_INSENSITIVE_COLLATION)
       .select("_id progress")
       .lean();
 
@@ -5336,18 +5333,15 @@ class GuildService {
 
   // Get guild summary by realm and name with progress summaries (without boss arrays)
   async getGuildSummaryByRealmName(realm: string, name: string): Promise<any | null> {
-    const guild = await Guild.findOne({
-      name: { $regex: new RegExp(`^${this.escapeRegex(name)}$`, "i") }, // Case-insensitive exact match
-      realm: { $regex: new RegExp(`^${this.escapeRegex(realm)}$`, "i") }, // Case-insensitive exact match
-    });
+    const guildObj = (await Guild.findOne({ name, realm })
+      .collation(CASE_INSENSITIVE_COLLATION)
+      .lean()) as (IGuild & {
+      _id: mongoose.Types.ObjectId;
+    }) | null;
 
-    if (!guild) {
+    if (!guildObj) {
       return null;
     }
-
-    const guildObj = guild.toObject() as IGuild & {
-      _id: mongoose.Types.ObjectId;
-    };
 
     // Transform progress to summary format (without boss arrays)
     const summaryProgress = guildObj.progress.map((p) => {

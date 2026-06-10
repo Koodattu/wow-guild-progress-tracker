@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
 import logger from "../utils/logger";
-import { CURRENT_RAID_IDS } from "../config/guilds";
+import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
 import Raid from "../models/Raid";
 import Event from "../models/Event";
 import Guild from "../models/Guild";
@@ -23,11 +23,15 @@ router.get(
       const currentRaidId = CURRENT_RAID_IDS[0];
 
       // Fetch all necessary data in parallel
-      const [guilds, events, raid, raidDatesDoc] = await Promise.all([
+      const [guilds, events, raid, raidDatesDoc, raids] = await Promise.all([
         guildService.getAllGuildsForRaid(currentRaidId),
         Event.find().sort({ timestamp: -1 }).limit(5).lean(),
         Raid.findOne({ id: currentRaidId }).lean(),
         Raid.findOne({ id: currentRaidId }).select("starts ends").lean(),
+        Raid.find({ id: { $in: TRACKED_RAIDS } })
+          .select("id name slug rioSlug expansion iconUrl partitions -_id")
+          .sort({ id: -1 })
+          .lean(),
       ]);
 
       if (!raid) {
@@ -66,6 +70,7 @@ router.get(
           expansion: raid.expansion,
           iconUrl: raid.iconUrl,
         },
+        raids,
         dates: {
           starts: raidDatesDoc?.starts,
           ends: raidDatesDoc?.ends,

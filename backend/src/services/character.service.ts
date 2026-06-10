@@ -14,6 +14,8 @@ import rateLimitService from "./rate-limit.service";
 import wclService from "./warcraftlogs.service";
 import mongoose from "mongoose";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 interface IWarcraftLogsAllStars {
   partition: number;
   spec: string;
@@ -1707,14 +1709,15 @@ class CharacterService {
   }
 
   async getCharacterProfileByRealmName(realm: string, name: string, classId?: number): Promise<CharacterProfileLookupResponse | null> {
-    const realmRegex = new RegExp(`^${this.escapeRegex(realm)}$`, "i");
-    const nameRegex = new RegExp(`^${this.escapeRegex(name)}$`, "i");
+    const exactCharacterMatch = {
+      characterRealm: realm,
+      characterName: name,
+    };
 
     const identityRows = await CharacterRaidParticipation.aggregate([
       {
         $match: {
-          characterRealm: realmRegex,
-          characterName: nameRegex,
+          ...exactCharacterMatch,
           zoneId: { $in: TRACKED_RAIDS },
         },
       },
@@ -1766,7 +1769,7 @@ class CharacterService {
         },
       },
       { $sort: { lastSeenAt: -1, classID: 1 } },
-    ]);
+    ]).collation(CASE_INSENSITIVE_COLLATION);
 
     const choices = (identityRows as CharacterProfileChoice[]).map((choice) => ({
       ...choice,
@@ -1817,14 +1820,14 @@ class CharacterService {
               zoneId: { $in: TRACKED_RAIDS },
             }
           : {
-              characterRealm: realmRegex,
-              characterName: nameRegex,
+              ...exactCharacterMatch,
               classID: selectedChoice.classID,
               zoneId: { $in: TRACKED_RAIDS },
             };
 
       [timelineRows, rankingRows] = await Promise.all([
         CharacterRaidParticipation.find(timelineMatch)
+          .collation(CASE_INSENSITIVE_COLLATION)
           .sort({ firstSeenAt: 1, zoneId: 1 })
           .lean(),
         canonicalIds.length > 0
@@ -1839,10 +1842,11 @@ class CharacterService {
       ]);
     } else {
       const fallbackCharacter = await Character.findOne({
-        realm: realmRegex,
-        name: nameRegex,
+        realm,
+        name,
         ...(classId ? { classID: classId } : {}),
       })
+        .collation(CASE_INSENSITIVE_COLLATION)
         .select("wclCanonicalCharacterId name realm region classID")
         .lean();
 
@@ -1913,8 +1917,7 @@ class CharacterService {
           ...(profileCanonicalIds.length > 0
             ? { wclCanonicalCharacterId: { $in: profileCanonicalIds } }
             : {
-                characterRealm: realmRegex,
-                characterName: nameRegex,
+                ...exactCharacterMatch,
               }),
           ...(profileClassId ? { classID: profileClassId } : {}),
         },
@@ -1946,7 +1949,7 @@ class CharacterService {
         },
       },
       { $sort: { lastSeenAt: -1, name: 1, realm: 1 } },
-    ]);
+    ]).collation(CASE_INSENSITIVE_COLLATION);
 
     return {
       type: "profile",
@@ -1997,16 +2000,18 @@ class CharacterService {
   async getCharacterRaidReportsByRealmName(realm: string, name: string, zoneId: number, guildId: string, classId?: number): Promise<CharacterRaidReportsResponse | null> {
     if (!mongoose.Types.ObjectId.isValid(guildId)) return null;
 
-    const realmRegex = new RegExp(`^${this.escapeRegex(realm)}$`, "i");
-    const nameRegex = new RegExp(`^${this.escapeRegex(name)}$`, "i");
     const reportGuildId = new mongoose.Types.ObjectId(guildId);
+    const exactCharacterMatch = {
+      characterRealm: realm,
+      characterName: name,
+    };
     const participationRows = await CharacterRaidParticipation.find({
-      characterRealm: realmRegex,
-      characterName: nameRegex,
+      ...exactCharacterMatch,
       reportGuildId,
       zoneId,
       ...(classId ? { classID: classId } : {}),
     })
+      .collation(CASE_INSENSITIVE_COLLATION)
       .select("wclCanonicalCharacterId classID -_id")
       .lean();
     const canonicalIds = Array.from(new Set(participationRows.map((row) => row.wclCanonicalCharacterId).filter((id): id is number => typeof id === "number")));
@@ -2019,8 +2024,7 @@ class CharacterService {
             ...(classId ? { classID: classId } : participationClassIds.length > 0 ? { classID: { $in: participationClassIds } } : {}),
           }
         : {
-            characterRealm: realmRegex,
-            characterName: nameRegex,
+            ...exactCharacterMatch,
             reportGuildId,
             ...(classId ? { classID: classId } : {}),
           };
@@ -2072,7 +2076,7 @@ class CharacterService {
             report: 1,
           },
         },
-      ]),
+      ]).collation(CASE_INSENSITIVE_COLLATION),
     ]);
 
     if (!appearanceRows.length) return null;

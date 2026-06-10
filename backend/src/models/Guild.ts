@@ -1,6 +1,8 @@
 import mongoose, { Schema, Document } from "mongoose";
 import StreamerSchema, { IStreamer } from "./Streamer";
 
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
 export interface IBestPullPhase {
   phaseId: number;
   phaseName: string;
@@ -297,6 +299,7 @@ const GuildSchema: Schema = new Schema(
 
 // Compound index for guild lookup
 GuildSchema.index({ name: 1, realm: 1, region: 1 }, { unique: true });
+GuildSchema.index({ realm: 1, name: 1 }, { collation: CASE_INSENSITIVE_COLLATION });
 
 // Compound index for progress queries (used by getAllGuildsForRaid)
 GuildSchema.index({ "progress.raidId": 1, "progress.bossesDefeated": -1 });

@@ -1041,8 +1041,11 @@ router.put("/guilds/:guildId", async (req: Request, res: Response) => {
     }
 
     await guild.save();
-    await Promise.all([cacheService.invalidateCurrentRaidCaches(), cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name)]).catch((error) => {
-      logger.warn("Failed to invalidate guild caches after admin guild update:", error);
+    cacheService.refreshCurrentRaidCaches().catch((error) => {
+      logger.warn("Failed to refresh current raid caches after admin guild update:", error);
+    });
+    await cacheService.invalidateGuildSpecificCaches(guild.realm, guild.name).catch((error) => {
+      logger.warn("Failed to invalidate guild-specific caches after admin guild update:", error);
     });
 
     logger.info(`Admin updated guild: ${guild.name}-${guild.realm} (ID: ${guildId})`);

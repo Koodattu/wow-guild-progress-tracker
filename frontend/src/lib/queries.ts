@@ -75,11 +75,11 @@ export function useHomeData() {
 
 // Guilds
 
-export function useGuilds(raidId?: number) {
+export function useGuilds(raidId?: number, enabled: boolean = true) {
   return useQuery({
     queryKey: queryKeys.guilds.byRaid(raidId!),
     queryFn: () => api.getGuilds(raidId!),
-    enabled: raidId !== undefined && raidId > 0,
+    enabled: enabled && raidId !== undefined && raidId > 0,
   });
 }
 
@@ -155,10 +155,11 @@ export function useLiveStreamers() {
 
 // Events
 
-export function useEventsPaginated(page: number, limit: number = 50, filters?: EventFilters) {
+export function useEventsPaginated(page: number, limit: number = 50, filters?: EventFilters, enabled: boolean = true) {
   return useQuery({
     queryKey: queryKeys.events.paginated(page, limit, filters),
     queryFn: () => api.getEventsPaginated(page, limit, filters),
+    enabled,
     refetchInterval: page === 1 ? 30 * 1000 : undefined, // Auto-refresh first page every 30s
   });
 }
@@ -197,11 +198,11 @@ export function useBosses(raidId: number | null) {
   });
 }
 
-export function useRaidDates(raidId: number | null) {
+export function useRaidDates(raidId: number | null, enabled: boolean = true) {
   return useQuery({
     queryKey: queryKeys.raids.dates(raidId!),
     queryFn: () => api.getRaidDates(raidId!),
-    enabled: raidId !== null && raidId > 0,
+    enabled: enabled && raidId !== null && raidId > 0,
   });
 }
 
