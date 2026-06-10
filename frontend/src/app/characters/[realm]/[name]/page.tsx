@@ -135,27 +135,35 @@ function getMetricIcon(metric: string | null) {
   return "/icons/roleicon_damage.png";
 }
 
-function RankingsMetricCell({ row }: { row: CharacterRanking }) {
+function RankingsMetricCell({ row, compact = false }: { row: CharacterRanking; compact?: boolean }) {
   const metric = row.metric?.toUpperCase() ?? "DPS";
 
   return (
-    <div className="flex items-center gap-2 text-gray-300">
-      <Image src={getMetricIcon(row.metric)} alt={metric} width={18} height={18} className="h-[18px] w-[18px] shrink-0" />
+    <div className={`flex items-center text-gray-300 ${compact ? "justify-end gap-1.5" : "gap-2"}`}>
+      <Image src={getMetricIcon(row.metric)} alt={metric} width={18} height={18} className={`${compact ? "h-4 w-4" : "h-[18px] w-[18px]"} shrink-0`} />
       <span className="font-semibold">{metric}</span>
     </div>
   );
 }
 
-function RankingsBossParseCell({ row, classId }: { row?: CharacterRanking; classId: number }) {
+function RankingsBossParseCell({ row, classId, compact = false }: { row?: CharacterRanking; classId: number; compact?: boolean }) {
   if (!row || row.rankPercent === null) return <span className="text-gray-600">-</span>;
 
   const parsePercent = Math.round(row.rankPercent);
   const specIcon = row.specName ? getSpecIconUrl(classId, row.specName) : undefined;
 
   return (
-    <span className="inline-flex items-center justify-end gap-1 font-semibold tabular-nums" style={{ color: getParseColor(parsePercent) }}>
+    <span className={`inline-flex items-center justify-end gap-1 font-semibold tabular-nums ${compact ? "text-sm" : ""}`} style={{ color: getParseColor(parsePercent) }}>
       {parsePercent}
-      {specIcon ? <IconImage iconFilename={specIcon} alt={`${formatSpecName(row.specName!)} icon`} width={16} height={16} className="h-4 w-4 rounded" /> : null}
+      {specIcon ? (
+        <IconImage
+          iconFilename={specIcon}
+          alt={`${formatSpecName(row.specName!)} icon`}
+          width={compact ? 14 : 16}
+          height={compact ? 14 : 16}
+          className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} rounded`}
+        />
+      ) : null}
     </span>
   );
 }
@@ -781,83 +789,78 @@ export default function CharacterProfilePage({ params }: PageProps) {
             <p className="text-sm text-gray-400">Best available parses grouped by raid and boss.</p>
           </div>
           {rankingRaidGroups.length ? (
-            <div className="divide-y divide-gray-800">
-              {rankingRaidGroups.map((group) => (
-                <div key={group.zoneId}>
-                  <div className="flex items-center gap-3 bg-gray-950/35 px-4 py-3">
-                    <IconImage
-                      iconFilename={group.raid?.iconUrl}
-                      alt={`${group.raidName} icon`}
-                      width={30}
-                      height={30}
-                      className="h-[30px] w-[30px] shrink-0 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <h3 className="truncate font-semibold text-gray-100">{group.raidName}</h3>
-                      <div className="text-xs text-gray-500">{group.bossColumns.length} bosses</div>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px] border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
-                          <th className="px-4 py-3">View</th>
-                          <th className="px-4 py-3">Metric</th>
-                          <th className="px-4 py-3 text-right">Score</th>
-                          {group.bossColumns.map((bossColumn) => (
-                            <th key={getBossKey(group.zoneId, bossColumn.encounterId)} className="px-4 py-3">
-                              <div className="flex justify-center" title={bossColumn.encounterName}>
-                                <IconImage
-                                  iconFilename={bossColumn.boss?.iconUrl}
-                                  alt={`${bossColumn.encounterName} icon`}
-                                  width={24}
-                                  height={24}
-                                  className="h-6 w-6 rounded object-cover"
-                                />
-                              </div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-gray-800 last:border-0">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2 font-semibold text-gray-100">
-                              <IconImage
-                                iconFilename={group.raid?.iconUrl}
-                                alt={`${group.raidName} icon`}
-                                width={24}
-                                height={24}
-                                className="h-6 w-6 shrink-0 rounded object-cover"
-                              />
-                              <span>All Stars</span>
-                            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse">
+                <colgroup>
+                  <col className="w-[250px]" />
+                  <col className="w-[96px]" />
+                  <col className="w-[104px]" />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
+                    <th className="px-4 py-2.5">Raid</th>
+                    <th className="px-3 py-2.5 text-right">Metric</th>
+                    <th className="px-3 py-2.5 text-right">Score</th>
+                    <th className="px-3 py-2.5">Boss parses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingRaidGroups.map((group) => (
+                    <tr key={group.zoneId} className="border-b border-gray-800 last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <IconImage
+                            iconFilename={group.raid?.iconUrl}
+                            alt={`${group.raidName} icon`}
+                            width={32}
+                            height={32}
+                            className="h-8 w-8 shrink-0 rounded object-cover ring-1 ring-white/10"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold leading-tight text-gray-100">{group.raidName}</div>
+                            <div className="mt-0.5 text-xs tabular-nums text-gray-500">{group.bossColumns.length} bosses</div>
+                          </div>
+                        </div>
+                      </td>
+                      {group.bestAllStars ? (
+                        <>
+                          <td className="px-3 py-3">
+                            <RankingsMetricCell row={group.bestAllStars} compact />
                           </td>
-                          {group.bestAllStars ? (
-                            <>
-                              <td className="px-4 py-3">
-                                <RankingsMetricCell row={group.bestAllStars} />
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="px-4 py-3 text-gray-600">-</td>
-                              <td className="px-4 py-3 text-right text-gray-600">-</td>
-                            </>
-                          )}
+                          <td className="px-3 py-3 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-3 py-3 text-right text-gray-600">-</td>
+                          <td className="px-3 py-3 text-right text-gray-600">-</td>
+                        </>
+                      )}
+                      <td className="px-3 py-2">
+                        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(56px, 1fr))` }}>
                           {group.bossColumns.map((bossColumn) => (
-                            <td key={getBossKey(group.zoneId, bossColumn.encounterId)} className="px-4 py-3 text-center">
-                              <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} />
-                            </td>
+                            <div
+                              key={getBossKey(group.zoneId, bossColumn.encounterId)}
+                              className="flex min-w-0 items-center justify-center gap-1.5 rounded bg-gray-950/40 px-1.5 py-1.5 ring-1 ring-white/5"
+                              title={bossColumn.encounterName}
+                              aria-label={`${bossColumn.encounterName} parse`}
+                            >
+                              <IconImage
+                                iconFilename={bossColumn.boss?.iconUrl}
+                                alt=""
+                                width={22}
+                                height={22}
+                                className="h-[22px] w-[22px] shrink-0 rounded object-cover ring-1 ring-white/10"
+                              />
+                              <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} compact />
+                            </div>
                           ))}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className="px-4 py-8 text-center text-gray-400">No rankings have been fetched for this character.</div>
