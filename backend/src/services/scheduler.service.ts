@@ -60,6 +60,7 @@ function throttleDelay(ms: number): Promise<void> {
 
 /** Minimum interval between cache warming operations (in ms) */
 const CACHE_WARM_DEBOUNCE_MS = 5 * 60 * 1000; // 5 minutes
+const HOME_CACHE_REFRESH_MS = parseInt(process.env.HOME_CACHE_REFRESH_MINUTES || "4", 10) * 60 * 1000;
 
 interface GuildBatchUpdateStats {
   attempted: number;
@@ -85,12 +86,14 @@ class UpdateScheduler {
   private hotHoursRaidingInterval: NodeJS.Timeout | null = null;
   private hotHoursTwitchInterval: NodeJS.Timeout | null = null;
   private fightVodResolverInterval: NodeJS.Timeout | null = null;
+  private homeCacheRefreshInterval: NodeJS.Timeout | null = null;
   private offHoursActiveInterval: NodeJS.Timeout | null = null;
   private offHoursDailyInterval: NodeJS.Timeout | null = null;
   private isUpdatingHotActive: boolean = false;
   private isUpdatingHotRaiding: boolean = false;
   private isUpdatingTwitchStreams: boolean = false;
   private isResolvingFightVodLinks: boolean = false;
+  private isRefreshingHomeCache: boolean = false;
   private isBackfillingFightVodLinks: boolean = false;
   private isCleaningFightVodLinks: boolean = false;
   private isUpdatingOffActive: boolean = false;
@@ -316,6 +319,22 @@ class UpdateScheduler {
       }
       await this.resolveFightVodLinks();
     }, POLLING_FIGHT_VODS_MS);
+
+    this.homeCacheRefreshInterval = setInterval(async () => {
+      if (this.isRefreshingHomeCache) {
+        logger.info("[HomeCache] Previous refresh still in progress, skipping...");
+        return;
+      }
+
+      this.isRefreshingHomeCache = true;
+      try {
+        await cacheWarmerService.warmHomeCacheData();
+      } catch (error) {
+        logger.error("[HomeCache] Error refreshing home cache:", error);
+      } finally {
+        this.isRefreshingHomeCache = false;
+      }
+    }, HOME_CACHE_REFRESH_MS);
 
     // OFF HOURS - Active guilds: Check every hour
     this.offHoursActiveInterval = setInterval(async () => {
@@ -782,6 +801,10 @@ class UpdateScheduler {
     if (this.fightVodResolverInterval) {
       clearInterval(this.fightVodResolverInterval);
       this.fightVodResolverInterval = null;
+    }
+    if (this.homeCacheRefreshInterval) {
+      clearInterval(this.homeCacheRefreshInterval);
+      this.homeCacheRefreshInterval = null;
     }
     if (this.offHoursActiveInterval) {
       clearInterval(this.offHoursActiveInterval);

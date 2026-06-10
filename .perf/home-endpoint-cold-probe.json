@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-06-10T18:48:55.864Z",
+  "options": {
+    "baseUrl": "https://suomiwow.vaarattu.tv",
+    "runs": 8,
+    "warmup": 0,
+    "delayMs": 1000,
+    "from": null,
+    "output": ".perf\\home-endpoint-cold-probe.json",
+    "cacheBust": false,
+    "endpoints": [
+      "/api/home"
+    ]
+  },
+  "endpoints": [
+    {
+      "name": "custom-1",
+      "path": "/api/home"
+    }
+  ],
+  "results": [
+    {
+      "name": "custom-1",
+      "path": "/api/home",
+      "attempts": [
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 149.9542,
+          "totalMs": 153.1341,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=194, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 1,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 47.57269999999994,
+          "totalMs": 50.12059999999997,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=193, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 2,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 50.89339999999993,
+          "totalMs": 52.47560000000021,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=192, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 3,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 53.77190000000019,
+          "totalMs": 54.673499999999876,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=191, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 4,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 46.91180000000077,
+          "totalMs": 48.26690000000053,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=190, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 5,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 51.72410000000036,
+          "totalMs": 54.14460000000054,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=189, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 6,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 51.83099999999922,
+          "totalMs": 52.78099999999995,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=188, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 7,
+          "measured": true
+        },
+        {
+          "url": "https://suomiwow.vaarattu.tv/api/home",
+          "ok": true,
+          "status": 200,
+          "headersMs": 51.10120000000006,
+          "totalMs": 52.87850000000071,
+          "bytes": 102157,
+          "error": null,
+          "cacheControl": "public, max-age=187, stale-while-revalidate=300",
+          "cfCacheStatus": "DYNAMIC",
+          "age": null,
+          "contentType": "application/json; charset=utf-8",
+          "run": 8,
+          "measured": true
+        }
+      ],
+      "summary": {
+        "runs": 8,
+        "ok": 8,
+        "failed": 0,
+        "statusCodes": {
+          "200": 8
+        },
+        "totalMs": {
+          "min": 48.3,
+          "p50": 52.8,
+          "p95": 153.1,
+          "max": 153.1,
+          "avg": 64.8
+        },
+        "headersMs": {
+          "p50": 51.1,
+          "p95": 150,
+          "avg": 63
+        },
+        "bytes": {
+          "min": 102157,
+          "p50": 102157,
+          "p95": 102157,
+          "max": 102157,
+          "avg": 102157
+        },
+        "cache": {
+          "cfCacheStatus": "DYNAMIC",
+          "age": "-",
+          "cacheControl": "public, max-age=194, stale-while-revalidate=300"
+        }
+      }
+    }
+  ]
+}
