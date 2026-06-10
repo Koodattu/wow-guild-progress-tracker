@@ -4,6 +4,7 @@ import { ROLE_BY_CLASS_AND_SPEC, Role } from "../config/specs";
 import Character from "../models/Character";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import CharacterRankingBackfill, { CharacterRankingBackfillStatus, ICharacterRankingBackfill } from "../models/CharacterRankingBackfill";
+import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import Raid from "../models/Raid";
 import Ranking from "../models/Ranking";
@@ -154,6 +155,7 @@ export interface CharacterRankingBackfillEnqueueResult {
   existing: number;
   updated: number;
   skippedWithoutCharacter: number;
+  discoverySkipped: boolean;
 }
 
 export interface CharacterRankingBackfillTriggerResult {
@@ -252,8 +254,23 @@ class CharacterRankingBackfillService {
   private currentItem: BackfillItemSummary | null = null;
   private lastMessage: string | null = null;
 
-  async triggerBackfill(): Promise<CharacterRankingBackfillTriggerResult> {
-    const enqueue = await this.enqueueMissingItems();
+  async triggerBackfill(options: { refreshCandidates?: boolean } = {}): Promise<CharacterRankingBackfillTriggerResult> {
+    const existingQueueItems = await CharacterRankingBackfill.countDocuments({});
+    const enqueue =
+      existingQueueItems > 0 && options.refreshCandidates !== true
+        ? {
+            candidates: 0,
+            queued: 0,
+            existing: existingQueueItems,
+            updated: 0,
+            skippedWithoutCharacter: 0,
+            discoverySkipped: true,
+          }
+        : await this.enqueueMissingItems();
+
+    if (enqueue.discoverySkipped) {
+      logger.info(`[CharacterRankingBackfill] Candidate discovery skipped; ${enqueue.existing} persistent queue items already exist`);
+    }
 
     let started = false;
     if (!this.isRunning) {
@@ -290,67 +307,21 @@ class CharacterRankingBackfillService {
   }
 
   async enqueueMissingItems(): Promise<CharacterRankingBackfillEnqueueResult> {
-    logger.info("[CharacterRankingBackfill] Discovering mythic character/raid candidates from report rankings");
+    const startedAt = Date.now();
+    const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    logger.info("[CharacterRankingBackfill] Discovering character/raid candidates from canonical raid participation");
 
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } }).select("id name -_id").lean();
     const raidNameById = new Map(raids.map((raid) => [raid.id, raid.name]));
 
-    const rows = await CharacterReportAppearance.aggregate<CandidateAggregateRow>([
+    const rows = await CharacterRaidParticipation.aggregate<CandidateAggregateRow>([
       {
         $match: {
-          appearanceSource: "reportRankings",
           wclCanonicalCharacterId: { $type: "number" },
-          reportZoneId: { $in: TRACKED_RAIDS },
-          "rankingFightIds.0": { $exists: true },
-          hidden: { $ne: true },
+          zoneId: { $in: TRACKED_RAIDS },
+          characterId: { $ne: null },
         },
       },
-      { $unwind: "$rankingFightIds" },
-      {
-        $lookup: {
-          from: "fights",
-          let: {
-            reportCode: "$reportCode",
-            fightId: "$rankingFightIds",
-            zoneId: "$reportZoneId",
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$reportCode", "$$reportCode"] },
-                    { $eq: ["$fightId", "$$fightId"] },
-                    { $eq: ["$zoneId", "$$zoneId"] },
-                    { $eq: ["$difficulty", MYTHIC_DIFFICULTY] },
-                  ],
-                },
-              },
-            },
-            { $project: { _id: 0, isKill: 1 } },
-          ],
-          as: "rankingFight",
-        },
-      },
-      { $unwind: "$rankingFight" },
-      {
-        $group: {
-          _id: "$_id",
-          characterId: { $first: "$characterId" },
-          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-          name: { $first: "$characterName" },
-          realm: { $first: "$characterRealm" },
-          region: { $first: "$characterRegion" },
-          classID: { $first: "$classID" },
-          zoneId: { $first: "$reportZoneId" },
-          reportCode: { $first: "$reportCode" },
-          reportStartTime: { $first: "$reportStartTime" },
-          specNames: { $first: "$specNames" },
-          mythicFightCount: { $sum: 1 },
-          mythicKillCount: { $sum: { $cond: ["$rankingFight.isKill", 1, 0] } },
-        },
-      },
-      { $sort: { reportStartTime: 1 } },
       {
         $group: {
           _id: {
@@ -360,18 +331,14 @@ class CharacterRankingBackfillService {
           },
           characterId: { $last: "$characterId" },
           wclCanonicalCharacterId: { $last: "$wclCanonicalCharacterId" },
-          name: { $last: "$name" },
-          realm: { $last: "$realm" },
-          region: { $last: "$region" },
+          name: { $last: "$characterName" },
+          realm: { $last: "$characterRealm" },
+          region: { $last: "$characterRegion" },
           classID: { $last: "$classID" },
           zoneId: { $last: "$zoneId" },
-          appearanceCount: { $sum: 1 },
-          reportCodes: { $addToSet: "$reportCode" },
-          mythicFightCount: { $sum: "$mythicFightCount" },
-          mythicKillCount: { $sum: "$mythicKillCount" },
-          firstSeenAt: { $min: "$reportStartTime" },
-          lastSeenAt: { $max: "$reportStartTime" },
-          observedSpecNameLists: { $addToSet: "$specNames" },
+          reportCount: { $sum: "$reportCount" },
+          firstSeenAt: { $min: "$firstSeenAt" },
+          lastSeenAt: { $max: "$lastSeenAt" },
         },
       },
       {
@@ -384,18 +351,46 @@ class CharacterRankingBackfillService {
           region: 1,
           classID: 1,
           zoneId: 1,
-          appearanceCount: 1,
-          reportCount: { $size: "$reportCodes" },
-          mythicFightCount: 1,
-          mythicKillCount: 1,
+          appearanceCount: "$reportCount",
+          reportCount: 1,
+          mythicFightCount: 0,
+          mythicKillCount: 0,
           firstSeenAt: 1,
           lastSeenAt: 1,
-          observedSpecNameLists: 1,
         },
       },
     ]).allowDiskUse(true);
 
-    logger.info(`[CharacterRankingBackfill] Candidate discovery found ${rows.length} character/raid pairs`);
+    logger.info(`[CharacterRankingBackfill] Candidate discovery found ${rows.length} canonical participation character/raid pairs (${elapsed()})`);
+
+    const observedSpecRows = await CharacterReportAppearance.aggregate<{
+      _id: { wclCanonicalCharacterId: number; classID: number; zoneId: number };
+      observedSpecNameLists: string[][];
+      reportRankingAppearanceCount: number;
+      rankingFightIdCount: number;
+    }>([
+      {
+        $match: {
+          wclCanonicalCharacterId: { $type: "number" },
+          reportZoneId: { $in: TRACKED_RAIDS },
+          hidden: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+            classID: "$classID",
+            zoneId: "$reportZoneId",
+          },
+          observedSpecNameLists: { $addToSet: "$specNames" },
+          reportRankingAppearanceCount: { $sum: { $cond: [{ $eq: ["$appearanceSource", "reportRankings"] }, 1, 0] } },
+          rankingFightIdCount: { $sum: { $size: { $ifNull: ["$rankingFightIds", []] } } },
+        },
+      },
+    ]).allowDiskUse(true);
+    const observedSpecByKey = new Map(observedSpecRows.map((row) => [`${row._id.wclCanonicalCharacterId}:${row._id.classID}:${row._id.zoneId}`, row]));
+    logger.info(`[CharacterRankingBackfill] Loaded observed spec evidence for ${observedSpecRows.length} character/raid pairs (${elapsed()})`);
 
     const canonicalIds = [...new Set(rows.map((row) => row.wclCanonicalCharacterId))];
     const classIds = [...new Set(rows.map((row) => row.classID))];
@@ -421,7 +416,8 @@ class CharacterRankingBackfillService {
         continue;
       }
 
-      const observedSpecNames = this.flattenObservedSpecNames(row.observedSpecNameLists);
+      const observedSpecEvidence = observedSpecByKey.get(`${row.wclCanonicalCharacterId}:${row.classID}:${row.zoneId}`);
+      const observedSpecNames = this.flattenObservedSpecNames(observedSpecEvidence?.observedSpecNameLists);
       operations.push({
         updateOne: {
           filter: {
@@ -441,8 +437,8 @@ class CharacterRankingBackfillService {
               evidence: {
                 appearanceCount: row.appearanceCount,
                 reportCount: row.reportCount,
-                mythicFightCount: row.mythicFightCount,
-                mythicKillCount: row.mythicKillCount,
+                mythicFightCount: observedSpecEvidence?.rankingFightIdCount ?? 0,
+                mythicKillCount: 0,
                 firstSeenAt: row.firstSeenAt,
                 lastSeenAt: row.lastSeenAt,
               },
@@ -453,7 +449,7 @@ class CharacterRankingBackfillService {
               zoneId: row.zoneId,
               status: "pending",
               priority: 20,
-              source: "report_rankings_mythic",
+              source: "raid_participation",
               attempts: 0,
               maxAttempts: 3,
               aliasesQueried: 0,
@@ -484,7 +480,7 @@ class CharacterRankingBackfillService {
 
     const existing = operations.length - queued;
     logger.info(
-      `[CharacterRankingBackfill] Enqueue complete: ${queued} new, ${existing} existing, ${updated} updated, ${skippedWithoutCharacter} skipped without Character document`,
+      `[CharacterRankingBackfill] Enqueue complete: ${queued} new, ${existing} existing, ${updated} updated, ${skippedWithoutCharacter} skipped without Character document (${elapsed()})`,
     );
 
     return {
@@ -493,6 +489,7 @@ class CharacterRankingBackfillService {
       existing,
       updated,
       skippedWithoutCharacter,
+      discoverySkipped: false,
     };
   }
 

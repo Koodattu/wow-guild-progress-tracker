@@ -2345,12 +2345,14 @@ router.post("/trigger/backfill-report-characters", async (req: Request, res: Res
 // Queue and start historical character ranking backfill
 router.post("/trigger/backfill-character-rankings", async (req: Request, res: Response) => {
   try {
-    const result = await characterRankingBackfillService.triggerBackfill();
+    const refreshCandidates = req.body?.refreshCandidates === true;
+    const result = await characterRankingBackfillService.triggerBackfill({ refreshCandidates });
+    const queueMessage = result.enqueue.discoverySkipped
+      ? `candidate discovery skipped, ${result.enqueue.existing} persistent queue items already exist`
+      : `${result.enqueue.queued} new character/raid items queued, ${result.enqueue.existing} already tracked`;
     res.json({
       success: true,
-      message: result.started
-        ? `Character ranking backfill started: ${result.enqueue.queued} new character/raid items queued, ${result.enqueue.existing} already tracked`
-        : `Character ranking backfill is already running: ${result.enqueue.queued} new character/raid items queued, ${result.enqueue.existing} already tracked`,
+      message: result.started ? `Character ranking backfill started: ${queueMessage}` : `Character ranking backfill is already running: ${queueMessage}`,
       ...result,
     });
   } catch (error) {

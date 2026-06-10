@@ -1760,6 +1760,7 @@ export interface CharacterRankingBackfillTriggerResponse extends TriggerResponse
     existing: number;
     updated: number;
     skippedWithoutCharacter: number;
+    discoverySkipped: boolean;
   };
   status: CharacterRankingBackfillStatusResponse;
 }

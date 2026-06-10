@@ -25,7 +25,7 @@ export interface ICharacterRankingBackfill extends Document {
 
   status: CharacterRankingBackfillStatus;
   priority: number;
-  source: "report_rankings_mythic";
+  source: "raid_participation";
 
   evidence: ICharacterRankingBackfillEvidence;
 
@@ -81,7 +81,7 @@ const CharacterRankingBackfillSchema = new Schema<ICharacterRankingBackfill>(
       index: true,
     },
     priority: { type: Number, required: true, default: 20, index: true },
-    source: { type: String, enum: ["report_rankings_mythic"], required: true, default: "report_rankings_mythic" },
+    source: { type: String, enum: ["raid_participation"], required: true, default: "raid_participation" },
 
     evidence: {
       type: CharacterRankingBackfillEvidenceSchema,
