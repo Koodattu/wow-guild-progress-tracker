@@ -808,7 +808,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                 <tbody>
                   {rankingRaidGroups.map((group) => (
                     <tr key={group.zoneId} className="border-b border-gray-800 last:border-0">
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <div className="flex min-w-0 items-center gap-3">
                           <IconImage
                             iconFilename={group.raid?.iconUrl}
@@ -825,32 +825,32 @@ export default function CharacterProfilePage({ params }: PageProps) {
                       </td>
                       {group.bestAllStars ? (
                         <>
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-4">
                             <RankingsMetricCell row={group.bestAllStars} compact />
                           </td>
-                          <td className="px-3 py-3 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
+                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
                         </>
                       ) : (
                         <>
-                          <td className="px-3 py-3 text-right text-gray-600">-</td>
-                          <td className="px-3 py-3 text-right text-gray-600">-</td>
+                          <td className="px-3 py-4 text-right text-gray-600">-</td>
+                          <td className="px-3 py-4 text-right text-gray-600">-</td>
                         </>
                       )}
-                      <td className="px-3 py-2">
-                        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(56px, 1fr))` }}>
+                      <td className="px-3 py-3">
+                        <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(48px, 1fr))` }}>
                           {group.bossColumns.map((bossColumn) => (
                             <div
                               key={getBossKey(group.zoneId, bossColumn.encounterId)}
-                              className="flex min-w-0 items-center justify-center gap-1.5 rounded bg-gray-950/40 px-1.5 py-1.5 ring-1 ring-white/5"
+                              className="flex min-w-0 flex-col items-center justify-start gap-1"
                               title={bossColumn.encounterName}
                               aria-label={`${bossColumn.encounterName} parse`}
                             >
                               <IconImage
                                 iconFilename={bossColumn.boss?.iconUrl}
                                 alt=""
-                                width={22}
-                                height={22}
-                                className="h-[22px] w-[22px] shrink-0 rounded object-cover ring-1 ring-white/10"
+                                width={28}
+                                height={28}
+                                className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
                               />
                               <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} compact />
                             </div>
