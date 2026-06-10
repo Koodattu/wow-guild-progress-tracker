@@ -92,6 +92,7 @@ interface SpecQuery {
   specSlug: string;
   wclName: string;
   role: Role;
+  source: "observed" | "fallback";
 }
 
 interface BackfillItemSummary {
@@ -108,6 +109,8 @@ interface BackfillItemSummary {
   attempts: number;
   maxAttempts: number;
   aliasesQueried: number;
+  specQuerySource?: "observed" | "fallback" | null;
+  specsQueried: string[];
   rankingsWritten: number;
   leaderboardEntriesWritten: number;
   completionReason?: string | null;
@@ -136,6 +139,8 @@ export interface CharacterRankingBackfillStatusResponse {
     total: number;
     terminal: number;
     aliasesQueried: number;
+    observedSpecItems: number;
+    fallbackSpecItems: number;
     rankingsWritten: number;
     leaderboardEntriesWritten: number;
   };
@@ -161,6 +166,8 @@ interface ProcessOutcome {
   status: "completed" | "skipped";
   reason: string;
   aliasesQueried: number;
+  specQuerySource: "observed" | "fallback" | null;
+  specsQueried: string[];
   rankingsWritten: number;
   leaderboardEntriesWritten: number;
 }
@@ -200,6 +207,15 @@ function toSpecAlias(specSlug: string, metric: RankingMetric): string {
   return `${base}${metricSuffix}Rankings`;
 }
 
+function normalizeObservedSpecSlug(specName: string, classSpecMap: Record<string, Role>): string | null {
+  const slug = slugifySpecName(specName).replace(/^-+|-+$/g, "");
+  if (!slug) return null;
+  if (classSpecMap[slug]) return slug;
+
+  const matchingClassSpec = Object.keys(classSpecMap).find((classSpec) => slug.startsWith(`${classSpec}-`) || slug.endsWith(`-${classSpec}`));
+  return matchingClassSpec ?? null;
+}
+
 function summarizeItem(item: ICharacterRankingBackfill): BackfillItemSummary {
   return {
     id: String(item._id),
@@ -215,6 +231,8 @@ function summarizeItem(item: ICharacterRankingBackfill): BackfillItemSummary {
     attempts: item.attempts,
     maxAttempts: item.maxAttempts,
     aliasesQueried: item.aliasesQueried,
+    specQuerySource: item.specQuerySource,
+    specsQueried: item.specsQueried ?? [],
     rankingsWritten: item.rankingsWritten,
     leaderboardEntriesWritten: item.leaderboardEntriesWritten,
     completionReason: item.completionReason,
@@ -439,6 +457,8 @@ class CharacterRankingBackfillService {
               attempts: 0,
               maxAttempts: 3,
               aliasesQueried: 0,
+              specQuerySource: null,
+              specsQueried: [],
               rankingsWritten: 0,
               leaderboardEntriesWritten: 0,
               completionReason: null,
@@ -504,6 +524,8 @@ class CharacterRankingBackfillService {
       total: 0,
       terminal: 0,
       aliasesQueried: 0,
+      observedSpecItems: 0,
+      fallbackSpecItems: 0,
       rankingsWritten: 0,
       leaderboardEntriesWritten: 0,
     };
@@ -522,10 +544,19 @@ class CharacterRankingBackfillService {
     }
     queue.terminal = queue.completed + queue.skipped + queue.failed;
 
-    const [dbCurrentItem, recentFailures] = await Promise.all([
+    const [dbCurrentItem, recentFailures, specSelectionRows] = await Promise.all([
       CharacterRankingBackfill.findOne({ status: "in_progress" }).sort({ lastActivityAt: -1 }).lean<ICharacterRankingBackfill>(),
       CharacterRankingBackfill.find({ status: "failed" }).sort({ lastErrorAt: -1 }).limit(5).lean<ICharacterRankingBackfill[]>(),
+      CharacterRankingBackfill.aggregate<{ _id: "observed" | "fallback"; count: number }>([
+        { $match: { specQuerySource: { $in: ["observed", "fallback"] } } },
+        { $group: { _id: "$specQuerySource", count: { $sum: 1 } } },
+      ]),
     ]);
+
+    for (const row of specSelectionRows) {
+      if (row._id === "observed") queue.observedSpecItems = row.count;
+      if (row._id === "fallback") queue.fallbackSpecItems = row.count;
+    }
 
     return {
       processor: {
@@ -590,19 +621,23 @@ class CharacterRankingBackfillService {
 
         try {
           const specQueries = this.buildSpecQueries(item);
-          const estimatedPoints = Math.max(ESTIMATED_POINTS_PER_RANKING_ALIAS, specQueries.length * ESTIMATED_POINTS_PER_RANKING_ALIAS);
+          const estimatedPoints = specQueries.length > 0 ? Math.max(ESTIMATED_POINTS_PER_RANKING_ALIAS, specQueries.length * ESTIMATED_POINTS_PER_RANKING_ALIAS) : 0;
 
           logger.info(
-            `[CharacterRankingBackfill] Processing ${item.name}-${item.realm} zone ${item.zoneId} (${item.raidName ?? "unknown raid"}), attempt ${item.attempts}/${item.maxAttempts}, aliases=${specQueries.length}`,
+            `[CharacterRankingBackfill] Processing ${item.name}-${item.realm} zone ${item.zoneId} (${item.raidName ?? "unknown raid"}), attempt ${item.attempts}/${item.maxAttempts}, aliases=${specQueries.length}, specs=${this.describeSpecQueries(specQueries)}`,
           );
 
-          await this.waitForBackgroundCapacity(estimatedPoints, `${item.name}-${item.realm} zone ${item.zoneId}`);
+          if (estimatedPoints > 0) {
+            await this.waitForBackgroundCapacity(estimatedPoints, `${item.name}-${item.realm} zone ${item.zoneId}`);
+          }
           const outcome = await this.processItem(item, specQueries);
 
           await CharacterRankingBackfill.findByIdAndUpdate(item._id, {
             $set: {
               status: outcome.status,
               aliasesQueried: outcome.aliasesQueried,
+              specQuerySource: outcome.specQuerySource,
+              specsQueried: outcome.specsQueried,
               rankingsWritten: outcome.rankingsWritten,
               leaderboardEntriesWritten: outcome.leaderboardEntriesWritten,
               completionReason: outcome.reason,
@@ -654,11 +689,16 @@ class CharacterRankingBackfillService {
   }
 
   private async processItem(item: ICharacterRankingBackfill, specQueries: SpecQuery[]): Promise<ProcessOutcome> {
+    const specQuerySource = specQueries[0]?.source ?? null;
+    const specsQueried = Array.from(new Set(specQueries.map((query) => query.specSlug))).sort((a, b) => a.localeCompare(b));
+
     if (specQueries.length === 0) {
       return {
         status: "skipped",
         reason: "No known specs for character class",
         aliasesQueried: 0,
+        specQuerySource,
+        specsQueried,
         rankingsWritten: 0,
         leaderboardEntriesWritten: 0,
       };
@@ -681,6 +721,8 @@ class CharacterRankingBackfillService {
         status: "skipped",
         reason: "WCL character not found by canonical ID",
         aliasesQueried: specQueries.length,
+        specQuerySource,
+        specsQueried,
         rankingsWritten: 0,
         leaderboardEntriesWritten: 0,
       };
@@ -692,6 +734,8 @@ class CharacterRankingBackfillService {
         status: "skipped",
         reason: "WCL character profile is hidden",
         aliasesQueried: specQueries.length,
+        specQuerySource,
+        specsQueried,
         rankingsWritten: 0,
         leaderboardEntriesWritten: 0,
       };
@@ -774,6 +818,8 @@ class CharacterRankingBackfillService {
         status: "skipped",
         reason: "No meaningful mythic rankings returned",
         aliasesQueried: specQueries.length,
+        specQuerySource,
+        specsQueried,
         rankingsWritten: 0,
         leaderboardEntriesWritten: 0,
       };
@@ -786,6 +832,8 @@ class CharacterRankingBackfillService {
       status: "completed",
       reason: "Rankings fetched and stored",
       aliasesQueried: specQueries.length,
+      specQuerySource,
+      specsQueried,
       rankingsWritten: operations.length,
       leaderboardEntriesWritten,
     };
@@ -818,21 +866,24 @@ class CharacterRankingBackfillService {
     const specsByWclName = new Map<string, { specSlug: string; wclName: string; role: Role }>();
     const classSpecMap = ROLE_BY_CLASS_AND_SPEC[item.classID] ?? {};
 
-    for (const [specSlug, role] of Object.entries(classSpecMap)) {
-      const wclName = toWclSpecName(specSlug);
-      specsByWclName.set(wclName.toLowerCase(), { specSlug, wclName, role });
-    }
-
     for (const observedSpecName of item.observedSpecNames ?? []) {
-      const specSlug = slugifySpecName(observedSpecName).replace(/^-+|-+$/g, "");
+      const specSlug = normalizeObservedSpecSlug(observedSpecName, classSpecMap);
       if (!specSlug) continue;
       const wclName = toWclSpecName(specSlug);
       if (!wclName) continue;
       specsByWclName.set(wclName.toLowerCase(), {
         specSlug,
         wclName,
-        role: resolveRole(item.classID, specSlug),
+        role: classSpecMap[specSlug] ?? resolveRole(item.classID, specSlug),
       });
+    }
+
+    const source: SpecQuery["source"] = specsByWclName.size > 0 ? "observed" : "fallback";
+    if (specsByWclName.size === 0) {
+      for (const [specSlug, role] of Object.entries(classSpecMap)) {
+        const wclName = toWclSpecName(specSlug);
+        specsByWclName.set(wclName.toLowerCase(), { specSlug, wclName, role });
+      }
     }
 
     const queries: SpecQuery[] = [];
@@ -841,17 +892,34 @@ class CharacterRankingBackfillService {
         ...spec,
         metric: "dps",
         alias: toSpecAlias(spec.specSlug, "dps"),
+        source,
       });
       if (spec.role === "healer") {
         queries.push({
           ...spec,
           metric: "hps",
           alias: toSpecAlias(spec.specSlug, "hps"),
+          source,
         });
       }
     }
 
     return queries;
+  }
+
+  private describeSpecQueries(specQueries: SpecQuery[]): string {
+    if (specQueries.length === 0) return "none";
+
+    const bySpec = new Map<string, { source: SpecQuery["source"]; metrics: RankingMetric[] }>();
+    for (const specQuery of specQueries) {
+      const existing = bySpec.get(specQuery.specSlug) ?? { source: specQuery.source, metrics: [] };
+      existing.metrics.push(specQuery.metric);
+      bySpec.set(specQuery.specSlug, existing);
+    }
+
+    return Array.from(bySpec.entries())
+      .map(([spec, entry]) => `${spec}:${entry.metrics.join("+")}@${entry.source}`)
+      .join(",");
   }
 
   private buildWclQuery(specQueries: SpecQuery[]): string {

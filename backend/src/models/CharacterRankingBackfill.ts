@@ -32,6 +32,8 @@ export interface ICharacterRankingBackfill extends Document {
   attempts: number;
   maxAttempts: number;
   aliasesQueried: number;
+  specQuerySource?: "observed" | "fallback" | null;
+  specsQueried: string[];
   rankingsWritten: number;
   leaderboardEntriesWritten: number;
   completionReason?: string | null;
@@ -90,6 +92,8 @@ const CharacterRankingBackfillSchema = new Schema<ICharacterRankingBackfill>(
     attempts: { type: Number, required: true, default: 0 },
     maxAttempts: { type: Number, required: true, default: 3 },
     aliasesQueried: { type: Number, required: true, default: 0 },
+    specQuerySource: { type: String, enum: ["observed", "fallback"], default: null },
+    specsQueried: { type: [String], default: [] },
     rankingsWritten: { type: Number, required: true, default: 0 },
     leaderboardEntriesWritten: { type: Number, required: true, default: 0 },
     completionReason: { type: String, default: null },

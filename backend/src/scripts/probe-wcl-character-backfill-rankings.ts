@@ -286,6 +286,84 @@ function summarizeRankingsPayload(payload: any): Record<string, unknown> {
   };
 }
 
+function compactOutput(output: Record<string, unknown>): Record<string, unknown> {
+  const candidates = Array.isArray(output.candidates) ? output.candidates : [];
+  const results = Array.isArray(output.results) ? output.results : [];
+
+  return {
+    generatedAt: output.generatedAt,
+    options: output.options,
+    candidates: candidates.map((candidate: any) => ({
+      name: candidate.name,
+      realm: candidate.realm,
+      region: candidate.region,
+      classID: candidate.classID,
+      wclCanonicalCharacterId: candidate.wclCanonicalCharacterId,
+      trackedZones: candidate.trackedZones,
+      specs: candidate.specs,
+      selectedZones: (candidate.selectedZones ?? []).map((zone: any) => ({
+        zoneId: zone.zoneId,
+        raidName: zone.raidName,
+        partitions: zone.partitions,
+        evidence: {
+          appearanceSources: zone.evidence?.appearanceSources,
+          reportCount: zone.evidence?.reportCount,
+          mythicFightCount: zone.evidence?.mythicFightCount,
+          mythicKillCount: zone.evidence?.mythicKillCount,
+          exactRankingFightIdCount: zone.evidence?.exactRankingFightIdCount,
+          exactRankingFightMythicCount: zone.evidence?.exactRankingFightMythicCount,
+        },
+      })),
+    })),
+    results: results.map((result: any) => {
+      const aliases = Object.entries(result.aliases ?? {}).map(([alias, value]: [string, any]) => {
+        const summary = value?.summary ?? {};
+        const sample = Array.isArray(summary.sampleEncounters) ? summary.sampleEncounters.find((encounter: any) => encounter?.bestAmount > 0 || encounter?.rankPercent > 0) : null;
+        return {
+          alias,
+          spec: value?.spec,
+          metric: value?.metric,
+          role: value?.role,
+          payloadPartition: summary.partition ?? null,
+          rankingsCount: summary.rankingsCount ?? 0,
+          nonZeroRankingsCount: summary.nonZeroRankingsCount ?? 0,
+          allStarsCount: summary.allStarsCount ?? 0,
+          bestPerformanceAverage: summary.bestPerformanceAverage ?? null,
+          medianPerformanceAverage: summary.medianPerformanceAverage ?? null,
+          allStarsPartitions: summary.allStarsPartitions ?? [],
+          rankingPartitions: summary.rankingPartitions ?? [],
+          sample: sample
+            ? {
+                encounterId: sample.encounterId,
+                encounterName: sample.encounterName,
+                spec: sample.spec,
+                bestSpec: sample.bestSpec,
+                rankPercent: sample.rankPercent,
+                bestAmount: sample.bestAmount,
+                totalKills: sample.totalKills,
+                allStarsPartition: sample.allStarsPartition,
+                allStarsPoints: sample.allStarsPoints,
+                ilvl: sample.ilvl,
+              }
+            : null,
+        };
+      });
+
+      return {
+        label: result.label,
+        zoneId: Object.values(result.aliases ?? {})[0] ? (Object.values(result.aliases ?? {})[0] as any).summary?.zone : null,
+        lookupMode: result.lookupMode,
+        partitionMode: result.partitionMode,
+        requestedPartition: result.requestedPartition,
+        rateLimitDelta: result.rateLimit?.deltaFromPreviousResponse ?? null,
+        character: result.character,
+        meaningfulAliases: aliases.filter((alias) => alias.nonZeroRankingsCount > 0),
+        zeroAliases: aliases.filter((alias) => alias.nonZeroRankingsCount === 0).map((alias) => `${alias.spec}:${alias.metric}`),
+      };
+    }),
+  };
+}
+
 async function measureBundle(bundle: ProbeBundle, costMode: CostMode, previousRateLimit?: RateLimitData): Promise<{ output: Record<string, unknown>; rateLimit?: RateLimitData }> {
   const { query, variables, aliasMap } = buildZoneRankingsQuery(bundle);
   const before = costMode === "before" ? await getRateLimit(`${bundle.label}:before`) : undefined;
@@ -655,7 +733,7 @@ async function main(): Promise<void> {
     output.results = results;
   }
 
-  console.log(JSON.stringify(output, null, 2));
+  console.log(JSON.stringify(hasFlag("compact") ? compactOutput(output) : output, null, 2));
 }
 
 main()

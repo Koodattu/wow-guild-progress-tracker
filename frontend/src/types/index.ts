@@ -1713,6 +1713,8 @@ export interface CharacterRankingBackfillItem {
   attempts: number;
   maxAttempts: number;
   aliasesQueried: number;
+  specQuerySource?: "observed" | "fallback" | null;
+  specsQueried: string[];
   rankingsWritten: number;
   leaderboardEntriesWritten: number;
   completionReason?: string | null;
@@ -1741,6 +1743,8 @@ export interface CharacterRankingBackfillStatusResponse {
     total: number;
     terminal: number;
     aliasesQueried: number;
+    observedSpecItems: number;
+    fallbackSpecItems: number;
     rankingsWritten: number;
     leaderboardEntriesWritten: number;
   };

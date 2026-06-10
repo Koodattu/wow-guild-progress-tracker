@@ -1276,6 +1276,12 @@ export default function AdminPage() {
                           <span>{characterBackfillPercent}% complete</span>
                           <span>{characterBackfillQueue.rankingsWritten} rankings written</span>
                         </div>
+                        {(characterBackfillQueue.observedSpecItems > 0 || characterBackfillQueue.fallbackSpecItems > 0) && (
+                          <div className="flex items-center justify-between text-gray-500">
+                            <span>{characterBackfillQueue.observedSpecItems} observed-spec items</span>
+                            <span>{characterBackfillQueue.fallbackSpecItems} fallback items</span>
+                          </div>
+                        )}
                         {characterRankingBackfillStatus.processor.currentItem && (
                           <div className="text-gray-400 truncate">
                             Current: {characterRankingBackfillStatus.processor.currentItem.name}-{characterRankingBackfillStatus.processor.currentItem.realm} /{" "}
