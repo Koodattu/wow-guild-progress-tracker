@@ -80,6 +80,7 @@ import {
   TriggerResponse,
   CharacterRankingBackfillStatusResponse,
   CharacterRankingBackfillTriggerResponse,
+  CharacterRankingLeaderboardRebuildTriggerResponse,
   AdminGuildDetail,
   VerifyReportsResponse,
   QueueRescanResponse,
@@ -1485,6 +1486,15 @@ export async function triggerBackfillCharacterRankings(refreshCandidates = false
     body: JSON.stringify({ refreshCandidates }),
   });
   if (!response.ok) throw new Error("Failed to trigger character ranking backfill");
+  return response.json();
+}
+
+export async function triggerRebuildCharacterRankingLeaderboards(): Promise<CharacterRankingLeaderboardRebuildTriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-character-ranking-leaderboards`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger character ranking leaderboard rebuild");
   return response.json();
 }
 

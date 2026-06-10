@@ -1734,6 +1734,16 @@ export interface CharacterRankingBackfillStatusResponse {
     currentItem: CharacterRankingBackfillItem | null;
     lastMessage: string | null;
   };
+  leaderboardRebuild: {
+    isRunning: boolean;
+    startedAt: string | null;
+    completedAt: string | null;
+    totalPairs: number;
+    processedPairs: number;
+    writtenEntries: number;
+    lastMessage: string | null;
+    lastError: string | null;
+  };
   queue: {
     pending: number;
     inProgress: number;
@@ -1762,6 +1772,11 @@ export interface CharacterRankingBackfillTriggerResponse extends TriggerResponse
     skippedWithoutCharacter: number;
     discoverySkipped: boolean;
   };
+  status: CharacterRankingBackfillStatusResponse;
+}
+
+export interface CharacterRankingLeaderboardRebuildTriggerResponse extends TriggerResponse {
+  started: boolean;
   status: CharacterRankingBackfillStatusResponse;
 }
 

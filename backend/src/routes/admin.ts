@@ -2361,6 +2361,20 @@ router.post("/trigger/backfill-character-rankings", async (req: Request, res: Re
   }
 });
 
+// Rebuild historical character ranking leaderboards from stored Ranking rows (no WCL API calls)
+router.post("/trigger/rebuild-character-ranking-leaderboards", async (req: Request, res: Response) => {
+  try {
+    const result = await characterRankingBackfillService.triggerLeaderboardRebuildFromRankings();
+    res.json({
+      success: result.started,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering character ranking leaderboard rebuild:", error);
+    res.status(500).json({ error: "Failed to trigger character ranking leaderboard rebuild" });
+  }
+});
+
 // Trigger Raider.IO update for all WCL-not-found guilds (same as nightly 9 AM job)
 router.post("/trigger/update-raiderio-guilds", async (req: Request, res: Response) => {
   try {

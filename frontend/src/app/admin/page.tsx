@@ -25,6 +25,7 @@ import {
   triggerRescanCharacters,
   triggerBackfillReportCharacters,
   triggerBackfillCharacterRankings,
+  triggerRebuildCharacterRankingLeaderboards,
   triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
   triggerUpdateRaiderIOGuilds,
@@ -523,6 +524,11 @@ export default function AdminPage() {
 
   const characterBackfillQueue = characterRankingBackfillStatus?.queue;
   const characterBackfillPercent = characterBackfillQueue && characterBackfillQueue.total > 0 ? Math.round((characterBackfillQueue.terminal / characterBackfillQueue.total) * 100) : 0;
+  const characterLeaderboardRebuild = characterRankingBackfillStatus?.leaderboardRebuild;
+  const characterLeaderboardRebuildPercent =
+    characterLeaderboardRebuild && characterLeaderboardRebuild.totalPairs > 0
+      ? Math.round((characterLeaderboardRebuild.processedPairs / characterLeaderboardRebuild.totalPairs) * 100)
+      : 0;
 
   // Handler for scheduler triggers with 10-second cooldown per button
   const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
@@ -531,7 +537,7 @@ export default function AdminPage() {
     try {
       const result = await triggerFn();
       setTriggerMessage({ type: "success", text: result.message });
-      if (triggerName === "backfill-character-rankings" || triggerName === "refresh-character-ranking-candidates") {
+      if (triggerName === "backfill-character-rankings" || triggerName === "refresh-character-ranking-candidates" || triggerName === "rebuild-character-ranking-leaderboards") {
         const status = await api.getAdminCharacterRankingBackfillStatus();
         setCharacterRankingBackfillStatus(status);
       }
@@ -1244,6 +1250,20 @@ export default function AdminPage() {
                       {triggerLoading === "refresh-character-ranking-candidates" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["refresh-character-ranking-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
+                    <button
+                      onClick={() => handleTrigger("rebuild-character-ranking-leaderboards", triggerRebuildCharacterRankingLeaderboards)}
+                      disabled={
+                        triggerLoading === "rebuild-character-ranking-leaderboards" ||
+                        triggerCooldowns["rebuild-character-ranking-leaderboards"] ||
+                        characterRankingBackfillStatus?.processor.isRunning ||
+                        characterRankingBackfillStatus?.leaderboardRebuild.isRunning
+                      }
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Rebuild Character Ranking Tables</span>
+                      {triggerLoading === "rebuild-character-ranking-leaderboards" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rebuild-character-ranking-leaderboards"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
                     {characterRankingBackfillStatus && characterBackfillQueue && (
                       <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
                         <div className="flex items-center justify-between gap-3">
@@ -1295,6 +1315,27 @@ export default function AdminPage() {
                           <div className="text-gray-400 truncate">
                             Current: {characterRankingBackfillStatus.processor.currentItem.name}-{characterRankingBackfillStatus.processor.currentItem.realm} /{" "}
                             {characterRankingBackfillStatus.processor.currentItem.raidName ?? `Raid ${characterRankingBackfillStatus.processor.currentItem.zoneId}`}
+                          </div>
+                        )}
+                        {characterLeaderboardRebuild && (characterLeaderboardRebuild.isRunning || characterLeaderboardRebuild.processedPairs > 0 || characterLeaderboardRebuild.lastError) && (
+                          <div className="border-t border-gray-700 pt-2 space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium text-white">Leaderboard table rebuild</span>
+                              <span className={characterLeaderboardRebuild.isRunning ? "text-blue-400" : characterLeaderboardRebuild.lastError ? "text-red-400" : "text-green-400"}>
+                                {characterLeaderboardRebuild.isRunning ? "Running" : characterLeaderboardRebuild.lastError ? "Failed" : "Idle"}
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-1.5">
+                              <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, characterLeaderboardRebuildPercent)}%` }} />
+                            </div>
+                            <div className="flex items-center justify-between text-gray-500">
+                              <span>
+                                {characterLeaderboardRebuild.processedPairs}/{characterLeaderboardRebuild.totalPairs} pairs
+                              </span>
+                              <span>{characterLeaderboardRebuild.writtenEntries} entries written</span>
+                            </div>
+                            {characterLeaderboardRebuild.lastMessage && <div className="text-gray-400 truncate">{characterLeaderboardRebuild.lastMessage}</div>}
+                            {characterLeaderboardRebuild.lastError && <div className="text-red-400 truncate">{characterLeaderboardRebuild.lastError}</div>}
                           </div>
                         )}
                       </div>

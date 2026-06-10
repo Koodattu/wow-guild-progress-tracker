@@ -131,6 +131,16 @@ export interface CharacterRankingBackfillStatusResponse {
     currentItem: BackfillItemSummary | null;
     lastMessage: string | null;
   };
+  leaderboardRebuild: {
+    isRunning: boolean;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    totalPairs: number;
+    processedPairs: number;
+    writtenEntries: number;
+    lastMessage: string | null;
+    lastError: string | null;
+  };
   queue: {
     pending: number;
     inProgress: number;
@@ -161,6 +171,12 @@ export interface CharacterRankingBackfillEnqueueResult {
 export interface CharacterRankingBackfillTriggerResult {
   started: boolean;
   enqueue: CharacterRankingBackfillEnqueueResult;
+  status: CharacterRankingBackfillStatusResponse;
+}
+
+export interface CharacterRankingLeaderboardRebuildTriggerResult {
+  started: boolean;
+  message: string;
   status: CharacterRankingBackfillStatusResponse;
 }
 
@@ -253,6 +269,16 @@ class CharacterRankingBackfillService {
   private isWaitingForRateLimit = false;
   private currentItem: BackfillItemSummary | null = null;
   private lastMessage: string | null = null;
+  private leaderboardRebuild = {
+    isRunning: false,
+    startedAt: null as Date | null,
+    completedAt: null as Date | null,
+    totalPairs: 0,
+    processedPairs: 0,
+    writtenEntries: 0,
+    lastMessage: null as string | null,
+    lastError: null as string | null,
+  };
 
   async triggerBackfill(options: { refreshCandidates?: boolean } = {}): Promise<CharacterRankingBackfillTriggerResult> {
     const existingQueueItems = await CharacterRankingBackfill.countDocuments({});
@@ -281,6 +307,38 @@ class CharacterRankingBackfillService {
     return {
       started,
       enqueue,
+      status: await this.getStatus(),
+    };
+  }
+
+  async triggerLeaderboardRebuildFromRankings(): Promise<CharacterRankingLeaderboardRebuildTriggerResult> {
+    if (this.leaderboardRebuild.isRunning) {
+      return {
+        started: false,
+        message: "Character leaderboard rebuild is already running",
+        status: await this.getStatus(),
+      };
+    }
+
+    if (this.isRunning) {
+      return {
+        started: false,
+        message: "Character ranking backfill is running; wait for it to finish before rebuilding leaderboards",
+        status: await this.getStatus(),
+      };
+    }
+
+    void this.runLeaderboardRebuildFromRankings().catch((error) => {
+      logger.error("[CharacterRankingBackfill] Character leaderboard rebuild crashed:", error);
+      this.leaderboardRebuild.isRunning = false;
+      this.leaderboardRebuild.completedAt = new Date();
+      this.leaderboardRebuild.lastError = error instanceof Error ? error.message : String(error);
+      this.leaderboardRebuild.lastMessage = `Rebuild crashed: ${this.leaderboardRebuild.lastError}`;
+    });
+
+    return {
+      started: true,
+      message: "Character leaderboard rebuild started in background",
       status: await this.getStatus(),
     };
   }
@@ -562,10 +620,62 @@ class CharacterRankingBackfillService {
         currentItem: this.currentItem ?? (dbCurrentItem ? summarizeItem(dbCurrentItem) : null),
         lastMessage: this.lastMessage,
       },
+      leaderboardRebuild: { ...this.leaderboardRebuild },
       queue,
       recentFailures: recentFailures.map((item) => summarizeItem(item)),
       updatedAt: new Date(),
     };
+  }
+
+  private async runLeaderboardRebuildFromRankings(): Promise<void> {
+    this.leaderboardRebuild = {
+      isRunning: true,
+      startedAt: new Date(),
+      completedAt: null,
+      totalPairs: 0,
+      processedPairs: 0,
+      writtenEntries: 0,
+      lastMessage: "Discovering character/raid ranking pairs",
+      lastError: null,
+    };
+
+    logger.info("[CharacterRankingBackfill] Rebuilding character leaderboards from stored rankings");
+
+    const pairs = await Ranking.aggregate<{ _id: { characterId: mongoose.Types.ObjectId; zoneId: number } }>([
+      {
+        $group: {
+          _id: {
+            characterId: "$characterId",
+            zoneId: "$zoneId",
+          },
+        },
+      },
+      { $sort: { "_id.zoneId": -1 } },
+    ]).allowDiskUse(true);
+
+    this.leaderboardRebuild.totalPairs = pairs.length;
+    this.leaderboardRebuild.lastMessage = `Rebuilding ${pairs.length} character/raid leaderboard pairs`;
+    logger.info(`[CharacterRankingBackfill] Character leaderboard rebuild found ${pairs.length} character/raid pairs`);
+
+    for (const pair of pairs) {
+      const count = await this.rebuildLeaderboardForCharacterZone(pair._id.characterId, pair._id.zoneId, false);
+      this.leaderboardRebuild.processedPairs += 1;
+      this.leaderboardRebuild.writtenEntries += count;
+
+      if (this.leaderboardRebuild.processedPairs % 100 === 0 || this.leaderboardRebuild.processedPairs === pairs.length) {
+        this.leaderboardRebuild.lastMessage = `Rebuilt ${this.leaderboardRebuild.processedPairs}/${pairs.length} character/raid pairs`;
+        logger.info(
+          `[CharacterRankingBackfill] Character leaderboard rebuild progress ${this.leaderboardRebuild.processedPairs}/${pairs.length}, entries=${this.leaderboardRebuild.writtenEntries}`,
+        );
+      }
+    }
+
+    await cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey());
+
+    this.leaderboardRebuild.isRunning = false;
+    this.leaderboardRebuild.completedAt = new Date();
+    this.leaderboardRebuild.lastMessage = `Rebuild complete: ${this.leaderboardRebuild.processedPairs} pairs, ${this.leaderboardRebuild.writtenEntries} leaderboard entries`;
+    logger.info(`[CharacterRankingBackfill] ${this.leaderboardRebuild.lastMessage}`);
   }
 
   private async resetInterruptedItems(): Promise<void> {
@@ -976,7 +1086,7 @@ class CharacterRankingBackfillService {
     return [...unique].sort((a, b) => a.localeCompare(b));
   }
 
-  private async rebuildLeaderboardForCharacterZone(characterId: mongoose.Types.ObjectId, zoneId: number): Promise<number> {
+  private async rebuildLeaderboardForCharacterZone(characterId: mongoose.Types.ObjectId, zoneId: number, invalidateOptions = true): Promise<number> {
     const characterObjectId = new mongoose.Types.ObjectId(String(characterId));
     const character = await Character.findById(characterObjectId).select("guildName guildRealm").lean();
     const guildName = character?.guildName ?? null;
@@ -1047,8 +1157,13 @@ class CharacterRankingBackfillService {
         },
       ]),
       Ranking.aggregate([
-        { $match: { ...baseMatch, "allStars.points": { $gt: 0 } } },
-        { $sort: { "allStars.points": -1, rankPercent: -1, partition: -1 } },
+        {
+          $match: {
+            ...baseMatch,
+            $or: [{ "allStars.points": { $gt: 0 } }, { bestAmount: { $gt: 0 } }, { rankPercent: { $gt: 0 } }, { totalKills: { $gt: 0 } }],
+          },
+        },
+        { $sort: { "allStars.points": -1, rankPercent: -1, bestAmount: -1, totalKills: -1, partition: -1 } },
         {
           $group: {
             _id: { encounterId: "$encounter.id", partition: "$partition", metric: "$metric" },
@@ -1102,8 +1217,13 @@ class CharacterRankingBackfillService {
         { $match: { points: { $gt: 0 } } },
       ]),
       Ranking.aggregate([
-        { $match: { ...baseMatch, "allStars.points": { $gt: 0 } } },
-        { $sort: { "allStars.points": -1, rankPercent: -1, partition: -1 } },
+        {
+          $match: {
+            ...baseMatch,
+            $or: [{ "allStars.points": { $gt: 0 } }, { bestAmount: { $gt: 0 } }, { rankPercent: { $gt: 0 } }, { totalKills: { $gt: 0 } }],
+          },
+        },
+        { $sort: { "allStars.points": -1, rankPercent: -1, bestAmount: -1, totalKills: -1, partition: -1 } },
         {
           $group: {
             _id: { encounterId: "$encounter.id", metric: "$metric" },
@@ -1192,7 +1312,9 @@ class CharacterRankingBackfillService {
 
     if (dedupedEntries.length > 0) {
       await CharacterLeaderboard.insertMany(dedupedEntries, { ordered: false });
-      await cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey());
+      if (invalidateOptions) {
+        await cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey());
+      }
     }
 
     return dedupedEntries.length;

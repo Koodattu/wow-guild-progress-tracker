@@ -1834,7 +1834,6 @@ class CharacterService {
               zoneId: { $in: TRACKED_RAIDS },
             })
               .sort({ zoneId: -1, score: -1 })
-              .limit(50)
               .lean()
           : Promise.resolve([]),
       ]);
@@ -1863,7 +1862,6 @@ class CharacterService {
           zoneId: { $in: TRACKED_RAIDS },
         })
           .sort({ zoneId: -1, score: -1 })
-          .limit(50)
           .lean(),
       ]);
     }
@@ -2810,8 +2808,16 @@ class CharacterService {
       // ── AllStars leaderboards (per partition × per metric) ────────────
       for (const part of partitions) {
         const allStarsAgg = await Ranking.aggregate([
-          { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, partition: part, metric: { $ne: null } } },
-          { $sort: { "allStars.points": -1 } },
+          {
+            $match: {
+              zoneId: CURRENT_TIER_ID,
+              difficulty: MYTHIC_DIFFICULTY,
+              partition: part,
+              metric: { $ne: null },
+              $or: [{ "allStars.points": { $gt: 0 } }, { bestAmount: { $gt: 0 } }, { rankPercent: { $gt: 0 } }, { totalKills: { $gt: 0 } }],
+            },
+          },
+          { $sort: { "allStars.points": -1, rankPercent: -1, bestAmount: -1, totalKills: -1 } },
           {
             $group: {
               _id: { characterId: "$characterId", encounterId: "$encounter.id", metric: "$metric" },
@@ -2902,8 +2908,15 @@ class CharacterService {
 
       // ── AllStars + all partitions (best per boss per metric across partitions) ─
       const allStarsAllPartitions = await Ranking.aggregate([
-        { $match: { zoneId: CURRENT_TIER_ID, difficulty: MYTHIC_DIFFICULTY, metric: { $ne: null } } },
-        { $sort: { "allStars.points": -1, partition: -1 } },
+        {
+          $match: {
+            zoneId: CURRENT_TIER_ID,
+            difficulty: MYTHIC_DIFFICULTY,
+            metric: { $ne: null },
+            $or: [{ "allStars.points": { $gt: 0 } }, { bestAmount: { $gt: 0 } }, { rankPercent: { $gt: 0 } }, { totalKills: { $gt: 0 } }],
+          },
+        },
+        { $sort: { "allStars.points": -1, rankPercent: -1, bestAmount: -1, totalKills: -1, partition: -1 } },
         {
           $group: {
             _id: { characterId: "$characterId", encounterId: "$encounter.id", metric: "$metric" },
@@ -3076,18 +3089,18 @@ class CharacterService {
     // The leaderboard stores one entry per character (best spec per boss in bossScores).
     // Filtering by specName on the top-level field is unreliable because specName is
     // chosen by $first (arbitrary). Instead, find entries where bossScores contains a
-    // non-zero score for the requested spec, filter bossScores in memory, and recompute
-    // the spec-specific allStars total.
+    // parse for the requested spec, filter bossScores in memory, and recompute the
+    // spec-specific allStars total. Some bosses have parses but zero all-star points.
     if (encounterId === undefined && normalizedSpecName !== undefined) {
       const specQuery = {
         ...baseQuery,
-        bossScores: { $elemMatch: { specName: normalizedSpecName, points: { $gt: 0 } } },
+        bossScores: { $elemMatch: { specName: normalizedSpecName, rankPercent: { $gt: 0 } } },
       };
 
       const allSpecEntries = (await CharacterLeaderboard.find(specQuery).lean()) as any[];
 
       for (const e of allSpecEntries) {
-        e.bossScores = (e.bossScores ?? []).filter((bs: any) => bs.specName === normalizedSpecName && bs.points > 0);
+        e.bossScores = (e.bossScores ?? []).filter((bs: any) => bs.specName === normalizedSpecName && bs.rankPercent > 0);
         e.allStarsPoints = e.bossScores.reduce((sum: number, bs: any) => sum + (bs.points ?? 0), 0);
         e.score = e.allStarsPoints;
       }
