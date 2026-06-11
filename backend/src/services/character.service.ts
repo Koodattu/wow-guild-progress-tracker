@@ -3027,10 +3027,20 @@ class CharacterService {
       await CharacterLeaderboard.syncIndexes();
 
       if (dedupedEntries.length > 0) {
-        // Insert in batches of 5000 to avoid memory pressure
+        // Write in batches of 5000 to avoid memory pressure
         const BATCH = 5000;
         for (let i = 0; i < dedupedEntries.length; i += BATCH) {
-          await CharacterLeaderboard.insertMany(dedupedEntries.slice(i, i + BATCH), { ordered: false });
+          const batch = dedupedEntries.slice(i, i + BATCH);
+          await CharacterLeaderboard.bulkWrite(
+            batch.map((entry) => ({
+              replaceOne: {
+                filter: this.toLeaderboardUniqueFilter(entry),
+                replacement: entry,
+                upsert: true,
+              },
+            })),
+            { ordered: false },
+          );
         }
       }
 
@@ -3040,6 +3050,18 @@ class CharacterService {
       logger.error("[Leaderboard] Build failed:", error);
       throw error;
     }
+  }
+
+  private toLeaderboardUniqueFilter(entry: any): Record<string, unknown> {
+    return {
+      zoneId: entry.zoneId,
+      difficulty: entry.difficulty,
+      type: entry.type,
+      encounterId: entry.encounterId,
+      partition: entry.partition,
+      metric: entry.metric,
+      characterId: entry.characterId,
+    };
   }
 
   /**

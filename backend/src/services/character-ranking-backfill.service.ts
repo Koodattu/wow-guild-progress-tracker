@@ -1311,13 +1311,34 @@ class CharacterRankingBackfillService {
     });
 
     if (dedupedEntries.length > 0) {
-      await CharacterLeaderboard.insertMany(dedupedEntries, { ordered: false });
+      await CharacterLeaderboard.bulkWrite(
+        dedupedEntries.map((entry) => ({
+          replaceOne: {
+            filter: this.toLeaderboardUniqueFilter(entry),
+            replacement: entry,
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
       if (invalidateOptions) {
         await cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey());
       }
     }
 
     return dedupedEntries.length;
+  }
+
+  private toLeaderboardUniqueFilter(entry: any): Record<string, unknown> {
+    return {
+      zoneId: entry.zoneId,
+      difficulty: entry.difficulty,
+      type: entry.type,
+      encounterId: entry.encounterId,
+      partition: entry.partition,
+      metric: entry.metric,
+      characterId: entry.characterId,
+    };
   }
 
   private toBossLeaderboardEntry(row: any, zoneId: number, partition: number | null, sourcePartition: number, guildName: string | null, guildRealm: string | null): any {
