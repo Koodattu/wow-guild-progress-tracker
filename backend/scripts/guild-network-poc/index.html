@@ -1,0 +1,1621 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guild Network PoC</title>
+    <style>
+      :root {
+        --bg: #050711;
+        --panel: #0b1020;
+        --panel-2: #111827;
+        --line: rgba(148, 163, 184, 0.22);
+        --line-strong: rgba(148, 163, 184, 0.38);
+        --text: #f8fafc;
+        --muted: #a5b4c8;
+        --quiet: #738196;
+        --blue: #60a5fa;
+        --blue-strong: #2563eb;
+        --green: #34d399;
+        --amber: #fbbf24;
+        --violet: #a78bfa;
+        --red: #fb7185;
+        --shadow: rgba(0, 0, 0, 0.34);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 288px minmax(0, 1fr) 360px;
+        height: 100vh;
+        min-height: 620px;
+        overflow: hidden;
+      }
+
+      .sidebar,
+      .inspector {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border-color: var(--line);
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        min-height: 0;
+        height: 100%;
+      }
+
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--line);
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .brand {
+        padding: 18px 16px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.2;
+        font-weight: 750;
+        letter-spacing: 0;
+      }
+
+      .brand p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.4;
+      }
+
+      .filters {
+        display: grid;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 650;
+      }
+
+      .field-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      select,
+      input[type="text"],
+      input[type="range"] {
+        width: 100%;
+      }
+
+      select,
+      input[type="text"] {
+        min-height: 34px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #070b16;
+        color: var(--text);
+        padding: 0 10px;
+        outline: none;
+      }
+
+      input[type="text"]::placeholder {
+        color: #8a96aa;
+      }
+
+      select:focus,
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--blue) 80%, white);
+        outline-offset: 2px;
+      }
+
+      input[type="range"] {
+        accent-color: var(--blue);
+      }
+
+      .value-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 26px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #070b16;
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 750;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #070b16;
+        padding: 0 10px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .toggle input {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--blue);
+      }
+
+      .button-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .button-row.three {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .button {
+        min-height: 34px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 720;
+        cursor: pointer;
+        transition:
+          background-color 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+
+      .button:hover {
+        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
+        background: #162033;
+      }
+
+      .button.primary {
+        border-color: color-mix(in srgb, var(--blue-strong) 70%, white);
+        background: var(--blue-strong);
+      }
+
+      .button.primary:hover {
+        background: #1d4ed8;
+      }
+
+      .button.subtle {
+        color: var(--muted);
+      }
+
+      .search-results {
+        display: none;
+        gap: 6px;
+        max-height: 180px;
+        overflow: auto;
+      }
+
+      .search-results.visible {
+        display: grid;
+      }
+
+      .search-result {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 8px 9px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .search-result:hover {
+        border-color: rgba(96, 165, 250, 0.48);
+        background: rgba(37, 99, 235, 0.16);
+      }
+
+      .timeline-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px 8px;
+      }
+
+      .timeline-head h2 {
+        margin: 0;
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 750;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 6px;
+        min-height: 0;
+        padding: 0 10px 16px;
+        overflow: auto;
+      }
+
+      .raid-button {
+        display: grid;
+        grid-template-columns: 10px minmax(0, 1fr);
+        gap: 9px;
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        padding: 9px 8px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .raid-button:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .raid-button.active {
+        border-color: rgba(96, 165, 250, 0.5);
+        background: rgba(37, 99, 235, 0.2);
+      }
+
+      .raid-dot {
+        width: 9px;
+        height: 9px;
+        margin-top: 4px;
+        border-radius: 999px;
+        background: var(--quiet);
+      }
+
+      .raid-button.active .raid-dot {
+        background: var(--blue);
+        box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
+      }
+
+      .raid-name {
+        display: block;
+        overflow: hidden;
+        color: var(--text);
+        font-size: 0.84rem;
+        font-weight: 720;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .raid-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+        color: var(--quiet);
+        font-size: 0.72rem;
+        line-height: 1.3;
+      }
+
+      .stage {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 25% 20%, rgba(96, 165, 250, 0.13), transparent 28%),
+          radial-gradient(circle at 80% 78%, rgba(52, 211, 153, 0.1), transparent 24%),
+          #050711;
+      }
+
+      .stage-toolbar {
+        position: absolute;
+        z-index: 3;
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        pointer-events: none;
+      }
+
+      .stage-title {
+        min-width: 220px;
+        max-width: min(620px, 70vw);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.82);
+        padding: 12px 14px;
+        box-shadow: 0 8px 18px var(--shadow);
+        pointer-events: auto;
+      }
+
+      .stage-title h2 {
+        margin: 0;
+        font-size: 1.04rem;
+        line-height: 1.25;
+        font-weight: 780;
+      }
+
+      .stage-title p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .stat-strip {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+        pointer-events: auto;
+      }
+
+      .stat {
+        min-width: 90px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.82);
+        padding: 8px 10px;
+        box-shadow: 0 8px 18px var(--shadow);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .loading,
+      .error {
+        position: absolute;
+        z-index: 4;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 7, 17, 0.72);
+        padding: 24px;
+      }
+
+      .loading.visible,
+      .error.visible {
+        display: flex;
+      }
+
+      .notice {
+        width: min(520px, 100%);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: #080d19;
+        padding: 16px;
+        box-shadow: 0 12px 24px var(--shadow);
+      }
+
+      .notice strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.95rem;
+      }
+
+      .notice p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.5;
+      }
+
+      .inspector-header {
+        padding: 18px 16px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .inspector-header h2 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 760;
+      }
+
+      .inspector-header p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.45;
+      }
+
+      .inspector-scroll {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+        min-width: 0;
+        overflow: auto;
+        padding: 14px 16px 18px;
+      }
+
+      .section {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .section h3 {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 760;
+      }
+
+      .selected-panel,
+      .list-row,
+      .bridge-row {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .selected-panel {
+        padding: 12px;
+        min-width: 0;
+      }
+
+      .selected-title {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+        font-size: 0.88rem;
+        font-weight: 760;
+      }
+
+      .selected-empty {
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+
+      .pair-list,
+      .bridge-list,
+      .example-list {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .list-row {
+        width: 100%;
+        padding: 9px 10px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .list-row:hover,
+      .list-row.active {
+        border-color: rgba(96, 165, 250, 0.48);
+        background: rgba(37, 99, 235, 0.16);
+      }
+
+      .row-main {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 720;
+      }
+
+      .row-main span:first-child {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .row-sub {
+        margin-top: 4px;
+        color: var(--quiet);
+        font-size: 0.72rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .bridge-row {
+        padding: 9px 10px;
+      }
+
+      button.bridge-row {
+        width: 100%;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      button.bridge-row:hover,
+      button.bridge-row.active {
+        border-color: rgba(251, 191, 36, 0.58);
+        background: rgba(251, 191, 36, 0.1);
+      }
+
+      .focus-banner {
+        display: none;
+        border: 1px solid rgba(251, 191, 36, 0.38);
+        border-radius: 8px;
+        background: rgba(251, 191, 36, 0.1);
+        padding: 10px;
+      }
+
+      .focus-banner.visible {
+        display: grid;
+        gap: 7px;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        max-width: 100%;
+        align-items: center;
+        min-height: 22px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #070b16;
+        color: var(--muted);
+        padding: 0 8px;
+        font-size: 0.7rem;
+      }
+
+      .legend {
+        position: absolute;
+        z-index: 3;
+        left: 14px;
+        bottom: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: min(680px, calc(100% - 28px));
+        pointer-events: none;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(5, 7, 17, 0.78);
+        padding: 5px 9px;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      .legend-swatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+      }
+
+      @media (max-width: 1180px) {
+        .app {
+          grid-template-columns: 244px minmax(0, 1fr);
+        }
+
+        .inspector {
+          grid-column: 1 / -1;
+          min-height: 0;
+          border-top: 1px solid var(--line);
+          border-left: none;
+        }
+
+        .inspector-scroll {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          max-height: 380px;
+        }
+      }
+
+      @media (max-width: 780px) {
+        .app {
+          display: block;
+          height: auto;
+          min-height: 100vh;
+          overflow: visible;
+        }
+
+        .sidebar,
+        .inspector {
+          height: auto;
+          min-height: 0;
+          border: none;
+        }
+
+        .timeline {
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          max-height: 260px;
+        }
+
+        .stage {
+          height: 68vh;
+          min-height: 520px;
+        }
+
+        .stage-toolbar {
+          display: grid;
+        }
+
+        .stat-strip {
+          justify-content: flex-start;
+        }
+
+        .inspector-scroll {
+          grid-template-columns: 1fr;
+          max-height: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition-duration: 0ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <h1>Guild Network PoC</h1>
+          <p>Report appearance network by raid tier.</p>
+        </div>
+
+        <div class="filters">
+          <div class="field">
+            <label for="scopeSelect">Graph scope</label>
+            <select id="scopeSelect">
+              <option value="raid">Selected raid</option>
+              <option value="recent">Latest 4 raids</option>
+              <option value="all">All tracked raids</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="minShared">Min shared characters</label>
+            <div class="field-row">
+              <input id="minShared" type="range" min="1" max="10" value="2" />
+              <span class="value-pill" id="minSharedValue">2</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="minReports">Min reports per guild</label>
+            <select id="minReports">
+              <option value="1">1 report</option>
+              <option value="2">2 reports</option>
+              <option value="3">3 reports</option>
+              <option value="5">5 reports</option>
+              <option value="10">10 reports</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="limitGuilds">Guild cap</label>
+            <select id="limitGuilds">
+              <option value="40">40 guilds</option>
+              <option value="60">60 guilds</option>
+              <option value="80" selected>80 guilds</option>
+              <option value="120">120 guilds</option>
+            </select>
+          </div>
+
+          <label class="toggle">
+            <span>Canonical only</span>
+            <input id="canonicalOnly" type="checkbox" />
+          </label>
+
+          <div class="field">
+            <label for="characterSearch">Focus character</label>
+            <input id="characterSearch" type="text" autocomplete="off" spellcheck="false" placeholder="Search by character name" />
+            <div class="search-results" id="characterResults"></div>
+          </div>
+
+          <div class="button-row">
+            <button class="button primary" id="applyButton" type="button">Apply filters</button>
+            <button class="button" id="playButton" type="button">Play raids</button>
+          </div>
+          <button class="button subtle" id="clearFocusButton" type="button">Clear character focus</button>
+        </div>
+
+        <div class="timeline-head">
+          <h2>Raid point</h2>
+        </div>
+        <div class="timeline" id="raidList"></div>
+      </aside>
+
+      <main class="stage" id="stage">
+        <div class="stage-toolbar">
+          <div class="stage-title">
+            <h2 id="raidTitle">Loading raids</h2>
+            <p id="raidSubtitle">Connecting to MongoDB.</p>
+          </div>
+          <div class="stat-strip" id="stats"></div>
+        </div>
+        <canvas id="graphCanvas"></canvas>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--blue)"></span> Guild</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--green)"></span> Strong shared roster</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--amber)"></span> Focused character</span>
+        </div>
+        <div class="loading visible" id="loading">
+          <div class="notice">
+            <strong>Loading graph</strong>
+            <p id="loadingText">Preparing raid timeline.</p>
+          </div>
+        </div>
+        <div class="error" id="error">
+          <div class="notice">
+            <strong>Graph unavailable</strong>
+            <p id="errorText"></p>
+          </div>
+        </div>
+      </main>
+
+      <aside class="inspector">
+        <div class="inspector-header">
+          <h2>Inspector</h2>
+          <p id="inspectorSubtitle">Select a guild or guild pair.</p>
+        </div>
+        <div class="inspector-scroll">
+          <section class="section">
+            <h3>Character focus</h3>
+            <div class="focus-banner" id="focusPanel"></div>
+          </section>
+
+          <section class="section">
+            <h3>Selection</h3>
+            <div class="selected-panel" id="selectionPanel">
+              <div class="selected-empty">No graph item selected.</div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h3>Strongest guild pairs</h3>
+            <div class="pair-list" id="pairList"></div>
+          </section>
+
+          <section class="section">
+            <h3>Bridge characters</h3>
+            <div class="bridge-list" id="bridgeList"></div>
+          </section>
+        </div>
+      </aside>
+    </div>
+
+    <script>
+      const state = {
+        raids: [],
+        selectedRaidId: null,
+        focusIdentity: "",
+        focusCharacter: null,
+        graph: { nodes: [], edges: [], bridges: [], stats: {}, selectedCharacter: null },
+        nodeById: new Map(),
+        selectedNode: null,
+        selectedEdge: null,
+        hoverNode: null,
+        hoverEdge: null,
+        transform: { x: 0, y: 0, scale: 1 },
+        draggingNode: null,
+        panning: false,
+        lastPointer: { x: 0, y: 0 },
+        playing: false,
+        playTimer: null,
+        searchTimer: null,
+        previousPositions: new Map(),
+      };
+
+      const canvas = document.getElementById("graphCanvas");
+      const stage = document.getElementById("stage");
+      const ctx = canvas.getContext("2d");
+      const raidList = document.getElementById("raidList");
+      const raidTitle = document.getElementById("raidTitle");
+      const raidSubtitle = document.getElementById("raidSubtitle");
+      const stats = document.getElementById("stats");
+      const loading = document.getElementById("loading");
+      const loadingText = document.getElementById("loadingText");
+      const error = document.getElementById("error");
+      const errorText = document.getElementById("errorText");
+      const scopeSelect = document.getElementById("scopeSelect");
+      const minShared = document.getElementById("minShared");
+      const minSharedValue = document.getElementById("minSharedValue");
+      const minReports = document.getElementById("minReports");
+      const limitGuilds = document.getElementById("limitGuilds");
+      const canonicalOnly = document.getElementById("canonicalOnly");
+      const characterSearch = document.getElementById("characterSearch");
+      const characterResults = document.getElementById("characterResults");
+      const applyButton = document.getElementById("applyButton");
+      const playButton = document.getElementById("playButton");
+      const clearFocusButton = document.getElementById("clearFocusButton");
+      const focusPanel = document.getElementById("focusPanel");
+      const selectionPanel = document.getElementById("selectionPanel");
+      const pairList = document.getElementById("pairList");
+      const bridgeList = document.getElementById("bridgeList");
+      const inspectorSubtitle = document.getElementById("inspectorSubtitle");
+
+      const palette = ["#60a5fa", "#34d399", "#a78bfa", "#fbbf24", "#fb7185", "#22d3ee", "#f97316", "#c084fc"];
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (match) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[match]);
+      }
+
+      function formatNumber(value) {
+        return new Intl.NumberFormat("en-US").format(value || 0);
+      }
+
+      function plural(value, singular, pluralValue = `${singular}s`) {
+        return `${formatNumber(value)} ${value === 1 ? singular : pluralValue}`;
+      }
+
+      function shortDate(value) {
+        if (!value) return "";
+        return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(new Date(value));
+      }
+
+      function dateRange(first, last) {
+        if (!first && !last) return "";
+        if (!first || first === last) return shortDate(last || first);
+        return `${shortDate(first)} to ${shortDate(last)}`;
+      }
+
+      function guildLabel(guild) {
+        return guild ? `${guild.name}-${guild.realm}` : "Unknown guild";
+      }
+
+      function characterLabel(character) {
+        return character ? `${character.name}-${character.realm}` : "";
+      }
+
+      function classColor(value) {
+        const index = Math.abs(Number(value) || 0) % palette.length;
+        return palette[index];
+      }
+
+      function showLoading(text) {
+        loadingText.textContent = text;
+        loading.classList.add("visible");
+        error.classList.remove("visible");
+      }
+
+      function hideLoading() {
+        loading.classList.remove("visible");
+      }
+
+      function showError(message) {
+        errorText.textContent = message;
+        error.classList.add("visible");
+        loading.classList.remove("visible");
+      }
+
+      async function fetchJson(path) {
+        const response = await fetch(path, { cache: "no-store" });
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body.error || "Request failed");
+        }
+        return body;
+      }
+
+      function updateMinSharedLabel() {
+        minSharedValue.textContent = minShared.value;
+      }
+
+      function buildQueryParams(extra = {}) {
+        return new URLSearchParams({
+          scope: scopeSelect.value,
+          zoneId: String(state.selectedRaidId || state.raids[0]?.id || 46),
+          recentCount: "4",
+          minShared: minShared.value,
+          minReports: minReports.value,
+          limitGuilds: limitGuilds.value,
+          canonicalOnly: canonicalOnly.checked ? "1" : "0",
+          focus: state.focusIdentity || "",
+          ...extra,
+        });
+      }
+
+      function renderRaidList() {
+        raidList.innerHTML = "";
+        for (const raid of state.raids) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `raid-button ${raid.id === state.selectedRaidId ? "active" : ""}`;
+          button.innerHTML = `
+            <span class="raid-dot"></span>
+            <span>
+              <span class="raid-name">${escapeHtml(raid.name)}</span>
+              <span class="raid-meta">
+                <span>${escapeHtml(raid.expansion)}</span>
+                <span>${formatNumber(raid.guildCount)} guilds</span>
+                <span>${formatNumber(raid.characterCount)} chars</span>
+              </span>
+            </span>
+          `;
+          button.addEventListener("click", () => selectRaid(raid.id));
+          raidList.appendChild(button);
+        }
+      }
+
+      function renderStats() {
+        const graphStats = state.graph.stats || {};
+        const items = [
+          ["Raids", graphStats.raidCount],
+          ["Guilds", graphStats.connectedGuilds],
+          ["Pairs", graphStats.edges],
+          ["Characters", graphStats.activeCharacters],
+          ["Bridges", graphStats.multiGuildCharacters],
+        ];
+        stats.innerHTML = items
+          .map(
+            ([label, value]) => `
+              <div class="stat">
+                <strong>${formatNumber(value)}</strong>
+                <span>${label}</span>
+              </div>
+            `,
+          )
+          .join("");
+      }
+
+      function getEdgeGuilds(edge) {
+        return [state.nodeById.get(edge.source), state.nodeById.get(edge.target)];
+      }
+
+      function renderFocusPanel() {
+        const character = state.focusCharacter;
+        if (!character) {
+          focusPanel.classList.remove("visible");
+          focusPanel.innerHTML = "";
+          return;
+        }
+
+        focusPanel.classList.add("visible");
+        focusPanel.innerHTML = `
+          <div class="row-main">
+            <span>${escapeHtml(characterLabel(character))}</span>
+            <span>${escapeHtml(character.className)}</span>
+          </div>
+          <div class="row-sub">${plural(character.guildCount, "guild")} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} report appearances</div>
+          <div class="chip-row">
+            ${character.guilds
+              .slice(0, 8)
+              .map((guild) => `<span class="chip">${escapeHtml(guildLabel(guild))}: ${plural(guild.raidCount, "raid")}</span>`)
+              .join("")}
+          </div>
+        `;
+      }
+
+      function renderSelectionPanel() {
+        if (state.selectedEdge) {
+          const [source, target] = getEdgeGuilds(state.selectedEdge);
+          inspectorSubtitle.textContent = `${state.selectedEdge.sharedCharacters} shared characters across ${plural(state.selectedEdge.raidCount, "raid")}`;
+          selectionPanel.innerHTML = `
+            <div class="selected-title">
+              <span>${escapeHtml(guildLabel(source))}</span>
+              <span style="color: var(--quiet)">to</span>
+              <span>${escapeHtml(guildLabel(target))}</span>
+            </div>
+            <div class="row-sub">${formatNumber(state.selectedEdge.reportWeight)} weighted report overlap · ${escapeHtml(state.selectedEdge.raidLabel || "")} · ${dateRange(
+              state.selectedEdge.firstSeenAt,
+              state.selectedEdge.lastSeenAt,
+            )}</div>
+            <div class="chip-row">
+              ${(state.selectedEdge.examples || [])
+                .slice(0, 14)
+                .map((item) => `<span class="chip" style="border-color:${classColor(item.classID)}66">${escapeHtml(item.name)}-${escapeHtml(item.realm)} · ${escapeHtml(item.className)}</span>`)
+                .join("")}
+            </div>
+          `;
+          return;
+        }
+
+        if (state.selectedNode) {
+          inspectorSubtitle.textContent = `${formatNumber(state.selectedNode.activeCharacters)} active character-raid rows`;
+          selectionPanel.innerHTML = `
+            <div class="selected-title"><span>${escapeHtml(guildLabel(state.selectedNode))}</span></div>
+            <div class="row-sub">${formatNumber(state.selectedNode.reportCount)} report appearances · ${plural(state.selectedNode.raidCount, "raid")} · ${dateRange(
+              state.selectedNode.firstSeenAt,
+              state.selectedNode.lastSeenAt,
+            )}</div>
+            <div class="chip-row">
+              <span class="chip">${formatNumber(state.selectedNode.connectionWeight)} shared-character weight</span>
+              ${state.selectedNode.raids
+                .slice(0, 8)
+                .map((raid) => `<span class="chip">${escapeHtml(raid.name)}: ${formatNumber(raid.reports)}</span>`)
+                .join("")}
+            </div>
+          `;
+          return;
+        }
+
+        inspectorSubtitle.textContent = state.focusCharacter ? "Focused character is highlighted." : "Select a guild, guild pair, or character.";
+        selectionPanel.innerHTML = `<div class="selected-empty">${
+          state.focusCharacter ? "Edges and guilds tied to the focused character are highlighted in amber." : "No graph item selected."
+        }</div>`;
+      }
+
+      function renderInspector() {
+        renderFocusPanel();
+        renderSelectionPanel();
+
+        pairList.innerHTML = state.graph.edges
+          .slice(0, 14)
+          .map((edge) => {
+            const [source, target] = getEdgeGuilds(edge);
+            const active = state.selectedEdge && state.selectedEdge.id === edge.id ? " active" : "";
+            const focus = edge.hasFocusCharacter ? " · focused character" : "";
+            return `
+              <button class="list-row${active}" type="button" data-edge-id="${escapeHtml(edge.id)}">
+                <div class="row-main">
+                  <span>${escapeHtml(guildLabel(source))} ↔ ${escapeHtml(guildLabel(target))}</span>
+                  <span>${formatNumber(edge.sharedCharacters)}</span>
+                </div>
+                <div class="row-sub">${plural(edge.raidCount, "raid")} · ${escapeHtml(edge.raidLabel || "")}${focus}</div>
+              </button>
+            `;
+          })
+          .join("");
+
+        for (const button of pairList.querySelectorAll("[data-edge-id]")) {
+          button.addEventListener("click", () => {
+            state.selectedEdge = state.graph.edges.find((edge) => edge.id === button.dataset.edgeId) || null;
+            state.selectedNode = null;
+            renderInspector();
+          });
+        }
+
+        bridgeList.innerHTML = state.graph.bridges
+          .slice(0, 18)
+          .map((character) => {
+            const active = state.focusIdentity === character.id ? " active" : "";
+            return `
+              <button class="bridge-row${active}" type="button" data-character-id="${escapeHtml(character.id)}">
+                <div class="row-main">
+                  <span>${escapeHtml(characterLabel(character))}</span>
+                  <span>${formatNumber(character.guildCount)}</span>
+                </div>
+                <div class="row-sub">${escapeHtml(character.className)} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} report appearances</div>
+                <div class="chip-row">
+                  ${character.guilds
+                    .slice(0, 5)
+                    .map((guild) => `<span class="chip">${escapeHtml(guildLabel(guild))}: ${formatNumber(guild.reports)}</span>`)
+                    .join("")}
+                </div>
+              </button>
+            `;
+          })
+          .join("");
+
+        for (const button of bridgeList.querySelectorAll("[data-character-id]")) {
+          button.addEventListener("click", () => {
+            const character = state.graph.bridges.find((item) => item.id === button.dataset.characterId);
+            if (character) selectCharacter(character);
+          });
+        }
+      }
+
+      function prepareGraph(graph) {
+        state.previousPositions = new Map(state.graph.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
+        state.graph = graph;
+        state.focusCharacter = graph.selectedCharacter || null;
+        state.nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+        const focusGuildIds = new Set((state.focusCharacter?.guilds || []).map((guild) => guild.id));
+        const rect = canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        graph.nodes.forEach((node, index) => {
+          const previous = state.previousPositions.get(node.id);
+          const angle = (index / Math.max(1, graph.nodes.length)) * Math.PI * 2;
+          const radius = 120 + (index % 9) * 12;
+          node.x = previous?.x ?? centerX + Math.cos(angle) * radius;
+          node.y = previous?.y ?? centerY + Math.sin(angle) * radius;
+          node.vx = 0;
+          node.vy = 0;
+          node.isFocus = focusGuildIds.has(node.id);
+          node.radius = Math.max(6, Math.min(24, 5 + Math.sqrt(node.activeCharacters || 1) * 1.2));
+          node.color = classColor(node.realm.length + node.name.length);
+        });
+
+        graph.edges.forEach((edge) => {
+          edge.sourceNode = state.nodeById.get(edge.source);
+          edge.targetNode = state.nodeById.get(edge.target);
+        });
+
+        state.selectedEdge = null;
+        state.selectedNode = null;
+      }
+
+      function tickSimulation() {
+        const nodes = state.graph.nodes;
+        const edges = state.graph.edges;
+        if (!nodes.length) return;
+
+        for (const edge of edges) {
+          const a = edge.sourceNode;
+          const b = edge.targetNode;
+          if (!a || !b) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const distance = Math.max(1, Math.hypot(dx, dy));
+          const targetDistance = Math.max(74, 160 - Math.min(edge.sharedCharacters, 30) * 2.4 - Math.min(edge.raidCount || 1, 8) * 4);
+          const force = (distance - targetDistance) * 0.0055;
+          const fx = (dx / distance) * force;
+          const fy = (dy / distance) * force;
+          if (state.draggingNode !== a) {
+            a.vx += fx;
+            a.vy += fy;
+          }
+          if (state.draggingNode !== b) {
+            b.vx -= fx;
+            b.vy -= fy;
+          }
+        }
+
+        for (let i = 0; i < nodes.length; i += 1) {
+          const a = nodes[i];
+          for (let j = i + 1; j < nodes.length; j += 1) {
+            const b = nodes[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const distance = Math.max(1, Math.hypot(dx, dy));
+            const minDistance = a.radius + b.radius + 26;
+            const strength = Math.min(1.8, (minDistance * minDistance) / (distance * distance)) * 0.78;
+            const fx = (dx / distance) * strength;
+            const fy = (dy / distance) * strength;
+            if (state.draggingNode !== a) {
+              a.vx -= fx;
+              a.vy -= fy;
+            }
+            if (state.draggingNode !== b) {
+              b.vx += fx;
+              b.vy += fy;
+            }
+          }
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        for (const node of nodes) {
+          if (state.draggingNode === node) continue;
+          node.vx += (centerX - node.x) * 0.0018;
+          node.vy += (centerY - node.y) * 0.0018;
+          node.vx *= 0.86;
+          node.vy *= 0.86;
+          node.x += node.vx;
+          node.y += node.vy;
+        }
+      }
+
+      function resizeCanvas() {
+        const rect = stage.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+        canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+
+      function worldToScreen(point) {
+        return {
+          x: point.x * state.transform.scale + state.transform.x,
+          y: point.y * state.transform.scale + state.transform.y,
+        };
+      }
+
+      function screenToWorld(point) {
+        return {
+          x: (point.x - state.transform.x) / state.transform.scale,
+          y: (point.y - state.transform.y) / state.transform.scale,
+        };
+      }
+
+      function drawGraph() {
+        tickSimulation();
+
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        ctx.save();
+        ctx.translate(state.transform.x, state.transform.y);
+        ctx.scale(state.transform.scale, state.transform.scale);
+
+        for (const edge of state.graph.edges) {
+          const a = edge.sourceNode;
+          const b = edge.targetNode;
+          if (!a || !b) continue;
+          const selected = state.selectedEdge && state.selectedEdge.id === edge.id;
+          const hovered = state.hoverEdge && state.hoverEdge.id === edge.id;
+          const focused = edge.hasFocusCharacter;
+          const width = Math.max(1, Math.min(9, Math.sqrt(edge.sharedCharacters) + Math.min(edge.raidCount || 0, 8) * 0.18));
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = selected
+            ? "rgba(251, 191, 36, 0.95)"
+            : focused
+              ? "rgba(251, 191, 36, 0.82)"
+              : hovered
+                ? "rgba(52, 211, 153, 0.82)"
+                : `rgba(96, 165, 250, ${Math.min(0.48, 0.18 + (edge.raidCount || 1) * 0.025)})`;
+          ctx.lineWidth = selected || hovered || focused ? width + 1.4 : width;
+          ctx.stroke();
+        }
+
+        for (const node of state.graph.nodes) {
+          const selected = state.selectedNode && state.selectedNode.id === node.id;
+          const hovered = state.hoverNode && state.hoverNode.id === node.id;
+          const focused = node.isFocus;
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius + (selected || hovered || focused ? 3 : 0), 0, Math.PI * 2);
+          ctx.fillStyle = selected ? "#fbbf24" : hovered ? "#34d399" : focused ? "#fbbf24" : node.color;
+          ctx.fill();
+          ctx.lineWidth = selected || hovered || focused ? 2.4 : 1.2;
+          ctx.strokeStyle = selected || hovered || focused ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.36)";
+          ctx.stroke();
+
+          const shouldLabel = selected || hovered || focused || node.connectionWeight >= 12 || state.transform.scale > 1.25;
+          if (shouldLabel) {
+            ctx.font = "650 11px Inter, system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            const label = node.name.length > 22 ? `${node.name.slice(0, 21)}...` : node.name;
+            const textWidth = ctx.measureText(label).width;
+            const y = node.y + node.radius + 6;
+            ctx.fillStyle = "rgba(5, 7, 17, 0.84)";
+            ctx.fillRect(node.x - textWidth / 2 - 5, y - 2, textWidth + 10, 16);
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillText(label, node.x, y);
+          }
+        }
+
+        ctx.restore();
+        requestAnimationFrame(drawGraph);
+      }
+
+      function nodeAt(point) {
+        const world = screenToWorld(point);
+        let best = null;
+        let bestDistance = Infinity;
+        for (const node of state.graph.nodes) {
+          const distance = Math.hypot(world.x - node.x, world.y - node.y);
+          if (distance <= node.radius + 6 && distance < bestDistance) {
+            best = node;
+            bestDistance = distance;
+          }
+        }
+        return best;
+      }
+
+      function distanceToSegment(point, a, b) {
+        const world = screenToWorld(point);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSq = dx * dx + dy * dy;
+        if (lengthSq === 0) return Math.hypot(world.x - a.x, world.y - a.y);
+        const t = Math.max(0, Math.min(1, ((world.x - a.x) * dx + (world.y - a.y) * dy) / lengthSq));
+        const x = a.x + t * dx;
+        const y = a.y + t * dy;
+        return Math.hypot(world.x - x, world.y - y);
+      }
+
+      function edgeAt(point) {
+        let best = null;
+        let bestDistance = Infinity;
+        for (const edge of state.graph.edges) {
+          if (!edge.sourceNode || !edge.targetNode) continue;
+          const distance = distanceToSegment(point, edge.sourceNode, edge.targetNode);
+          const threshold = Math.max(7, Math.sqrt(edge.sharedCharacters) + 4) / state.transform.scale;
+          if (distance <= threshold && distance < bestDistance) {
+            best = edge;
+            bestDistance = distance;
+          }
+        }
+        return best;
+      }
+
+      function pointerPosition(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
+      }
+
+      async function loadGraph() {
+        if (!state.selectedRaidId) return;
+        const scope = scopeSelect.value;
+        const title = scope === "all" ? "all tracked raids" : scope === "recent" ? "latest 4 raids" : state.raids.find((item) => item.id === state.selectedRaidId)?.name || "raid";
+        showLoading(`Loading ${title} graph.`);
+        const graph = await fetchJson(`/api/graph?${buildQueryParams().toString()}`);
+        prepareGraph(graph);
+        raidTitle.textContent = graph.scope?.label || graph.raid.name;
+        const reportWord = Number(graph.params.minReports) === 1 ? "report" : "reports";
+        const guildCap = Number(graph.params.limitGuilds);
+        const focusCapNote = state.focusIdentity && guildCap && Number(graph.stats.connectedGuilds) > guildCap ? ` · ${guildCap} guild cap + focus` : "";
+        raidSubtitle.textContent = `${plural(graph.stats.raidCount, "raid")} · min ${graph.params.minShared} shared · min ${graph.params.minReports} ${reportWord}${focusCapNote}`;
+        if (state.focusIdentity && !graph.selectedCharacter) {
+          characterSearch.value = "";
+          state.focusIdentity = "";
+          state.focusCharacter = null;
+        }
+        renderStats();
+        renderInspector();
+        renderRaidList();
+        hideLoading();
+      }
+
+      async function selectRaid(raidId) {
+        state.selectedRaidId = raidId;
+        if (scopeSelect.value !== "raid") {
+          scopeSelect.value = "raid";
+        }
+        try {
+          await loadGraph();
+        } catch (loadError) {
+          showError(loadError.message);
+        }
+      }
+
+      async function selectCharacter(character) {
+        state.focusIdentity = character.id;
+        characterSearch.value = characterLabel(character);
+        characterResults.classList.remove("visible");
+        try {
+          await loadGraph();
+        } catch (loadError) {
+          showError(loadError.message);
+        }
+      }
+
+      async function searchCharacters() {
+        const query = characterSearch.value.trim();
+        if (query.length < 2) {
+          characterResults.classList.remove("visible");
+          characterResults.innerHTML = "";
+          return;
+        }
+
+        try {
+          const data = await fetchJson(`/api/characters?${buildQueryParams({ q: query, limit: "12" }).toString()}`);
+          const characters = data.characters || [];
+          characterResults.innerHTML = characters
+            .map(
+              (character) => `
+                <button class="search-result" type="button" data-character-id="${escapeHtml(character.id)}">
+                  <div class="row-main">
+                    <span>${escapeHtml(characterLabel(character))}</span>
+                    <span>${formatNumber(character.guildCount)}</span>
+                  </div>
+                  <div class="row-sub">${escapeHtml(character.className)} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} reports</div>
+                </button>
+              `,
+            )
+            .join("");
+          characterResults.classList.toggle("visible", characters.length > 0);
+          for (const button of characterResults.querySelectorAll("[data-character-id]")) {
+            button.addEventListener("click", () => {
+              const character = characters.find((item) => item.id === button.dataset.characterId);
+              if (character) selectCharacter(character);
+            });
+          }
+        } catch {
+          characterResults.innerHTML = `<div class="selected-empty">Search failed.</div>`;
+          characterResults.classList.add("visible");
+        }
+      }
+
+      function clearCharacterFocus() {
+        state.focusIdentity = "";
+        state.focusCharacter = null;
+        characterSearch.value = "";
+        characterResults.innerHTML = "";
+        characterResults.classList.remove("visible");
+        loadGraph().catch((loadError) => showError(loadError.message));
+      }
+
+      function startPlayback() {
+        if (state.playing || state.raids.length < 2) return;
+        scopeSelect.value = "raid";
+        state.playing = true;
+        playButton.textContent = "Pause";
+        const step = async () => {
+          const currentIndex = state.raids.findIndex((raid) => raid.id === state.selectedRaidId);
+          const nextIndex = currentIndex <= 0 ? state.raids.length - 1 : currentIndex - 1;
+          await selectRaid(state.raids[nextIndex].id);
+        };
+        state.playTimer = window.setInterval(step, 2800);
+      }
+
+      function stopPlayback() {
+        state.playing = false;
+        playButton.textContent = "Play raids";
+        if (state.playTimer) {
+          window.clearInterval(state.playTimer);
+          state.playTimer = null;
+        }
+      }
+
+      async function init() {
+        resizeCanvas();
+        updateMinSharedLabel();
+        try {
+          const data = await fetchJson("/api/raids");
+          state.raids = data.raids || [];
+          state.selectedRaidId = state.raids[0]?.id || null;
+          renderRaidList();
+          if (state.selectedRaidId) {
+            await loadGraph();
+          } else {
+            showError("No tracked raid participation rows found.");
+          }
+        } catch (initError) {
+          showError(initError.message);
+        }
+      }
+
+      minShared.addEventListener("input", updateMinSharedLabel);
+      applyButton.addEventListener("click", () => {
+        loadGraph().catch((loadError) => showError(loadError.message));
+      });
+      scopeSelect.addEventListener("change", () => {
+        loadGraph().catch((loadError) => showError(loadError.message));
+      });
+      minReports.addEventListener("change", () => {
+        searchCharacters();
+      });
+      canonicalOnly.addEventListener("change", () => {
+        searchCharacters();
+      });
+      characterSearch.addEventListener("input", () => {
+        window.clearTimeout(state.searchTimer);
+        state.searchTimer = window.setTimeout(searchCharacters, 180);
+      });
+      clearFocusButton.addEventListener("click", clearCharacterFocus);
+      playButton.addEventListener("click", () => {
+        if (state.playing) stopPlayback();
+        else startPlayback();
+      });
+
+      canvas.addEventListener("pointerdown", (event) => {
+        const point = pointerPosition(event);
+        state.lastPointer = point;
+        const node = nodeAt(point);
+        if (node) {
+          state.draggingNode = node;
+          state.selectedNode = node;
+          state.selectedEdge = null;
+          renderInspector();
+          canvas.setPointerCapture(event.pointerId);
+          return;
+        }
+
+        const edge = edgeAt(point);
+        if (edge) {
+          state.selectedEdge = edge;
+          state.selectedNode = null;
+          renderInspector();
+          return;
+        }
+
+        state.panning = true;
+        canvas.setPointerCapture(event.pointerId);
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        const point = pointerPosition(event);
+        if (state.draggingNode) {
+          const world = screenToWorld(point);
+          state.draggingNode.x = world.x;
+          state.draggingNode.y = world.y;
+          state.draggingNode.vx = 0;
+          state.draggingNode.vy = 0;
+        } else if (state.panning) {
+          state.transform.x += point.x - state.lastPointer.x;
+          state.transform.y += point.y - state.lastPointer.y;
+        } else {
+          state.hoverNode = nodeAt(point);
+          state.hoverEdge = state.hoverNode ? null : edgeAt(point);
+          canvas.style.cursor = state.hoverNode ? "grab" : state.hoverEdge ? "pointer" : "default";
+        }
+        state.lastPointer = point;
+      });
+
+      canvas.addEventListener("pointerup", (event) => {
+        state.draggingNode = null;
+        state.panning = false;
+        try {
+          canvas.releasePointerCapture(event.pointerId);
+        } catch {}
+      });
+
+      canvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const point = pointerPosition(event);
+        const before = screenToWorld(point);
+        const factor = event.deltaY > 0 ? 0.9 : 1.1;
+        state.transform.scale = Math.max(0.35, Math.min(2.4, state.transform.scale * factor));
+        const after = worldToScreen(before);
+        state.transform.x += point.x - after.x;
+        state.transform.y += point.y - after.y;
+      });
+
+      window.addEventListener("resize", resizeCanvas);
+      if ("ResizeObserver" in window) {
+        new ResizeObserver(resizeCanvas).observe(stage);
+      }
+
+      init();
+      requestAnimationFrame(drawGraph);
+    </script>
+  </body>
+</html>
