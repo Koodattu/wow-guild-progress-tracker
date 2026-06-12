@@ -1955,6 +1955,74 @@
         return a;
       }
 
+      function previousDotAlpha(c, g, current) {
+        const currentSlot = current.slotOf.get(c);
+        let a = currentSlot === undefined ? 0.26 : current.g[currentSlot] === g ? 0.1 : 0.22;
+        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.12;
+        if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.18;
+        if (view.selChar >= 0) a *= c === view.selChar ? 2.5 : 0.1;
+        return Math.min(0.65, a);
+      }
+
+      function drawPreviousTierContext(t, current) {
+        if (view.tier <= 0) return;
+        const prev = F.tiers[view.tier - 1];
+
+        ctx.save();
+        ctx.setLineDash([5 / t.k, 5 / t.k]);
+        for (const [g, n] of prev.roster) {
+          const isCurrent = current.roster.has(g);
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const r = hullRadius(n);
+          ctx.beginPath();
+          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(148, 163, 184, ${isSel || isHover ? 0.16 : isCurrent ? 0.045 : 0.085})`;
+          ctx.fill();
+          ctx.lineWidth = (isSel || isHover ? 1.5 : 0.9) / t.k;
+          ctx.strokeStyle = `rgba(203, 213, 225, ${isSel || isHover ? 0.55 : isCurrent ? 0.18 : 0.32})`;
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        const buckets = new Map();
+        for (let s = 0; s < prev.count; s += 1) {
+          const alpha = previousDotAlpha(prev.c[s], prev.g[s], current);
+          if (alpha < 0.02) continue;
+          const bucket = Math.min(13, Math.max(1, Math.round(alpha * 20)));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.3 + Math.min(2, Math.sqrt(prev.r[s]) * 0.32);
+          path.moveTo(prev.x[s] + r, prev.y[s]);
+          path.arc(prev.x[s], prev.y[s], r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = bucket / 20;
+          ctx.fillStyle = "#94a3b8";
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        if (!view.showLabels) return;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g, n] of prev.roster) {
+          if (current.roster.has(g)) continue;
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const guild = M.guilds[g];
+          const fontPx = clamp(10 / t.k, 4, 180);
+          const x = F.gx[g];
+          const y = F.gy[g] - hullRadius(n) - 3 / t.k;
+          ctx.font = `650 ${fontPx}px Inter, system-ui, sans-serif`;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(guild.name, x, y);
+          ctx.fillStyle = isSel || isHover ? "#e2e8f0" : "rgba(203, 213, 225, 0.68)";
+          ctx.fillText(guild.name, x, y);
+        }
+      }
+
       function drawGalaxy(now) {
         const t = tf();
         const td = F.tiers[view.tier];
@@ -1970,6 +2038,8 @@
         ctx.save();
         ctx.translate(t.x, t.y);
         ctx.scale(t.k, t.k);
+
+        drawPreviousTierContext(t, td);
 
         // guild hulls
         for (const [g, n] of td.roster) {
@@ -2556,6 +2626,15 @@
           if (d < hullRadius(n) && d < bestGD) { bestGD = d; bestG = g; }
         }
         if (bestG !== null) return { kind: "guild", g: bestG };
+        if (view.tier > 0) {
+          const prev = F.tiers[view.tier - 1];
+          for (const [g, n] of prev.roster) {
+            if (td.roster.has(g)) continue;
+            const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
+            if (d < hullRadius(n) && d < bestGD) { bestGD = d; bestG = g; }
+          }
+          if (bestG !== null) return { kind: "guild", g: bestG, previous: true };
+        }
         return null;
       }
 
@@ -2646,6 +2725,11 @@
             return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(at.roster.get(hit.g) || 0)} distinct members all time · click to inspect`;
           }
           const n = F.tiers[view.tier].roster.get(hit.g) || 0;
+          if (!n && hit.previous && view.tier > 0) {
+            const prev = F.tiers[view.tier - 1];
+            const prevN = prev.roster.get(hit.g) || 0;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(prevN)} raiders in previous tier · click to inspect`;
+          }
           return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} raiders this tier · click to inspect`;
         }
         if (hit.kind === "node") {
