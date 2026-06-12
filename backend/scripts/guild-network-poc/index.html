@@ -101,8 +101,26 @@
 
       .mode-row {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .mode-row .button {
+        font-size: 0.76rem;
+        padding: 0 4px;
+      }
+
+      .glink {
+        cursor: pointer;
+      }
+
+      .glink:hover {
+        color: var(--blue);
+        text-decoration: underline;
+      }
+
+      .timeline.dimmed {
+        opacity: 0.55;
       }
 
       .button {
@@ -633,6 +651,7 @@
           <h3>View</h3>
           <div class="mode-row">
             <button class="button active" id="modeGalaxy" type="button">Galaxy</button>
+            <button class="button" id="modeAll" type="button">All time</button>
             <button class="button" id="modeFlow" type="button">Lineages</button>
           </div>
         </div>
@@ -650,6 +669,7 @@
             </select>
           </div>
           <label class="toggle"><span>Migration flows (prev tier)</span><input id="tglFlows" type="checkbox" checked /></label>
+          <label class="toggle"><span>Migration lines (stay visible)</span><input id="tglTrails" type="checkbox" checked /></label>
           <label class="toggle"><span>Cross-guild fibers (pugging)</span><input id="tglFibers" type="checkbox" checked /></label>
           <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
         </div>
@@ -658,6 +678,12 @@
           <h3>Find a character</h3>
           <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Type a character name…" />
           <div class="search-results" id="searchResults"></div>
+        </div>
+
+        <div class="side-section">
+          <h3>Find a guild</h3>
+          <input id="gsearch" type="text" autocomplete="off" spellcheck="false" placeholder="Type a guild name…" />
+          <div class="search-results" id="gsearchResults"></div>
         </div>
 
         <div class="side-section">
@@ -674,8 +700,9 @@
           <p class="hint">
             <b>Drag</b> pan · <b>wheel</b> zoom · <b>click</b> a dot or cluster to inspect ·
             <b>←/→</b> step tiers · <b>space</b> play · <b>esc</b> clear.
-            Guilds are not nodes here — each cluster <i>is</i> its roster. Play the timeline and
-            watch raiders migrate between guilds.
+            Guilds are not nodes here — each cluster <i>is</i> its roster. Zoom in far enough to
+            read character names. <b>All time</b> places every multi-guild raider between all the
+            guilds of their career.
           </p>
         </div>
       </aside>
@@ -762,16 +789,17 @@
         minReports: 2,
         classFilter: new Set(),
         showFlows: true,
+        showTrails: true,
         showFibers: true,
         showLabels: true,
         selChar: -1,
         selGuild: -1,
         hover: null, // {kind:"char"|"guild"|"flow", ...}
-        tf: { galaxy: { x: 0, y: 0, k: 1 }, flow: { x: 0, y: 0, k: 1 } },
+        tf: { galaxy: { x: 0, y: 0, k: 1 }, all: { x: 0, y: 0, k: 1 }, flow: { x: 0, y: 0, k: 1 } },
         trans: null, // tier transition animation
         playing: false,
         playTimer: null,
-        fitted: { galaxy: false, flow: false },
+        fitted: { galaxy: false, all: false, flow: false },
       };
 
       const canvas = document.getElementById("canvas");
@@ -781,7 +809,8 @@
       const els = Object.fromEntries(
         ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
          "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
-         "modeGalaxy", "modeFlow", "minReports", "tglFlows", "tglFibers", "tglLabels", "resetView", "clearSel"]
+         "gsearch", "gsearchResults", "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows",
+         "tglTrails", "tglFibers", "tglLabels", "resetView", "clearSel"]
           .map((id) => [id, document.getElementById(id)]),
       );
 
@@ -1072,7 +1101,7 @@
           const st = { present: td.count, guilds: td.roster.size, stayed: 0, switched: 0, newFaces: 0, returning: 0, departed: 0 };
           if (t > 0) {
             const prev = tiers[t - 1];
-            const flowMap = new Map(); // gPrev*100000+gCur -> n
+            const flowMap = new Map(); // gPrev*100000+gCur -> { n, cs: sample char idxs }
             for (let s = 0; s < td.count; s += 1) {
               const c = td.c[s];
               const prevSlot = prev.slotOf.get(c);
@@ -1081,7 +1110,10 @@
                 const b = td.g[s];
                 if (a === b) st.stayed += 1; else st.switched += 1;
                 const key = a * 100000 + b;
-                flowMap.set(key, (flowMap.get(key) || 0) + 1);
+                let flow = flowMap.get(key);
+                if (!flow) flowMap.set(key, (flow = { n: 0, cs: [] }));
+                flow.n += 1;
+                if (flow.cs.length < 30) flow.cs.push(c);
               } else if (firstTier[c] === t) {
                 st.newFaces += 1;
               } else {
@@ -1105,6 +1137,8 @@
         F.gy = gy;
         F.guildMax = guildMax;
         F.active = active;
+        F.ord = ord;
+        F.allTime = null;
 
         buildAlluvial();
 
@@ -1151,18 +1185,21 @@
           const raw = F.flows[t];
           if (!raw) continue;
           const agg = new Map();
-          for (const [key, n] of raw) {
+          for (const [key, f] of raw) {
             const a = lumpOf(t - 1, Math.floor(key / 100000));
             const b = lumpOf(t, key % 100000);
             const k2 = (a + 2) * 100000 + (b + 2);
-            agg.set(k2, (agg.get(k2) || 0) + n);
+            let cur = agg.get(k2);
+            if (!cur) agg.set(k2, (cur = { n: 0, cs: [] }));
+            cur.n += f.n;
+            for (const c of f.cs) if (cur.cs.length < 12) cur.cs.push(c);
           }
           const list = [];
-          for (const [k2, n] of agg) {
+          for (const [k2, f] of agg) {
             const a = Math.floor(k2 / 100000) - 2;
             const b = (k2 % 100000) - 2;
-            if (n < 2 && a !== b) continue;
-            list.push({ a, b, n });
+            if (f.n < 2 && a !== b) continue;
+            list.push({ a, b, n: f.n, cs: f.cs });
           }
 
           const prevCol = columns[t - 1];
@@ -1253,6 +1290,141 @@
         view.fitted.flow = true;
       }
 
+      function panTo(wx, wy) {
+        const rect = stage.getBoundingClientRect();
+        const t = tf();
+        t.x = rect.width / 2 - wx * t.k;
+        t.y = (rect.height - 60) / 2 - wy * t.k;
+      }
+
+      /* ============================== all-time career graph ============================== */
+
+      // Aggregates every tier: loyalists pack inside their one guild's cluster, while
+      // multi-guild characters float at the weighted centre of every guild they raided
+      // with, tethered to each by a fiber. The career social graph in one picture.
+      function buildAllTime() {
+        if (F.allTime) return F.allTime;
+        const mr = view.minReports;
+        const singles = new Map(); // g -> [[c, reports]]
+        const multis = [];
+        let count = 0;
+        for (let c = 0; c < M.chars.length; c += 1) {
+          const mem = M.chars[c].mem;
+          const totals = new Map();
+          for (let i = 0; i < mem.length; i += 3) {
+            if (mem[i + 2] >= mr) totals.set(mem[i + 1], (totals.get(mem[i + 1]) || 0) + mem[i + 2]);
+          }
+          if (!totals.size) continue;
+          count += 1;
+          if (totals.size === 1) {
+            const [g, rep] = totals.entries().next().value;
+            let list = singles.get(g);
+            if (!list) singles.set(g, (list = []));
+            list.push([c, rep]);
+          } else {
+            multis.push([c, totals]);
+          }
+        }
+
+        const at = {
+          count,
+          c: new Int32Array(count),
+          g: new Int32Array(count),
+          rep: new Int32Array(count),
+          guildN: new Int32Array(count),
+          x: new Float32Array(count),
+          y: new Float32Array(count),
+          slotOf: new Map(),
+          roster: new Map(), // g -> distinct members ever
+          hullN: new Map(), // g -> loyalist count (sizes the hull)
+          fibers: [], // [slot, g, slot, g, ...] for multi-guild characters
+          multiCount: multis.length,
+          nomads: multis.map(([c, totals]) => [c, totals.size]).sort((p, q) => q[1] - p[1]).slice(0, 14),
+          selMaskG: -2,
+          selMask: null,
+          grid: null,
+        };
+
+        let s = 0;
+        for (const [g, list] of singles) {
+          list.sort((p, q) => F.ord[p[0]] - F.ord[q[0]]);
+          ensurePhyllo(list.length);
+          at.hullN.set(g, list.length);
+          at.roster.set(g, (at.roster.get(g) || 0) + list.length);
+          for (let k = 0; k < list.length; k += 1) {
+            at.c[s] = list[k][0];
+            at.g[s] = g;
+            at.rep[s] = list[k][1];
+            at.guildN[s] = 1;
+            at.x[s] = F.gx[g] + phX[k];
+            at.y[s] = F.gy[g] + phY[k];
+            at.slotOf.set(list[k][0], s);
+            s += 1;
+          }
+        }
+        for (const [c, totals] of multis) {
+          let wsum = 0, x = 0, y = 0, best = -1, bestW = 0, repSum = 0;
+          for (const [g, w] of totals) {
+            const ww = Math.sqrt(w);
+            wsum += ww;
+            x += F.gx[g] * ww;
+            y += F.gy[g] * ww;
+            repSum += w;
+            if (w > bestW) { bestW = w; best = g; }
+            at.roster.set(g, (at.roster.get(g) || 0) + 1);
+          }
+          const h = hash32("m" + c);
+          const rad = 4 + ((h >>> 8) % 18);
+          at.c[s] = c;
+          at.g[s] = best;
+          at.rep[s] = repSum;
+          at.guildN[s] = totals.size;
+          at.x[s] = x / wsum + Math.cos(h % 6283 / 1000) * rad;
+          at.y[s] = y / wsum + Math.sin(h % 6283 / 1000) * rad;
+          at.slotOf.set(c, s);
+          for (const [g] of totals) at.fibers.push(s, g);
+          s += 1;
+        }
+
+        F.allTime = at;
+        return at;
+      }
+
+      function fitAll() {
+        const at = buildAllTime();
+        let weight = 0, mx = 0, my = 0;
+        for (const [g, n] of at.roster) { weight += n; mx += F.gx[g] * n; my += F.gy[g] * n; }
+        if (!weight) { fitBounds(view.tf.all, -100, -100, 100, 100); view.fitted.all = true; return; }
+        mx /= weight; my /= weight;
+        let vx = 0, vy = 0;
+        for (const [g, n] of at.roster) {
+          vx += n * (F.gx[g] - mx) ** 2;
+          vy += n * (F.gy[g] - my) ** 2;
+        }
+        const rx = Math.max(260, Math.sqrt(vx / weight) * 2.4);
+        const ry = Math.max(260, Math.sqrt(vy / weight) * 2.4);
+        fitBounds(view.tf.all, mx - rx, my - ry, mx + rx, my + ry);
+        view.fitted.all = true;
+      }
+
+      // characters whose guild changed since the previous tier, as ready-to-draw lines
+      function tierTrails(t) {
+        const td = F.tiers[t];
+        if (td.trailsAll) return td.trailsAll;
+        const out = [];
+        if (t > 0) {
+          const prev = F.tiers[t - 1];
+          for (let s = 0; s < td.count; s += 1) {
+            const ps = prev.slotOf.get(td.c[s]);
+            if (ps !== undefined && prev.g[ps] !== td.g[s]) {
+              out.push([prev.x[ps], prev.y[ps], td.x[s], td.y[s], td.c[s]]);
+            }
+          }
+        }
+        td.trailsAll = out;
+        return out;
+      }
+
       /* ============================== tier switching ============================== */
 
       function setTier(t, animate = true) {
@@ -1314,6 +1486,11 @@
         if (view.mode === "galaxy") {
           els.titleMain.textContent = tier.name;
           els.titleSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · tier ${view.tier + 1} of ${M.tiers.length}`;
+        } else if (view.mode === "all") {
+          const first = M.tiers[0];
+          const last = M.tiers[M.tiers.length - 1];
+          els.titleMain.textContent = "All raids combined";
+          els.titleSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · multi-guild raiders float between every guild of their career`;
         } else {
           els.titleMain.textContent = "Guild lineages";
           els.titleSub.textContent = "Each band is a guild's roster flowing through time. Ribbons are raiders who stayed or moved.";
@@ -1336,12 +1513,20 @@
             ["Gone", st.departed],
           ];
           if (view.tier === 0) items = items.slice(0, 2);
+        } else if (view.mode === "all") {
+          const at = buildAllTime();
+          items = [
+            ["Characters", at.count],
+            ["Guilds", at.roster.size],
+            ["Loyalists", at.count - at.multiCount],
+            ["Multi-guild", at.multiCount],
+          ];
         } else {
           let migrations = 0;
           for (const flowMap of F.flows) {
             if (!flowMap) continue;
-            for (const [key, n] of flowMap) {
-              if (Math.floor(key / 100000) !== key % 100000) migrations += n;
+            for (const [key, flow] of flowMap) {
+              if (Math.floor(key / 100000) !== key % 100000) migrations += flow.n;
             }
           }
           items = [
@@ -1366,7 +1551,11 @@
             </button>`)
           .join("");
         for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
-          cell.addEventListener("click", () => { stopPlay(); setTier(Number(cell.dataset.t)); });
+          cell.addEventListener("click", () => {
+            stopPlay();
+            if (view.mode === "all") setMode("galaxy");
+            setTier(Number(cell.dataset.t));
+          });
         }
         renderTimeline();
       }
@@ -1382,7 +1571,16 @@
       function renderInspector() {
         if (view.selChar >= 0) return renderCharPanel(view.selChar);
         if (view.selGuild >= 0) return renderGuildPanel(view.selGuild);
+        if (view.mode === "all") return renderAllPanel();
         renderTierPanel();
+      }
+
+      function nameChips(flow, max = 8) {
+        const shown = flow.cs.slice(0, max);
+        const extra = flow.n - shown.length;
+        return shown
+          .map((c) => `<span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">${esc(M.chars[c].name)}</span>`)
+          .join("") + (extra > 0 ? `<span class="chip static">+${fmt(extra)} more</span>` : "");
       }
 
       function bindInspectorActions() {
@@ -1407,12 +1605,12 @@
         const top = Array.from(td.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
         const moves = [];
         if (F.flows[t]) {
-          for (const [key, n] of F.flows[t]) {
+          for (const [key, flow] of F.flows[t]) {
             const a = Math.floor(key / 100000);
             const b = key % 100000;
-            if (a !== b && n >= 2) moves.push([a, b, n]);
+            if (a !== b && flow.n >= 2) moves.push([a, b, flow]);
           }
-          moves.sort((p, q) => q[2] - p[2]);
+          moves.sort((p, q) => q[2].n - p[2].n);
         }
 
         els.insBody.innerHTML = `
@@ -1429,10 +1627,47 @@
             <h3>Biggest moves vs previous tier</h3>
             <div class="list">
               ${moves.length === 0 ? `<div class="card"><div class="row-sub">${t === 0 ? "First tracked tier — no previous tier." : "No multi-raider moves under this filter."}</div></div>` : ""}
-              ${moves.slice(0, 10).map(([a, b, n]) => `
-                <button class="card" type="button" data-sel-guild="${b}">
-                  <div class="row-main"><span>${esc(guildLabel(a))} → ${esc(guildLabel(b))}</span><span>${fmt(n)}</span></div>
-                  <div class="row-sub">${fmt(n)} raiders moved together</div>
+              ${moves.slice(0, 10).map(([a, b, flow]) => `
+                <div class="card">
+                  <div class="row-main">
+                    <span><span class="glink" data-sel-guild="${a}">${esc(guildLabel(a))}</span> → <span class="glink" data-sel-guild="${b}">${esc(guildLabel(b))}</span></span>
+                    <span>${fmt(flow.n)}</span>
+                  </div>
+                  <div class="chips">${nameChips(flow)}</div>
+                </div>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderAllPanel() {
+        const at = buildAllTime();
+        const first = M.tiers[0];
+        const last = M.tiers[M.tiers.length - 1];
+        els.insTitle.textContent = "All raids combined";
+        els.insSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · ${fmt(at.count)} characters, ${fmt(at.multiCount)} of them in 2+ guilds`;
+
+        const top = Array.from(at.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Most distinct members ever</h3>
+            <div class="list">
+              ${top.map(([g, n]) => `
+                <button class="card" type="button" data-sel-guild="${g}">
+                  <div class="row-main"><span>${esc(guildLabel(g))}</span><span>${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Serial movers (most guilds in a career)</h3>
+            <div class="list">
+              ${at.nomads.map(([c, n]) => `
+                <button class="card" type="button" data-sel-char="${c}">
+                  <div class="row-main">
+                    <span style="color:${CLASS_COLORS[M.chars[c].classID]}">${esc(M.chars[c].name)}-${esc(M.chars[c].realm)}</span>
+                    <span>${fmt(n)} guilds</span>
+                  </div>
+                  <div class="row-sub">${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
                 </button>`).join("")}
             </div>
           </section>`;
@@ -1463,21 +1698,21 @@
         const inflow = [];
         const outflow = [];
         if (F.flows[t]) {
-          for (const [key, n] of F.flows[t]) {
+          for (const [key, flow] of F.flows[t]) {
             const a = Math.floor(key / 100000);
             const b = key % 100000;
-            if (b === g && a !== g) inflow.push([a, n]);
+            if (b === g && a !== g) inflow.push([a, flow]);
           }
         }
         if (F.flows[t + 1]) {
-          for (const [key, n] of F.flows[t + 1]) {
+          for (const [key, flow] of F.flows[t + 1]) {
             const a = Math.floor(key / 100000);
             const b = key % 100000;
-            if (a === g && b !== g) outflow.push([b, n]);
+            if (a === g && b !== g) outflow.push([b, flow]);
           }
         }
-        inflow.sort((p, q) => q[1] - p[1]);
-        outflow.sort((p, q) => q[1] - p[1]);
+        inflow.sort((p, q) => q[1].n - p[1].n);
+        outflow.sort((p, q) => q[1].n - p[1].n);
 
         els.insTitle.textContent = guildLabel(g);
         els.insSub.textContent = `${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
@@ -1498,20 +1733,22 @@
             <h3>Joined this tier from</h3>
             <div class="list">
               ${inflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked arrivals from the previous tier.</div></div>` : ""}
-              ${inflow.slice(0, 6).map(([a, n]) => `
-                <button class="card" type="button" data-sel-guild="${a}">
-                  <div class="row-main"><span>${esc(guildLabel(a))}</span><span>+${fmt(n)}</span></div>
-                </button>`).join("")}
+              ${inflow.slice(0, 6).map(([a, flow]) => `
+                <div class="card">
+                  <div class="row-main"><span class="glink" data-sel-guild="${a}">${esc(guildLabel(a))}</span><span>+${fmt(flow.n)}</span></div>
+                  <div class="chips">${nameChips(flow, 6)}</div>
+                </div>`).join("")}
             </div>
           </section>
           <section class="panel">
             <h3>Left for (next tier)</h3>
             <div class="list">
               ${outflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked departures to the next tier.</div></div>` : ""}
-              ${outflow.slice(0, 6).map(([b, n]) => `
-                <button class="card" type="button" data-sel-guild="${b}">
-                  <div class="row-main"><span>${esc(guildLabel(b))}</span><span>−${fmt(n)}</span></div>
-                </button>`).join("")}
+              ${outflow.slice(0, 6).map(([b, flow]) => `
+                <div class="card">
+                  <div class="row-main"><span class="glink" data-sel-guild="${b}">${esc(guildLabel(b))}</span><span>−${fmt(flow.n)}</span></div>
+                  <div class="chips">${nameChips(flow, 6)}</div>
+                </div>`).join("")}
             </div>
           </section>
           <section class="panel">
@@ -1577,7 +1814,7 @@
         view.selChar = c;
         view.selGuild = -1;
         const tiersAttended = F.charTiers[c] || [];
-        if (tiersAttended.length && !tiersAttended.includes(view.tier)) {
+        if (view.mode === "galaxy" && tiersAttended.length && !tiersAttended.includes(view.tier)) {
           stopPlay();
           setTier(tiersAttended[tiersAttended.length - 1]);
         }
@@ -1605,6 +1842,58 @@
             if (view.classFilter.has(id)) view.classFilter.delete(id);
             else view.classFilter.add(id);
             chip.classList.toggle("on", view.classFilter.has(id));
+          });
+        }
+      }
+
+      function focusGuild(g) {
+        view.selGuild = g;
+        view.selChar = -1;
+        if (view.mode === "galaxy" && !F.tiers[view.tier].roster.has(g)) {
+          for (let t = M.tiers.length - 1; t >= 0; t -= 1) {
+            if (F.tiers[t].roster.has(g)) { stopPlay(); setTier(t); break; }
+          }
+        }
+        if (view.mode !== "flow") panTo(F.gx[g], F.gy[g]);
+        renderInspector();
+      }
+
+      let gsearchTimer = null;
+      function runGuildSearch() {
+        const q = els.gsearch.value.trim().toLowerCase();
+        if (q.length < 2) {
+          els.gsearchResults.classList.remove("visible");
+          els.gsearchResults.innerHTML = "";
+          return;
+        }
+        const hits = [];
+        for (let g = 0; g < M.guilds.length; g += 1) {
+          if (F.guildMax[g] === 0) continue;
+          const guild = M.guilds[g];
+          if (!`${guild.name}-${guild.realm}`.toLowerCase().includes(q)) continue;
+          let tiersActive = 0;
+          for (let t = 0; t < M.tiers.length; t += 1) if (F.tiers[t].roster.has(g)) tiersActive += 1;
+          hits.push([g, tiersActive]);
+        }
+        hits.sort((a, b) => F.guildMax[b[0]] - F.guildMax[a[0]]);
+        els.gsearchResults.innerHTML = hits.slice(0, 12)
+          .map(([g, tiersActive]) => {
+            const guild = M.guilds[g];
+            return `
+              <button class="search-result" type="button" data-g="${g}">
+                <div class="row-main">
+                  <span style="color:hsl(${guild.hue} 70% 72%)">${esc(guildLabel(g))}</span>
+                  <span>${tiersActive}t</span>
+                </div>
+                <div class="row-sub">peak roster ${fmt(F.guildMax[g])} · active ${tiersActive} ${tiersActive === 1 ? "tier" : "tiers"}</div>
+              </button>`;
+          })
+          .join("");
+        els.gsearchResults.classList.toggle("visible", hits.length > 0);
+        for (const btn of els.gsearchResults.querySelectorAll("[data-g]")) {
+          btn.addEventListener("click", () => {
+            focusGuild(Number(btn.dataset.g));
+            els.gsearchResults.classList.remove("visible");
           });
         }
       }
@@ -1701,9 +1990,10 @@
 
         // aggregated migration arrows from the previous tier
         if (view.showFlows && F.flows[view.tier]) {
-          for (const [key, n] of F.flows[view.tier]) {
+          for (const [key, flow] of F.flows[view.tier]) {
             const a = Math.floor(key / 100000);
             const b = key % 100000;
+            const n = flow.n;
             if (a === b || n < 2) continue;
             const x0 = F.gx[a], y0 = F.gy[a], x1 = F.gx[b], y1 = F.gy[b];
             const mx = (x0 + x1) / 2 - (y1 - y0) * 0.14;
@@ -1745,6 +2035,28 @@
           ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
           ctx.lineWidth = 0.7 / t.k;
           ctx.stroke();
+        }
+
+        // persistent per-character migration lines from the previous tier
+        if (view.showTrails && view.tier > 0) {
+          const lines = tierTrails(view.tier);
+          if (lines.length) {
+            const paths = new Map();
+            for (const [x0, y0, x1, y1, c] of lines) {
+              const cls = M.chars[c].classID;
+              let path = paths.get(cls);
+              if (!path) paths.set(cls, (path = new Path2D()));
+              path.moveTo(x0, y0);
+              path.lineTo(x1, y1);
+            }
+            ctx.globalAlpha = 0.3;
+            ctx.lineWidth = 0.9 / Math.sqrt(t.k);
+            for (const [cls, path] of paths) {
+              ctx.strokeStyle = CLASS_COLORS[cls];
+              ctx.stroke(path);
+            }
+            ctx.globalAlpha = 1;
+          }
         }
 
         // leavers fade out where they last stood
@@ -1826,29 +2138,56 @@
           ctx.stroke();
         }
 
-        // guild labels
-        if (view.showLabels) {
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          for (const [g, n] of td.roster) {
-            const apparent = hullRadius(n) * t.k;
-            const isSel = g === view.selGuild;
-            const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
-            if (apparent < 26 && !isSel && !isHover) continue;
-            const guild = M.guilds[g];
-            const fontPx = clamp(11 / t.k, 4, 200);
-            ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
-            const x = F.gx[g];
-            const y = F.gy[g] - hullRadius(n) - 3 / t.k;
-            ctx.lineWidth = 3 / t.k;
-            ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
-            ctx.strokeText(guild.name, x, y);
-            ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
-            ctx.fillText(guild.name, x, y);
-          }
-        }
+        // guild labels (always shown while the toggle is on)
+        if (view.showLabels) drawGuildLabels(t, td.roster);
+
+        // character names once zoomed in far enough to read them
+        drawCharLabels(t, td);
 
         ctx.restore();
+      }
+
+      function drawGuildLabels(t, roster) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g, n] of roster) {
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && (view.hover.kind === "guild") && view.hover.g === g;
+          const guild = M.guilds[g];
+          const fontPx = clamp(11 / t.k, 4, 200);
+          ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+          const x = F.gx[g];
+          const y = F.gy[g] - hullRadius(view.mode === "all" ? (F.allTime.hullN.get(g) || 1) : n) - 3 / t.k;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(guild.name, x, y);
+          ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
+          ctx.fillText(guild.name, x, y);
+        }
+      }
+
+      function drawCharLabels(t, src, minK = 3.2) {
+        if (t.k < minK) return;
+        const rect = stage.getBoundingClientRect();
+        const wx0 = -t.x / t.k - 20;
+        const wy0 = -t.y / t.k - 20;
+        const wx1 = (rect.width - t.x) / t.k + 20;
+        const wy1 = (rect.height - t.y) / t.k + 20;
+        const fontPx = 10 / t.k;
+        ctx.font = `600 ${fontPx}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (let s = 0; s < src.count; s += 1) {
+          const x = src.x[s];
+          const y = src.y[s];
+          if (x < wx0 || x > wx1 || y < wy0 || y > wy1) continue;
+          const ch = M.chars[src.c[s]];
+          ctx.lineWidth = 2.6 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.88)";
+          ctx.strokeText(ch.name, x, y + 3.4);
+          ctx.fillStyle = CLASS_COLORS[ch.classID];
+          ctx.fillText(ch.name, x, y + 3.4);
+        }
       }
 
       function drawCareerPath(c, t) {
@@ -1894,6 +2233,159 @@
           ctx.fillStyle = "#fde68a";
           ctx.fillText(label, point.x, point.y - 11 / t.k);
         }
+      }
+
+      /* ============================== all-time rendering ============================== */
+
+      function drawAll() {
+        const t = tf();
+        const at = buildAllTime();
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
+
+        // guild hulls sized by loyalist core
+        for (const [g] of at.roster) {
+          const r = hullRadius(at.hullN.get(g) || 1);
+          const guild = M.guilds[g];
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          ctx.beginPath();
+          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(${guild.hue} 65% 58% / ${isSel || isHover ? 0.16 : 0.07})`;
+          ctx.fill();
+          if (isSel || isHover) {
+            ctx.lineWidth = 1.6 / t.k;
+            ctx.strokeStyle = `hsl(${guild.hue} 70% 65% / 0.8)`;
+            ctx.stroke();
+          }
+        }
+
+        // career fibers: every multi-guild character tethered to each of their guilds
+        if (view.showFibers && at.fibers.length) {
+          ctx.beginPath();
+          for (let i = 0; i < at.fibers.length; i += 2) {
+            const s = at.fibers[i];
+            const g = at.fibers[i + 1];
+            ctx.moveTo(at.x[s], at.y[s]);
+            ctx.lineTo(F.gx[g], F.gy[g]);
+          }
+          ctx.strokeStyle = "rgba(148, 163, 184, 0.06)";
+          ctx.lineWidth = 0.7 / t.k;
+          ctx.stroke();
+        }
+
+        // membership mask so a selected guild keeps ALL its members lit, including
+        // multi-guild characters whose primary guild is elsewhere
+        let mask = null;
+        if (view.selGuild >= 0) {
+          if (at.selMaskG !== view.selGuild) {
+            const m = new Uint8Array(at.count);
+            for (let s = 0; s < at.count; s += 1) {
+              const mem = M.chars[at.c[s]].mem;
+              for (let i = 0; i < mem.length; i += 3) {
+                if (mem[i + 1] === view.selGuild && mem[i + 2] >= view.minReports) { m[s] = 1; break; }
+              }
+            }
+            at.selMask = m;
+            at.selMaskG = view.selGuild;
+          }
+          mask = at.selMask;
+        }
+
+        // dots
+        const buckets = new Map();
+        for (let s = 0; s < at.count; s += 1) {
+          const cls = M.chars[at.c[s]].classID;
+          let alpha = 0.92;
+          if (view.classFilter.size && !view.classFilter.has(cls)) alpha *= 0.1;
+          if (mask && !mask[s]) alpha *= 0.22;
+          if (view.selChar >= 0) alpha *= at.c[s] === view.selChar ? 1 : 0.1;
+          if (alpha < 0.02) continue;
+          const bucket = cls * 16 + Math.min(15, Math.round(alpha * 10));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.7 + Math.min(2.4, Math.sqrt(at.rep[s]) * 0.28);
+          path.moveTo(at.x[s] + r, at.y[s]);
+          path.arc(at.x[s], at.y[s], r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = (bucket % 16) / 10;
+          ctx.fillStyle = CLASS_COLORS[Math.floor(bucket / 16)];
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        // selected character: amber tethers to every guild of their career
+        if (view.selChar >= 0) {
+          const s = at.slotOf.get(view.selChar);
+          if (s !== undefined) {
+            const mem = M.chars[view.selChar].mem;
+            const seen = new Set();
+            ctx.lineWidth = 1.8 / Math.sqrt(t.k);
+            ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
+            for (let i = 0; i < mem.length; i += 3) {
+              const g = mem[i + 1];
+              if (mem[i + 2] < view.minReports || seen.has(g)) continue;
+              seen.add(g);
+              ctx.beginPath();
+              ctx.moveTo(at.x[s], at.y[s]);
+              ctx.lineTo(F.gx[g], F.gy[g]);
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(at.x[s], at.y[s], 6 / Math.sqrt(t.k), 0, Math.PI * 2);
+            ctx.strokeStyle = "#fbbf24";
+            ctx.lineWidth = 2 / Math.sqrt(t.k);
+            ctx.stroke();
+          }
+        }
+
+        // hovered character ring
+        if (view.hover && view.hover.kind === "char") {
+          const s = view.hover.s;
+          ctx.beginPath();
+          ctx.arc(at.x[s], at.y[s], 5, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = 1.4 / t.k;
+          ctx.stroke();
+        }
+
+        if (view.showLabels) drawGuildLabels(t, at.roster);
+        drawCharLabels(t, at, 4.2);
+
+        ctx.restore();
+      }
+
+      function hitAll(px, py) {
+        const at = buildAllTime();
+        const world = toWorld(px, py);
+        const { cell, grid } = buildGrid(at);
+        const reach = Math.max(6, 8 / tf().k);
+        let best = null;
+        let bestD = reach;
+        const cx = Math.floor(world.x / cell);
+        const cy = Math.floor(world.y / cell);
+        for (let ix = cx - 1; ix <= cx + 1; ix += 1) {
+          for (let iy = cy - 1; iy <= cy + 1; iy += 1) {
+            const list = grid.get(`${ix}:${iy}`);
+            if (!list) continue;
+            for (const s of list) {
+              const d = Math.hypot(world.x - at.x[s], world.y - at.y[s]);
+              if (d < bestD) { bestD = d; best = s; }
+            }
+          }
+        }
+        if (best !== null) return { kind: "char", s: best, c: at.c[best], g: at.g[best] };
+
+        let bestG = null;
+        let bestGD = Infinity;
+        for (const [g] of at.roster) {
+          const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
+          if (d < hullRadius(at.hullN.get(g) || 1) && d < bestGD) { bestGD = d; bestG = g; }
+        }
+        if (bestG !== null) return { kind: "guild", g: bestG };
+        return null;
       }
 
       /* ============================== alluvial rendering ============================== */
@@ -2014,6 +2506,7 @@
         ctx.clearRect(0, 0, rect.width, rect.height);
         if (F.tiers) {
           if (view.mode === "galaxy") drawGalaxy(now);
+          else if (view.mode === "all") drawAll();
           else drawFlow();
         }
         requestAnimationFrame(frame);
@@ -2124,10 +2617,23 @@
         tooltip.style.display = "none";
       }
 
+      function flowNames(f, max = 8) {
+        const names = (f.cs || []).slice(0, max).map((c) => M.chars[c].name).join(", ");
+        if (!names) return "";
+        const extra = f.n - Math.min(f.cs.length, max);
+        return `<br><span style="color:#cbd5e1">${esc(names)}${extra > 0 ? ` +${fmt(extra)} more` : ""}</span>`;
+      }
+
       function tooltipFor(hit) {
         if (hit.kind === "char") {
           const ch = M.chars[hit.c];
           const tiersAttended = (F.charTiers[hit.c] || []).length;
+          if (view.mode === "all") {
+            const at = F.allTime;
+            return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</b><br>
+              ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · main guild ${esc(guildLabel(hit.g))}<br>
+              ${fmt(at.rep[hit.s])} reports across ${fmt(at.guildN[hit.s])} ${at.guildN[hit.s] === 1 ? "guild" : "guilds"} · ${tiersAttended} tiers · click for career`;
+          }
           const td = F.tiers[view.tier];
           const reports = td.r[hit.s];
           return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</b><br>
@@ -2135,6 +2641,10 @@
             ${fmt(reports)} reports this tier · ${tiersAttended} tiers tracked · click for career`;
         }
         if (hit.kind === "guild") {
+          if (view.mode === "all") {
+            const at = F.allTime;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(at.roster.get(hit.g) || 0)} distinct members all time · click to inspect`;
+          }
           const n = F.tiers[view.tier].roster.get(hit.g) || 0;
           return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} raiders this tier · click to inspect`;
         }
@@ -2146,9 +2656,9 @@
           const from = M.tiers[hit.t - 1];
           const to = M.tiers[hit.t];
           if (f.a === f.b) {
-            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} raiders stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}`;
+            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} raiders stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}${flowNames(f)}`;
           }
-          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} raiders moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}`;
+          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} raiders moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}${flowNames(f)}`;
         }
         if (hit.kind === "header") {
           return `<b>${esc(M.tiers[hit.t].name)}</b><br>${esc(M.tiers[hit.t].expansion)} · click to set current tier`;
@@ -2187,7 +2697,7 @@
           return;
         }
         if (!F.tiers) return;
-        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : hitFlow(px, py);
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : view.mode === "all" ? hitAll(px, py) : hitFlow(px, py);
         view.hover = hit;
         canvas.style.cursor = hit ? "pointer" : "default";
         if (hit) showTooltip(px, py, tooltipFor(hit));
@@ -2203,7 +2713,7 @@
         const rect = canvas.getBoundingClientRect();
         const px = event.clientX - rect.left;
         const py = event.clientY - rect.top;
-        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : hitFlow(px, py);
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : view.mode === "all" ? hitAll(px, py) : hitFlow(px, py);
         if (!hit) { clearSelection(); return; }
         if (hit.kind === "char") selectChar(hit.c);
         else if (hit.kind === "guild") selectGuild(hit.g);
@@ -2231,15 +2741,20 @@
       function setMode(mode) {
         view.mode = mode;
         els.modeGalaxy.classList.toggle("active", mode === "galaxy");
+        els.modeAll.classList.toggle("active", mode === "all");
         els.modeFlow.classList.toggle("active", mode === "flow");
+        els.timeline.classList.toggle("dimmed", mode === "all");
         if (mode === "flow" && !view.fitted.flow) fitFlow();
+        if (mode === "all" && !view.fitted.all) fitAll();
         if (mode === "galaxy" && !view.fitted.galaxy) fitGalaxy();
         view.hover = null;
         hideTooltip();
         updateHud();
+        renderInspector();
       }
 
       els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
+      els.modeAll.addEventListener("click", () => setMode("all"));
       els.modeFlow.addEventListener("click", () => setMode("flow"));
 
       els.minReports.addEventListener("change", () => {
@@ -2257,6 +2772,7 @@
       });
 
       els.tglFlows.addEventListener("change", () => { view.showFlows = els.tglFlows.checked; });
+      els.tglTrails.addEventListener("change", () => { view.showTrails = els.tglTrails.checked; });
       els.tglFibers.addEventListener("change", () => { view.showFibers = els.tglFibers.checked; });
       els.tglLabels.addEventListener("change", () => { view.showLabels = els.tglLabels.checked; });
 
@@ -2264,9 +2780,14 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(runSearch, 160);
       });
+      els.gsearch.addEventListener("input", () => {
+        clearTimeout(gsearchTimer);
+        gsearchTimer = setTimeout(runGuildSearch, 160);
+      });
 
       els.resetView.addEventListener("click", () => {
         if (view.mode === "galaxy") fitGalaxy();
+        else if (view.mode === "all") fitAll();
         else fitFlow();
       });
       els.clearSel.addEventListener("click", clearSelection);
