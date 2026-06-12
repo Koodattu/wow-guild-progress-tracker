@@ -3,12 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guild Network PoC</title>
+    <title>Raider Constellation</title>
     <style>
       :root {
         --bg: #050711;
         --panel: #0b1020;
-        --panel-2: #111827;
         --line: rgba(148, 163, 184, 0.22);
         --line-strong: rgba(148, 163, 184, 0.38);
         --text: #f8fafc;
@@ -16,10 +15,7 @@
         --quiet: #738196;
         --blue: #60a5fa;
         --blue-strong: #2563eb;
-        --green: #34d399;
         --amber: #fbbf24;
-        --violet: #a78bfa;
-        --red: #fb7185;
         --shadow: rgba(0, 0, 0, 0.34);
       }
 
@@ -30,85 +26,108 @@
       html,
       body {
         width: 100%;
-        min-height: 100%;
+        height: 100%;
         margin: 0;
         background: var(--bg);
         color: var(--text);
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        overflow: hidden;
       }
 
       button,
       input,
       select {
         font: inherit;
-      }
-
-      button {
         color: inherit;
       }
 
       .app {
         display: grid;
-        grid-template-columns: 288px minmax(0, 1fr) 360px;
+        grid-template-columns: 270px minmax(0, 1fr) 340px;
         height: 100vh;
-        min-height: 620px;
         overflow: hidden;
       }
 
       .sidebar,
       .inspector {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
         background: color-mix(in srgb, var(--panel) 92%, black);
-        border-color: var(--line);
+        overflow-y: auto;
       }
 
       .sidebar {
-        display: flex;
-        flex-direction: column;
         border-right: 1px solid var(--line);
-        min-height: 0;
-        height: 100%;
       }
 
       .inspector {
-        display: flex;
-        flex-direction: column;
         border-left: 1px solid var(--line);
-        min-height: 0;
-        height: 100%;
-        overflow: hidden;
       }
 
       .brand {
-        padding: 18px 16px 14px;
+        padding: 16px 16px 12px;
         border-bottom: 1px solid var(--line);
       }
 
       .brand h1 {
         margin: 0;
         font-size: 1rem;
-        line-height: 1.2;
-        font-weight: 750;
-        letter-spacing: 0;
+        font-weight: 800;
       }
 
       .brand p {
-        margin: 6px 0 0;
+        margin: 5px 0 0;
         color: var(--muted);
-        font-size: 0.82rem;
-        line-height: 1.4;
+        font-size: 0.78rem;
+        line-height: 1.45;
       }
 
-      .filters {
+      .side-section {
         display: grid;
-        gap: 12px;
-        padding: 14px 16px;
+        gap: 9px;
+        padding: 13px 16px;
         border-bottom: 1px solid var(--line);
+      }
+
+      .side-section h3 {
+        margin: 0;
+        color: var(--quiet);
+        font-size: 0.72rem;
+        font-weight: 760;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .mode-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .button {
+        min-height: 33px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .button:hover {
+        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
+        background: #162033;
+      }
+
+      .button.active {
+        border-color: color-mix(in srgb, var(--blue-strong) 70%, white);
+        background: var(--blue-strong);
       }
 
       .field {
         display: grid;
-        gap: 6px;
+        gap: 5px;
       }
 
       .field label {
@@ -117,56 +136,23 @@
         font-weight: 650;
       }
 
-      .field-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      select,
-      input[type="text"],
-      input[type="range"] {
-        width: 100%;
-      }
-
       select,
       input[type="text"] {
-        min-height: 34px;
+        min-height: 32px;
         border: 1px solid var(--line-strong);
         border-radius: 7px;
         background: #070b16;
         color: var(--text);
         padding: 0 10px;
         outline: none;
-      }
-
-      input[type="text"]::placeholder {
-        color: #8a96aa;
+        width: 100%;
       }
 
       select:focus,
       button:focus-visible,
       input:focus-visible {
         outline: 2px solid color-mix(in srgb, var(--blue) 80%, white);
-        outline-offset: 2px;
-      }
-
-      input[type="range"] {
-        accent-color: var(--blue);
-      }
-
-      .value-pill {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 34px;
-        height: 26px;
-        border: 1px solid var(--line);
-        border-radius: 7px;
-        background: #070b16;
-        color: var(--text);
-        font-size: 0.78rem;
-        font-weight: 750;
+        outline-offset: 1px;
       }
 
       .toggle {
@@ -174,68 +160,26 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        min-height: 36px;
+        min-height: 32px;
         border: 1px solid var(--line);
         border-radius: 7px;
         background: #070b16;
         padding: 0 10px;
         color: var(--muted);
+        font-size: 0.8rem;
         cursor: pointer;
       }
 
       .toggle input {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         accent-color: var(--blue);
-      }
-
-      .button-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-
-      .button-row.three {
-        grid-template-columns: 1fr 1fr 1fr;
-      }
-
-      .button {
-        min-height: 34px;
-        border: 1px solid var(--line-strong);
-        border-radius: 7px;
-        background: #101827;
-        color: var(--text);
-        font-size: 0.82rem;
-        font-weight: 720;
-        cursor: pointer;
-        transition:
-          background-color 160ms ease,
-          border-color 160ms ease,
-          color 160ms ease;
-      }
-
-      .button:hover {
-        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
-        background: #162033;
-      }
-
-      .button.primary {
-        border-color: color-mix(in srgb, var(--blue-strong) 70%, white);
-        background: var(--blue-strong);
-      }
-
-      .button.primary:hover {
-        background: #1d4ed8;
-      }
-
-      .button.subtle {
-        color: var(--muted);
       }
 
       .search-results {
         display: none;
-        gap: 6px;
-        max-height: 180px;
+        gap: 5px;
+        max-height: 230px;
         overflow: auto;
       }
 
@@ -244,11 +188,10 @@
       }
 
       .search-result {
-        width: 100%;
         border: 1px solid var(--line);
         border-radius: 7px;
         background: rgba(255, 255, 255, 0.035);
-        padding: 8px 9px;
+        padding: 7px 9px;
         text-align: left;
         cursor: pointer;
       }
@@ -258,160 +201,56 @@
         background: rgba(37, 99, 235, 0.16);
       }
 
-      .timeline-head {
+      .class-grid {
         display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .class-chip {
+        display: inline-flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 12px 16px 8px;
-      }
-
-      .timeline-head h2 {
-        margin: 0;
-        font-size: 0.8rem;
+        gap: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #070b16;
+        padding: 3px 8px;
+        font-size: 0.68rem;
         color: var(--muted);
-        font-weight: 750;
-      }
-
-      .timeline {
-        display: grid;
-        gap: 6px;
-        min-height: 0;
-        padding: 0 10px 16px;
-        overflow: auto;
-      }
-
-      .raid-button {
-        display: grid;
-        grid-template-columns: 10px minmax(0, 1fr);
-        gap: 9px;
-        width: 100%;
-        border: 1px solid transparent;
-        border-radius: 8px;
-        background: transparent;
-        padding: 9px 8px;
-        text-align: left;
         cursor: pointer;
       }
 
-      .raid-button:hover {
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .raid-button.active {
-        border-color: rgba(96, 165, 250, 0.5);
-        background: rgba(37, 99, 235, 0.2);
-      }
-
-      .raid-dot {
-        width: 9px;
-        height: 9px;
-        margin-top: 4px;
+      .class-chip .dot {
+        width: 8px;
+        height: 8px;
         border-radius: 999px;
-        background: var(--quiet);
       }
 
-      .raid-button.active .raid-dot {
-        background: var(--blue);
-        box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
-      }
-
-      .raid-name {
-        display: block;
-        overflow: hidden;
+      .class-chip.on {
+        border-color: rgba(96, 165, 250, 0.6);
+        background: rgba(37, 99, 235, 0.22);
         color: var(--text);
-        font-size: 0.84rem;
-        font-weight: 720;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
-      .raid-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 4px;
+      .hint {
         color: var(--quiet);
         font-size: 0.72rem;
-        line-height: 1.3;
+        line-height: 1.55;
+      }
+
+      .hint b {
+        color: var(--muted);
       }
 
       .stage {
         position: relative;
         min-width: 0;
         min-height: 0;
-        height: 100%;
         overflow: hidden;
         background:
-          radial-gradient(circle at 25% 20%, rgba(96, 165, 250, 0.13), transparent 28%),
-          radial-gradient(circle at 80% 78%, rgba(52, 211, 153, 0.1), transparent 24%),
+          radial-gradient(circle at 25% 18%, rgba(96, 165, 250, 0.1), transparent 30%),
+          radial-gradient(circle at 80% 80%, rgba(167, 139, 250, 0.08), transparent 26%),
           #050711;
-      }
-
-      .stage-toolbar {
-        position: absolute;
-        z-index: 3;
-        top: 14px;
-        left: 14px;
-        right: 14px;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        pointer-events: none;
-      }
-
-      .stage-title {
-        min-width: 220px;
-        max-width: min(620px, 70vw);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: rgba(5, 7, 17, 0.82);
-        padding: 12px 14px;
-        box-shadow: 0 8px 18px var(--shadow);
-        pointer-events: auto;
-      }
-
-      .stage-title h2 {
-        margin: 0;
-        font-size: 1.04rem;
-        line-height: 1.25;
-        font-weight: 780;
-      }
-
-      .stage-title p {
-        margin: 5px 0 0;
-        color: var(--muted);
-        font-size: 0.82rem;
-      }
-
-      .stat-strip {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 8px;
-        pointer-events: auto;
-      }
-
-      .stat {
-        min-width: 90px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: rgba(5, 7, 17, 0.82);
-        padding: 8px 10px;
-        box-shadow: 0 8px 18px var(--shadow);
-      }
-
-      .stat strong {
-        display: block;
-        font-size: 1rem;
-        line-height: 1;
-      }
-
-      .stat span {
-        display: block;
-        margin-top: 4px;
-        color: var(--muted);
-        font-size: 0.72rem;
       }
 
       canvas {
@@ -420,142 +259,260 @@
         height: 100%;
       }
 
-      .loading,
-      .error {
+      .stage-top {
         position: absolute;
-        z-index: 4;
+        z-index: 3;
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .stage-title {
+        max-width: min(480px, 55vw);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.84);
+        padding: 10px 13px;
+        box-shadow: 0 8px 18px var(--shadow);
+        pointer-events: none;
+      }
+
+      .stage-title h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .stage-title p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .stat-strip {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 7px;
+        margin-left: auto;
+      }
+
+      .stat {
+        min-width: 72px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.84);
+        padding: 7px 9px;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 0.95rem;
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.68rem;
+      }
+
+      .timeline {
+        position: absolute;
+        z-index: 3;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: stretch;
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: rgba(5, 7, 17, 0.88);
+        padding: 7px;
+        box-shadow: 0 8px 18px var(--shadow);
+      }
+
+      .play-btn {
+        flex: 0 0 auto;
+        width: 38px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .play-btn:hover {
+        background: #162033;
+      }
+
+      .tier-cells {
+        display: flex;
+        flex: 1 1 auto;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .tier-cell {
+        flex: 1 1 0;
+        min-width: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        padding: 3px 2px 4px;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .tier-cell:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .tier-cell.active {
+        border-color: rgba(96, 165, 250, 0.55);
+        background: rgba(37, 99, 235, 0.22);
+      }
+
+      .tier-cell .bar {
+        height: 3px;
+        border-radius: 99px;
+        margin-bottom: 4px;
+        opacity: 0.85;
+      }
+
+      .tier-cell .abbr {
+        display: block;
+        font-size: 0.66rem;
+        font-weight: 760;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tier-cell .yr {
+        display: block;
+        font-size: 0.6rem;
+        color: var(--quiet);
+      }
+
+      .tooltip {
+        position: absolute;
+        z-index: 6;
+        display: none;
+        max-width: 320px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: rgba(7, 11, 22, 0.96);
+        padding: 8px 10px;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        color: var(--muted);
+        pointer-events: none;
+        box-shadow: 0 10px 22px var(--shadow);
+      }
+
+      .tooltip b {
+        color: var(--text);
+      }
+
+      .overlay {
+        position: absolute;
+        z-index: 5;
         inset: 0;
         display: none;
         align-items: center;
         justify-content: center;
-        background: rgba(5, 7, 17, 0.72);
+        background: rgba(5, 7, 17, 0.78);
         padding: 24px;
       }
 
-      .loading.visible,
-      .error.visible {
+      .overlay.visible {
         display: flex;
       }
 
       .notice {
-        width: min(520px, 100%);
+        width: min(480px, 100%);
         border: 1px solid var(--line-strong);
         border-radius: 10px;
         background: #080d19;
         padding: 16px;
-        box-shadow: 0 12px 24px var(--shadow);
       }
 
       .notice strong {
         display: block;
         margin-bottom: 6px;
-        font-size: 0.95rem;
       }
 
       .notice p {
         margin: 0;
         color: var(--muted);
-        font-size: 0.86rem;
+        font-size: 0.85rem;
         line-height: 1.5;
+        overflow-wrap: anywhere;
       }
 
       .inspector-header {
-        padding: 18px 16px 14px;
+        padding: 15px 16px 12px;
         border-bottom: 1px solid var(--line);
       }
 
       .inspector-header h2 {
         margin: 0;
-        font-size: 0.95rem;
-        font-weight: 760;
+        font-size: 0.92rem;
+        font-weight: 780;
       }
 
       .inspector-header p {
-        margin: 6px 0 0;
+        margin: 5px 0 0;
         color: var(--muted);
-        font-size: 0.8rem;
+        font-size: 0.77rem;
         line-height: 1.45;
       }
 
-      .inspector-scroll {
+      .inspector-body {
         display: grid;
         align-content: start;
-        gap: 14px;
+        gap: 13px;
+        padding: 13px 16px 20px;
         min-width: 0;
-        overflow: auto;
-        padding: 14px 16px 18px;
       }
 
-      .section {
+      .panel {
         display: grid;
         gap: 8px;
         min-width: 0;
       }
 
-      .section h3 {
+      .panel h3 {
         margin: 0;
-        color: var(--muted);
-        font-size: 0.78rem;
+        color: var(--quiet);
+        font-size: 0.72rem;
         font-weight: 760;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
       }
 
-      .selected-panel,
-      .list-row,
-      .bridge-row {
-        min-width: 0;
+      .card {
         border: 1px solid var(--line);
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.035);
-      }
-
-      .selected-panel {
-        padding: 12px;
-        min-width: 0;
-      }
-
-      .selected-title {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 8px;
-        font-size: 0.88rem;
-        font-weight: 760;
-      }
-
-      .selected-empty {
-        color: var(--muted);
-        font-size: 0.82rem;
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-        white-space: normal;
-      }
-
-      .pair-list,
-      .bridge-list,
-      .example-list {
-        display: grid;
-        gap: 7px;
-        min-width: 0;
-      }
-
-      .list-row {
-        width: 100%;
         padding: 9px 10px;
-        text-align: left;
-        cursor: pointer;
-      }
-
-      .list-row:hover,
-      .list-row.active {
-        border-color: rgba(96, 165, 250, 0.48);
-        background: rgba(37, 99, 235, 0.16);
+        min-width: 0;
       }
 
       .row-main {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        color: var(--text);
         font-size: 0.82rem;
         font-weight: 720;
       }
@@ -568,154 +525,98 @@
       }
 
       .row-sub {
-        margin-top: 4px;
+        margin-top: 3px;
         color: var(--quiet);
-        font-size: 0.72rem;
-        line-height: 1.35;
+        font-size: 0.71rem;
+        line-height: 1.4;
         overflow-wrap: anywhere;
       }
 
-      .bridge-row {
-        padding: 9px 10px;
+      .list {
+        display: grid;
+        gap: 6px;
       }
 
-      button.bridge-row {
+      button.card {
         width: 100%;
-        color: inherit;
         text-align: left;
         cursor: pointer;
+        color: inherit;
       }
 
-      button.bridge-row:hover,
-      button.bridge-row.active {
-        border-color: rgba(251, 191, 36, 0.58);
-        background: rgba(251, 191, 36, 0.1);
+      button.card:hover,
+      button.card.active {
+        border-color: rgba(96, 165, 250, 0.5);
+        background: rgba(37, 99, 235, 0.16);
       }
 
-      .focus-banner {
-        display: none;
-        border: 1px solid rgba(251, 191, 36, 0.38);
-        border-radius: 8px;
-        background: rgba(251, 191, 36, 0.1);
-        padding: 10px;
-      }
-
-      .focus-banner.visible {
-        display: grid;
-        gap: 7px;
-      }
-
-      .chip-row {
+      .chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
+        gap: 5px;
+        margin-top: 6px;
       }
 
       .chip {
         display: inline-flex;
         max-width: 100%;
         align-items: center;
-        min-height: 22px;
+        gap: 5px;
         border: 1px solid var(--line);
         border-radius: 999px;
         background: #070b16;
         color: var(--muted);
-        padding: 0 8px;
-        font-size: 0.7rem;
+        padding: 2px 8px;
+        font-size: 0.68rem;
+        cursor: pointer;
       }
 
-      .legend {
-        position: absolute;
-        z-index: 3;
-        left: 14px;
-        bottom: 14px;
+      .chip:hover {
+        border-color: rgba(96, 165, 250, 0.5);
+        color: var(--text);
+      }
+
+      .chip.static {
+        cursor: default;
+      }
+
+      .roster-bars {
         display: flex;
-        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 2px;
+        height: 46px;
+        margin-top: 6px;
+      }
+
+      .roster-bars button {
+        flex: 1 1 0;
+        min-width: 2px;
+        border: none;
+        border-radius: 2px 2px 0 0;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.55;
+      }
+
+      .roster-bars button.on {
+        opacity: 1;
+        outline: 1px solid rgba(255, 255, 255, 0.6);
+      }
+
+      .clear-row {
+        display: flex;
         gap: 8px;
-        max-width: min(680px, calc(100% - 28px));
-        pointer-events: none;
       }
 
-      .legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(5, 7, 17, 0.78);
-        padding: 5px 9px;
-        color: var(--muted);
-        font-size: 0.72rem;
-      }
-
-      .legend-swatch {
-        width: 9px;
-        height: 9px;
-        border-radius: 999px;
+      .clear-row .button {
+        flex: 1;
+        font-size: 0.76rem;
+        min-height: 29px;
       }
 
       @media (max-width: 1180px) {
         .app {
-          grid-template-columns: 244px minmax(0, 1fr);
-        }
-
-        .inspector {
-          grid-column: 1 / -1;
-          min-height: 0;
-          border-top: 1px solid var(--line);
-          border-left: none;
-        }
-
-        .inspector-scroll {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          max-height: 380px;
-        }
-      }
-
-      @media (max-width: 780px) {
-        .app {
-          display: block;
-          height: auto;
-          min-height: 100vh;
-          overflow: visible;
-        }
-
-        .sidebar,
-        .inspector {
-          height: auto;
-          min-height: 0;
-          border: none;
-        }
-
-        .timeline {
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-          max-height: 260px;
-        }
-
-        .stage {
-          height: 68vh;
-          min-height: 520px;
-        }
-
-        .stage-toolbar {
-          display: grid;
-        }
-
-        .stat-strip {
-          justify-content: flex-start;
-        }
-
-        .inspector-scroll {
-          grid-template-columns: 1fr;
-          max-height: none;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        * {
-          transition-duration: 0ms !important;
-          scroll-behavior: auto !important;
+          grid-template-columns: 232px minmax(0, 1fr) 280px;
         }
       }
     </style>
@@ -724,96 +625,84 @@
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
-          <h1>Guild Network PoC</h1>
-          <p>Report appearance network by raid tier.</p>
+          <h1>Raider Constellation</h1>
+          <p>Every character ever logged, clustered into the guilds they raided with — scrub twelve years of guild history.</p>
         </div>
 
-        <div class="filters">
-          <div class="field">
-            <label for="scopeSelect">Graph scope</label>
-            <select id="scopeSelect">
-              <option value="raid">Selected raid</option>
-              <option value="recent">Latest 4 raids</option>
-              <option value="all">All tracked raids</option>
-            </select>
+        <div class="side-section">
+          <h3>View</h3>
+          <div class="mode-row">
+            <button class="button active" id="modeGalaxy" type="button">Galaxy</button>
+            <button class="button" id="modeFlow" type="button">Lineages</button>
           </div>
+        </div>
 
+        <div class="side-section">
+          <h3>Filters</h3>
           <div class="field">
-            <label for="minShared">Min shared characters</label>
-            <div class="field-row">
-              <input id="minShared" type="range" min="1" max="10" value="2" />
-              <span class="value-pill" id="minSharedValue">2</span>
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="minReports">Min reports per guild</label>
+            <label for="minReports">Min reports per guild &amp; tier (filters pugs)</label>
             <select id="minReports">
-              <option value="1">1 report</option>
-              <option value="2">2 reports</option>
-              <option value="3">3 reports</option>
-              <option value="5">5 reports</option>
-              <option value="10">10 reports</option>
+              <option value="1">1+ · everyone, incl. one-night pugs</option>
+              <option value="2" selected>2+ · regulars</option>
+              <option value="3">3+ · core raiders</option>
+              <option value="5">5+ · committed core</option>
+              <option value="10">10+ · die-hards</option>
             </select>
           </div>
-
-          <div class="field">
-            <label for="limitGuilds">Guild cap</label>
-            <select id="limitGuilds">
-              <option value="40">40 guilds</option>
-              <option value="60">60 guilds</option>
-              <option value="80" selected>80 guilds</option>
-              <option value="120">120 guilds</option>
-            </select>
-          </div>
-
-          <label class="toggle">
-            <span>Canonical only</span>
-            <input id="canonicalOnly" type="checkbox" />
-          </label>
-
-          <div class="field">
-            <label for="characterSearch">Focus character</label>
-            <input id="characterSearch" type="text" autocomplete="off" spellcheck="false" placeholder="Search by character name" />
-            <div class="search-results" id="characterResults"></div>
-          </div>
-
-          <div class="button-row">
-            <button class="button primary" id="applyButton" type="button">Apply filters</button>
-            <button class="button" id="playButton" type="button">Play raids</button>
-          </div>
-          <button class="button subtle" id="clearFocusButton" type="button">Clear character focus</button>
+          <label class="toggle"><span>Migration flows (prev tier)</span><input id="tglFlows" type="checkbox" checked /></label>
+          <label class="toggle"><span>Cross-guild fibers (pugging)</span><input id="tglFibers" type="checkbox" checked /></label>
+          <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
         </div>
 
-        <div class="timeline-head">
-          <h2>Raid point</h2>
+        <div class="side-section">
+          <h3>Find a character</h3>
+          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Type a character name…" />
+          <div class="search-results" id="searchResults"></div>
         </div>
-        <div class="timeline" id="raidList"></div>
+
+        <div class="side-section">
+          <h3>Classes</h3>
+          <div class="class-grid" id="classGrid"></div>
+        </div>
+
+        <div class="side-section">
+          <h3>Controls</h3>
+          <div class="clear-row">
+            <button class="button" id="resetView" type="button">Reset view</button>
+            <button class="button" id="clearSel" type="button">Clear selection</button>
+          </div>
+          <p class="hint">
+            <b>Drag</b> pan · <b>wheel</b> zoom · <b>click</b> a dot or cluster to inspect ·
+            <b>←/→</b> step tiers · <b>space</b> play · <b>esc</b> clear.
+            Guilds are not nodes here — each cluster <i>is</i> its roster. Play the timeline and
+            watch raiders migrate between guilds.
+          </p>
+        </div>
       </aside>
 
       <main class="stage" id="stage">
-        <div class="stage-toolbar">
+        <canvas id="canvas"></canvas>
+        <div class="stage-top">
           <div class="stage-title">
-            <h2 id="raidTitle">Loading raids</h2>
-            <p id="raidSubtitle">Connecting to MongoDB.</p>
+            <h2 id="titleMain">Loading…</h2>
+            <p id="titleSub"></p>
           </div>
           <div class="stat-strip" id="stats"></div>
         </div>
-        <canvas id="graphCanvas"></canvas>
-        <div class="legend">
-          <span class="legend-item"><span class="legend-swatch" style="background: var(--blue)"></span> Guild</span>
-          <span class="legend-item"><span class="legend-swatch" style="background: var(--green)"></span> Strong shared roster</span>
-          <span class="legend-item"><span class="legend-swatch" style="background: var(--amber)"></span> Focused character</span>
+        <div class="timeline" id="timeline" style="display: none">
+          <button class="play-btn" id="playBtn" type="button" title="Play through tiers">▶</button>
+          <div class="tier-cells" id="tierCells"></div>
         </div>
-        <div class="loading visible" id="loading">
+        <div class="tooltip" id="tooltip"></div>
+        <div class="overlay visible" id="loading">
           <div class="notice">
-            <strong>Loading graph</strong>
-            <p id="loadingText">Preparing raid timeline.</p>
+            <strong>Loading the universe</strong>
+            <p id="loadingText">Fetching every character × guild × tier…</p>
           </div>
         </div>
-        <div class="error" id="error">
+        <div class="overlay" id="errorBox">
           <div class="notice">
-            <strong>Graph unavailable</strong>
+            <strong>Something broke</strong>
             <p id="errorText"></p>
           </div>
         </div>
@@ -821,440 +710,944 @@
 
       <aside class="inspector">
         <div class="inspector-header">
-          <h2>Inspector</h2>
-          <p id="inspectorSubtitle">Select a guild or guild pair.</p>
+          <h2 id="insTitle">Inspector</h2>
+          <p id="insSub">Click a character dot or a guild cluster.</p>
         </div>
-        <div class="inspector-scroll">
-          <section class="section">
-            <h3>Character focus</h3>
-            <div class="focus-banner" id="focusPanel"></div>
-          </section>
-
-          <section class="section">
-            <h3>Selection</h3>
-            <div class="selected-panel" id="selectionPanel">
-              <div class="selected-empty">No graph item selected.</div>
-            </div>
-          </section>
-
-          <section class="section">
-            <h3>Strongest guild pairs</h3>
-            <div class="pair-list" id="pairList"></div>
-          </section>
-
-          <section class="section">
-            <h3>Bridge characters</h3>
-            <div class="bridge-list" id="bridgeList"></div>
-          </section>
-        </div>
+        <div class="inspector-body" id="insBody"></div>
       </aside>
     </div>
 
     <script>
-      const state = {
-        raids: [],
-        selectedRaidId: null,
-        focusIdentity: "",
-        focusCharacter: null,
-        graph: { nodes: [], edges: [], bridges: [], stats: {}, selectedCharacter: null },
-        nodeById: new Map(),
-        selectedNode: null,
-        selectedEdge: null,
-        hoverNode: null,
-        hoverEdge: null,
-        transform: { x: 0, y: 0, scale: 1 },
-        draggingNode: null,
-        panning: false,
-        lastPointer: { x: 0, y: 0 },
+      "use strict";
+
+      /* ============================== constants ============================== */
+
+      const CLASS_NAMES = {
+        1: "Death Knight", 2: "Druid", 3: "Hunter", 4: "Mage", 5: "Monk", 6: "Paladin",
+        7: "Priest", 8: "Rogue", 9: "Shaman", 10: "Warlock", 11: "Warrior", 12: "Demon Hunter", 13: "Evoker",
+      };
+      const CLASS_COLORS = {
+        1: "#C41E3A", 2: "#FF7C0A", 3: "#AAD372", 4: "#3FC7EB", 5: "#00FF98", 6: "#F48CBA",
+        7: "#FFFFFF", 8: "#FFF468", 9: "#0070DD", 10: "#8788EE", 11: "#C69B6D", 12: "#A330C9", 13: "#33937F",
+        0: "#94a3b8",
+      };
+      const EXPANSION_COLORS = {
+        "Mists of Pandaria": "#2dd4bf",
+        "Warlords of Draenor": "#f97316",
+        "Legion": "#a3e635",
+        "Battle for Azeroth": "#38bdf8",
+        "Shadowlands": "#c084fc",
+        "Dragonflight": "#facc15",
+        "The War Within": "#fb7185",
+        "Midnight": "#818cf8",
+      };
+      const PHYLLO_ANGLE = 2.39996322972865332; // golden angle
+      const DOT_SPACING = 7; // world units between phyllotaxis slots
+      const HULL_PAD = 10;
+      const TRANS_MS = 950;
+      const PLAY_MS = 2600;
+      const LUMP = -1; // alluvial pseudo-guild that pools tiny rosters
+      const ALLUVIAL_MIN_ROSTER = 4;
+      const ALLUVIAL_K = 0.9; // vertical px per character
+      const ALLUVIAL_NODE_W = 26;
+      const ALLUVIAL_COL_PITCH = 215;
+
+      /* ============================== state ============================== */
+
+      const M = { tiers: [], realms: [], guilds: [], chars: [] }; // loaded model
+      const F = {}; // filtered + derived model, rebuilt by rebuild()
+      const view = {
+        mode: "galaxy",
+        tier: 0,
+        minReports: 2,
+        classFilter: new Set(),
+        showFlows: true,
+        showFibers: true,
+        showLabels: true,
+        selChar: -1,
+        selGuild: -1,
+        hover: null, // {kind:"char"|"guild"|"flow", ...}
+        tf: { galaxy: { x: 0, y: 0, k: 1 }, flow: { x: 0, y: 0, k: 1 } },
+        trans: null, // tier transition animation
         playing: false,
         playTimer: null,
-        searchTimer: null,
-        previousPositions: new Map(),
+        fitted: { galaxy: false, flow: false },
       };
 
-      const canvas = document.getElementById("graphCanvas");
-      const stage = document.getElementById("stage");
+      const canvas = document.getElementById("canvas");
       const ctx = canvas.getContext("2d");
-      const raidList = document.getElementById("raidList");
-      const raidTitle = document.getElementById("raidTitle");
-      const raidSubtitle = document.getElementById("raidSubtitle");
-      const stats = document.getElementById("stats");
-      const loading = document.getElementById("loading");
-      const loadingText = document.getElementById("loadingText");
-      const error = document.getElementById("error");
-      const errorText = document.getElementById("errorText");
-      const scopeSelect = document.getElementById("scopeSelect");
-      const minShared = document.getElementById("minShared");
-      const minSharedValue = document.getElementById("minSharedValue");
-      const minReports = document.getElementById("minReports");
-      const limitGuilds = document.getElementById("limitGuilds");
-      const canonicalOnly = document.getElementById("canonicalOnly");
-      const characterSearch = document.getElementById("characterSearch");
-      const characterResults = document.getElementById("characterResults");
-      const applyButton = document.getElementById("applyButton");
-      const playButton = document.getElementById("playButton");
-      const clearFocusButton = document.getElementById("clearFocusButton");
-      const focusPanel = document.getElementById("focusPanel");
-      const selectionPanel = document.getElementById("selectionPanel");
-      const pairList = document.getElementById("pairList");
-      const bridgeList = document.getElementById("bridgeList");
-      const inspectorSubtitle = document.getElementById("inspectorSubtitle");
+      const stage = document.getElementById("stage");
+      const tooltip = document.getElementById("tooltip");
+      const els = Object.fromEntries(
+        ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
+         "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
+         "modeGalaxy", "modeFlow", "minReports", "tglFlows", "tglFibers", "tglLabels", "resetView", "clearSel"]
+          .map((id) => [id, document.getElementById(id)]),
+      );
 
-      const palette = ["#60a5fa", "#34d399", "#a78bfa", "#fbbf24", "#fb7185", "#22d3ee", "#f97316", "#c084fc"];
+      /* ============================== helpers ============================== */
 
-      function escapeHtml(value) {
-        return String(value ?? "").replace(/[&<>"']/g, (match) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[match]);
-      }
+      const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]);
+      const fmt = (v) => new Intl.NumberFormat("en-US").format(v || 0);
+      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-      function formatNumber(value) {
-        return new Intl.NumberFormat("en-US").format(value || 0);
-      }
-
-      function plural(value, singular, pluralValue = `${singular}s`) {
-        return `${formatNumber(value)} ${value === 1 ? singular : pluralValue}`;
-      }
-
-      function shortDate(value) {
-        if (!value) return "";
-        return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(new Date(value));
-      }
-
-      function dateRange(first, last) {
-        if (!first && !last) return "";
-        if (!first || first === last) return shortDate(last || first);
-        return `${shortDate(first)} to ${shortDate(last)}`;
-      }
-
-      function guildLabel(guild) {
-        return guild ? `${guild.name}-${guild.realm}` : "Unknown guild";
-      }
-
-      function characterLabel(character) {
-        return character ? `${character.name}-${character.realm}` : "";
-      }
-
-      function classColor(value) {
-        const index = Math.abs(Number(value) || 0) % palette.length;
-        return palette[index];
-      }
-
-      function showLoading(text) {
-        loadingText.textContent = text;
-        loading.classList.add("visible");
-        error.classList.remove("visible");
-      }
-
-      function hideLoading() {
-        loading.classList.remove("visible");
-      }
-
-      function showError(message) {
-        errorText.textContent = message;
-        error.classList.add("visible");
-        loading.classList.remove("visible");
-      }
-
-      async function fetchJson(path) {
-        const response = await fetch(path, { cache: "no-store" });
-        const body = await response.json();
-        if (!response.ok) {
-          throw new Error(body.error || "Request failed");
+      function hash32(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i += 1) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 0x01000193);
         }
-        return body;
+        return h >>> 0;
       }
 
-      function updateMinSharedLabel() {
-        minSharedValue.textContent = minShared.value;
+      function tierAbbr(name) {
+        const words = String(name).replace(/[,'/]/g, " ").split(/\s+/).filter((w) => w && !/^(the|of|a|an)$/i.test(w));
+        if (words.length === 1) return words[0].slice(0, 4);
+        return words.map((w) => w[0].toUpperCase()).join("").slice(0, 4);
       }
 
-      function buildQueryParams(extra = {}) {
-        return new URLSearchParams({
-          scope: scopeSelect.value,
-          zoneId: String(state.selectedRaidId || state.raids[0]?.id || 46),
-          recentCount: "4",
-          minShared: minShared.value,
-          minReports: minReports.value,
-          limitGuilds: limitGuilds.value,
-          canonicalOnly: canonicalOnly.checked ? "1" : "0",
-          focus: state.focusIdentity || "",
-          ...extra,
+      function monthYear(iso) {
+        if (!iso) return "";
+        return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(new Date(iso));
+      }
+
+      function expColor(expansion) {
+        return EXPANSION_COLORS[expansion] || "#94a3b8";
+      }
+
+      function guildLabel(g) {
+        if (g === LUMP) return "Pugs & small groups";
+        const guild = M.guilds[g];
+        return `${guild.name}-${guild.realm}`;
+      }
+
+      function hullRadius(n) {
+        return DOT_SPACING * Math.sqrt(Math.max(1, n)) + HULL_PAD;
+      }
+
+      // phyllotaxis slot offsets, lazily extended
+      let phX = new Float32Array(0);
+      let phY = new Float32Array(0);
+      function ensurePhyllo(n) {
+        if (phX.length >= n) return;
+        const size = Math.max(n, 1024);
+        const nx = new Float32Array(size);
+        const ny = new Float32Array(size);
+        nx.set(phX); ny.set(phY);
+        for (let i = phX.length; i < size; i += 1) {
+          const r = DOT_SPACING * Math.sqrt(i + 0.6);
+          nx[i] = Math.cos(i * PHYLLO_ANGLE) * r;
+          ny[i] = Math.sin(i * PHYLLO_ANGLE) * r;
+        }
+        phX = nx; phY = ny;
+      }
+
+      /* ============================== data load ============================== */
+
+      async function boot() {
+        try {
+          els.loadingText.textContent = "Fetching every character × guild × tier…";
+          const res = await fetch("/api/universe", { cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "universe request failed");
+
+          M.tiers = data.tiers;
+          M.realms = data.realms;
+          M.guilds = data.guilds.map(([name, realmIdx], g) => ({
+            name,
+            realm: M.realms[realmIdx] || "Unknown",
+            hue: hash32(name + "::" + g) % 360,
+          }));
+          M.chars = data.characters.map(([name, realmIdx, classID, mem]) => ({
+            name,
+            lname: name.toLowerCase(),
+            realm: M.realms[realmIdx] || "Unknown",
+            classID: CLASS_NAMES[classID] ? classID : 0,
+            mem, // flat [t, g, reports, ...]
+            total: (() => { let s = 0; for (let i = 2; i < mem.length; i += 3) s += mem[i]; return s; })(),
+          }));
+
+          els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} characters across ${M.tiers.length} tiers…`;
+          await new Promise((r) => setTimeout(r, 30)); // let the text paint
+
+          view.tier = M.tiers.length - 1;
+          rebuild();
+          buildClassGrid();
+          buildTimeline();
+          fitGalaxy();
+          els.loading.classList.remove("visible");
+          els.timeline.style.display = "flex";
+          updateHud();
+          renderInspector();
+          requestAnimationFrame(frame);
+        } catch (err) {
+          els.loading.classList.remove("visible");
+          els.errorText.textContent = err.message;
+          els.errorBox.classList.add("visible");
+        }
+      }
+
+      /* ============================== rebuild (filter → layout → tiers → flows) ============================== */
+
+      function rebuild() {
+        const TC = M.tiers.length;
+        const CC = M.chars.length;
+        const GC = M.guilds.length;
+        const mr = view.minReports;
+
+        // -- pass 1: per-tier presence with primary guild, secondaries, career guild pairs
+        const tierChars = Array.from({ length: TC }, () => []); // [c, g, r] triples
+        const tierSecondaries = Array.from({ length: TC }, () => []);
+        const pairW = new Map();
+        const charTiers = new Array(CC).fill(null);
+        const firstTier = new Int32Array(CC).fill(-1);
+
+        for (let c = 0; c < CC; c += 1) {
+          const mem = M.chars[c].mem;
+          const careerGuilds = [];
+          for (let i = 0; i < mem.length; ) {
+            const t = mem[i];
+            let best = -1;
+            let bestR = 0;
+            let j = i;
+            const entries = [];
+            for (; j < mem.length && mem[j] === t; j += 3) {
+              const g = mem[j + 1];
+              const r = mem[j + 2];
+              if (r >= mr) {
+                entries.push(g, r);
+                if (r > bestR || (r === bestR && g < best)) { best = g; bestR = r; }
+              }
+            }
+            if (entries.length) {
+              tierChars[t].push(c, best, bestR);
+              for (let k = 0; k < entries.length; k += 2) {
+                const g = entries[k];
+                if (g !== best) tierSecondaries[t].push(c, g);
+                if (!careerGuilds.includes(g)) careerGuilds.push(g);
+              }
+              (charTiers[c] || (charTiers[c] = [])).push(t);
+              if (firstTier[c] === -1) firstTier[c] = t;
+            }
+            i = j;
+          }
+          for (let a = 0; a < careerGuilds.length; a += 1) {
+            for (let b = a + 1; b < careerGuilds.length; b += 1) {
+              const lo = Math.min(careerGuilds[a], careerGuilds[b]);
+              const hi = Math.max(careerGuilds[a], careerGuilds[b]);
+              const key = lo * 100000 + hi;
+              pairW.set(key, (pairW.get(key) || 0) + 1);
+            }
+          }
+        }
+
+        // -- pass 2: rosters and the maximum roster a guild ever fields (sizes its gravity well)
+        const guildMax = new Int32Array(GC);
+        const rosters = Array.from({ length: TC }, () => new Map()); // g -> count
+        for (let t = 0; t < TC; t += 1) {
+          const arr = tierChars[t];
+          const roster = rosters[t];
+          for (let i = 0; i < arr.length; i += 3) {
+            roster.set(arr[i + 1], (roster.get(arr[i + 1]) || 0) + 1);
+          }
+          for (const [g, n] of roster) if (n > guildMax[g]) guildMax[g] = n;
+        }
+        const active = [];
+        for (let g = 0; g < GC; g += 1) if (guildMax[g] > 0) active.push(g);
+
+        // -- guild constellation layout: force sim over the career-overlap meta-graph.
+        // Guilds that ever exchanged players end up adjacent, so migrations are short
+        // hops and community structure becomes geography. Positions are stable across
+        // the whole timeline.
+        const gx = new Float32Array(GC);
+        const gy = new Float32Array(GC);
+        const gr = new Float32Array(GC);
+        for (const g of active) gr[g] = hullRadius(guildMax[g]) + 16;
+
+        const order = active.slice().sort((a, b) => guildMax[b] - guildMax[a] || a - b);
+        order.forEach((g, i) => {
+          const r = 90 * Math.sqrt(i + 0.5);
+          gx[g] = Math.cos(i * PHYLLO_ANGLE) * r;
+          gy[g] = Math.sin(i * PHYLLO_ANGLE) * r;
         });
+
+        const edges = [];
+        for (const [key, w] of pairW) {
+          edges.push([Math.floor(key / 100000), key % 100000, w]);
+        }
+
+        const ITERS = 420;
+        for (let iter = 0; iter < ITERS; iter += 1) {
+          const temp = 1 - (iter / ITERS) * 0.75;
+          for (const [a, b, w] of edges) {
+            const dx = gx[b] - gx[a];
+            const dy = gy[b] - gy[a];
+            const d = Math.max(1, Math.hypot(dx, dy));
+            const ideal = gr[a] + gr[b] + 60;
+            const strength = 0.004 * Math.min(1, Math.log1p(w) / 3);
+            const f = (d - ideal) * strength * temp;
+            const fx = (dx / d) * f;
+            const fy = (dy / d) * f;
+            gx[a] += fx; gy[a] += fy;
+            gx[b] -= fx; gy[b] -= fy;
+          }
+          for (let i = 0; i < active.length; i += 1) {
+            const a = active[i];
+            for (let j = i + 1; j < active.length; j += 1) {
+              const b = active[j];
+              const dx = gx[b] - gx[a];
+              const dy = gy[b] - gy[a];
+              let d = Math.hypot(dx, dy);
+              if (d < 1) d = 1;
+              const minD = gr[a] + gr[b] + 14;
+              let f;
+              if (d < minD) {
+                f = (minD - d) * 0.42 * temp;
+              } else {
+                f = Math.min(5, 42000 / (d * d)) * temp * 0.5;
+              }
+              const fx = (dx / d) * f;
+              const fy = (dy / d) * f;
+              gx[a] -= fx; gy[a] -= fy;
+              gx[b] += fx; gy[b] += fy;
+            }
+          }
+          for (const g of active) {
+            gx[g] *= 1 - 0.0015 * temp;
+            gy[g] *= 1 - 0.0015 * temp;
+          }
+        }
+
+        // -- per-tier character positions: phyllotaxis packing around the guild well.
+        // Member ordering is a stable per-character hash so a raider keeps roughly the
+        // same seat in their guild from tier to tier; only real changes move dots far.
+        const ord = new Float64Array(CC);
+        for (let c = 0; c < CC; c += 1) ord[c] = hash32("c" + c) / 4294967296;
+
+        const tiers = [];
+        for (let t = 0; t < TC; t += 1) {
+          const arr = tierChars[t];
+          const count = arr.length / 3;
+          const members = new Map(); // g -> slot indices
+          const td = {
+            count,
+            c: new Int32Array(count),
+            g: new Int32Array(count),
+            r: new Int32Array(count),
+            x: new Float32Array(count),
+            y: new Float32Array(count),
+            slotOf: new Map(),
+            members,
+            roster: rosters[t],
+            secondaries: tierSecondaries[t],
+            grid: null,
+          };
+          for (let i = 0, s = 0; i < arr.length; i += 3, s += 1) {
+            td.c[s] = arr[i];
+            td.g[s] = arr[i + 1];
+            td.r[s] = arr[i + 2];
+            td.slotOf.set(arr[i], s);
+            let list = members.get(arr[i + 1]);
+            if (!list) members.set(arr[i + 1], (list = []));
+            list.push(s);
+          }
+          for (const [g, slots] of members) {
+            slots.sort((a, b) => ord[td.c[a]] - ord[td.c[b]]);
+            ensurePhyllo(slots.length);
+            for (let k = 0; k < slots.length; k += 1) {
+              const s = slots[k];
+              td.x[s] = gx[g] + phX[k];
+              td.y[s] = gy[g] + phY[k];
+            }
+          }
+          tiers.push(td);
+        }
+
+        // -- migrations between consecutive tiers + churn stats
+        const flows = new Array(TC).fill(null);
+        const stats = new Array(TC).fill(null);
+        for (let t = 0; t < TC; t += 1) {
+          const td = tiers[t];
+          const st = { present: td.count, guilds: td.roster.size, stayed: 0, switched: 0, newFaces: 0, returning: 0, departed: 0 };
+          if (t > 0) {
+            const prev = tiers[t - 1];
+            const flowMap = new Map(); // gPrev*100000+gCur -> n
+            for (let s = 0; s < td.count; s += 1) {
+              const c = td.c[s];
+              const prevSlot = prev.slotOf.get(c);
+              if (prevSlot !== undefined) {
+                const a = prev.g[prevSlot];
+                const b = td.g[s];
+                if (a === b) st.stayed += 1; else st.switched += 1;
+                const key = a * 100000 + b;
+                flowMap.set(key, (flowMap.get(key) || 0) + 1);
+              } else if (firstTier[c] === t) {
+                st.newFaces += 1;
+              } else {
+                st.returning += 1;
+              }
+            }
+            for (let s = 0; s < prev.count; s += 1) {
+              if (!td.slotOf.has(prev.c[s])) st.departed += 1;
+            }
+            flows[t] = flowMap;
+          }
+          stats[t] = st;
+        }
+
+        F.tiers = tiers;
+        F.flows = flows;
+        F.stats = stats;
+        F.charTiers = charTiers;
+        F.firstTier = firstTier;
+        F.gx = gx;
+        F.gy = gy;
+        F.guildMax = guildMax;
+        F.active = active;
+
+        buildAlluvial();
+
+        // drop selections that the new filter erased
+        if (view.selChar >= 0 && !(charTiers[view.selChar] || []).length) view.selChar = -1;
+        if (view.selGuild >= 0 && guildMax[view.selGuild] === 0) view.selGuild = -1;
+        view.trans = null;
+        view.hover = null;
       }
 
-      function renderRaidList() {
-        raidList.innerHTML = "";
-        for (const raid of state.raids) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `raid-button ${raid.id === state.selectedRaidId ? "active" : ""}`;
-          button.innerHTML = `
-            <span class="raid-dot"></span>
-            <span>
-              <span class="raid-name">${escapeHtml(raid.name)}</span>
-              <span class="raid-meta">
-                <span>${escapeHtml(raid.expansion)}</span>
-                <span>${formatNumber(raid.guildCount)} guilds</span>
-                <span>${formatNumber(raid.characterCount)} chars</span>
-              </span>
-            </span>
-          `;
-          button.addEventListener("click", () => selectRaid(raid.id));
-          raidList.appendChild(button);
+      /* ============================== alluvial layout ============================== */
+
+      function buildAlluvial() {
+        const TC = M.tiers.length;
+        const columns = [];
+        const colFlows = new Array(TC).fill(null);
+
+        const lumpOf = (t, g) => ((F.tiers[t].roster.get(g) || 0) >= ALLUVIAL_MIN_ROSTER ? g : LUMP);
+
+        for (let t = 0; t < TC; t += 1) {
+          const roster = F.tiers[t].roster;
+          const nodes = [];
+          let lumpCount = 0;
+          for (const [g, n] of roster) {
+            if (n >= ALLUVIAL_MIN_ROSTER) nodes.push({ g, count: n });
+            else lumpCount += n;
+          }
+          nodes.sort((a, b) => F.gy[a.g] - F.gy[b.g] || F.gx[a.g] - F.gx[b.g]);
+          if (lumpCount > 0) nodes.push({ g: LUMP, count: lumpCount });
+
+          let y = 0;
+          const byG = new Map();
+          for (const node of nodes) {
+            node.x = t * ALLUVIAL_COL_PITCH;
+            node.y = y;
+            node.h = Math.max(3, node.count * ALLUVIAL_K);
+            y += node.h + 7;
+            byG.set(node.g, node);
+          }
+          columns.push({ nodes, byG, height: y });
         }
+
+        for (let t = 1; t < TC; t += 1) {
+          const raw = F.flows[t];
+          if (!raw) continue;
+          const agg = new Map();
+          for (const [key, n] of raw) {
+            const a = lumpOf(t - 1, Math.floor(key / 100000));
+            const b = lumpOf(t, key % 100000);
+            const k2 = (a + 2) * 100000 + (b + 2);
+            agg.set(k2, (agg.get(k2) || 0) + n);
+          }
+          const list = [];
+          for (const [k2, n] of agg) {
+            const a = Math.floor(k2 / 100000) - 2;
+            const b = (k2 % 100000) - 2;
+            if (n < 2 && a !== b) continue;
+            list.push({ a, b, n });
+          }
+
+          const prevCol = columns[t - 1];
+          const col = columns[t];
+          const yOf = (byG, g) => { const node = byG.get(g); return node ? node.y + node.h / 2 : 0; };
+
+          // allocate slots within each node, sorted by partner position to minimise crossings
+          const bySrc = new Map();
+          const byDst = new Map();
+          for (const flow of list) {
+            if (!prevCol.byG.has(flow.a) || !col.byG.has(flow.b)) continue;
+            (bySrc.get(flow.a) || bySrc.set(flow.a, []).get(flow.a)).push(flow);
+            (byDst.get(flow.b) || byDst.set(flow.b, []).get(flow.b)).push(flow);
+          }
+          for (const [g, flowsOut] of bySrc) {
+            flowsOut.sort((p, q) => yOf(col.byG, p.b) - yOf(col.byG, q.b));
+            const node = prevCol.byG.get(g);
+            const total = flowsOut.reduce((s, f) => s + f.n * ALLUVIAL_K, 0);
+            const scale = total > node.h ? node.h / total : 1;
+            let y = node.y;
+            for (const f of flowsOut) {
+              f.w = Math.max(0.8, f.n * ALLUVIAL_K * scale);
+              f.ya = y;
+              y += f.n * ALLUVIAL_K * scale;
+            }
+          }
+          for (const [g, flowsIn] of byDst) {
+            flowsIn.sort((p, q) => yOf(prevCol.byG, p.a) - yOf(prevCol.byG, q.a));
+            const node = col.byG.get(g);
+            const total = flowsIn.reduce((s, f) => s + f.n * ALLUVIAL_K, 0);
+            const scale = total > node.h ? node.h / total : 1;
+            let y = node.y;
+            for (const f of flowsIn) {
+              f.yb = y;
+              y += f.n * ALLUVIAL_K * scale;
+            }
+          }
+          colFlows[t] = list.filter((f) => f.ya !== undefined && f.yb !== undefined);
+        }
+
+        F.alluvial = { columns, flows: colFlows };
+      }
+
+      /* ============================== view transforms ============================== */
+
+      function tf() {
+        return view.tf[view.mode];
+      }
+
+      function toWorld(px, py) {
+        const t = tf();
+        return { x: (px - t.x) / t.k, y: (py - t.y) / t.k };
+      }
+
+      function fitBounds(t, x0, y0, x1, y1) {
+        const rect = stage.getBoundingClientRect();
+        const w = Math.max(1, x1 - x0);
+        const h = Math.max(1, y1 - y0);
+        const k = clamp(Math.min((rect.width - 60) / w, (rect.height - 140) / h), 0.02, 2.5);
+        t.k = k;
+        t.x = rect.width / 2 - (x0 + w / 2) * k;
+        t.y = (rect.height - 60) / 2 - (y0 + h / 2) * k;
+      }
+
+      function fitGalaxy() {
+        // Fit the roster-weighted core of the current tier; lone outlier guilds can
+        // sit off-screen rather than shrinking the whole constellation to a blob.
+        const td = F.tiers[view.tier];
+        let weight = 0, mx = 0, my = 0;
+        for (const [g, n] of td.roster) { weight += n; mx += F.gx[g] * n; my += F.gy[g] * n; }
+        if (!weight) { fitBounds(view.tf.galaxy, -100, -100, 100, 100); view.fitted.galaxy = true; return; }
+        mx /= weight; my /= weight;
+        let vx = 0, vy = 0;
+        for (const [g, n] of td.roster) {
+          vx += n * (F.gx[g] - mx) ** 2;
+          vy += n * (F.gy[g] - my) ** 2;
+        }
+        const rx = Math.max(260, Math.sqrt(vx / weight) * 2.3);
+        const ry = Math.max(260, Math.sqrt(vy / weight) * 2.3);
+        fitBounds(view.tf.galaxy, mx - rx, my - ry, mx + rx, my + ry);
+        view.fitted.galaxy = true;
+      }
+
+      function fitFlow() {
+        const cols = F.alluvial.columns;
+        const maxH = Math.max(120, ...cols.map((c) => c.height));
+        fitBounds(view.tf.flow, -40, -70, (cols.length - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W + 160, Math.min(maxH, 2400));
+        view.fitted.flow = true;
+      }
+
+      /* ============================== tier switching ============================== */
+
+      function setTier(t, animate = true) {
+        t = clamp(t, 0, M.tiers.length - 1);
+        if (t === view.tier) return;
+        const from = F.tiers[view.tier];
+        const to = F.tiers[t];
+        view.tier = t;
+
+        if (animate && view.mode === "galaxy") {
+          const prevX = new Float32Array(to.count).fill(NaN);
+          const prevY = new Float32Array(to.count).fill(NaN);
+          const trails = [];
+          for (let s = 0; s < to.count; s += 1) {
+            const slot = from.slotOf.get(to.c[s]);
+            if (slot !== undefined) {
+              prevX[s] = from.x[slot];
+              prevY[s] = from.y[slot];
+              if (from.g[slot] !== to.g[s] && trails.length < 4000) {
+                trails.push([from.x[slot], from.y[slot], to.x[s], to.y[s], to.c[s]]);
+              }
+            }
+          }
+          const leavers = [];
+          for (let s = 0; s < from.count && leavers.length < 6000; s += 1) {
+            if (!to.slotOf.has(from.c[s])) leavers.push([from.x[s], from.y[s], from.c[s]]);
+          }
+          view.trans = { start: performance.now(), prevX, prevY, trails, leavers };
+        } else {
+          view.trans = null;
+        }
+
+        updateHud();
+        renderInspector();
+      }
+
+      function startPlay() {
+        if (view.playing) return;
+        view.playing = true;
+        els.playBtn.textContent = "❚❚";
+        if (view.tier >= M.tiers.length - 1) setTier(0);
+        view.playTimer = setInterval(() => {
+          if (view.tier >= M.tiers.length - 1) { stopPlay(); return; }
+          setTier(view.tier + 1);
+        }, PLAY_MS);
+      }
+
+      function stopPlay() {
+        view.playing = false;
+        els.playBtn.textContent = "▶";
+        if (view.playTimer) clearInterval(view.playTimer);
+        view.playTimer = null;
+      }
+
+      /* ============================== HUD (title, stats, timeline) ============================== */
+
+      function updateHud() {
+        const tier = M.tiers[view.tier];
+        if (view.mode === "galaxy") {
+          els.titleMain.textContent = tier.name;
+          els.titleSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · tier ${view.tier + 1} of ${M.tiers.length}`;
+        } else {
+          els.titleMain.textContent = "Guild lineages";
+          els.titleSub.textContent = "Each band is a guild's roster flowing through time. Ribbons are raiders who stayed or moved.";
+        }
+        renderStats();
+        renderTimeline();
       }
 
       function renderStats() {
-        const graphStats = state.graph.stats || {};
-        const items = [
-          ["Raids", graphStats.raidCount],
-          ["Guilds", graphStats.connectedGuilds],
-          ["Pairs", graphStats.edges],
-          ["Characters", graphStats.activeCharacters],
-          ["Bridges", graphStats.multiGuildCharacters],
-        ];
-        stats.innerHTML = items
-          .map(
-            ([label, value]) => `
-              <div class="stat">
-                <strong>${formatNumber(value)}</strong>
-                <span>${label}</span>
-              </div>
-            `,
-          )
+        let items;
+        if (view.mode === "galaxy") {
+          const st = F.stats[view.tier];
+          items = [
+            ["Raiders", st.present],
+            ["Guilds", st.guilds],
+            ["Stayed", st.stayed],
+            ["Switched", st.switched],
+            ["Returned", st.returning],
+            ["New", st.newFaces],
+            ["Gone", st.departed],
+          ];
+          if (view.tier === 0) items = items.slice(0, 2);
+        } else {
+          let migrations = 0;
+          for (const flowMap of F.flows) {
+            if (!flowMap) continue;
+            for (const [key, n] of flowMap) {
+              if (Math.floor(key / 100000) !== key % 100000) migrations += n;
+            }
+          }
+          items = [
+            ["Tiers", M.tiers.length],
+            ["Guilds", F.active.length],
+            ["Characters", M.chars.reduce((s, ch, c) => s + ((F.charTiers[c] || []).length ? 1 : 0), 0)],
+            ["Guild switches", migrations],
+          ];
+        }
+        els.stats.innerHTML = items
+          .map(([label, value]) => `<div class="stat"><strong>${fmt(value)}</strong><span>${label}</span></div>`)
           .join("");
       }
 
-      function getEdgeGuilds(edge) {
-        return [state.nodeById.get(edge.source), state.nodeById.get(edge.target)];
+      function buildTimeline() {
+        els.tierCells.innerHTML = M.tiers
+          .map((tier, t) => `
+            <button class="tier-cell" type="button" data-t="${t}" title="${esc(tier.name)} · ${esc(tier.expansion)} · ${monthYear(tier.start)}">
+              <span class="bar" style="background:${expColor(tier.expansion)}"></span>
+              <span class="abbr">${esc(tierAbbr(tier.name))}</span>
+              <span class="yr">${tier.start ? new Date(tier.start).getFullYear() : ""}</span>
+            </button>`)
+          .join("");
+        for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
+          cell.addEventListener("click", () => { stopPlay(); setTier(Number(cell.dataset.t)); });
+        }
+        renderTimeline();
       }
 
-      function renderFocusPanel() {
-        const character = state.focusCharacter;
-        if (!character) {
-          focusPanel.classList.remove("visible");
-          focusPanel.innerHTML = "";
-          return;
+      function renderTimeline() {
+        for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
+          cell.classList.toggle("active", Number(cell.dataset.t) === view.tier);
         }
-
-        focusPanel.classList.add("visible");
-        focusPanel.innerHTML = `
-          <div class="row-main">
-            <span>${escapeHtml(characterLabel(character))}</span>
-            <span>${escapeHtml(character.className)}</span>
-          </div>
-          <div class="row-sub">${plural(character.guildCount, "guild")} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} report appearances</div>
-          <div class="chip-row">
-            ${character.guilds
-              .slice(0, 8)
-              .map((guild) => `<span class="chip">${escapeHtml(guildLabel(guild))}: ${plural(guild.raidCount, "raid")}</span>`)
-              .join("")}
-          </div>
-        `;
       }
 
-      function renderSelectionPanel() {
-        if (state.selectedEdge) {
-          const [source, target] = getEdgeGuilds(state.selectedEdge);
-          inspectorSubtitle.textContent = `${state.selectedEdge.sharedCharacters} shared characters across ${plural(state.selectedEdge.raidCount, "raid")}`;
-          selectionPanel.innerHTML = `
-            <div class="selected-title">
-              <span>${escapeHtml(guildLabel(source))}</span>
-              <span style="color: var(--quiet)">to</span>
-              <span>${escapeHtml(guildLabel(target))}</span>
-            </div>
-            <div class="row-sub">${formatNumber(state.selectedEdge.reportWeight)} weighted report overlap · ${escapeHtml(state.selectedEdge.raidLabel || "")} · ${dateRange(
-              state.selectedEdge.firstSeenAt,
-              state.selectedEdge.lastSeenAt,
-            )}</div>
-            <div class="chip-row">
-              ${(state.selectedEdge.examples || [])
-                .slice(0, 14)
-                .map((item) => `<span class="chip" style="border-color:${classColor(item.classID)}66">${escapeHtml(item.name)}-${escapeHtml(item.realm)} · ${escapeHtml(item.className)}</span>`)
-                .join("")}
-            </div>
-          `;
-          return;
-        }
-
-        if (state.selectedNode) {
-          inspectorSubtitle.textContent = `${formatNumber(state.selectedNode.activeCharacters)} active character-raid rows`;
-          selectionPanel.innerHTML = `
-            <div class="selected-title"><span>${escapeHtml(guildLabel(state.selectedNode))}</span></div>
-            <div class="row-sub">${formatNumber(state.selectedNode.reportCount)} report appearances · ${plural(state.selectedNode.raidCount, "raid")} · ${dateRange(
-              state.selectedNode.firstSeenAt,
-              state.selectedNode.lastSeenAt,
-            )}</div>
-            <div class="chip-row">
-              <span class="chip">${formatNumber(state.selectedNode.connectionWeight)} shared-character weight</span>
-              ${state.selectedNode.raids
-                .slice(0, 8)
-                .map((raid) => `<span class="chip">${escapeHtml(raid.name)}: ${formatNumber(raid.reports)}</span>`)
-                .join("")}
-            </div>
-          `;
-          return;
-        }
-
-        inspectorSubtitle.textContent = state.focusCharacter ? "Focused character is highlighted." : "Select a guild, guild pair, or character.";
-        selectionPanel.innerHTML = `<div class="selected-empty">${
-          state.focusCharacter ? "Edges and guilds tied to the focused character are highlighted in amber." : "No graph item selected."
-        }</div>`;
-      }
+      /* ============================== inspector panels ============================== */
 
       function renderInspector() {
-        renderFocusPanel();
-        renderSelectionPanel();
+        if (view.selChar >= 0) return renderCharPanel(view.selChar);
+        if (view.selGuild >= 0) return renderGuildPanel(view.selGuild);
+        renderTierPanel();
+      }
 
-        pairList.innerHTML = state.graph.edges
-          .slice(0, 14)
-          .map((edge) => {
-            const [source, target] = getEdgeGuilds(edge);
-            const active = state.selectedEdge && state.selectedEdge.id === edge.id ? " active" : "";
-            const focus = edge.hasFocusCharacter ? " · focused character" : "";
-            return `
-              <button class="list-row${active}" type="button" data-edge-id="${escapeHtml(edge.id)}">
-                <div class="row-main">
-                  <span>${escapeHtml(guildLabel(source))} ↔ ${escapeHtml(guildLabel(target))}</span>
-                  <span>${formatNumber(edge.sharedCharacters)}</span>
-                </div>
-                <div class="row-sub">${plural(edge.raidCount, "raid")} · ${escapeHtml(edge.raidLabel || "")}${focus}</div>
-              </button>
-            `;
-          })
+      function bindInspectorActions() {
+        for (const el of els.insBody.querySelectorAll("[data-sel-guild]")) {
+          el.addEventListener("click", () => selectGuild(Number(el.dataset.selGuild)));
+        }
+        for (const el of els.insBody.querySelectorAll("[data-sel-char]")) {
+          el.addEventListener("click", () => selectChar(Number(el.dataset.selChar)));
+        }
+        for (const el of els.insBody.querySelectorAll("[data-go-tier]")) {
+          el.addEventListener("click", () => { stopPlay(); setTier(Number(el.dataset.goTier)); });
+        }
+      }
+
+      function renderTierPanel() {
+        const t = view.tier;
+        const tier = M.tiers[t];
+        const td = F.tiers[t];
+        els.insTitle.textContent = tier.name;
+        els.insSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · ${fmt(td.count)} raiders in ${fmt(td.roster.size)} guilds`;
+
+        const top = Array.from(td.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        const moves = [];
+        if (F.flows[t]) {
+          for (const [key, n] of F.flows[t]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a !== b && n >= 2) moves.push([a, b, n]);
+          }
+          moves.sort((p, q) => q[2] - p[2]);
+        }
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Biggest rosters</h3>
+            <div class="list">
+              ${top.map(([g, n]) => `
+                <button class="card" type="button" data-sel-guild="${g}">
+                  <div class="row-main"><span>${esc(guildLabel(g))}</span><span>${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Biggest moves vs previous tier</h3>
+            <div class="list">
+              ${moves.length === 0 ? `<div class="card"><div class="row-sub">${t === 0 ? "First tracked tier — no previous tier." : "No multi-raider moves under this filter."}</div></div>` : ""}
+              ${moves.slice(0, 10).map(([a, b, n]) => `
+                <button class="card" type="button" data-sel-guild="${b}">
+                  <div class="row-main"><span>${esc(guildLabel(a))} → ${esc(guildLabel(b))}</span><span>${fmt(n)}</span></div>
+                  <div class="row-sub">${fmt(n)} raiders moved together</div>
+                </button>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderGuildPanel(g) {
+        const guild = M.guilds[g];
+        const t = view.tier;
+        const rosterNow = F.tiers[t].roster.get(g) || 0;
+
+        const history = M.tiers.map((tier, i) => ({ i, n: F.tiers[i].roster.get(g) || 0 }));
+        const peak = Math.max(1, ...history.map((h) => h.n));
+        const activeTiers = history.filter((h) => h.n > 0);
+
+        // tenure of current/overall members in this guild
+        const tenure = new Map();
+        for (let i = 0; i < M.tiers.length; i += 1) {
+          const slots = F.tiers[i].members.get(g);
+          if (!slots) continue;
+          for (const s of slots) {
+            const c = F.tiers[i].c[s];
+            tenure.set(c, (tenure.get(c) || 0) + 1);
+          }
+        }
+        const mainstays = Array.from(tenure.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+        const inflow = [];
+        const outflow = [];
+        if (F.flows[t]) {
+          for (const [key, n] of F.flows[t]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (b === g && a !== g) inflow.push([a, n]);
+          }
+        }
+        if (F.flows[t + 1]) {
+          for (const [key, n] of F.flows[t + 1]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a === g && b !== g) outflow.push([b, n]);
+          }
+        }
+        inflow.sort((p, q) => q[1] - p[1]);
+        outflow.sort((p, q) => q[1] - p[1]);
+
+        els.insTitle.textContent = guildLabel(g);
+        els.insSub.textContent = `${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Roster across tiers — click to jump</h3>
+            <div class="card">
+              <div class="roster-bars">
+                ${history.map((h) => `
+                  <button type="button" data-go-tier="${h.i}" title="${esc(M.tiers[h.i].name)}: ${fmt(h.n)} raiders"
+                    class="${h.i === t ? "on" : ""}"
+                    style="height:${Math.max(2, (h.n / peak) * 44)}px;background:hsl(${guild.hue} 65% 58%)"></button>`).join("")}
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Joined this tier from</h3>
+            <div class="list">
+              ${inflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked arrivals from the previous tier.</div></div>` : ""}
+              ${inflow.slice(0, 6).map(([a, n]) => `
+                <button class="card" type="button" data-sel-guild="${a}">
+                  <div class="row-main"><span>${esc(guildLabel(a))}</span><span>+${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Left for (next tier)</h3>
+            <div class="list">
+              ${outflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked departures to the next tier.</div></div>` : ""}
+              ${outflow.slice(0, 6).map(([b, n]) => `
+                <button class="card" type="button" data-sel-guild="${b}">
+                  <div class="row-main"><span>${esc(guildLabel(b))}</span><span>−${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Mainstays (most tiers in this guild)</h3>
+            <div class="chips">
+              ${mainstays.map(([c, n]) => `
+                <span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">
+                  ${esc(M.chars[c].name)} · ${n}
+                </span>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderCharPanel(c) {
+        const ch = M.chars[c];
+        const tiersAttended = F.charTiers[c] || [];
+        const career = [];
+        const guildsSeen = new Set();
+        for (const t of tiersAttended) {
+          const td = F.tiers[t];
+          const s = td.slotOf.get(c);
+          career.push({ t, g: td.g[s], r: td.r[s] });
+          guildsSeen.add(td.g[s]);
+        }
+        const first = career.length ? M.tiers[career[0].t] : null;
+        const last = career.length ? M.tiers[career[career.length - 1].t] : null;
+
+        els.insTitle.textContent = `${ch.name}-${ch.realm}`;
+        els.insSub.textContent = `${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Career ${first ? `· ${monthYear(first.start)} → ${monthYear(last.start)}` : ""}</h3>
+            <div class="list">
+              ${career.map((step) => `
+                <button class="card ${step.t === view.tier ? "active" : ""}" type="button" data-go-tier="${step.t}">
+                  <div class="row-main">
+                    <span>${esc(M.tiers[step.t].name)}</span>
+                    <span style="color:${expColor(M.tiers[step.t].expansion)}">${tierAbbr(M.tiers[step.t].name)}</span>
+                  </div>
+                  <div class="row-sub">${esc(guildLabel(step.g))} · ${fmt(step.r)} reports</div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Guilds</h3>
+            <div class="chips">
+              ${Array.from(guildsSeen).map((g) => `
+                <span class="chip" data-sel-guild="${g}" style="border-color:hsl(${M.guilds[g].hue} 65% 58% / 0.6)">${esc(guildLabel(g))}</span>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function selectGuild(g) {
+        view.selGuild = g === LUMP ? -1 : g;
+        view.selChar = -1;
+        renderInspector();
+      }
+
+      function selectChar(c) {
+        view.selChar = c;
+        view.selGuild = -1;
+        const tiersAttended = F.charTiers[c] || [];
+        if (tiersAttended.length && !tiersAttended.includes(view.tier)) {
+          stopPlay();
+          setTier(tiersAttended[tiersAttended.length - 1]);
+        }
+        renderInspector();
+      }
+
+      function clearSelection() {
+        view.selChar = -1;
+        view.selGuild = -1;
+        renderInspector();
+      }
+
+      /* ============================== sidebar widgets ============================== */
+
+      function buildClassGrid() {
+        els.classGrid.innerHTML = Object.entries(CLASS_NAMES)
+          .map(([id, name]) => `
+            <button class="class-chip" type="button" data-class="${id}">
+              <span class="dot" style="background:${CLASS_COLORS[id]}"></span>${esc(name)}
+            </button>`)
           .join("");
-
-        for (const button of pairList.querySelectorAll("[data-edge-id]")) {
-          button.addEventListener("click", () => {
-            state.selectedEdge = state.graph.edges.find((edge) => edge.id === button.dataset.edgeId) || null;
-            state.selectedNode = null;
-            renderInspector();
+        for (const chip of els.classGrid.querySelectorAll("[data-class]")) {
+          chip.addEventListener("click", () => {
+            const id = Number(chip.dataset.class);
+            if (view.classFilter.has(id)) view.classFilter.delete(id);
+            else view.classFilter.add(id);
+            chip.classList.toggle("on", view.classFilter.has(id));
           });
         }
+      }
 
-        bridgeList.innerHTML = state.graph.bridges
-          .slice(0, 18)
-          .map((character) => {
-            const active = state.focusIdentity === character.id ? " active" : "";
+      let searchTimer = null;
+      function runSearch() {
+        const q = els.search.value.trim().toLowerCase();
+        if (q.length < 2) {
+          els.searchResults.classList.remove("visible");
+          els.searchResults.innerHTML = "";
+          return;
+        }
+        const hits = [];
+        for (let c = 0; c < M.chars.length; c += 1) {
+          if (!M.chars[c].lname.startsWith(q)) continue;
+          const tiersAttended = (F.charTiers[c] || []).length;
+          if (!tiersAttended) continue;
+          hits.push([c, tiersAttended, M.chars[c].total]);
+        }
+        hits.sort((a, b) => b[1] - a[1] || b[2] - a[2]);
+        els.searchResults.innerHTML = hits.slice(0, 18)
+          .map(([c, tiersAttended]) => {
+            const ch = M.chars[c];
             return `
-              <button class="bridge-row${active}" type="button" data-character-id="${escapeHtml(character.id)}">
+              <button class="search-result" type="button" data-c="${c}">
                 <div class="row-main">
-                  <span>${escapeHtml(characterLabel(character))}</span>
-                  <span>${formatNumber(character.guildCount)}</span>
+                  <span style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</span>
+                  <span>${tiersAttended}t</span>
                 </div>
-                <div class="row-sub">${escapeHtml(character.className)} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} report appearances</div>
-                <div class="chip-row">
-                  ${character.guilds
-                    .slice(0, 5)
-                    .map((guild) => `<span class="chip">${escapeHtml(guildLabel(guild))}: ${formatNumber(guild.reports)}</span>`)
-                    .join("")}
-                </div>
-              </button>
-            `;
+                <div class="row-sub">${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${fmt(ch.total)} reports</div>
+              </button>`;
           })
           .join("");
-
-        for (const button of bridgeList.querySelectorAll("[data-character-id]")) {
-          button.addEventListener("click", () => {
-            const character = state.graph.bridges.find((item) => item.id === button.dataset.characterId);
-            if (character) selectCharacter(character);
+        els.searchResults.classList.toggle("visible", hits.length > 0);
+        for (const btn of els.searchResults.querySelectorAll("[data-c]")) {
+          btn.addEventListener("click", () => {
+            selectChar(Number(btn.dataset.c));
+            els.searchResults.classList.remove("visible");
           });
         }
       }
 
-      function prepareGraph(graph) {
-        state.previousPositions = new Map(state.graph.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
-        state.graph = graph;
-        state.focusCharacter = graph.selectedCharacter || null;
-        state.nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-        const focusGuildIds = new Set((state.focusCharacter?.guilds || []).map((guild) => guild.id));
-        const rect = canvas.getBoundingClientRect();
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        graph.nodes.forEach((node, index) => {
-          const previous = state.previousPositions.get(node.id);
-          const angle = (index / Math.max(1, graph.nodes.length)) * Math.PI * 2;
-          const radius = 120 + (index % 9) * 12;
-          node.x = previous?.x ?? centerX + Math.cos(angle) * radius;
-          node.y = previous?.y ?? centerY + Math.sin(angle) * radius;
-          node.vx = 0;
-          node.vy = 0;
-          node.isFocus = focusGuildIds.has(node.id);
-          node.radius = Math.max(6, Math.min(24, 5 + Math.sqrt(node.activeCharacters || 1) * 1.2));
-          node.color = classColor(node.realm.length + node.name.length);
-        });
-
-        graph.edges.forEach((edge) => {
-          edge.sourceNode = state.nodeById.get(edge.source);
-          edge.targetNode = state.nodeById.get(edge.target);
-        });
-
-        state.selectedEdge = null;
-        state.selectedNode = null;
-      }
-
-      function tickSimulation() {
-        const nodes = state.graph.nodes;
-        const edges = state.graph.edges;
-        if (!nodes.length) return;
-
-        for (const edge of edges) {
-          const a = edge.sourceNode;
-          const b = edge.targetNode;
-          if (!a || !b) continue;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const distance = Math.max(1, Math.hypot(dx, dy));
-          const targetDistance = Math.max(74, 160 - Math.min(edge.sharedCharacters, 30) * 2.4 - Math.min(edge.raidCount || 1, 8) * 4);
-          const force = (distance - targetDistance) * 0.0055;
-          const fx = (dx / distance) * force;
-          const fy = (dy / distance) * force;
-          if (state.draggingNode !== a) {
-            a.vx += fx;
-            a.vy += fy;
-          }
-          if (state.draggingNode !== b) {
-            b.vx -= fx;
-            b.vy -= fy;
-          }
-        }
-
-        for (let i = 0; i < nodes.length; i += 1) {
-          const a = nodes[i];
-          for (let j = i + 1; j < nodes.length; j += 1) {
-            const b = nodes[j];
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const distance = Math.max(1, Math.hypot(dx, dy));
-            const minDistance = a.radius + b.radius + 26;
-            const strength = Math.min(1.8, (minDistance * minDistance) / (distance * distance)) * 0.78;
-            const fx = (dx / distance) * strength;
-            const fy = (dy / distance) * strength;
-            if (state.draggingNode !== a) {
-              a.vx -= fx;
-              a.vy -= fy;
-            }
-            if (state.draggingNode !== b) {
-              b.vx += fx;
-              b.vy += fy;
-            }
-          }
-        }
-
-        const rect = canvas.getBoundingClientRect();
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        for (const node of nodes) {
-          if (state.draggingNode === node) continue;
-          node.vx += (centerX - node.x) * 0.0018;
-          node.vy += (centerY - node.y) * 0.0018;
-          node.vx *= 0.86;
-          node.vy *= 0.86;
-          node.x += node.vx;
-          node.y += node.vy;
-        }
-      }
+      /* ============================== galaxy rendering ============================== */
 
       function resizeCanvas() {
         const rect = stage.getBoundingClientRect();
@@ -1263,359 +1656,638 @@
         canvas.height = Math.max(1, Math.floor(rect.height * ratio));
         canvas.style.width = `${rect.width}px`;
         canvas.style.height = `${rect.height}px`;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       }
 
-      function worldToScreen(point) {
-        return {
-          x: point.x * state.transform.scale + state.transform.x,
-          y: point.y * state.transform.scale + state.transform.y,
-        };
+      function dotAlpha(c, g) {
+        let a = 0.92;
+        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.1;
+        if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.22;
+        if (view.selChar >= 0) a *= c === view.selChar ? 1 : 0.1;
+        return a;
       }
 
-      function screenToWorld(point) {
-        return {
-          x: (point.x - state.transform.x) / state.transform.scale,
-          y: (point.y - state.transform.y) / state.transform.scale,
-        };
-      }
+      function drawGalaxy(now) {
+        const t = tf();
+        const td = F.tiers[view.tier];
+        const tier = M.tiers[view.tier];
 
-      function drawGraph() {
-        tickSimulation();
+        let p = 1;
+        if (view.trans) {
+          p = clamp((now - view.trans.start) / TRANS_MS, 0, 1);
+          if (p >= 1) view.trans = null;
+        }
+        const pe = ease(p);
 
-        const rect = canvas.getBoundingClientRect();
-        ctx.clearRect(0, 0, rect.width, rect.height);
         ctx.save();
-        ctx.translate(state.transform.x, state.transform.y);
-        ctx.scale(state.transform.scale, state.transform.scale);
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
 
-        for (const edge of state.graph.edges) {
-          const a = edge.sourceNode;
-          const b = edge.targetNode;
-          if (!a || !b) continue;
-          const selected = state.selectedEdge && state.selectedEdge.id === edge.id;
-          const hovered = state.hoverEdge && state.hoverEdge.id === edge.id;
-          const focused = edge.hasFocusCharacter;
-          const width = Math.max(1, Math.min(9, Math.sqrt(edge.sharedCharacters) + Math.min(edge.raidCount || 0, 8) * 0.18));
+        // guild hulls
+        for (const [g, n] of td.roster) {
+          const r = hullRadius(n);
+          const guild = M.guilds[g];
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
           ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.strokeStyle = selected
-            ? "rgba(251, 191, 36, 0.95)"
-            : focused
-              ? "rgba(251, 191, 36, 0.82)"
-              : hovered
-                ? "rgba(52, 211, 153, 0.82)"
-                : `rgba(96, 165, 250, ${Math.min(0.48, 0.18 + (edge.raidCount || 1) * 0.025)})`;
-          ctx.lineWidth = selected || hovered || focused ? width + 1.4 : width;
+          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(${guild.hue} 65% 58% / ${isSel || isHover ? 0.16 : 0.07})`;
+          ctx.fill();
+          if (isSel || isHover) {
+            ctx.lineWidth = 1.6 / t.k;
+            ctx.strokeStyle = `hsl(${guild.hue} 70% 65% / 0.8)`;
+            ctx.stroke();
+          }
+        }
+
+        // aggregated migration arrows from the previous tier
+        if (view.showFlows && F.flows[view.tier]) {
+          for (const [key, n] of F.flows[view.tier]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a === b || n < 2) continue;
+            const x0 = F.gx[a], y0 = F.gy[a], x1 = F.gx[b], y1 = F.gy[b];
+            const mx = (x0 + x1) / 2 - (y1 - y0) * 0.14;
+            const my = (y0 + y1) / 2 + (x1 - x0) * 0.14;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.quadraticCurveTo(mx, my, x1, y1);
+            ctx.strokeStyle = `rgba(251, 191, 36, ${Math.min(0.55, 0.1 + n * 0.03)})`;
+            ctx.lineWidth = Math.min(7, 0.8 + Math.sqrt(n));
+            ctx.stroke();
+            // arrowhead
+            const ux = x1 - mx, uy = y1 - my;
+            const ul = Math.max(1, Math.hypot(ux, uy));
+            const ax = x1 - (ux / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
+            const ay = y1 - (uy / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
+            const size = Math.min(14, 4 + Math.sqrt(n) * 1.6);
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - (ux / ul) * size - (uy / ul) * size * 0.5, ay - (uy / ul) * size + (ux / ul) * size * 0.5);
+            ctx.lineTo(ax - (ux / ul) * size + (uy / ul) * size * 0.5, ay - (uy / ul) * size - (ux / ul) * size * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(0.6, 0.15 + n * 0.03)})`;
+            ctx.fill();
+          }
+        }
+
+        // cross-guild fibers: characters who logged with several guilds in the same tier
+        if (view.showFibers && td.secondaries.length) {
+          ctx.beginPath();
+          const cap = Math.min(td.secondaries.length, 7000);
+          for (let i = 0; i < cap; i += 2) {
+            const c = td.secondaries[i];
+            const g = td.secondaries[i + 1];
+            const s = td.slotOf.get(c);
+            if (s === undefined) continue;
+            ctx.moveTo(td.x[s], td.y[s]);
+            ctx.lineTo(F.gx[g], F.gy[g]);
+          }
+          ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
+          ctx.lineWidth = 0.7 / t.k;
           ctx.stroke();
         }
 
-        for (const node of state.graph.nodes) {
-          const selected = state.selectedNode && state.selectedNode.id === node.id;
-          const hovered = state.hoverNode && state.hoverNode.id === node.id;
-          const focused = node.isFocus;
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, node.radius + (selected || hovered || focused ? 3 : 0), 0, Math.PI * 2);
-          ctx.fillStyle = selected ? "#fbbf24" : hovered ? "#34d399" : focused ? "#fbbf24" : node.color;
-          ctx.fill();
-          ctx.lineWidth = selected || hovered || focused ? 2.4 : 1.2;
-          ctx.strokeStyle = selected || hovered || focused ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.36)";
-          ctx.stroke();
+        // leavers fade out where they last stood
+        if (view.trans && view.trans.leavers.length) {
+          const alpha = (1 - pe) * 0.5;
+          if (alpha > 0.02) {
+            const paths = new Map();
+            for (const [x, y, c] of view.trans.leavers) {
+              const cls = M.chars[c].classID;
+              let path = paths.get(cls);
+              if (!path) paths.set(cls, (path = new Path2D()));
+              path.moveTo(x + 1.8, y);
+              path.arc(x, y, 1.8, 0, Math.PI * 2);
+            }
+            ctx.globalAlpha = alpha;
+            for (const [cls, path] of paths) {
+              ctx.fillStyle = CLASS_COLORS[cls];
+              ctx.fill(path);
+            }
+            ctx.globalAlpha = 1;
+          }
+        }
 
-          const shouldLabel = selected || hovered || focused || node.connectionWeight >= 12 || state.transform.scale > 1.25;
-          if (shouldLabel) {
-            ctx.font = "650 11px Inter, system-ui, sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            const label = node.name.length > 22 ? `${node.name.slice(0, 21)}...` : node.name;
-            const textWidth = ctx.measureText(label).width;
-            const y = node.y + node.radius + 6;
-            ctx.fillStyle = "rgba(5, 7, 17, 0.84)";
-            ctx.fillRect(node.x - textWidth / 2 - 5, y - 2, textWidth + 10, 16);
-            ctx.fillStyle = "#f8fafc";
-            ctx.fillText(label, node.x, y);
+        // migration trails
+        if (view.trans && view.trans.trails.length) {
+          ctx.lineWidth = 1 / t.k;
+          for (const [x0, y0, x1, y1, c] of view.trans.trails) {
+            const cx = x0 + (x1 - x0) * pe;
+            const cy = y0 + (y1 - y0) * pe;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(cx, cy);
+            ctx.strokeStyle = CLASS_COLORS[M.chars[c].classID] + "55";
+            ctx.stroke();
+          }
+        }
+
+        // character dots, batched by class × alpha bucket
+        const buckets = new Map();
+        const trans = view.trans;
+        for (let s = 0; s < td.count; s += 1) {
+          let x = td.x[s];
+          let y = td.y[s];
+          let alpha = dotAlpha(td.c[s], td.g[s]);
+          if (trans) {
+            const px = trans.prevX[s];
+            if (Number.isNaN(px)) {
+              alpha *= pe; // newcomer fades in
+            } else {
+              x = px + (x - px) * pe;
+              y = trans.prevY[s] + (y - trans.prevY[s]) * pe;
+            }
+          }
+          if (alpha < 0.02) continue;
+          const bucket = M.chars[td.c[s]].classID * 16 + Math.min(15, Math.round(alpha * 10));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.7 + Math.min(2.4, Math.sqrt(td.r[s]) * 0.45);
+          path.moveTo(x + r, y);
+          path.arc(x, y, r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = (bucket % 16) / 10;
+          ctx.fillStyle = CLASS_COLORS[Math.floor(bucket / 16)];
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        // selected character: career path through the constellation + ring
+        if (view.selChar >= 0) drawCareerPath(view.selChar, t);
+
+        // hovered character ring
+        if (view.hover && view.hover.kind === "char") {
+          const s = view.hover.s;
+          ctx.beginPath();
+          ctx.arc(td.x[s], td.y[s], 5, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = 1.4 / t.k;
+          ctx.stroke();
+        }
+
+        // guild labels
+        if (view.showLabels) {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          for (const [g, n] of td.roster) {
+            const apparent = hullRadius(n) * t.k;
+            const isSel = g === view.selGuild;
+            const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+            if (apparent < 26 && !isSel && !isHover) continue;
+            const guild = M.guilds[g];
+            const fontPx = clamp(11 / t.k, 4, 200);
+            ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+            const x = F.gx[g];
+            const y = F.gy[g] - hullRadius(n) - 3 / t.k;
+            ctx.lineWidth = 3 / t.k;
+            ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+            ctx.strokeText(guild.name, x, y);
+            ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
+            ctx.fillText(guild.name, x, y);
           }
         }
 
         ctx.restore();
-        requestAnimationFrame(drawGraph);
       }
 
-      function nodeAt(point) {
-        const world = screenToWorld(point);
+      function drawCareerPath(c, t) {
+        const tiersAttended = F.charTiers[c] || [];
+        if (!tiersAttended.length) return;
+        const points = tiersAttended.map((tt) => {
+          const td = F.tiers[tt];
+          const s = td.slotOf.get(c);
+          return { t: tt, x: td.x[s], y: td.y[s] };
+        });
+
+        ctx.lineWidth = 2.4 / Math.sqrt(t.k);
+        for (let i = 1; i < points.length; i += 1) {
+          const a = points[i - 1];
+          const b = points[i];
+          const gap = b.t - a.t > 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          const mx = (a.x + b.x) / 2 - (b.y - a.y) * 0.1;
+          const my = (a.y + b.y) / 2 + (b.x - a.x) * 0.1;
+          ctx.quadraticCurveTo(mx, my, b.x, b.y);
+          ctx.setLineDash(gap ? [6 / t.k, 6 / t.k] : []);
+          const hueShift = 30 + (i / points.length) * 30;
+          ctx.strokeStyle = `hsl(${hueShift} 95% 62% / 0.9)`;
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        const fontPx = clamp(10 / t.k, 3, 60);
+        ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (const point of points) {
+          const isCurrent = point.t === view.tier;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, (isCurrent ? 5 : 3.4) / Math.sqrt(t.k), 0, Math.PI * 2);
+          ctx.fillStyle = isCurrent ? "#fbbf24" : "rgba(255,255,255,0.92)";
+          ctx.fill();
+          const label = tierAbbr(M.tiers[point.t].name);
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(label, point.x, point.y - 11 / t.k);
+          ctx.fillStyle = "#fde68a";
+          ctx.fillText(label, point.x, point.y - 11 / t.k);
+        }
+      }
+
+      /* ============================== alluvial rendering ============================== */
+
+      function flowColor(f, highlight) {
+        if (highlight) return "rgba(251, 191, 36, 0.72)";
+        if (f.a === f.b && f.a !== LUMP) {
+          return `hsl(${M.guilds[f.a].hue} 60% 55% / 0.4)`;
+        }
+        if (f.a === f.b) return "rgba(148, 163, 184, 0.16)";
+        return "rgba(148, 163, 184, 0.17)";
+      }
+
+      function drawFlow() {
+        const t = tf();
+        const { columns, flows } = F.alluvial;
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
+
+        const selG = view.selGuild;
+        const hover = view.hover;
+        const selTiers = view.selChar >= 0 ? F.charTiers[view.selChar] || [] : [];
+
+        // ribbons
+        for (let i = 1; i < columns.length; i += 1) {
+          if (!flows[i]) continue;
+          const x0 = (i - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W;
+          const x1 = i * ALLUVIAL_COL_PITCH;
+          const cpx = (x1 - x0) * 0.45;
+          for (const f of flows[i]) {
+            const isSel = selG >= 0 && (f.a === selG || f.b === selG);
+            const isHover = hover && hover.kind === "flow" && hover.f === f;
+            ctx.beginPath();
+            ctx.moveTo(x0, f.ya);
+            ctx.bezierCurveTo(x0 + cpx, f.ya, x1 - cpx, f.yb, x1, f.yb);
+            ctx.lineTo(x1, f.yb + f.w);
+            ctx.bezierCurveTo(x1 - cpx, f.yb + f.w, x0 + cpx, f.ya + f.w, x0, f.ya + f.w);
+            ctx.closePath();
+            ctx.fillStyle = flowColor(f, isSel || isHover);
+            ctx.fill();
+          }
+        }
+
+        // nodes
+        for (let i = 0; i < columns.length; i += 1) {
+          const isCurrentTier = i === view.tier;
+          for (const node of columns[i].nodes) {
+            const isSel = node.g === selG;
+            const isHover = hover && hover.kind === "node" && hover.node === node;
+            const hue = node.g === LUMP ? null : M.guilds[node.g].hue;
+            ctx.fillStyle = node.g === LUMP
+              ? "rgba(115, 129, 150, 0.55)"
+              : `hsl(${hue} 62% ${isSel || isHover ? 66 : 52}% / ${isSel || isHover ? 1 : 0.85})`;
+            ctx.fillRect(node.x, node.y, ALLUVIAL_NODE_W, node.h);
+            if (isSel) {
+              ctx.lineWidth = 1.6 / t.k;
+              ctx.strokeStyle = "#fbbf24";
+              ctx.strokeRect(node.x, node.y, ALLUVIAL_NODE_W, node.h);
+            }
+            const apparentH = node.h * t.k;
+            if ((apparentH > 9 || isSel || isHover) && node.g !== LUMP) {
+              const fontPx = clamp(10.5 / t.k, 2.5, 80);
+              ctx.font = `650 ${fontPx}px Inter, system-ui, sans-serif`;
+              ctx.textAlign = "left";
+              ctx.textBaseline = "middle";
+              const label = M.guilds[node.g].name;
+              ctx.lineWidth = 3 / t.k;
+              ctx.strokeStyle = "rgba(5, 7, 17, 0.8)";
+              ctx.strokeText(label, node.x + ALLUVIAL_NODE_W + 4 / t.k, node.y + node.h / 2);
+              ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${hue} 60% 78% / 0.9)`;
+              ctx.fillText(label, node.x + ALLUVIAL_NODE_W + 4 / t.k, node.y + node.h / 2);
+            }
+          }
+          // column header
+          const tier = M.tiers[i];
+          const fontPx = clamp(12 / t.k, 3, 90);
+          ctx.font = `800 ${fontPx}px Inter, system-ui, sans-serif`;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "bottom";
+          const hx = i * ALLUVIAL_COL_PITCH;
+          const hy = -18 / t.k;
+          ctx.fillStyle = isCurrentTier ? "#fbbf24" : expColor(tier.expansion);
+          ctx.fillText(tierAbbr(tier.name), hx, hy);
+          ctx.font = `600 ${fontPx * 0.72}px Inter, system-ui, sans-serif`;
+          ctx.fillStyle = "rgba(165, 180, 200, 0.75)";
+          ctx.fillText(tier.start ? String(new Date(tier.start).getFullYear()) : "", hx, hy + fontPx * 0.85);
+        }
+
+        // selected character path across columns
+        if (view.selChar >= 0 && selTiers.length) {
+          ctx.beginPath();
+          let started = false;
+          for (const tt of selTiers) {
+            const td = F.tiers[tt];
+            const s = td.slotOf.get(view.selChar);
+            const g = td.g[s];
+            const node = columns[tt].byG.get((td.roster.get(g) || 0) >= ALLUVIAL_MIN_ROSTER ? g : LUMP);
+            if (!node) continue;
+            const x = node.x + ALLUVIAL_NODE_W / 2;
+            const y = node.y + node.h / 2;
+            if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
+          }
+          ctx.strokeStyle = "rgba(251, 191, 36, 0.9)";
+          ctx.lineWidth = 2.4 / t.k;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      /* ============================== frame loop ============================== */
+
+      function frame(now) {
+        const rect = stage.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        if (F.tiers) {
+          if (view.mode === "galaxy") drawGalaxy(now);
+          else drawFlow();
+        }
+        requestAnimationFrame(frame);
+      }
+
+      /* ============================== hit testing ============================== */
+
+      function buildGrid(td) {
+        if (td.grid) return td.grid;
+        const cell = 22;
+        const grid = new Map();
+        for (let s = 0; s < td.count; s += 1) {
+          const key = `${Math.floor(td.x[s] / cell)}:${Math.floor(td.y[s] / cell)}`;
+          let list = grid.get(key);
+          if (!list) grid.set(key, (list = []));
+          list.push(s);
+        }
+        td.grid = { cell, grid };
+        return td.grid;
+      }
+
+      function hitGalaxy(px, py) {
+        const world = toWorld(px, py);
+        const td = F.tiers[view.tier];
+        const { cell, grid } = buildGrid(td);
+        const reach = Math.max(6, 8 / tf().k);
         let best = null;
-        let bestDistance = Infinity;
-        for (const node of state.graph.nodes) {
-          const distance = Math.hypot(world.x - node.x, world.y - node.y);
-          if (distance <= node.radius + 6 && distance < bestDistance) {
-            best = node;
-            bestDistance = distance;
+        let bestD = reach;
+        const cx = Math.floor(world.x / cell);
+        const cy = Math.floor(world.y / cell);
+        for (let ix = cx - 1; ix <= cx + 1; ix += 1) {
+          for (let iy = cy - 1; iy <= cy + 1; iy += 1) {
+            const list = grid.get(`${ix}:${iy}`);
+            if (!list) continue;
+            for (const s of list) {
+              const d = Math.hypot(world.x - td.x[s], world.y - td.y[s]);
+              if (d < bestD) { bestD = d; best = s; }
+            }
           }
         }
-        return best;
+        if (best !== null) return { kind: "char", s: best, c: td.c[best], g: td.g[best] };
+
+        let bestG = null;
+        let bestGD = Infinity;
+        for (const [g, n] of td.roster) {
+          const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
+          if (d < hullRadius(n) && d < bestGD) { bestGD = d; bestG = g; }
+        }
+        if (bestG !== null) return { kind: "guild", g: bestG };
+        return null;
       }
 
-      function distanceToSegment(point, a, b) {
-        const world = screenToWorld(point);
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const lengthSq = dx * dx + dy * dy;
-        if (lengthSq === 0) return Math.hypot(world.x - a.x, world.y - a.y);
-        const t = Math.max(0, Math.min(1, ((world.x - a.x) * dx + (world.y - a.y) * dy) / lengthSq));
-        const x = a.x + t * dx;
-        const y = a.y + t * dy;
-        return Math.hypot(world.x - x, world.y - y);
-      }
+      function hitFlow(px, py) {
+        const world = toWorld(px, py);
+        const { columns, flows } = F.alluvial;
+        const col = Math.round(world.x / ALLUVIAL_COL_PITCH);
 
-      function edgeAt(point) {
-        let best = null;
-        let bestDistance = Infinity;
-        for (const edge of state.graph.edges) {
-          if (!edge.sourceNode || !edge.targetNode) continue;
-          const distance = distanceToSegment(point, edge.sourceNode, edge.targetNode);
-          const threshold = Math.max(7, Math.sqrt(edge.sharedCharacters) + 4) / state.transform.scale;
-          if (distance <= threshold && distance < bestDistance) {
-            best = edge;
-            bestDistance = distance;
+        // headers
+        if (world.y < -6 && col >= 0 && col < columns.length && Math.abs(world.x - col * ALLUVIAL_COL_PITCH) < 90) {
+          return { kind: "header", t: col };
+        }
+
+        // nodes
+        const colIdx = Math.floor((world.x + 40) / ALLUVIAL_COL_PITCH);
+        for (const i of [colIdx, colIdx + 1]) {
+          if (i < 0 || i >= columns.length) continue;
+          if (world.x >= i * ALLUVIAL_COL_PITCH - 2 && world.x <= i * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W + 2) {
+            for (const node of columns[i].nodes) {
+              if (world.y >= node.y - 1 && world.y <= node.y + node.h + 1) return { kind: "node", node, t: i };
+            }
           }
         }
-        return best;
-      }
 
-      function pointerPosition(event) {
-        const rect = canvas.getBoundingClientRect();
-        return {
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-        };
-      }
-
-      async function loadGraph() {
-        if (!state.selectedRaidId) return;
-        const scope = scopeSelect.value;
-        const title = scope === "all" ? "all tracked raids" : scope === "recent" ? "latest 4 raids" : state.raids.find((item) => item.id === state.selectedRaidId)?.name || "raid";
-        showLoading(`Loading ${title} graph.`);
-        const graph = await fetchJson(`/api/graph?${buildQueryParams().toString()}`);
-        prepareGraph(graph);
-        raidTitle.textContent = graph.scope?.label || graph.raid.name;
-        const reportWord = Number(graph.params.minReports) === 1 ? "report" : "reports";
-        const guildCap = Number(graph.params.limitGuilds);
-        const focusCapNote = state.focusIdentity && guildCap && Number(graph.stats.connectedGuilds) > guildCap ? ` · ${guildCap} guild cap + focus` : "";
-        raidSubtitle.textContent = `${plural(graph.stats.raidCount, "raid")} · min ${graph.params.minShared} shared · min ${graph.params.minReports} ${reportWord}${focusCapNote}`;
-        if (state.focusIdentity && !graph.selectedCharacter) {
-          characterSearch.value = "";
-          state.focusIdentity = "";
-          state.focusCharacter = null;
-        }
-        renderStats();
-        renderInspector();
-        renderRaidList();
-        hideLoading();
-      }
-
-      async function selectRaid(raidId) {
-        state.selectedRaidId = raidId;
-        if (scopeSelect.value !== "raid") {
-          scopeSelect.value = "raid";
-        }
-        try {
-          await loadGraph();
-        } catch (loadError) {
-          showError(loadError.message);
-        }
-      }
-
-      async function selectCharacter(character) {
-        state.focusIdentity = character.id;
-        characterSearch.value = characterLabel(character);
-        characterResults.classList.remove("visible");
-        try {
-          await loadGraph();
-        } catch (loadError) {
-          showError(loadError.message);
-        }
-      }
-
-      async function searchCharacters() {
-        const query = characterSearch.value.trim();
-        if (query.length < 2) {
-          characterResults.classList.remove("visible");
-          characterResults.innerHTML = "";
-          return;
-        }
-
-        try {
-          const data = await fetchJson(`/api/characters?${buildQueryParams({ q: query, limit: "12" }).toString()}`);
-          const characters = data.characters || [];
-          characterResults.innerHTML = characters
-            .map(
-              (character) => `
-                <button class="search-result" type="button" data-character-id="${escapeHtml(character.id)}">
-                  <div class="row-main">
-                    <span>${escapeHtml(characterLabel(character))}</span>
-                    <span>${formatNumber(character.guildCount)}</span>
-                  </div>
-                  <div class="row-sub">${escapeHtml(character.className)} · ${plural(character.raidCount, "raid")} · ${formatNumber(character.totalReports)} reports</div>
-                </button>
-              `,
-            )
-            .join("");
-          characterResults.classList.toggle("visible", characters.length > 0);
-          for (const button of characterResults.querySelectorAll("[data-character-id]")) {
-            button.addEventListener("click", () => {
-              const character = characters.find((item) => item.id === button.dataset.characterId);
-              if (character) selectCharacter(character);
-            });
+        // ribbons
+        const gap = Math.ceil(world.x / ALLUVIAL_COL_PITCH);
+        if (gap >= 1 && gap < columns.length && flows[gap]) {
+          const x0 = (gap - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W;
+          const x1 = gap * ALLUVIAL_COL_PITCH;
+          if (world.x > x0 && world.x < x1) {
+            const u = (world.x - x0) / (x1 - x0);
+            const su = u * u * (3 - 2 * u);
+            let best = null;
+            for (const f of flows[gap]) {
+              const yTop = f.ya + (f.yb - f.ya) * su;
+              if (world.y >= yTop - 1 && world.y <= yTop + f.w + 1) {
+                if (!best || f.w < best.w) best = f;
+              }
+            }
+            if (best) return { kind: "flow", f: best, t: gap };
           }
-        } catch {
-          characterResults.innerHTML = `<div class="selected-empty">Search failed.</div>`;
-          characterResults.classList.add("visible");
         }
+        return null;
       }
 
-      function clearCharacterFocus() {
-        state.focusIdentity = "";
-        state.focusCharacter = null;
-        characterSearch.value = "";
-        characterResults.innerHTML = "";
-        characterResults.classList.remove("visible");
-        loadGraph().catch((loadError) => showError(loadError.message));
+      /* ============================== tooltip ============================== */
+
+      function showTooltip(px, py, html) {
+        tooltip.innerHTML = html;
+        tooltip.style.display = "block";
+        const rect = stage.getBoundingClientRect();
+        const tw = tooltip.offsetWidth;
+        const th = tooltip.offsetHeight;
+        tooltip.style.left = `${clamp(px + 16, 4, rect.width - tw - 6)}px`;
+        tooltip.style.top = `${clamp(py + 14, 4, rect.height - th - 6)}px`;
       }
 
-      function startPlayback() {
-        if (state.playing || state.raids.length < 2) return;
-        scopeSelect.value = "raid";
-        state.playing = true;
-        playButton.textContent = "Pause";
-        const step = async () => {
-          const currentIndex = state.raids.findIndex((raid) => raid.id === state.selectedRaidId);
-          const nextIndex = currentIndex <= 0 ? state.raids.length - 1 : currentIndex - 1;
-          await selectRaid(state.raids[nextIndex].id);
-        };
-        state.playTimer = window.setInterval(step, 2800);
+      function hideTooltip() {
+        tooltip.style.display = "none";
       }
 
-      function stopPlayback() {
-        state.playing = false;
-        playButton.textContent = "Play raids";
-        if (state.playTimer) {
-          window.clearInterval(state.playTimer);
-          state.playTimer = null;
+      function tooltipFor(hit) {
+        if (hit.kind === "char") {
+          const ch = M.chars[hit.c];
+          const tiersAttended = (F.charTiers[hit.c] || []).length;
+          const td = F.tiers[view.tier];
+          const reports = td.r[hit.s];
+          return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</b><br>
+            ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${esc(guildLabel(hit.g))}<br>
+            ${fmt(reports)} reports this tier · ${tiersAttended} tiers tracked · click for career`;
         }
-      }
-
-      async function init() {
-        resizeCanvas();
-        updateMinSharedLabel();
-        try {
-          const data = await fetchJson("/api/raids");
-          state.raids = data.raids || [];
-          state.selectedRaidId = state.raids[0]?.id || null;
-          renderRaidList();
-          if (state.selectedRaidId) {
-            await loadGraph();
-          } else {
-            showError("No tracked raid participation rows found.");
+        if (hit.kind === "guild") {
+          const n = F.tiers[view.tier].roster.get(hit.g) || 0;
+          return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} raiders this tier · click to inspect`;
+        }
+        if (hit.kind === "node") {
+          return `<b>${esc(guildLabel(hit.node.g))}</b><br>${fmt(hit.node.count)} raiders in ${esc(M.tiers[hit.t].name)}`;
+        }
+        if (hit.kind === "flow") {
+          const f = hit.f;
+          const from = M.tiers[hit.t - 1];
+          const to = M.tiers[hit.t];
+          if (f.a === f.b) {
+            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} raiders stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}`;
           }
-        } catch (initError) {
-          showError(initError.message);
+          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} raiders moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}`;
         }
+        if (hit.kind === "header") {
+          return `<b>${esc(M.tiers[hit.t].name)}</b><br>${esc(M.tiers[hit.t].expansion)} · click to set current tier`;
+        }
+        return "";
       }
 
-      minShared.addEventListener("input", updateMinSharedLabel);
-      applyButton.addEventListener("click", () => {
-        loadGraph().catch((loadError) => showError(loadError.message));
-      });
-      scopeSelect.addEventListener("change", () => {
-        loadGraph().catch((loadError) => showError(loadError.message));
-      });
-      minReports.addEventListener("change", () => {
-        searchCharacters();
-      });
-      canonicalOnly.addEventListener("change", () => {
-        searchCharacters();
-      });
-      characterSearch.addEventListener("input", () => {
-        window.clearTimeout(state.searchTimer);
-        state.searchTimer = window.setTimeout(searchCharacters, 180);
-      });
-      clearFocusButton.addEventListener("click", clearCharacterFocus);
-      playButton.addEventListener("click", () => {
-        if (state.playing) stopPlayback();
-        else startPlayback();
-      });
+      /* ============================== pointer interactions ============================== */
+
+      const pointer = { down: false, moved: false, x: 0, y: 0 };
 
       canvas.addEventListener("pointerdown", (event) => {
-        const point = pointerPosition(event);
-        state.lastPointer = point;
-        const node = nodeAt(point);
-        if (node) {
-          state.draggingNode = node;
-          state.selectedNode = node;
-          state.selectedEdge = null;
-          renderInspector();
-          canvas.setPointerCapture(event.pointerId);
-          return;
-        }
-
-        const edge = edgeAt(point);
-        if (edge) {
-          state.selectedEdge = edge;
-          state.selectedNode = null;
-          renderInspector();
-          return;
-        }
-
-        state.panning = true;
+        const rect = canvas.getBoundingClientRect();
+        pointer.down = true;
+        pointer.moved = false;
+        pointer.x = event.clientX - rect.left;
+        pointer.y = event.clientY - rect.top;
         canvas.setPointerCapture(event.pointerId);
       });
 
       canvas.addEventListener("pointermove", (event) => {
-        const point = pointerPosition(event);
-        if (state.draggingNode) {
-          const world = screenToWorld(point);
-          state.draggingNode.x = world.x;
-          state.draggingNode.y = world.y;
-          state.draggingNode.vx = 0;
-          state.draggingNode.vy = 0;
-        } else if (state.panning) {
-          state.transform.x += point.x - state.lastPointer.x;
-          state.transform.y += point.y - state.lastPointer.y;
-        } else {
-          state.hoverNode = nodeAt(point);
-          state.hoverEdge = state.hoverNode ? null : edgeAt(point);
-          canvas.style.cursor = state.hoverNode ? "grab" : state.hoverEdge ? "pointer" : "default";
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        if (pointer.down) {
+          const dx = px - pointer.x;
+          const dy = py - pointer.y;
+          if (Math.abs(dx) + Math.abs(dy) > 3) pointer.moved = true;
+          if (pointer.moved) {
+            tf().x += dx;
+            tf().y += dy;
+            hideTooltip();
+          }
+          pointer.x = px;
+          pointer.y = py;
+          return;
         }
-        state.lastPointer = point;
+        if (!F.tiers) return;
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : hitFlow(px, py);
+        view.hover = hit;
+        canvas.style.cursor = hit ? "pointer" : "default";
+        if (hit) showTooltip(px, py, tooltipFor(hit));
+        else hideTooltip();
       });
 
       canvas.addEventListener("pointerup", (event) => {
-        state.draggingNode = null;
-        state.panning = false;
-        try {
-          canvas.releasePointerCapture(event.pointerId);
-        } catch {}
+        const wasDrag = pointer.moved;
+        pointer.down = false;
+        try { canvas.releasePointerCapture(event.pointerId); } catch {}
+        if (wasDrag || !F.tiers) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : hitFlow(px, py);
+        if (!hit) { clearSelection(); return; }
+        if (hit.kind === "char") selectChar(hit.c);
+        else if (hit.kind === "guild") selectGuild(hit.g);
+        else if (hit.kind === "node") selectGuild(hit.node.g);
+        else if (hit.kind === "header") { stopPlay(); setTier(hit.t, false); }
+        else if (hit.kind === "flow" && hit.f.a !== LUMP) selectGuild(hit.f.a === hit.f.b ? hit.f.a : hit.f.b);
       });
 
       canvas.addEventListener("wheel", (event) => {
         event.preventDefault();
-        const point = pointerPosition(event);
-        const before = screenToWorld(point);
-        const factor = event.deltaY > 0 ? 0.9 : 1.1;
-        state.transform.scale = Math.max(0.35, Math.min(2.4, state.transform.scale * factor));
-        const after = worldToScreen(before);
-        state.transform.x += point.x - after.x;
-        state.transform.y += point.y - after.y;
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const t = tf();
+        const before = toWorld(px, py);
+        const factor = event.deltaY > 0 ? 0.88 : 1.14;
+        t.k = clamp(t.k * factor, 0.015, 6);
+        t.x = px - before.x * t.k;
+        t.y = py - before.y * t.k;
+        hideTooltip();
+      }, { passive: false });
+
+      /* ============================== top-level events ============================== */
+
+      function setMode(mode) {
+        view.mode = mode;
+        els.modeGalaxy.classList.toggle("active", mode === "galaxy");
+        els.modeFlow.classList.toggle("active", mode === "flow");
+        if (mode === "flow" && !view.fitted.flow) fitFlow();
+        if (mode === "galaxy" && !view.fitted.galaxy) fitGalaxy();
+        view.hover = null;
+        hideTooltip();
+        updateHud();
+      }
+
+      els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
+      els.modeFlow.addEventListener("click", () => setMode("flow"));
+
+      els.minReports.addEventListener("change", () => {
+        view.minReports = Number(els.minReports.value);
+        els.loadingText.textContent = "Recomputing constellation…";
+        els.loading.classList.add("visible");
+        setTimeout(() => {
+          rebuild();
+          view.fitted.flow = false;
+          if (view.mode === "flow") fitFlow();
+          els.loading.classList.remove("visible");
+          updateHud();
+          renderInspector();
+        }, 30);
+      });
+
+      els.tglFlows.addEventListener("change", () => { view.showFlows = els.tglFlows.checked; });
+      els.tglFibers.addEventListener("change", () => { view.showFibers = els.tglFibers.checked; });
+      els.tglLabels.addEventListener("change", () => { view.showLabels = els.tglLabels.checked; });
+
+      els.search.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(runSearch, 160);
+      });
+
+      els.resetView.addEventListener("click", () => {
+        if (view.mode === "galaxy") fitGalaxy();
+        else fitFlow();
+      });
+      els.clearSel.addEventListener("click", clearSelection);
+      els.playBtn.addEventListener("click", () => {
+        if (view.playing) stopPlay();
+        else startPlay();
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+        if (event.key === "ArrowRight") { stopPlay(); setTier(view.tier + 1); }
+        else if (event.key === "ArrowLeft") { stopPlay(); setTier(view.tier - 1); }
+        else if (event.key === " ") { event.preventDefault(); view.playing ? stopPlay() : startPlay(); }
+        else if (event.key === "Escape") clearSelection();
       });
 
       window.addEventListener("resize", resizeCanvas);
-      if ("ResizeObserver" in window) {
-        new ResizeObserver(resizeCanvas).observe(stage);
-      }
+      if ("ResizeObserver" in window) new ResizeObserver(resizeCanvas).observe(stage);
 
-      init();
-      requestAnimationFrame(drawGraph);
+      resizeCanvas();
+      boot();
     </script>
   </body>
 </html>

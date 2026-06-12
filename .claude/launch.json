@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "raider-constellation-poc",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["backend/scripts/guild-network-poc.mjs"],
+      "port": 3015
+    }
+  ]
+}
