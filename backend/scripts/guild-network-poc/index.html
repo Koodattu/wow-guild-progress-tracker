@@ -234,6 +234,31 @@
         color: #fde68a;
       }
 
+      .identity-line {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .identity-line .name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .realm-inline,
+      .realm-muted {
+        color: var(--quiet);
+        font-size: 0.72em;
+        font-weight: 620;
+      }
+
+      .realm-muted {
+        font-size: 0.96em;
+      }
+
       .class-grid {
         display: flex;
         flex-wrap: wrap;
@@ -273,36 +298,6 @@
 
       .hint b {
         color: var(--muted);
-      }
-
-      .advanced {
-        display: grid;
-        gap: 9px;
-      }
-
-      .advanced summary {
-        min-height: 33px;
-        border: 1px solid var(--line-strong);
-        border-radius: 7px;
-        background: #101827;
-        padding: 7px 10px;
-        color: var(--muted);
-        font-size: 0.78rem;
-        font-weight: 720;
-        cursor: pointer;
-        list-style-position: inside;
-      }
-
-      .advanced summary:hover {
-        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
-        background: #162033;
-        color: var(--text);
-      }
-
-      .advanced-body {
-        display: grid;
-        gap: 9px;
-        padding-top: 2px;
       }
 
       .stage {
@@ -688,12 +683,6 @@
     <div class="app">
       <aside class="sidebar">
         <div class="side-section">
-          <h3>Search</h3>
-          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
-          <div class="search-results" id="searchResults"></div>
-        </div>
-
-        <div class="side-section">
           <h3>View</h3>
           <div class="mode-row">
             <button class="button active" id="modeGalaxy" type="button">Raid view</button>
@@ -703,30 +692,31 @@
         </div>
 
         <div class="side-section">
-          <details class="advanced">
-            <summary>Display settings</summary>
-            <div class="advanced-body">
-              <div class="field">
-                <label for="minReports">Min reports per guild &amp; tier</label>
-                <select id="minReports">
-                  <option value="1">1+ · everyone</option>
-                  <option value="2" selected>2+ · regulars</option>
-                  <option value="3">3+ · core raiders</option>
-                  <option value="5">5+ · committed core</option>
-                  <option value="10">10+ · die-hards</option>
-                </select>
-              </div>
-              <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
-              <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
-              <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" checked /></label>
-              <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
-              <div class="class-grid" id="classGrid"></div>
-              <div class="clear-row">
-                <button class="button" id="resetView" type="button">Reset view</button>
-                <button class="button" id="clearSel" type="button">Clear selection</button>
-              </div>
-            </div>
-          </details>
+          <h3>Filters</h3>
+          <div class="field">
+            <label for="minReports">Min reports per guild &amp; tier</label>
+            <select id="minReports">
+              <option value="1">1+ · everyone</option>
+              <option value="2" selected>2+ · regulars</option>
+              <option value="3">3+ · core raiders</option>
+              <option value="5">5+ · committed core</option>
+              <option value="10">10+ · die-hards</option>
+            </select>
+          </div>
+          <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
+          <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
+          <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" checked /></label>
+          <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
+          <div class="clear-row">
+            <button class="button" id="resetView" type="button">Reset view</button>
+            <button class="button" id="clearSel" type="button">Clear selection</button>
+          </div>
+        </div>
+
+        <div class="side-section">
+          <h3>Search</h3>
+          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
+          <div class="search-results" id="searchResults"></div>
         </div>
       </aside>
 
@@ -854,9 +844,9 @@
       }
 
       function tierAbbr(name) {
-        const words = String(name).replace(/[,'/]/g, " ").split(/\s+/).filter((w) => w && !/^(the|of|a|an)$/i.test(w));
+        const words = String(name).replace(/[,'’]/g, "").replace(/[/&+]/g, " ").split(/\s+/).filter(Boolean);
         if (words.length === 1) return words[0].slice(0, 4);
-        return words.map((w) => w[0].toUpperCase()).join("").slice(0, 4);
+        return words.map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w[0].toUpperCase())).join("");
       }
 
       function monthYear(iso) {
@@ -884,20 +874,43 @@
       }
 
       function realmLabel(realm) {
-        return String(realm || "Unknown").replace(/-/g, " ");
+        return String(realm || "Unknown")
+          .split("-")
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+          .join(" ");
       }
 
       function guildLabel(g, options = {}) {
         if (g === LUMP) return "Pugs & small groups";
         const guild = M.guilds[g];
-        if (options.full || guild.duplicateName) return `${guild.name}-${realmLabel(guild.realm)}`;
+        if (options.full) return `${guild.name}-${realmLabel(guild.realm)}`;
         return guild.name;
       }
 
       function characterLabel(c, options = {}) {
         const ch = M.chars[c];
-        if (options.full || ch.duplicateName) return `${ch.name}-${realmLabel(ch.realm)}`;
+        if (options.full) return `${ch.name}-${realmLabel(ch.realm)}`;
         return ch.name;
+      }
+
+      function realmInline(realm) {
+        return `<span class="realm-inline">${esc(realmLabel(realm))}</span>`;
+      }
+
+      function guildIdentityHtml(g, options = {}) {
+        if (g === LUMP) return `<span class="identity-line"><span class="name">${esc(guildLabel(g))}</span></span>`;
+        const guild = M.guilds[g];
+        const style = options.color ? ` style="color:${options.color}"` : "";
+        const showRealm = options.showRealm || (options.realmIfDuplicate && guild.duplicateName);
+        return `<span class="identity-line"${style}><span class="name">${esc(guild.name)}</span>${showRealm ? realmInline(guild.realm) : ""}</span>`;
+      }
+
+      function characterIdentityHtml(c, options = {}) {
+        const ch = M.chars[c];
+        const style = options.color ? ` style="color:${options.color}"` : "";
+        const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
+        return `<span class="identity-line"${style}><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>`;
       }
 
       function hullRadius(n) {
@@ -1808,7 +1821,7 @@
             <div class="list">
               ${top.map(([g, n]) => `
                 <button class="card" type="button" data-sel-guild="${g}">
-                  <div class="row-main"><span>${esc(guildLabel(g))}</span><span>${fmt(n)}</span></div>
+                  <div class="row-main">${guildIdentityHtml(g, { realmIfDuplicate: true })}<span>${fmt(n)}</span></div>
                 </button>`).join("")}
             </div>
           </section>
@@ -1819,7 +1832,7 @@
               ${moves.slice(0, 10).map(([a, b, flow]) => `
                 <div class="card">
                   <div class="row-main">
-                    <span><span class="glink" data-sel-guild="${a}">${esc(guildLabel(a))}</span> → <span class="glink" data-sel-guild="${b}">${esc(guildLabel(b))}</span></span>
+                    <span><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span> → <span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span></span>
                     <span>${fmt(flow.n)}</span>
                   </div>
                   <div class="chips">${nameChips(flow)}</div>
@@ -1843,7 +1856,7 @@
             <div class="list">
               ${top.map(([g, n]) => `
                 <button class="card" type="button" data-sel-guild="${g}">
-                  <div class="row-main"><span>${esc(guildLabel(g))}</span><span>${fmt(n)}</span></div>
+                  <div class="row-main">${guildIdentityHtml(g, { realmIfDuplicate: true })}<span>${fmt(n)}</span></div>
                 </button>`).join("")}
             </div>
           </section>
@@ -1853,10 +1866,10 @@
               ${at.nomads.map(([c, n]) => `
                 <button class="card" type="button" data-sel-char="${c}">
                   <div class="row-main">
-                    <span style="color:${CLASS_COLORS[M.chars[c].classID]}">${esc(characterLabel(c))}</span>
+                    ${characterIdentityHtml(c, { realmIfDuplicate: true, color: CLASS_COLORS[M.chars[c].classID] })}
                     <span>${fmt(n)} guilds</span>
                   </div>
-                  <div class="row-sub">${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
+                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(M.chars[c].realm))}</span> · ${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
                 </button>`).join("")}
             </div>
           </section>`;
@@ -1903,8 +1916,8 @@
         inflow.sort((p, q) => q[1].n - p[1].n);
         outflow.sort((p, q) => q[1].n - p[1].n);
 
-        els.insTitle.textContent = guildLabel(g);
-        els.insSub.textContent = `${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
+        els.insTitle.textContent = guild.name;
+        els.insSub.textContent = `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
 
         els.insBody.innerHTML = `
           <section class="panel">
@@ -1924,7 +1937,7 @@
               ${inflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked arrivals from the previous tier.</div></div>` : ""}
               ${inflow.slice(0, 6).map(([a, flow]) => `
                 <div class="card">
-                  <div class="row-main"><span class="glink" data-sel-guild="${a}">${esc(guildLabel(a))}</span><span>+${fmt(flow.n)}</span></div>
+                  <div class="row-main"><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span><span>+${fmt(flow.n)}</span></div>
                   <div class="chips">${nameChips(flow, 6)}</div>
                 </div>`).join("")}
             </div>
@@ -1935,7 +1948,7 @@
               ${outflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked departures to the next tier.</div></div>` : ""}
               ${outflow.slice(0, 6).map(([b, flow]) => `
                 <div class="card">
-                  <div class="row-main"><span class="glink" data-sel-guild="${b}">${esc(guildLabel(b))}</span><span>−${fmt(flow.n)}</span></div>
+                  <div class="row-main"><span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span><span>−${fmt(flow.n)}</span></div>
                   <div class="chips">${nameChips(flow, 6)}</div>
                 </div>`).join("")}
             </div>
@@ -1945,7 +1958,7 @@
             <div class="chips">
               ${mainstays.map(([c, n]) => `
                 <span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">
-                  ${esc(characterLabel(c))} · ${n}
+                  ${characterIdentityHtml(c, { realmIfDuplicate: true })} · ${n}
                 </span>`).join("")}
             </div>
           </section>`;
@@ -1966,8 +1979,8 @@
         const first = career.length ? M.tiers[career[0].t] : null;
         const last = career.length ? M.tiers[career[career.length - 1].t] : null;
 
-        els.insTitle.textContent = characterLabel(c);
-        els.insSub.textContent = `${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
+        els.insTitle.textContent = ch.name;
+        els.insSub.textContent = `${realmLabel(ch.realm)} · ${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
 
         els.insBody.innerHTML = `
           <section class="panel">
@@ -1976,7 +1989,7 @@
               ${career.map((step) => `
                 <button class="card ${step.t === view.tier ? "active" : ""}" type="button" data-go-tier="${step.t}">
                   <div class="row-main">
-                    <span>${esc(guildLabel(step.g))}</span>
+                    ${guildIdentityHtml(step.g, { realmIfDuplicate: true })}
                     <span style="color:${expColor(M.tiers[step.t].expansion)}">${tierAbbr(M.tiers[step.t].name)}</span>
                   </div>
                   <div class="row-sub">${esc(M.tiers[step.t].name)} · ${fmt(step.r)} reports</div>
@@ -2019,6 +2032,7 @@
       /* ============================== sidebar widgets ============================== */
 
       function buildClassGrid() {
+        if (!els.classGrid) return;
         els.classGrid.innerHTML = Object.entries(CLASS_NAMES)
           .map(([id, name]) => `
             <button class="class-chip" type="button" data-class="${id}">
@@ -2099,10 +2113,10 @@
               return `
                 <button class="search-result" type="button" data-search-kind="guild" data-search-id="${g}">
                   <div class="row-main">
-                    <span style="color:hsl(${guild.hue} 70% 72%)">${esc(guildLabel(g))}</span>
+                    ${guildIdentityHtml(g, { color: `hsl(${guild.hue} 70% 72%)` })}
                     <span class="search-kind guild">Guild</span>
                   </div>
-                  <div class="row-sub">${esc(realmLabel(guild.realm))} · peak roster ${fmt(F.guildMax[g])} · active ${hit.tiersActive} ${hit.tiersActive === 1 ? "tier" : "tiers"}</div>
+                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(guild.realm))}</span> · peak roster ${fmt(F.guildMax[g])} · active ${hit.tiersActive} ${hit.tiersActive === 1 ? "tier" : "tiers"}</div>
                 </button>`;
             }
             const c = hit.id;
@@ -2110,10 +2124,10 @@
             return `
               <button class="search-result" type="button" data-search-kind="char" data-search-id="${c}">
                 <div class="row-main">
-                  <span style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(c))}</span>
+                  ${characterIdentityHtml(c, { color: CLASS_COLORS[ch.classID] })}
                   <span class="search-kind">Character</span>
                 </div>
-                <div class="row-sub">${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports</div>
+                <div class="row-sub"><span class="realm-muted">${esc(realmLabel(ch.realm))}</span> · ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports</div>
               </button>`;
           })
           .join("");
