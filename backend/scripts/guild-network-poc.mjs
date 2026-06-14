@@ -5,7 +5,7 @@
 //   - tiers: tracked raid tiers ordered chronologically by first sighting
 //   - realms: string table for realm names
 //   - guilds: [name, realmIdx] per report guild
-//   - characters: [name, realmIdx, classID, [tierIdx, guildIdx, reports, ...]]
+//   - characters: [name, realmIdx, classID, [tierIdx, guildIdx, reports, ...], aliases?]
 // All filtering / layout / interaction happens client-side so the timeline can be
 // scrubbed with zero server round-trips.
 //
@@ -85,6 +85,7 @@ const rows = db.characterraidparticipations.find(
   { zoneId: { $in: TRACKED_RAIDS } },
   {
     _id: 0,
+    characterId: 1,
     wclCanonicalCharacterId: 1,
     zoneId: 1,
     reportGuildId: 1,
@@ -163,6 +164,9 @@ function guildIndex(row) {
 }
 
 function identityForRow(row) {
+  if (row.characterId !== null && row.characterId !== undefined) {
+    return "id:" + row.characterId + ":" + row.classID;
+  }
   if (row.wclCanonicalCharacterId !== null && row.wclCanonicalCharacterId !== undefined) {
     return "c:" + row.wclCanonicalCharacterId + ":" + row.classID;
   }
@@ -189,9 +193,15 @@ for (const row of rows) {
       realm: realmIndex(row.characterRealm),
       classID: row.classID || 0,
       nameSeen: row.lastSeenAt || null,
+      aliases: new Set(),
       mem: new Map()
     };
     chars.set(id, entry);
+  }
+  if (row.characterName) entry.aliases.add(row.characterName);
+  if (row.characterRealm) entry.aliases.add(row.characterRealm);
+  if (row.characterName || row.characterRealm) {
+    entry.aliases.add(String(row.characterName || "") + " " + String(row.characterRealm || ""));
   }
   // Canonical ids merge name-changed characters; keep the most recent name.
   if (row.lastSeenAt && (!entry.nameSeen || row.lastSeenAt > entry.nameSeen)) {
@@ -210,7 +220,12 @@ for (const entry of chars.values()) {
   for (const key of keys) {
     flat.push(Math.floor(key / 100000), key % 100000, entry.mem.get(key));
   }
-  characters.push([entry.name, entry.realm, entry.classID, flat]);
+  const currentRealm = realms[entry.realm] || "";
+  const aliases = Array.from(entry.aliases)
+    .filter((value) => value && value !== entry.name && value !== currentRealm && value !== entry.name + " " + currentRealm);
+  characters.push(aliases.length
+    ? [entry.name, entry.realm, entry.classID, flat, aliases]
+    : [entry.name, entry.realm, entry.classID, flat]);
 }
 
 print(JSON.stringify({

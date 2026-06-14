@@ -43,7 +43,7 @@
 
       .app {
         display: grid;
-        grid-template-columns: 270px minmax(0, 1fr) 340px;
+        grid-template-columns: 252px minmax(0, 1fr) 360px;
         height: 100vh;
         overflow: hidden;
       }
@@ -86,7 +86,7 @@
       .side-section {
         display: grid;
         gap: 9px;
-        padding: 13px 16px;
+        padding: 12px 14px;
         border-bottom: 1px solid var(--line);
       }
 
@@ -106,7 +106,7 @@
       }
 
       .mode-row .button {
-        font-size: 0.76rem;
+        font-size: 0.72rem;
         padding: 0 4px;
       }
 
@@ -197,7 +197,7 @@
       .search-results {
         display: none;
         gap: 5px;
-        max-height: 230px;
+        max-height: 360px;
         overflow: auto;
       }
 
@@ -217,6 +217,21 @@
       .search-result:hover {
         border-color: rgba(96, 165, 250, 0.48);
         background: rgba(37, 99, 235, 0.16);
+      }
+
+      .search-kind {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        background: rgba(96, 165, 250, 0.14);
+        color: #bfdbfe;
+        padding: 1px 6px;
+        font-size: 0.6rem;
+        font-weight: 760;
+      }
+
+      .search-kind.guild {
+        background: rgba(251, 191, 36, 0.14);
+        color: #fde68a;
       }
 
       .class-grid {
@@ -258,6 +273,36 @@
 
       .hint b {
         color: var(--muted);
+      }
+
+      .advanced {
+        display: grid;
+        gap: 9px;
+      }
+
+      .advanced summary {
+        min-height: 33px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        padding: 7px 10px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 720;
+        cursor: pointer;
+        list-style-position: inside;
+      }
+
+      .advanced summary:hover {
+        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
+        background: #162033;
+        color: var(--text);
+      }
+
+      .advanced-body {
+        display: grid;
+        gap: 9px;
+        padding-top: 2px;
       }
 
       .stage {
@@ -634,7 +679,7 @@
 
       @media (max-width: 1180px) {
         .app {
-          grid-template-columns: 232px minmax(0, 1fr) 280px;
+          grid-template-columns: 232px minmax(0, 1fr) 300px;
         }
       }
     </style>
@@ -642,68 +687,46 @@
   <body>
     <div class="app">
       <aside class="sidebar">
-        <div class="brand">
-          <h1>Raider Constellation</h1>
-          <p>Every character ever logged, clustered into the guilds they raided with — scrub twelve years of guild history.</p>
+        <div class="side-section">
+          <h3>Search</h3>
+          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
+          <div class="search-results" id="searchResults"></div>
         </div>
 
         <div class="side-section">
           <h3>View</h3>
           <div class="mode-row">
-            <button class="button active" id="modeGalaxy" type="button">Galaxy</button>
-            <button class="button" id="modeAll" type="button">All time</button>
+            <button class="button active" id="modeGalaxy" type="button">Raid view</button>
+            <button class="button" id="modeAll" type="button">Career map</button>
             <button class="button" id="modeFlow" type="button">Lineages</button>
           </div>
         </div>
 
         <div class="side-section">
-          <h3>Filters</h3>
-          <div class="field">
-            <label for="minReports">Min reports per guild &amp; tier (filters pugs)</label>
-            <select id="minReports">
-              <option value="1">1+ · everyone, incl. one-night pugs</option>
-              <option value="2" selected>2+ · regulars</option>
-              <option value="3">3+ · core raiders</option>
-              <option value="5">5+ · committed core</option>
-              <option value="10">10+ · die-hards</option>
-            </select>
-          </div>
-          <label class="toggle"><span>Migration flows (prev tier)</span><input id="tglFlows" type="checkbox" checked /></label>
-          <label class="toggle"><span>Migration lines (stay visible)</span><input id="tglTrails" type="checkbox" checked /></label>
-          <label class="toggle"><span>Cross-guild fibers (pugging)</span><input id="tglFibers" type="checkbox" checked /></label>
-          <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
-        </div>
-
-        <div class="side-section">
-          <h3>Find a character</h3>
-          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Type a character name…" />
-          <div class="search-results" id="searchResults"></div>
-        </div>
-
-        <div class="side-section">
-          <h3>Find a guild</h3>
-          <input id="gsearch" type="text" autocomplete="off" spellcheck="false" placeholder="Type a guild name…" />
-          <div class="search-results" id="gsearchResults"></div>
-        </div>
-
-        <div class="side-section">
-          <h3>Classes</h3>
-          <div class="class-grid" id="classGrid"></div>
-        </div>
-
-        <div class="side-section">
-          <h3>Controls</h3>
-          <div class="clear-row">
-            <button class="button" id="resetView" type="button">Reset view</button>
-            <button class="button" id="clearSel" type="button">Clear selection</button>
-          </div>
-          <p class="hint">
-            <b>Drag</b> pan · <b>wheel</b> zoom · <b>click</b> a dot or cluster to inspect ·
-            <b>←/→</b> step tiers · <b>space</b> play · <b>esc</b> clear.
-            Guilds are not nodes here — each cluster <i>is</i> its roster. Zoom in far enough to
-            read character names. <b>All time</b> places every multi-guild raider between all the
-            guilds of their career.
-          </p>
+          <details class="advanced">
+            <summary>Display settings</summary>
+            <div class="advanced-body">
+              <div class="field">
+                <label for="minReports">Min reports per guild &amp; tier</label>
+                <select id="minReports">
+                  <option value="1">1+ · everyone</option>
+                  <option value="2" selected>2+ · regulars</option>
+                  <option value="3">3+ · core raiders</option>
+                  <option value="5">5+ · committed core</option>
+                  <option value="10">10+ · die-hards</option>
+                </select>
+              </div>
+              <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
+              <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
+              <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" checked /></label>
+              <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
+              <div class="class-grid" id="classGrid"></div>
+              <div class="clear-row">
+                <button class="button" id="resetView" type="button">Reset view</button>
+                <button class="button" id="clearSel" type="button">Clear selection</button>
+              </div>
+            </div>
+          </details>
         </div>
       </aside>
 
@@ -809,8 +832,8 @@
       const els = Object.fromEntries(
         ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
          "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
-         "gsearch", "gsearchResults", "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows",
-         "tglTrails", "tglFibers", "tglLabels", "resetView", "clearSel"]
+         "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows", "tglTrails", "tglFibers",
+         "tglLabels", "resetView", "clearSel"]
           .map((id) => [id, document.getElementById(id)]),
       );
 
@@ -845,10 +868,36 @@
         return EXPANSION_COLORS[expansion] || "#94a3b8";
       }
 
-      function guildLabel(g) {
+      const SEARCH_CHAR_MAP = {
+        æ: "ae", œ: "oe", ø: "o", Ø: "o", đ: "d", Đ: "d", ð: "d", Ð: "d",
+        þ: "th", Þ: "th", ł: "l", Ł: "l", ß: "ss",
+      };
+
+      function normalizeSearch(value) {
+        return String(value || "")
+          .replace(/[æœøØđĐðÐþÞłŁß]/g, (ch) => SEARCH_CHAR_MAP[ch] || ch)
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+      }
+
+      function realmLabel(realm) {
+        return String(realm || "Unknown").replace(/-/g, " ");
+      }
+
+      function guildLabel(g, options = {}) {
         if (g === LUMP) return "Pugs & small groups";
         const guild = M.guilds[g];
-        return `${guild.name}-${guild.realm}`;
+        if (options.full || guild.duplicateName) return `${guild.name}-${realmLabel(guild.realm)}`;
+        return guild.name;
+      }
+
+      function characterLabel(c, options = {}) {
+        const ch = M.chars[c];
+        if (options.full || ch.duplicateName) return `${ch.name}-${realmLabel(ch.realm)}`;
+        return ch.name;
       }
 
       function hullRadius(n) {
@@ -887,15 +936,31 @@
             name,
             realm: M.realms[realmIdx] || "Unknown",
             hue: hash32(name + "::" + g) % 360,
+            searchKey: normalizeSearch(`${name} ${M.realms[realmIdx] || "Unknown"}`),
+            nameKey: normalizeSearch(name),
+            duplicateName: false,
           }));
-          M.chars = data.characters.map(([name, realmIdx, classID, mem]) => ({
-            name,
-            lname: name.toLowerCase(),
-            realm: M.realms[realmIdx] || "Unknown",
-            classID: CLASS_NAMES[classID] ? classID : 0,
-            mem, // flat [t, g, reports, ...]
-            total: (() => { let s = 0; for (let i = 2; i < mem.length; i += 3) s += mem[i]; return s; })(),
-          }));
+          const guildNameCounts = new Map();
+          for (const guild of M.guilds) guildNameCounts.set(guild.nameKey, (guildNameCounts.get(guild.nameKey) || 0) + 1);
+          for (const guild of M.guilds) guild.duplicateName = (guildNameCounts.get(guild.nameKey) || 0) > 1;
+
+          M.chars = data.characters.map(([name, realmIdx, classID, mem, aliases]) => {
+            const realm = M.realms[realmIdx] || "Unknown";
+            const aliasText = Array.isArray(aliases) ? aliases.join(" ") : "";
+            return {
+              name,
+              realm,
+              classID: CLASS_NAMES[classID] ? classID : 0,
+              mem, // flat [t, g, reports, ...]
+              searchKey: normalizeSearch(`${name} ${realm} ${aliasText}`),
+              nameKey: normalizeSearch(name),
+              duplicateName: false,
+              total: (() => { let s = 0; for (let i = 2; i < mem.length; i += 3) s += mem[i]; return s; })(),
+            };
+          });
+          const charNameCounts = new Map();
+          for (const ch of M.chars) charNameCounts.set(ch.nameKey, (charNameCounts.get(ch.nameKey) || 0) + 1);
+          for (const ch of M.chars) ch.duplicateName = (charNameCounts.get(ch.nameKey) || 0) > 1;
 
           els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} characters across ${M.tiers.length} tiers…`;
           await new Promise((r) => setTimeout(r, 30)); // let the text paint
@@ -1703,7 +1768,7 @@
         const shown = flow.cs.slice(0, max);
         const extra = flow.n - shown.length;
         return shown
-          .map((c) => `<span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">${esc(M.chars[c].name)}</span>`)
+          .map((c) => `<span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">${esc(characterLabel(c))}</span>`)
           .join("") + (extra > 0 ? `<span class="chip static">+${fmt(extra)} more</span>` : "");
       }
 
@@ -1788,7 +1853,7 @@
               ${at.nomads.map(([c, n]) => `
                 <button class="card" type="button" data-sel-char="${c}">
                   <div class="row-main">
-                    <span style="color:${CLASS_COLORS[M.chars[c].classID]}">${esc(M.chars[c].name)}-${esc(M.chars[c].realm)}</span>
+                    <span style="color:${CLASS_COLORS[M.chars[c].classID]}">${esc(characterLabel(c))}</span>
                     <span>${fmt(n)} guilds</span>
                   </div>
                   <div class="row-sub">${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
@@ -1880,7 +1945,7 @@
             <div class="chips">
               ${mainstays.map(([c, n]) => `
                 <span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">
-                  ${esc(M.chars[c].name)} · ${n}
+                  ${esc(characterLabel(c))} · ${n}
                 </span>`).join("")}
             </div>
           </section>`;
@@ -1901,7 +1966,7 @@
         const first = career.length ? M.tiers[career[0].t] : null;
         const last = career.length ? M.tiers[career[career.length - 1].t] : null;
 
-        els.insTitle.textContent = `${ch.name}-${ch.realm}`;
+        els.insTitle.textContent = characterLabel(c);
         els.insSub.textContent = `${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
 
         els.insBody.innerHTML = `
@@ -1911,10 +1976,10 @@
               ${career.map((step) => `
                 <button class="card ${step.t === view.tier ? "active" : ""}" type="button" data-go-tier="${step.t}">
                   <div class="row-main">
-                    <span>${esc(M.tiers[step.t].name)}</span>
+                    <span>${esc(guildLabel(step.g))}</span>
                     <span style="color:${expColor(M.tiers[step.t].expansion)}">${tierAbbr(M.tiers[step.t].name)}</span>
                   </div>
-                  <div class="row-sub">${esc(guildLabel(step.g))} · ${fmt(step.r)} reports</div>
+                  <div class="row-sub">${esc(M.tiers[step.t].name)} · ${fmt(step.r)} reports</div>
                 </button>`).join("")}
             </div>
           </section>
@@ -1987,49 +2052,9 @@
         renderInspector();
       }
 
-      let gsearchTimer = null;
-      function runGuildSearch() {
-        const q = els.gsearch.value.trim().toLowerCase();
-        if (q.length < 2) {
-          els.gsearchResults.classList.remove("visible");
-          els.gsearchResults.innerHTML = "";
-          return;
-        }
-        const hits = [];
-        for (let g = 0; g < M.guilds.length; g += 1) {
-          if (F.guildMax[g] === 0) continue;
-          const guild = M.guilds[g];
-          if (!`${guild.name}-${guild.realm}`.toLowerCase().includes(q)) continue;
-          let tiersActive = 0;
-          for (let t = 0; t < M.tiers.length; t += 1) if (F.tiers[t].roster.has(g)) tiersActive += 1;
-          hits.push([g, tiersActive]);
-        }
-        hits.sort((a, b) => F.guildMax[b[0]] - F.guildMax[a[0]]);
-        els.gsearchResults.innerHTML = hits.slice(0, 12)
-          .map(([g, tiersActive]) => {
-            const guild = M.guilds[g];
-            return `
-              <button class="search-result" type="button" data-g="${g}">
-                <div class="row-main">
-                  <span style="color:hsl(${guild.hue} 70% 72%)">${esc(guildLabel(g))}</span>
-                  <span>${tiersActive}t</span>
-                </div>
-                <div class="row-sub">peak roster ${fmt(F.guildMax[g])} · active ${tiersActive} ${tiersActive === 1 ? "tier" : "tiers"}</div>
-              </button>`;
-          })
-          .join("");
-        els.gsearchResults.classList.toggle("visible", hits.length > 0);
-        for (const btn of els.gsearchResults.querySelectorAll("[data-g]")) {
-          btn.addEventListener("click", () => {
-            focusGuild(Number(btn.dataset.g));
-            els.gsearchResults.classList.remove("visible");
-          });
-        }
-      }
-
       let searchTimer = null;
       function runSearch() {
-        const q = els.search.value.trim().toLowerCase();
+        const q = normalizeSearch(els.search.value);
         if (q.length < 2) {
           els.searchResults.classList.remove("visible");
           els.searchResults.innerHTML = "";
@@ -2037,29 +2062,67 @@
         }
         const hits = [];
         for (let c = 0; c < M.chars.length; c += 1) {
-          if (!M.chars[c].lname.startsWith(q)) continue;
+          const ch = M.chars[c];
+          if (!ch.searchKey.includes(q)) continue;
           const tiersAttended = (F.charTiers[c] || []).length;
           if (!tiersAttended) continue;
-          hits.push([c, tiersAttended, M.chars[c].total]);
+          hits.push({
+            type: "char",
+            id: c,
+            score: ch.nameKey.startsWith(q) ? 0 : 1,
+            weight: tiersAttended * 10000 + ch.total,
+            label: ch.name,
+            tiersAttended,
+          });
         }
-        hits.sort((a, b) => b[1] - a[1] || b[2] - a[2]);
-        els.searchResults.innerHTML = hits.slice(0, 18)
-          .map(([c, tiersAttended]) => {
+        for (let g = 0; g < M.guilds.length; g += 1) {
+          if (F.guildMax[g] === 0) continue;
+          const guild = M.guilds[g];
+          if (!guild.searchKey.includes(q)) continue;
+          let tiersActive = 0;
+          for (let t = 0; t < M.tiers.length; t += 1) if (F.tiers[t].roster.has(g)) tiersActive += 1;
+          hits.push({
+            type: "guild",
+            id: g,
+            score: guild.nameKey.startsWith(q) ? 0 : 1,
+            weight: F.guildMax[g] * 1000 + tiersActive,
+            label: guild.name,
+            tiersActive,
+          });
+        }
+        hits.sort((a, b) => a.score - b.score || b.weight - a.weight || a.label.localeCompare(b.label));
+        els.searchResults.innerHTML = hits.slice(0, 20)
+          .map((hit) => {
+            if (hit.type === "guild") {
+              const g = hit.id;
+              const guild = M.guilds[g];
+              return `
+                <button class="search-result" type="button" data-search-kind="guild" data-search-id="${g}">
+                  <div class="row-main">
+                    <span style="color:hsl(${guild.hue} 70% 72%)">${esc(guildLabel(g))}</span>
+                    <span class="search-kind guild">Guild</span>
+                  </div>
+                  <div class="row-sub">${esc(realmLabel(guild.realm))} · peak roster ${fmt(F.guildMax[g])} · active ${hit.tiersActive} ${hit.tiersActive === 1 ? "tier" : "tiers"}</div>
+                </button>`;
+            }
+            const c = hit.id;
             const ch = M.chars[c];
             return `
-              <button class="search-result" type="button" data-c="${c}">
+              <button class="search-result" type="button" data-search-kind="char" data-search-id="${c}">
                 <div class="row-main">
-                  <span style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</span>
-                  <span>${tiersAttended}t</span>
+                  <span style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(c))}</span>
+                  <span class="search-kind">Character</span>
                 </div>
-                <div class="row-sub">${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${fmt(ch.total)} reports</div>
+                <div class="row-sub">${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports</div>
               </button>`;
           })
           .join("");
         els.searchResults.classList.toggle("visible", hits.length > 0);
-        for (const btn of els.searchResults.querySelectorAll("[data-c]")) {
+        for (const btn of els.searchResults.querySelectorAll("[data-search-kind]")) {
           btn.addEventListener("click", () => {
-            selectChar(Number(btn.dataset.c));
+            const id = Number(btn.dataset.searchId);
+            if (btn.dataset.searchKind === "guild") focusGuild(id);
+            else selectChar(id);
             els.searchResults.classList.remove("visible");
           });
         }
@@ -2091,6 +2154,17 @@
         if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.18;
         if (view.selChar >= 0) a *= c === view.selChar ? 2.5 : 0.1;
         return Math.min(0.65, a);
+      }
+
+      function selectedCharacterGuilds() {
+        if (view.selChar < 0) return null;
+        const guilds = new Set();
+        for (const tt of F.charTiers[view.selChar] || []) {
+          const td = F.tiers[tt];
+          const s = td.slotOf.get(view.selChar);
+          if (s !== undefined) guilds.add(td.g[s]);
+        }
+        return guilds;
       }
 
       function drawPreviousTierContext(t, current) {
@@ -2133,22 +2207,24 @@
         ctx.globalAlpha = 1;
 
         if (!view.showLabels) return;
+        const visibleGuilds = selectedCharacterGuilds();
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
         for (const [g, n] of prev.roster) {
           if (current.roster.has(g)) continue;
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
           const isSel = g === view.selGuild;
           const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
-          const guild = M.guilds[g];
+          const label = guildLabel(g);
           const fontPx = clamp(10 / t.k, 4, 180);
           const x = F.gx[g];
           const y = F.gy[g] - hullRadius(n) - 3 / t.k;
           ctx.font = `650 ${fontPx}px Inter, system-ui, sans-serif`;
           ctx.lineWidth = 3 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
-          ctx.strokeText(guild.name, x, y);
+          ctx.strokeText(label, x, y);
           ctx.fillStyle = isSel || isHover ? "#e2e8f0" : "rgba(203, 213, 225, 0.68)";
-          ctx.fillText(guild.name, x, y);
+          ctx.fillText(label, x, y);
         }
       }
 
@@ -2347,40 +2423,46 @@
       }
 
       function drawGuildLabels(t, roster) {
+        const visibleGuilds = selectedCharacterGuilds();
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
         for (const [g, n] of roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
           const isSel = g === view.selGuild;
           const isHover = view.hover && (view.hover.kind === "guild") && view.hover.g === g;
           const guild = M.guilds[g];
+          const label = guildLabel(g);
           const fontPx = clamp(11 / t.k, 4, 200);
           ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
           const x = F.gx[g];
           const y = F.gy[g] - hullRadius(n) - 3 / t.k;
           ctx.lineWidth = 3 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
-          ctx.strokeText(guild.name, x, y);
+          ctx.strokeText(label, x, y);
           ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
-          ctx.fillText(guild.name, x, y);
+          ctx.fillText(label, x, y);
         }
       }
 
       function drawAllGuildLabels(t, at) {
+        const visibleGuilds = selectedCharacterGuilds();
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
         for (const [g] of at.roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
           const isSel = g === view.selGuild;
           const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
           const guild = M.guilds[g];
+          const label = guildLabel(g);
           const fontPx = clamp(11 / t.k, 4, 200);
           const x = at.gx[g];
           const y = at.gy[g] - hullRadius(allTimeHullN(at, g)) - 3 / t.k;
           ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
           ctx.lineWidth = 3 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
-          ctx.strokeText(guild.name, x, y);
+          ctx.strokeText(label, x, y);
           ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
-          ctx.fillText(guild.name, x, y);
+          ctx.fillText(label, x, y);
         }
       }
 
@@ -2400,11 +2482,12 @@
           const y = src.y[s];
           if (x < wx0 || x > wx1 || y < wy0 || y > wy1) continue;
           const ch = M.chars[src.c[s]];
+          const label = characterLabel(src.c[s]);
           ctx.lineWidth = 2.6 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.88)";
-          ctx.strokeText(ch.name, x, y + 3.4);
+          ctx.strokeText(label, x, y + 3.4);
           ctx.fillStyle = CLASS_COLORS[ch.classID];
-          ctx.fillText(ch.name, x, y + 3.4);
+          ctx.fillText(label, x, y + 3.4);
         }
       }
 
@@ -2847,7 +2930,7 @@
       }
 
       function flowNames(f, max = 8) {
-        const names = (f.cs || []).slice(0, max).map((c) => M.chars[c].name).join(", ");
+        const names = (f.cs || []).slice(0, max).map((c) => characterLabel(c)).join(", ");
         if (!names) return "";
         const extra = f.n - Math.min(f.cs.length, max);
         return `<br><span style="color:#cbd5e1">${esc(names)}${extra > 0 ? ` +${fmt(extra)} more` : ""}</span>`;
@@ -2859,13 +2942,13 @@
           const tiersAttended = (F.charTiers[hit.c] || []).length;
           if (view.mode === "all") {
             const at = F.allTime;
-            return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</b><br>
+            return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
               ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · main guild ${esc(guildLabel(hit.g))}<br>
               ${fmt(at.rep[hit.s])} reports across ${fmt(at.guildN[hit.s])} ${at.guildN[hit.s] === 1 ? "guild" : "guilds"} · ${tiersAttended} tiers · click for career`;
           }
           const td = F.tiers[view.tier];
           const reports = td.r[hit.s];
-          return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(ch.name)}-${esc(ch.realm)}</b><br>
+          return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
             ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${esc(guildLabel(hit.g))}<br>
             ${fmt(reports)} reports this tier · ${tiersAttended} tiers tracked · click for career`;
         }
@@ -3017,10 +3100,6 @@
       els.search.addEventListener("input", () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(runSearch, 160);
-      });
-      els.gsearch.addEventListener("input", () => {
-        clearTimeout(gsearchTimer);
-        gsearchTimer = setTimeout(runGuildSearch, 160);
       });
 
       els.resetView.addEventListener("click", () => {
