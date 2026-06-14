@@ -42,52 +42,56 @@
       }
 
       .app {
-        display: grid;
-        grid-template-columns: 252px minmax(0, 1fr) 360px;
+        position: relative;
+        display: block;
         height: 100vh;
         overflow: hidden;
       }
 
-      .sidebar,
-      .inspector {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        background: color-mix(in srgb, var(--panel) 92%, black);
-        overflow-y: auto;
-      }
-
       .sidebar {
-        border-right: 1px solid var(--line);
-      }
-
-      .inspector {
-        border-left: 1px solid var(--line);
-      }
-
-      .brand {
-        padding: 16px 16px 12px;
-        border-bottom: 1px solid var(--line);
-      }
-
-      .brand h1 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 800;
-      }
-
-      .brand p {
-        margin: 5px 0 0;
-        color: var(--muted);
-        font-size: 0.78rem;
-        line-height: 1.45;
+        position: absolute;
+        z-index: 4;
+        top: 12px;
+        left: 12px;
+        width: 252px;
+        display: grid;
+        gap: 8px;
+        pointer-events: none;
       }
 
       .side-section {
         display: grid;
         gap: 9px;
-        padding: 12px 14px;
-        border-bottom: 1px solid var(--line);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(7, 11, 22, 0.72);
+        padding: 10px;
+        box-shadow: 0 8px 14px var(--shadow);
+        backdrop-filter: blur(12px);
+        pointer-events: auto;
+      }
+
+      .search-island {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        width: 292px;
+        z-index: 5;
+      }
+
+      .filters-panel summary {
+        min-height: 30px;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 740;
+        list-style-position: inside;
+      }
+
+      .filter-body {
+        display: grid;
+        gap: 9px;
+        margin-top: 8px;
       }
 
       .side-section h3 {
@@ -301,7 +305,8 @@
       }
 
       .stage {
-        position: relative;
+        position: absolute;
+        inset: 0;
         min-width: 0;
         min-height: 0;
         overflow: hidden;
@@ -321,8 +326,8 @@
         position: absolute;
         z-index: 3;
         top: 12px;
-        left: 12px;
-        right: 12px;
+        left: 276px;
+        right: 316px;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -335,9 +340,10 @@
         max-width: min(480px, 55vw);
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(5, 7, 17, 0.84);
+        background: rgba(5, 7, 17, 0.68);
         padding: 10px 13px;
         box-shadow: 0 8px 18px var(--shadow);
+        backdrop-filter: blur(12px);
         pointer-events: none;
       }
 
@@ -365,8 +371,9 @@
         min-width: 72px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(5, 7, 17, 0.84);
+        background: rgba(5, 7, 17, 0.68);
         padding: 7px 9px;
+        backdrop-filter: blur(12px);
       }
 
       .stat strong {
@@ -519,8 +526,13 @@
       }
 
       .inspector-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
         padding: 15px 16px 12px;
         border-bottom: 1px solid var(--line);
+        background: rgba(7, 11, 22, 0.86);
+        backdrop-filter: blur(12px);
       }
 
       .inspector-header h2 {
@@ -672,9 +684,56 @@
         min-height: 29px;
       }
 
+      .drawer-toggle {
+        position: absolute;
+        z-index: 6;
+        top: 66px;
+        right: 12px;
+        min-height: 32px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: rgba(16, 24, 39, 0.82);
+        padding: 0 12px;
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 760;
+        cursor: pointer;
+        box-shadow: 0 8px 14px var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .inspector {
+        position: absolute;
+        z-index: 5;
+        top: 106px;
+        right: 12px;
+        bottom: 70px;
+        width: min(360px, calc(100vw - 48px));
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(7, 11, 22, 0.78);
+        box-shadow: 0 12px 22px var(--shadow);
+        backdrop-filter: blur(14px);
+        overflow-y: auto;
+        transform: translateX(0);
+        transition: transform 180ms ease-out, opacity 180ms ease-out;
+      }
+
+      .inspector.collapsed {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(calc(100% + 22px));
+      }
+
       @media (max-width: 1180px) {
-        .app {
-          grid-template-columns: 232px minmax(0, 1fr) 300px;
+        .sidebar {
+          width: 232px;
+        }
+
+        .stage-top {
+          left: 256px;
+          right: 304px;
         }
       }
     </style>
@@ -682,38 +741,42 @@
   <body>
     <div class="app">
       <aside class="sidebar">
-        <div class="side-section">
+        <div class="side-section view-island">
           <h3>View</h3>
           <div class="mode-row">
             <button class="button active" id="modeGalaxy" type="button">Raid view</button>
-            <button class="button" id="modeAll" type="button">Career map</button>
+            <button class="button" id="modeAll" type="button">All raids</button>
             <button class="button" id="modeFlow" type="button">Lineages</button>
           </div>
         </div>
 
-        <div class="side-section">
-          <h3>Filters</h3>
-          <div class="field">
-            <label for="minReports">Min reports per guild &amp; tier</label>
-            <select id="minReports">
-              <option value="1">1+ · everyone</option>
-              <option value="2" selected>2+ · regulars</option>
-              <option value="3">3+ · core raiders</option>
-              <option value="5">5+ · committed core</option>
-              <option value="10">10+ · die-hards</option>
-            </select>
-          </div>
-          <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
-          <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
-          <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" checked /></label>
-          <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
-          <div class="clear-row">
-            <button class="button" id="resetView" type="button">Reset view</button>
-            <button class="button" id="clearSel" type="button">Clear selection</button>
-          </div>
+        <div class="side-section filters-island">
+          <details class="filters-panel">
+            <summary>Filters</summary>
+            <div class="filter-body">
+              <div class="field">
+                <label for="minReports">Min reports per guild &amp; tier</label>
+                <select id="minReports">
+                  <option value="1">1+ · everyone</option>
+                  <option value="2" selected>2+ · regulars</option>
+                  <option value="3">3+ · core raiders</option>
+                  <option value="5">5+ · committed core</option>
+                  <option value="10">10+ · die-hards</option>
+                </select>
+              </div>
+              <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
+              <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
+              <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" /></label>
+              <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
+              <div class="clear-row">
+                <button class="button" id="resetView" type="button">Reset view</button>
+                <button class="button" id="clearSel" type="button">Clear selection</button>
+              </div>
+            </div>
+          </details>
         </div>
 
-        <div class="side-section">
+        <div class="side-section search-island">
           <h3>Search</h3>
           <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
           <div class="search-results" id="searchResults"></div>
@@ -748,7 +811,8 @@
         </div>
       </main>
 
-      <aside class="inspector">
+      <button class="drawer-toggle" id="toggleInspector" type="button">Summary</button>
+      <aside class="inspector collapsed" id="inspectorPanel">
         <div class="inspector-header">
           <h2 id="insTitle">Inspector</h2>
           <p id="insSub">Click a character dot or a guild cluster.</p>
@@ -803,8 +867,9 @@
         classFilter: new Set(),
         showFlows: true,
         showTrails: true,
-        showFibers: true,
+        showFibers: false,
         showLabels: true,
+        inspectorOpen: false,
         selChar: -1,
         selGuild: -1,
         hover: null, // {kind:"char"|"guild"|"flow", ...}
@@ -823,7 +888,7 @@
         ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
          "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
          "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows", "tglTrails", "tglFibers",
-         "tglLabels", "resetView", "clearSel"]
+         "tglLabels", "resetView", "clearSel", "inspectorPanel", "toggleInspector"]
           .map((id) => [id, document.getElementById(id)]),
       );
 
@@ -843,10 +908,44 @@
         return h >>> 0;
       }
 
+      const RAID_ABBRS = {
+        "siege of orgrimmar": "SOO",
+        "highmaul": "HM",
+        "blackrock foundry": "BRF",
+        "hellfire citadel": "HFC",
+        "the emerald nightmare": "EN",
+        "trial of valor": "TOV",
+        "the nighthold": "NH",
+        "tomb of sargeras": "TOS",
+        "antorus the burning throne": "ABT",
+        "uldir": "ULD",
+        "battle of dazar alor": "BOD",
+        "crucible of storms": "COS",
+        "the eternal palace": "EP",
+        "ny alotha": "NYA",
+        "ny alotha the waking city": "NYA",
+        "castle nathria": "CN",
+        "sanctum of domination": "SOD",
+        "sepulcher of the first ones": "SFO",
+        "vault of the incarnates": "VOTI",
+        "aberrus the shadowed crucible": "ATSC",
+        "amirdrassil the dream s hope": "ADH",
+        "nerub ar palace": "NP",
+        "liberation of undermine": "LOU",
+        "manaforge omega": "MO",
+        "vs dr mqd": "VDM",
+      };
+
       function tierAbbr(name) {
+        const normalized = normalizeSearch(name);
+        if (RAID_ABBRS[normalized]) return RAID_ABBRS[normalized];
         const words = String(name).replace(/[,'’]/g, "").replace(/[/&+]/g, " ").split(/\s+/).filter(Boolean);
         if (words.length === 1) return words[0].slice(0, 4);
-        return words.map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w[0].toUpperCase())).join("");
+        return words
+          .filter((w) => !/^(the|of|a|an)$/i.test(w))
+          .map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w[0].toUpperCase()))
+          .join("")
+          .slice(0, 6);
       }
 
       function monthYear(iso) {
@@ -1770,6 +1869,12 @@
 
       /* ============================== inspector panels ============================== */
 
+      function setInspectorOpen(open) {
+        view.inspectorOpen = open;
+        els.inspectorPanel.classList.toggle("collapsed", !open);
+        els.toggleInspector.textContent = open ? "Hide panel" : "Summary";
+      }
+
       function renderInspector() {
         if (view.selChar >= 0) return renderCharPanel(view.selChar);
         if (view.selGuild >= 0) return renderGuildPanel(view.selGuild);
@@ -1801,7 +1906,7 @@
         const t = view.tier;
         const tier = M.tiers[t];
         const td = F.tiers[t];
-        els.insTitle.textContent = tier.name;
+        els.insTitle.textContent = "Raid summary";
         els.insSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · ${fmt(td.count)} raiders in ${fmt(td.roster.size)} guilds`;
 
         const top = Array.from(td.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
@@ -2009,12 +2114,14 @@
       function selectGuild(g) {
         view.selGuild = g === LUMP ? -1 : g;
         view.selChar = -1;
+        setInspectorOpen(true);
         renderInspector();
       }
 
       function selectChar(c) {
         view.selChar = c;
         view.selGuild = -1;
+        setInspectorOpen(true);
         const tiersAttended = F.charTiers[c] || [];
         if (view.mode === "galaxy" && tiersAttended.length && !tiersAttended.includes(view.tier)) {
           stopPlay();
@@ -2052,6 +2159,7 @@
       function focusGuild(g) {
         view.selGuild = g;
         view.selChar = -1;
+        setInspectorOpen(true);
         if (view.mode === "galaxy" && !F.tiers[view.tier].roster.has(g)) {
           for (let t = M.tiers.length - 1; t >= 0; t -= 1) {
             if (F.tiers[t].roster.has(g)) { stopPlay(); setTier(t); break; }
@@ -2179,6 +2287,43 @@
           if (s !== undefined) guilds.add(td.g[s]);
         }
         return guilds;
+      }
+
+      function hitGuildLabelAt(world, transform, g, x, y, fontPx) {
+        const label = guildLabel(g);
+        const pad = 5 / transform.k;
+        ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+        const width = ctx.measureText(label).width;
+        return world.x >= x - width / 2 - pad &&
+          world.x <= x + width / 2 + pad &&
+          world.y >= y - fontPx - pad &&
+          world.y <= y + pad;
+      }
+
+      function hitVisibleGalaxyLabel(world, transform, roster, positions, previous = false) {
+        if (!view.showLabels) return null;
+        const visibleGuilds = selectedCharacterGuilds();
+        const fontPx = clamp((previous ? 10 : 11) / transform.k, 4, previous ? 180 : 200);
+        for (const [g, n] of roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const x = positions.gx[g];
+          const y = positions.gy[g] - hullRadius(n) - 3 / transform.k;
+          if (hitGuildLabelAt(world, transform, g, x, y, fontPx)) return g;
+        }
+        return null;
+      }
+
+      function hitVisibleAllLabel(world, transform, at) {
+        if (!view.showLabels) return null;
+        const visibleGuilds = selectedCharacterGuilds();
+        const fontPx = clamp(11 / transform.k, 4, 200);
+        for (const [g] of at.roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const x = at.gx[g];
+          const y = at.gy[g] - hullRadius(allTimeHullN(at, g)) - 3 / transform.k;
+          if (hitGuildLabelAt(world, transform, g, x, y, fontPx)) return g;
+        }
+        return null;
       }
 
       function drawPreviousTierContext(t, current) {
@@ -2677,8 +2822,9 @@
       function hitAll(px, py) {
         const at = buildAllTime();
         const world = toWorld(px, py);
+        const transform = tf();
         const { cell, grid } = buildGrid(at);
-        const reach = Math.max(6, 8 / tf().k);
+        const reach = Math.max(6, 8 / transform.k);
         let best = null;
         let bestD = reach;
         const cx = Math.floor(world.x / cell);
@@ -2694,6 +2840,9 @@
           }
         }
         if (best !== null) return { kind: "char", s: best, c: at.c[best], g: at.g[best] };
+
+        const labelG = hitVisibleAllLabel(world, transform, at);
+        if (labelG !== null) return { kind: "guild", g: labelG };
 
         let bestG = null;
         let bestGD = Infinity;
@@ -2848,8 +2997,9 @@
       function hitGalaxy(px, py) {
         const world = toWorld(px, py);
         const td = F.tiers[view.tier];
+        const transform = tf();
         const { cell, grid } = buildGrid(td);
-        const reach = Math.max(6, 8 / tf().k);
+        const reach = Math.max(6, 8 / transform.k);
         let best = null;
         let bestD = reach;
         const cx = Math.floor(world.x / cell);
@@ -2866,6 +3016,9 @@
         }
         if (best !== null) return { kind: "char", s: best, c: td.c[best], g: td.g[best] };
 
+        const labelG = hitVisibleGalaxyLabel(world, transform, td.roster, F);
+        if (labelG !== null) return { kind: "guild", g: labelG };
+
         let bestG = null;
         let bestGD = Infinity;
         for (const [g, n] of td.roster) {
@@ -2875,6 +3028,8 @@
         if (bestG !== null) return { kind: "guild", g: bestG };
         if (view.tier > 0) {
           const prev = F.tiers[view.tier - 1];
+          const prevLabelG = hitVisibleGalaxyLabel(world, transform, Array.from(prev.roster).filter(([g]) => !td.roster.has(g)), F, true);
+          if (prevLabelG !== null) return { kind: "guild", g: prevLabelG, previous: true };
           for (const [g, n] of prev.roster) {
             if (td.roster.has(g)) continue;
             const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
@@ -3087,6 +3242,7 @@
       els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
       els.modeAll.addEventListener("click", () => setMode("all"));
       els.modeFlow.addEventListener("click", () => setMode("flow"));
+      els.toggleInspector.addEventListener("click", () => setInspectorOpen(!view.inspectorOpen));
 
       els.minReports.addEventListener("change", () => {
         view.minReports = Number(els.minReports.value);
