@@ -1302,6 +1302,118 @@
       // Aggregates every tier: loyalists pack inside their one guild's cluster, while
       // multi-guild characters float at the weighted centre of every guild they raided
       // with, tethered to each by a fiber. The career social graph in one picture.
+      function allTimeHullN(at, g) {
+        return Math.max(1, at.hullN.get(g) || Math.ceil((at.roster.get(g) || 1) * 0.34));
+      }
+
+      function buildAllTimeGuildLayout(at, multis) {
+        const active = Array.from(at.roster.keys()).sort((a, b) => at.roster.get(b) - at.roster.get(a) || a - b);
+        const pairW = new Map();
+        for (const [, totals] of multis) {
+          const entries = Array.from(totals.entries());
+          for (let a = 0; a < entries.length; a += 1) {
+            for (let b = a + 1; b < entries.length; b += 1) {
+              const ga = entries[a][0];
+              const gb = entries[b][0];
+              const lo = Math.min(ga, gb);
+              const hi = Math.max(ga, gb);
+              const key = lo * 100000 + hi;
+              pairW.set(key, (pairW.get(key) || 0) + Math.sqrt(Math.min(entries[a][1], entries[b][1])));
+            }
+          }
+        }
+
+        for (const g of active) {
+          at.gr[g] = hullRadius(allTimeHullN(at, g)) + 74;
+        }
+        active.forEach((g, i) => {
+          const sourceD = Math.hypot(F.gx[g], F.gy[g]);
+          if (sourceD > 1) {
+            at.gx[g] = F.gx[g] * 2.2;
+            at.gy[g] = F.gy[g] * 2.2;
+          } else {
+            const r = 170 * Math.sqrt(i + 0.5);
+            at.gx[g] = Math.cos(i * PHYLLO_ANGLE) * r;
+            at.gy[g] = Math.sin(i * PHYLLO_ANGLE) * r;
+          }
+        });
+
+        const edges = [];
+        for (const [key, w] of pairW) edges.push([Math.floor(key / 100000), key % 100000, w]);
+
+        const ITERS = 520;
+        for (let iter = 0; iter < ITERS; iter += 1) {
+          const temp = 1 - (iter / ITERS) * 0.78;
+          for (const [a, b, w] of edges) {
+            const dx = at.gx[b] - at.gx[a];
+            const dy = at.gy[b] - at.gy[a];
+            const d = Math.max(1, Math.hypot(dx, dy));
+            const ideal = at.gr[a] + at.gr[b] + 190;
+            const strength = 0.0028 * Math.min(1, Math.log1p(w) / 4);
+            const f = (d - ideal) * strength * temp;
+            const fx = (dx / d) * f;
+            const fy = (dy / d) * f;
+            at.gx[a] += fx; at.gy[a] += fy;
+            at.gx[b] -= fx; at.gy[b] -= fy;
+          }
+          for (let i = 0; i < active.length; i += 1) {
+            const a = active[i];
+            for (let j = i + 1; j < active.length; j += 1) {
+              const b = active[j];
+              const dx = at.gx[b] - at.gx[a];
+              const dy = at.gy[b] - at.gy[a];
+              let d = Math.hypot(dx, dy);
+              if (d < 1) d = 1;
+              const minD = at.gr[a] + at.gr[b] + 70;
+              let f;
+              if (d < minD) {
+                f = (minD - d) * 0.48 * temp;
+              } else {
+                f = Math.min(8, 125000 / (d * d)) * temp * 0.42;
+              }
+              const fx = (dx / d) * f;
+              const fy = (dy / d) * f;
+              at.gx[a] -= fx; at.gy[a] -= fy;
+              at.gx[b] += fx; at.gy[b] += fy;
+            }
+          }
+          for (const g of active) {
+            at.gx[g] *= 1 - 0.0007 * temp;
+            at.gy[g] *= 1 - 0.0007 * temp;
+          }
+        }
+      }
+
+      function relaxAllTimeBridgeSlots(at, multiSlots) {
+        const active = Array.from(at.roster.keys());
+        for (let iter = 0; iter < 3; iter += 1) {
+          for (const [s, memberGuilds] of multiSlots) {
+            let x = at.x[s];
+            let y = at.y[s];
+            for (const g of active) {
+              if (memberGuilds.has(g)) continue;
+              let dx = x - at.gx[g];
+              let dy = y - at.gy[g];
+              let d = Math.hypot(dx, dy);
+              if (d < 0.1) {
+                const angle = (hash32(`${at.c[s]}:${g}`) % 6283) / 1000;
+                dx = Math.cos(angle);
+                dy = Math.sin(angle);
+                d = 1;
+              }
+              const minD = hullRadius(allTimeHullN(at, g)) + 18;
+              if (d < minD) {
+                const push = (minD - d) * 0.72;
+                x += (dx / d) * push;
+                y += (dy / d) * push;
+              }
+            }
+            at.x[s] = x;
+            at.y[s] = y;
+          }
+        }
+      }
+
       function buildAllTime() {
         if (F.allTime) return F.allTime;
         const mr = view.minReports;
@@ -1334,10 +1446,13 @@
           guildN: new Int32Array(count),
           x: new Float32Array(count),
           y: new Float32Array(count),
+          gx: new Float32Array(M.guilds.length),
+          gy: new Float32Array(M.guilds.length),
+          gr: new Float32Array(M.guilds.length),
           slotOf: new Map(),
           roster: new Map(), // g -> distinct members ever
           hullN: new Map(), // g -> loyalist count (sizes the hull)
-          fibers: [], // [slot, g, slot, g, ...] for multi-guild characters
+          fibers: [], // [slot, g, reports, slot, g, reports, ...] for multi-guild characters
           multiCount: multis.length,
           nomads: multis.map(([c, totals]) => [c, totals.size]).sort((p, q) => q[1] - p[1]).slice(0, 14),
           selMaskG: -2,
@@ -1345,36 +1460,43 @@
           grid: null,
         };
 
+        for (const [g, list] of singles) {
+          at.hullN.set(g, list.length);
+          at.roster.set(g, (at.roster.get(g) || 0) + list.length);
+        }
+        for (const [, totals] of multis) {
+          for (const [g] of totals) at.roster.set(g, (at.roster.get(g) || 0) + 1);
+        }
+        buildAllTimeGuildLayout(at, multis);
+
         let s = 0;
         for (const [g, list] of singles) {
           list.sort((p, q) => F.ord[p[0]] - F.ord[q[0]]);
           ensurePhyllo(list.length);
-          at.hullN.set(g, list.length);
-          at.roster.set(g, (at.roster.get(g) || 0) + list.length);
           for (let k = 0; k < list.length; k += 1) {
             at.c[s] = list[k][0];
             at.g[s] = g;
             at.rep[s] = list[k][1];
             at.guildN[s] = 1;
-            at.x[s] = F.gx[g] + phX[k];
-            at.y[s] = F.gy[g] + phY[k];
+            at.x[s] = at.gx[g] + phX[k];
+            at.y[s] = at.gy[g] + phY[k];
             at.slotOf.set(list[k][0], s);
             s += 1;
           }
         }
+        const multiSlots = [];
         for (const [c, totals] of multis) {
           let wsum = 0, x = 0, y = 0, best = -1, bestW = 0, repSum = 0;
           for (const [g, w] of totals) {
             const ww = Math.sqrt(w);
             wsum += ww;
-            x += F.gx[g] * ww;
-            y += F.gy[g] * ww;
+            x += at.gx[g] * ww;
+            y += at.gy[g] * ww;
             repSum += w;
             if (w > bestW) { bestW = w; best = g; }
-            at.roster.set(g, (at.roster.get(g) || 0) + 1);
           }
           const h = hash32("m" + c);
-          const rad = 4 + ((h >>> 8) % 18);
+          const rad = 8 + ((h >>> 8) % 26);
           at.c[s] = c;
           at.g[s] = best;
           at.rep[s] = repSum;
@@ -1382,9 +1504,11 @@
           at.x[s] = x / wsum + Math.cos(h % 6283 / 1000) * rad;
           at.y[s] = y / wsum + Math.sin(h % 6283 / 1000) * rad;
           at.slotOf.set(c, s);
-          for (const [g] of totals) at.fibers.push(s, g);
+          for (const [g, w] of totals) at.fibers.push(s, g, w);
+          multiSlots.push([s, new Set(totals.keys())]);
           s += 1;
         }
+        relaxAllTimeBridgeSlots(at, multiSlots);
 
         F.allTime = at;
         return at;
@@ -1393,16 +1517,16 @@
       function fitAll() {
         const at = buildAllTime();
         let weight = 0, mx = 0, my = 0;
-        for (const [g, n] of at.roster) { weight += n; mx += F.gx[g] * n; my += F.gy[g] * n; }
+        for (const [g, n] of at.roster) { weight += n; mx += at.gx[g] * n; my += at.gy[g] * n; }
         if (!weight) { fitBounds(view.tf.all, -100, -100, 100, 100); view.fitted.all = true; return; }
         mx /= weight; my /= weight;
         let vx = 0, vy = 0;
         for (const [g, n] of at.roster) {
-          vx += n * (F.gx[g] - mx) ** 2;
-          vy += n * (F.gy[g] - my) ** 2;
+          vx += n * (at.gx[g] - mx) ** 2;
+          vy += n * (at.gy[g] - my) ** 2;
         }
-        const rx = Math.max(260, Math.sqrt(vx / weight) * 2.4);
-        const ry = Math.max(260, Math.sqrt(vy / weight) * 2.4);
+        const rx = Math.max(340, Math.sqrt(vx / weight) * 2.55);
+        const ry = Math.max(340, Math.sqrt(vy / weight) * 2.55);
         fitBounds(view.tf.all, mx - rx, my - ry, mx + rx, my + ry);
         view.fitted.all = true;
       }
@@ -1854,7 +1978,12 @@
             if (F.tiers[t].roster.has(g)) { stopPlay(); setTier(t); break; }
           }
         }
-        if (view.mode !== "flow") panTo(F.gx[g], F.gy[g]);
+        if (view.mode === "all") {
+          const at = buildAllTime();
+          panTo(at.gx[g], at.gy[g]);
+        } else if (view.mode !== "flow") {
+          panTo(F.gx[g], F.gy[g]);
+        }
         renderInspector();
       }
 
@@ -2227,7 +2356,26 @@
           const fontPx = clamp(11 / t.k, 4, 200);
           ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
           const x = F.gx[g];
-          const y = F.gy[g] - hullRadius(view.mode === "all" ? (F.allTime.hullN.get(g) || 1) : n) - 3 / t.k;
+          const y = F.gy[g] - hullRadius(n) - 3 / t.k;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(guild.name, x, y);
+          ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
+          ctx.fillText(guild.name, x, y);
+        }
+      }
+
+      function drawAllGuildLabels(t, at) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g] of at.roster) {
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const guild = M.guilds[g];
+          const fontPx = clamp(11 / t.k, 4, 200);
+          const x = at.gx[g];
+          const y = at.gy[g] - hullRadius(allTimeHullN(at, g)) - 3 / t.k;
+          ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
           ctx.lineWidth = 3 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
           ctx.strokeText(guild.name, x, y);
@@ -2316,12 +2464,12 @@
 
         // guild hulls sized by loyalist core
         for (const [g] of at.roster) {
-          const r = hullRadius(at.hullN.get(g) || 1);
+          const r = hullRadius(allTimeHullN(at, g));
           const guild = M.guilds[g];
           const isSel = g === view.selGuild;
           const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
           ctx.beginPath();
-          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.arc(at.gx[g], at.gy[g], r, 0, Math.PI * 2);
           ctx.fillStyle = `hsl(${guild.hue} 65% 58% / ${isSel || isHover ? 0.16 : 0.07})`;
           ctx.fill();
           if (isSel || isHover) {
@@ -2333,16 +2481,18 @@
 
         // career fibers: every multi-guild character tethered to each of their guilds
         if (view.showFibers && at.fibers.length) {
-          ctx.beginPath();
-          for (let i = 0; i < at.fibers.length; i += 2) {
+          for (let i = 0; i < at.fibers.length; i += 3) {
             const s = at.fibers[i];
             const g = at.fibers[i + 1];
+            const reports = at.fibers[i + 2];
+            const isSel = view.selGuild === g || view.selChar === at.c[s];
+            ctx.beginPath();
             ctx.moveTo(at.x[s], at.y[s]);
-            ctx.lineTo(F.gx[g], F.gy[g]);
+            ctx.lineTo(at.gx[g], at.gy[g]);
+            ctx.strokeStyle = isSel ? "rgba(251, 191, 36, 0.45)" : "rgba(148, 163, 184, 0.055)";
+            ctx.lineWidth = (isSel ? 0.9 : 0.45) / t.k + Math.min(2.4, Math.sqrt(reports) * 0.08) / Math.sqrt(t.k);
+            ctx.stroke();
           }
-          ctx.strokeStyle = "rgba(148, 163, 184, 0.06)";
-          ctx.lineWidth = 0.7 / t.k;
-          ctx.stroke();
         }
 
         // membership mask so a selected guild keeps ALL its members lit, including
@@ -2400,7 +2550,7 @@
               seen.add(g);
               ctx.beginPath();
               ctx.moveTo(at.x[s], at.y[s]);
-              ctx.lineTo(F.gx[g], F.gy[g]);
+              ctx.lineTo(at.gx[g], at.gy[g]);
               ctx.stroke();
             }
             ctx.beginPath();
@@ -2421,7 +2571,7 @@
           ctx.stroke();
         }
 
-        if (view.showLabels) drawGuildLabels(t, at.roster);
+        if (view.showLabels) drawAllGuildLabels(t, at);
         drawCharLabels(t, at, 4.2);
 
         ctx.restore();
@@ -2451,8 +2601,8 @@
         let bestG = null;
         let bestGD = Infinity;
         for (const [g] of at.roster) {
-          const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
-          if (d < hullRadius(at.hullN.get(g) || 1) && d < bestGD) { bestGD = d; bestG = g; }
+          const d = Math.hypot(world.x - at.gx[g], world.y - at.gy[g]);
+          if (d < hullRadius(allTimeHullN(at, g)) && d < bestGD) { bestGD = d; bestG = g; }
         }
         if (bestG !== null) return { kind: "guild", g: bestG };
         return null;
@@ -2847,8 +2997,12 @@
         els.loading.classList.add("visible");
         setTimeout(() => {
           rebuild();
+          view.fitted.galaxy = false;
+          view.fitted.all = false;
           view.fitted.flow = false;
-          if (view.mode === "flow") fitFlow();
+          if (view.mode === "galaxy") fitGalaxy();
+          else if (view.mode === "all") fitAll();
+          else fitFlow();
           els.loading.classList.remove("visible");
           updateHud();
           renderInspector();
