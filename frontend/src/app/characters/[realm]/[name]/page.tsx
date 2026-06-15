@@ -850,17 +850,13 @@ export default function CharacterProfilePage({ params }: PageProps) {
                           <RaidNameCell raid={timelineRow.raid} />
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex min-w-0 flex-col gap-1">
-                            <span className="truncate font-semibold text-blue-300">{primaryGuild.guildName}</span>
-                            {secondaryGuilds.length ? (
-                              <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
-                                {secondaryGuilds.map((guild) => (
-                                  <span key={`${guild.zoneId}-${guild.guildId}`} className="truncate text-xs font-semibold text-gray-500">
-                                    {guild.guildName}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="font-semibold text-blue-300">{primaryGuild.guildName}</span>
+                            {secondaryGuilds.map((guild) => (
+                              <span key={`${guild.zoneId}-${guild.guildId}`} className="text-xs font-semibold text-gray-500">
+                                {guild.guildName}
+                              </span>
+                            ))}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center font-semibold tabular-nums text-gray-200">{timelineRow.reportCount}</td>
