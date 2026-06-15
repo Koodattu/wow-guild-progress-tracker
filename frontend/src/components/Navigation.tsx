@@ -30,7 +30,7 @@ const NAVIGATION_LINKS = [
   { href: "/characters", labelKey: "characterRankings" },
   { href: "/compare", labelKey: "compare" },
   { href: "/tierlists", labelKey: "tierLists" },
-  { href: "/raid-analytics", labelKey: "raidAnalytics" },
+  { href: "/analytics", labelKey: "raidAnalytics" },
   { href: "/timetable", labelKey: "raidTimetable" },
   { href: "/livestreams", labelKey: "livestreams" },
   { href: "/events", labelKey: "latestEvents" },

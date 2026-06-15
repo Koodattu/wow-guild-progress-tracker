@@ -6,6 +6,7 @@ import twitchService, { StreamStatus } from "./twitch.service";
 import tierListService from "./tierlist.service";
 import characterService from "./character.service";
 import raidAnalyticsService from "./raid-analytics.service";
+import guildNetworkService from "./guild-network.service";
 import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
 import taskTracker from "./task-tracker.service";
@@ -105,6 +106,7 @@ class UpdateScheduler {
   private isUpdatingCharacterRankings: boolean = false;
   private isQueueingReportCharacterBackfill: boolean = false;
   private isUpdatingCharacterRaidParticipations: boolean = false;
+  private isRebuildingGuildNetworkSnapshot: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
   private isCheckingHiatus: boolean = false;
   private isUpdatingRaiderIOGuilds: boolean = false;
@@ -695,6 +697,27 @@ class UpdateScheduler {
     return true;
   }
 
+  triggerGuildNetworkSnapshotRebuild(): boolean {
+    if (this.isRebuildingGuildNetworkSnapshot) {
+      return false;
+    }
+    this.rebuildGuildNetworkSnapshot()
+      .then(() => logger.info("[Admin] Guild network snapshot rebuild completed"))
+      .catch((err) => logger.error("[Admin] Guild network snapshot rebuild failed:", err));
+    return true;
+  }
+
+  async ensureGuildNetworkSnapshotOnStartup(): Promise<void> {
+    const existing = await guildNetworkService.getActiveMeta();
+    if (existing) {
+      logger.info(`[GuildNetwork] Active snapshot already exists (${existing.characterCount} characters, generated ${existing.generatedAt.toISOString()})`);
+      return;
+    }
+
+    logger.info("[GuildNetwork] No active snapshot found; building initial snapshot");
+    await this.rebuildGuildNetworkSnapshot();
+  }
+
   // Calculate tier lists on startup (if enabled)
   async calculateTierListsOnStartup(): Promise<void> {
     logger.info("Calculating tier lists on startup...");
@@ -1240,15 +1263,42 @@ class UpdateScheduler {
   private async rebuildCharacterRaidParticipations(): Promise<void> {
     this.isUpdatingCharacterRaidParticipations = true;
     const taskId = await taskTracker.start("Rebuild Character Raid Participations");
+    let participationRebuildCompleted = false;
 
     try {
       const result = await characterService.rebuildCharacterRaidParticipations();
       await taskTracker.complete(taskId, result);
+      participationRebuildCompleted = true;
     } catch (error) {
       logger.error("[CharacterRaidParticipation] Rebuild error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingCharacterRaidParticipations = false;
+    }
+
+    if (participationRebuildCompleted) {
+      try {
+        await this.rebuildGuildNetworkSnapshot();
+      } catch {
+        // rebuildGuildNetworkSnapshot records its own task failure; keep the
+        // participation rebuild status independent.
+      }
+    }
+  }
+
+  private async rebuildGuildNetworkSnapshot(): Promise<void> {
+    this.isRebuildingGuildNetworkSnapshot = true;
+    const taskId = await taskTracker.start("Rebuild Guild Network Snapshot");
+
+    try {
+      const result = await guildNetworkService.rebuildSnapshot();
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[GuildNetwork] Snapshot rebuild error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      this.isRebuildingGuildNetworkSnapshot = false;
     }
   }
 
