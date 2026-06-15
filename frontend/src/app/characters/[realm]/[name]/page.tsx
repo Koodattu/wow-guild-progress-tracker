@@ -37,7 +37,10 @@ type DisplayRaidTimelineRow =
   | {
       type: "appearance";
       raid: RaidInfo;
-      row: CharacterRaidTimelineRow;
+      rows: CharacterRaidTimelineRow[];
+      reportCount: number;
+      firstSeenAt: string;
+      lastSeenAt: string;
     }
   | {
       type: "missing";
@@ -46,6 +49,7 @@ type DisplayRaidTimelineRow =
 
 type SelectedTimelineReports = {
   raid: RaidInfo;
+  rows: CharacterRaidTimelineRow[];
   row: CharacterRaidTimelineRow;
 };
 
@@ -130,6 +134,29 @@ function getBetterRanking(a: CharacterRanking, b: CharacterRanking) {
   return b.score - a.score;
 }
 
+function getTimelineDateTime(value: string) {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function sortTimelineGuildRows(a: CharacterRaidTimelineRow, b: CharacterRaidTimelineRow) {
+  const reportDiff = b.reportCount - a.reportCount;
+  if (reportDiff !== 0) return reportDiff;
+
+  const lastSeenDiff = getTimelineDateTime(b.lastSeenAt) - getTimelineDateTime(a.lastSeenAt);
+  if (lastSeenDiff !== 0) return lastSeenDiff;
+
+  return a.guildName.localeCompare(b.guildName);
+}
+
+function getTimelineFirstSeen(rows: CharacterRaidTimelineRow[]) {
+  return rows.reduce((earliest, row) => (getTimelineDateTime(row.firstSeenAt) < getTimelineDateTime(earliest) ? row.firstSeenAt : earliest), rows[0]?.firstSeenAt ?? "");
+}
+
+function getTimelineLastSeen(rows: CharacterRaidTimelineRow[]) {
+  return rows.reduce((latest, row) => (getTimelineDateTime(row.lastSeenAt) > getTimelineDateTime(latest) ? row.lastSeenAt : latest), rows[0]?.lastSeenAt ?? "");
+}
+
 function getMetricIcon(metric: string | null) {
   if (metric === "hps") return "/icons/roleicon_healer.png";
   return "/icons/roleicon_damage.png";
@@ -197,14 +224,22 @@ function CharacterRaidReportsDialog({
   reports,
   loading,
   error,
+  onSelectGuild,
   onClose,
 }: {
   selected: SelectedTimelineReports;
   reports: CharacterRaidReportsResponse | null;
   loading: boolean;
   error: string | null;
+  onSelectGuild: (row: CharacterRaidTimelineRow) => void;
   onClose: () => void;
 }) {
+  function handleGuildRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: CharacterRaidTimelineRow) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onSelectGuild(row);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
@@ -216,9 +251,7 @@ function CharacterRaidReportsDialog({
             <IconImage iconFilename={selected.raid.iconUrl} alt={`${selected.raid.name} icon`} width={32} height={32} className="h-8 w-8 shrink-0 rounded object-cover" />
             <div className="min-w-0">
               <h2 className="truncate text-lg font-semibold text-white">{selected.raid.name} Reports</h2>
-              <p className="truncate text-sm text-gray-400">
-                {selected.row.guildName} <span className="text-gray-600">{formatRealmName(selected.row.guildRealm)}</span>
-              </p>
+              <p className="truncate text-sm text-gray-400">{selected.row.guildName}</p>
             </div>
           </div>
           <button
@@ -232,6 +265,52 @@ function CharacterRaidReportsDialog({
         </div>
 
         <div className="max-h-[72vh] overflow-y-auto">
+          <div className="border-b border-gray-800 bg-gray-950/35">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] border-collapse">
+                <thead>
+                  <tr className="text-left text-xs font-semibold uppercase text-gray-500">
+                    <th className="px-4 py-2.5">Guild</th>
+                    <th className="px-4 py-2.5 text-right">Reports</th>
+                    <th className="px-4 py-2.5">First Seen</th>
+                    <th className="px-4 py-2.5">Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.rows.map((row) => {
+                    const isSelected = row.guildId === selected.row.guildId;
+                    return (
+                      <tr
+                        key={`${row.zoneId}-${row.guildId}`}
+                        role="button"
+                        tabIndex={0}
+                        title={`Show ${row.reportCount} reports for ${row.guildName}`}
+                        onClick={() => onSelectGuild(row)}
+                        onKeyDown={(event) => handleGuildRowKeyDown(event, row)}
+                        className={`cursor-pointer border-t border-gray-800 transition-colors first:border-t-0 focus-visible:bg-blue-950/35 focus-visible:outline-2 focus-visible:outline-blue-500 ${
+                          isSelected ? "bg-blue-950/35 text-gray-100" : "text-gray-400 hover:bg-gray-800/45"
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-semibold">
+                          <Link
+                            href={getGuildProfileUrl(row.guildRealm, row.guildName)}
+                            onClick={(event) => event.stopPropagation()}
+                            className={`${isSelected ? "text-blue-200" : "text-blue-300"} transition-colors hover:text-blue-100`}
+                          >
+                            {row.guildName}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.reportCount}</td>
+                        <td className="px-4 py-3 text-sm tabular-nums">{formatShortDate(row.firstSeenAt)}</td>
+                        <td className="px-4 py-3 text-sm tabular-nums">{formatShortDate(row.lastSeenAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {loading ? (
             <div className="px-4 py-10 text-center text-gray-300">Loading reports...</div>
           ) : error ? (
@@ -470,10 +549,10 @@ export default function CharacterProfilePage({ params }: PageProps) {
     return () => window.removeEventListener("keydown", handleEscape);
   }, [selectedTimelineReports, handleCloseTimelineReports]);
 
-  async function handleOpenTimelineReports(raid: RaidInfo, row: CharacterRaidTimelineRow) {
+  async function handleOpenTimelineReports(raid: RaidInfo, row: CharacterRaidTimelineRow, rows: CharacterRaidTimelineRow[] = [row]) {
     const requestId = timelineReportsRequestId.current + 1;
     timelineReportsRequestId.current = requestId;
-    setSelectedTimelineReports({ raid, row });
+    setSelectedTimelineReports({ raid, rows, row });
     setTimelineReports(null);
     setTimelineReportsError(null);
     setTimelineReportsLoading(true);
@@ -494,10 +573,21 @@ export default function CharacterProfilePage({ params }: PageProps) {
     }
   }
 
-  function handleTimelineReportKeyDown(event: KeyboardEvent<HTMLTableRowElement>, raid: RaidInfo, row: CharacterRaidTimelineRow) {
+  function handleOpenTimelineGroup(raid: RaidInfo, rows: CharacterRaidTimelineRow[]) {
+    const [primaryRow] = rows;
+    if (!primaryRow) return;
+    handleOpenTimelineReports(raid, primaryRow, rows);
+  }
+
+  function handleSelectTimelineReportsGuild(row: CharacterRaidTimelineRow) {
+    if (!selectedTimelineReports) return;
+    handleOpenTimelineReports(selectedTimelineReports.raid, row, selectedTimelineReports.rows);
+  }
+
+  function handleTimelineReportKeyDown(event: KeyboardEvent<HTMLTableRowElement>, raid: RaidInfo, rows: CharacterRaidTimelineRow[]) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    handleOpenTimelineReports(raid, row);
+    handleOpenTimelineGroup(raid, rows);
   }
 
   const raidTimelineRows = useMemo<DisplayRaidTimelineRow[]>(() => {
@@ -527,10 +617,20 @@ export default function CharacterProfilePage({ params }: PageProps) {
     return raids.slice(firstIndex, lastIndex + 1).flatMap((raid): DisplayRaidTimelineRow[] => {
       const rows = rowsByRaidId.get(raid.id);
       if (!rows?.length) return [{ type: "missing", raid }];
-      return rows.map((row) => ({ type: "appearance", raid, row }));
+      const sortedRows = [...rows].sort(sortTimelineGuildRows);
+      return [
+        {
+          type: "appearance",
+          raid,
+          rows: sortedRows,
+          reportCount: sortedRows.reduce((total, row) => total + row.reportCount, 0),
+          firstSeenAt: getTimelineFirstSeen(sortedRows),
+          lastSeenAt: getTimelineLastSeen(sortedRows),
+        },
+      ];
     });
   }, [profile, raids]);
-  const raidReportCount = raidTimelineRows.reduce((total, row) => (row.type === "appearance" ? total + row.row.reportCount : total), 0);
+  const raidReportCount = raidTimelineRows.reduce((total, row) => (row.type === "appearance" ? total + row.reportCount : total), 0);
   const rankingRaidGroups = useMemo<RankingRaidGroup[]>(() => {
     if (!profile?.rankings.length) return [];
 
@@ -587,7 +687,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
   if (loading || isLoadingRaids) {
     return (
       <main className="min-h-screen px-4 py-8">
-        <div className="mx-auto max-w-6xl text-center text-gray-300">Loading character...</div>
+        <div className="mx-auto max-w-[1500px] text-center text-gray-300">Loading character...</div>
       </main>
     );
   }
@@ -599,7 +699,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
   if (error || raidsError || !profile) {
     return (
       <main className="min-h-screen px-4 py-8">
-        <div className="mx-auto max-w-6xl rounded-lg border border-gray-700 bg-gray-900 p-8 text-center">
+        <div className="mx-auto max-w-[1500px] rounded-lg border border-gray-700 bg-gray-900 p-8 text-center">
           <h1 className="text-xl font-semibold text-white">Character not found</h1>
           <p className="mt-2 text-sm text-gray-400">{error ?? (raidsError instanceof Error ? raidsError.message : "No character profile exists for this realm and name.")}</p>
         </div>
@@ -615,7 +715,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen px-4 py-8">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-[1500px] space-y-6">
         <header className="py-2">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0 md:pr-6">
@@ -702,10 +802,10 @@ export default function CharacterProfilePage({ params }: PageProps) {
           </div>
           {raidTimelineRows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] table-fixed border-collapse">
+              <table className="w-full min-w-[920px] table-fixed border-collapse">
                 <colgroup>
-                  <col className="w-[34%]" />
                   <col className="w-[30%]" />
+                  <col className="w-[34%]" />
                   <col className="w-[12%]" />
                   <col className="w-[12%]" />
                   <col className="w-[12%]" />
@@ -735,33 +835,37 @@ export default function CharacterProfilePage({ params }: PageProps) {
                       );
                     }
 
-                    const row = timelineRow.row;
+                    const [primaryGuild, ...secondaryGuilds] = timelineRow.rows;
                     return (
                       <tr
-                        key={`${row.zoneId}-${row.guildId}`}
+                        key={`appearance-${timelineRow.raid.id}`}
                         role="button"
                         tabIndex={0}
-                        title={`Show ${row.reportCount} reports for ${row.guildName} in ${timelineRow.raid.name}`}
-                        onClick={() => handleOpenTimelineReports(timelineRow.raid, row)}
-                        onKeyDown={(event) => handleTimelineReportKeyDown(event, timelineRow.raid, row)}
+                        title={`Show reports for ${timelineRow.raid.name}`}
+                        onClick={() => handleOpenTimelineGroup(timelineRow.raid, timelineRow.rows)}
+                        onKeyDown={(event) => handleTimelineReportKeyDown(event, timelineRow.raid, timelineRow.rows)}
                         className="group cursor-pointer border-b border-gray-800 transition-colors last:border-0 hover:bg-blue-950/35 focus-visible:bg-blue-950/35 focus-visible:outline-2 focus-visible:outline-blue-500"
                       >
                         <td className="px-4 py-3">
                           <RaidNameCell raid={timelineRow.raid} />
                         </td>
-                        <td className="px-4 py-3 truncate">
-                          <Link
-                            href={getGuildProfileUrl(row.guildRealm, row.guildName)}
-                            onClick={(event) => event.stopPropagation()}
-                            className="font-semibold text-blue-300 transition-colors hover:text-blue-200"
-                          >
-                            {row.guildName}
-                          </Link>
-                          <span className="ml-2 text-xs text-gray-500">{formatRealmName(row.guildRealm)}</span>
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <span className="truncate font-semibold text-blue-300">{primaryGuild.guildName}</span>
+                            {secondaryGuilds.length ? (
+                              <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
+                                {secondaryGuilds.map((guild) => (
+                                  <span key={`${guild.zoneId}-${guild.guildId}`} className="truncate text-xs font-semibold text-gray-500">
+                                    {guild.guildName}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-center font-semibold tabular-nums text-gray-200">{row.reportCount}</td>
-                        <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(row.firstSeenAt)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-400">{formatShortDate(row.lastSeenAt)}</td>
+                        <td className="px-4 py-3 text-center font-semibold tabular-nums text-gray-200">{timelineRow.reportCount}</td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-gray-400">{formatShortDate(timelineRow.firstSeenAt)}</td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-gray-400">{formatShortDate(timelineRow.lastSeenAt)}</td>
                       </tr>
                     );
                   })}
@@ -779,6 +883,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
             reports={timelineReports}
             loading={timelineReportsLoading}
             error={timelineReportsError}
+            onSelectGuild={handleSelectTimelineReportsGuild}
             onClose={handleCloseTimelineReports}
           />
         ) : null}
@@ -790,11 +895,11 @@ export default function CharacterProfilePage({ params }: PageProps) {
           </div>
           {rankingRaidGroups.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse">
+              <table className="w-full min-w-[1180px] border-collapse">
                 <colgroup>
-                  <col className="w-[250px]" />
-                  <col className="w-[96px]" />
+                  <col className="w-[300px]" />
                   <col className="w-[104px]" />
+                  <col className="w-[112px]" />
                   <col />
                 </colgroup>
                 <thead>
@@ -837,7 +942,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                         </>
                       )}
                       <td className="px-3 py-3">
-                        <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(48px, 1fr))` }}>
+                        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(56px, 1fr))` }}>
                           {group.bossColumns.map((bossColumn) => (
                             <div
                               key={getBossKey(group.zoneId, bossColumn.encounterId)}

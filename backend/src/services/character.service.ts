@@ -1762,19 +1762,10 @@ class CharacterService {
       {
         $group: {
           _id: {
-            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             classID: "$classID",
-            fallbackName: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterName", null],
-            },
-            fallbackRealm: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRealm", null],
-            },
-            fallbackRegion: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRegion", null],
-            },
           },
           wclCanonicalCharacterIds: { $addToSet: "$wclCanonicalCharacterId" },
+          latestWclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
           name: { $first: "$characterName" },
           realm: { $first: "$characterRealm" },
           region: { $first: "$characterRegion" },
@@ -1791,6 +1782,7 @@ class CharacterService {
         $project: {
           _id: 0,
           wclCanonicalCharacterIds: 1,
+          latestWclCanonicalCharacterId: 1,
           name: 1,
           realm: 1,
           region: 1,
@@ -1808,10 +1800,16 @@ class CharacterService {
       { $sort: { lastSeenAt: -1, classID: 1 } },
     ]).collation(CASE_INSENSITIVE_COLLATION);
 
-    const choices = (identityRows as CharacterProfileChoice[]).map((choice) => ({
-      ...choice,
-      wclCanonicalCharacterIds: (choice.wclCanonicalCharacterIds || []).filter((id): id is number => typeof id === "number"),
-    }));
+    const choices = (identityRows as Array<CharacterProfileChoice & { latestWclCanonicalCharacterId?: number | null }>).map(({ latestWclCanonicalCharacterId, ...choice }) => {
+      const canonicalIds = (choice.wclCanonicalCharacterIds || []).filter((id): id is number => typeof id === "number");
+      const orderedCanonicalIds =
+        typeof latestWclCanonicalCharacterId === "number" ? [latestWclCanonicalCharacterId, ...canonicalIds.filter((id) => id !== latestWclCanonicalCharacterId)] : canonicalIds;
+
+      return {
+        ...choice,
+        wclCanonicalCharacterIds: orderedCanonicalIds,
+      };
+    });
     if (!classId && choices.length > 1) {
       return {
         type: "choices",
@@ -1852,7 +1850,7 @@ class CharacterService {
       const timelineMatch =
         canonicalIds.length > 0
           ? {
-              wclCanonicalCharacterId: { $in: canonicalIds },
+              $or: [{ wclCanonicalCharacterId: { $in: canonicalIds } }, exactCharacterMatch],
               classID: selectedChoice.classID,
               zoneId: { $in: TRACKED_RAIDS },
             }
@@ -1953,7 +1951,7 @@ class CharacterService {
       {
         $match: {
           ...(profileCanonicalIds.length > 0
-            ? { wclCanonicalCharacterId: { $in: profileCanonicalIds } }
+            ? { $or: [{ wclCanonicalCharacterId: { $in: profileCanonicalIds } }, exactCharacterMatch] }
             : {
                 ...exactCharacterMatch,
               }),
