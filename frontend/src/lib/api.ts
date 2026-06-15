@@ -61,6 +61,8 @@ import {
   BossPullHistoryResponse,
   RaidAnalytics,
   RaidAnalyticsListItem,
+  GuildNetworkMeta,
+  GuildNetworkUniverse,
   CharacterRankingRow,
   CharacterRankingsFilterOptionsResponse,
   CharacterSearchResponse,
@@ -1108,6 +1110,36 @@ export const api = {
     const response = await fetch(`${API_URL}/api/raid-analytics/all`);
     if (!response.ok) {
       throw new Error("Failed to fetch all raid analytics");
+    }
+    return response.json();
+  },
+
+  // ============================================================================
+  // GUILD NETWORK ANALYTICS
+  // ============================================================================
+
+  getGuildNetworkUniverseUrl(): string {
+    return `${API_URL}/api/guild-network/universe`;
+  },
+
+  async getGuildNetworkMeta(): Promise<GuildNetworkMeta> {
+    const response = await fetch(`${API_URL}/api/guild-network/meta`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Guild network snapshot has not been built yet");
+      }
+      throw new Error("Failed to fetch guild network metadata");
+    }
+    return response.json();
+  },
+
+  async getGuildNetworkUniverse(): Promise<GuildNetworkUniverse> {
+    const response = await fetch(`${API_URL}/api/guild-network/universe`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Guild network snapshot has not been built yet");
+      }
+      throw new Error("Failed to fetch guild network universe");
     }
     return response.json();
   },

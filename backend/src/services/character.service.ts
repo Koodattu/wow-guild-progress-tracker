@@ -1173,9 +1173,7 @@ class CharacterService {
     }
 
     await flushAppearanceUpdates();
-    logger.info(
-      `[CharacterRaidParticipation] Relink multi-class canonical characters: complete, relinked ${relinkedGroups}/${identityRows.length} groups (${elapsed()})`,
-    );
+    logger.info(`[CharacterRaidParticipation] Relink multi-class canonical characters: complete, relinked ${relinkedGroups}/${identityRows.length} groups (${elapsed()})`);
     return { canonicalIds: canonicalIds.length, groups: identityRows.length, relinkedGroups };
   }
 
@@ -1195,8 +1193,7 @@ class CharacterService {
       `[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: loaded ${unmatchedAppearances.length} unmatched appearances (${elapsed()})`,
     );
 
-    const getMatchKey = (name: string, realm: string, region: string, classID: number) =>
-      `${name.toLowerCase()}:${realm.toLowerCase()}:${region.toLowerCase()}:${classID}`;
+    const getMatchKey = (name: string, realm: string, region: string, classID: number) => `${name.toLowerCase()}:${realm.toLowerCase()}:${region.toLowerCase()}:${classID}`;
     const canonicalMatchesByIdentity = new Map<string, { characterId: mongoose.Types.ObjectId; wclCanonicalCharacterId: number }>();
 
     logger.info("[CharacterRaidParticipation] Matching report.rankings fallback appearances to canonical characters: building canonical match map");
@@ -1276,9 +1273,7 @@ class CharacterService {
 
     for (const appearance of unmatchedAppearances) {
       scanned += 1;
-      const canonicalMatch = canonicalMatchesByIdentity.get(
-        getMatchKey(appearance.characterName, appearance.characterRealm, appearance.characterRegion, appearance.classID),
-      );
+      const canonicalMatch = canonicalMatchesByIdentity.get(getMatchKey(appearance.characterName, appearance.characterRealm, appearance.characterRegion, appearance.classID));
 
       if (scanned % 1000 === 0) {
         logger.info(
@@ -1443,19 +1438,22 @@ class CharacterService {
           },
         },
       }));
-      await CharacterReportAppearance.bulkWrite(
-        bulkOps,
-        { ordered: false },
-      );
+      await CharacterReportAppearance.bulkWrite(bulkOps, { ordered: false });
       updatedReports += batch.length;
     }
 
     return updatedReports;
   }
-
   async rebuildCharacterRaidParticipations(): Promise<{ deleted: number; inserted: number }> {
     const startedAt = Date.now();
     const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+    const targetCollectionName = CharacterRaidParticipation.collection.name;
+    const tempCollectionName = `${targetCollectionName}_rebuild_${Date.now()}`;
+    const db = CharacterRaidParticipation.db.db;
+    if (!db) {
+      throw new Error("MongoDB connection is not ready");
+    }
+
     logger.info("[CharacterRaidParticipation] Rebuilding materialized participation collection");
     logger.info("[CharacterRaidParticipation] Step 1/6: relinking multi-class canonical characters");
     const relinkedCanonicalClasses = await this.relinkMultiClassCanonicalCharactersFromReportAppearances();
@@ -1469,126 +1467,154 @@ class CharacterService {
     const zoneBackfilledReports = await this.backfillAppearanceReportZoneIds();
     logger.info(`[CharacterRaidParticipation] Step 3/6 zone ID fill complete: updated ${zoneBackfilledReports} report groups (${elapsed()})`);
 
-    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating Heroic/Mythic report appearances into raid participations");
-    const rows = await CharacterReportAppearance.aggregate([
-      { $match: { reportZoneId: { $gt: 0 } } },
-      {
-        $lookup: {
-          from: "reports",
-          let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }],
+    try {
+      logger.info("[CharacterRaidParticipation] Step 4/6: aggregating Heroic/Mythic report appearances into temporary participation rows");
+      const tempCollection = db.collection(tempCollectionName);
+      const batchSize = 5000;
+      let inserted = 0;
+      let batch: Record<string, unknown>[] = [];
+
+      const flushBatch = async (): Promise<void> => {
+        if (batch.length === 0) return;
+        await tempCollection.insertMany(batch, { ordered: false });
+        inserted += batch.length;
+        logger.info(`[CharacterRaidParticipation] Step 4/6 progress: staged ${inserted} rows (${elapsed()})`);
+        batch = [];
+      };
+
+      const cursor = CharacterReportAppearance.aggregate<Record<string, unknown>>([
+        { $match: { reportZoneId: { $gt: 0 } } },
+        {
+          $lookup: {
+            from: "reports",
+            let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }],
+                  },
+                },
+              },
+              { $project: { _id: 0, fightSequence: 1 } },
+            ],
+            as: "report",
+          },
+        },
+        { $unwind: "$report" },
+        {
+          $addFields: {
+            heroicMythicFightCount: {
+              $size: {
+                $filter: {
+                  input: { $ifNull: ["$report.fightSequence", []] },
+                  as: "fight",
+                  cond: { $in: ["$$fight.difficulty", [4, 5]] },
                 },
               },
             },
-            { $project: { _id: 0, fightSequence: 1 } },
-          ],
-          as: "report",
+          },
         },
-      },
-      { $unwind: "$report" },
-      {
-        $addFields: {
-          heroicMythicFightCount: {
-            $size: {
-              $filter: {
-                input: { $ifNull: ["$report.fightSequence", []] },
-                as: "fight",
-                cond: { $in: ["$$fight.difficulty", [4, 5]] },
+        { $match: { heroicMythicFightCount: { $gt: 0 } } },
+        { $sort: { reportStartTime: 1 } },
+        {
+          $group: {
+            _id: {
+              wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+              zoneId: "$reportZoneId",
+              reportGuildId: "$reportGuildId",
+              classID: "$classID",
+              fallbackName: {
+                $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterName", null],
+              },
+              fallbackRealm: {
+                $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRealm", null],
+              },
+              fallbackRegion: {
+                $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRegion", null],
               },
             },
+            characterId: { $first: "$characterId" },
+            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
+            zoneId: { $first: "$reportZoneId" },
+            reportGuildId: { $first: "$reportGuildId" },
+            reportGuildName: { $last: "$reportGuildName" },
+            reportGuildRealm: { $last: "$reportGuildRealm" },
+            characterName: { $last: "$characterName" },
+            characterRealm: { $last: "$characterRealm" },
+            characterRegion: { $last: "$characterRegion" },
+            classID: { $last: "$classID" },
+            firstSeenAt: { $min: "$reportStartTime" },
+            lastSeenAt: { $max: "$reportStartTime" },
+            reportCount: { $sum: 1 },
           },
         },
-      },
-      { $match: { heroicMythicFightCount: { $gt: 0 } } },
-      {
-        $sort: {
-          reportStartTime: 1,
-        },
-      },
-      {
-        $group: {
-          _id: {
-            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
-            zoneId: "$reportZoneId",
-            reportGuildId: "$reportGuildId",
-            classID: "$classID",
-            fallbackName: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterName", null],
-            },
-            fallbackRealm: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRealm", null],
-            },
-            fallbackRegion: {
-              $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRegion", null],
-            },
+        {
+          $project: {
+            _id: 0,
+            characterId: 1,
+            wclCanonicalCharacterId: 1,
+            zoneId: 1,
+            reportGuildId: 1,
+            reportGuildName: 1,
+            reportGuildRealm: 1,
+            characterName: 1,
+            characterRealm: 1,
+            characterRegion: 1,
+            classID: 1,
+            firstSeenAt: 1,
+            lastSeenAt: 1,
+            reportCount: 1,
+            createdAt: "$$NOW",
+            updatedAt: "$$NOW",
           },
-          characterId: { $first: "$characterId" },
-          wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-          zoneId: { $first: "$reportZoneId" },
-          reportGuildId: { $first: "$reportGuildId" },
-          reportGuildName: { $last: "$reportGuildName" },
-          reportGuildRealm: { $last: "$reportGuildRealm" },
-          characterName: { $last: "$characterName" },
-          characterRealm: { $last: "$characterRealm" },
-          characterRegion: { $last: "$characterRegion" },
-          classID: { $last: "$classID" },
-          firstSeenAt: { $min: "$reportStartTime" },
-          lastSeenAt: { $max: "$reportStartTime" },
-          reportCount: { $sum: 1 },
         },
-      },
-      {
-        $project: {
-          _id: 0,
-          characterId: 1,
-          wclCanonicalCharacterId: 1,
-          zoneId: 1,
-          reportGuildId: 1,
-          reportGuildName: 1,
-          reportGuildRealm: 1,
-          characterName: 1,
-          characterRealm: 1,
-          characterRegion: 1,
-          classID: 1,
-          firstSeenAt: 1,
-          lastSeenAt: 1,
-          reportCount: 1,
-        },
-      },
-    ]).allowDiskUse(true);
-    logger.info(`[CharacterRaidParticipation] Step 3/6 complete: aggregated ${rows.length} participation rows (${elapsed()})`);
+      ])
+        .allowDiskUse(true)
+        .cursor({ batchSize: 1000 });
 
-    logger.info("[CharacterRaidParticipation] Step 4/6: deleting existing materialized participation rows");
-    const deleteResult = await CharacterRaidParticipation.deleteMany({});
-    logger.info(`[CharacterRaidParticipation] Step 4/6 complete: deleted ${deleteResult.deletedCount ?? 0} rows (${elapsed()})`);
-
-    // Drops stale unique indexes while the materialized collection is empty.
-    logger.info("[CharacterRaidParticipation] Step 5/6: syncing participation indexes");
-    await CharacterRaidParticipation.syncIndexes();
-    logger.info(`[CharacterRaidParticipation] Step 5/6 complete (${elapsed()})`);
-
-    logger.info("[CharacterRaidParticipation] Step 6/6: inserting rebuilt participation rows");
-    if (rows.length > 0) {
-      const batchSize = 5000;
-      for (let index = 0; index < rows.length; index += batchSize) {
-        const batch = rows.slice(index, index + batchSize);
-        await CharacterRaidParticipation.insertMany(batch, { ordered: false });
-        logger.info(
-          `[CharacterRaidParticipation] Step 6/6 progress: inserted ${Math.min(index + batch.length, rows.length)}/${rows.length} rows (${elapsed()})`,
-        );
+      for await (const row of cursor) {
+        batch.push(row);
+        if (batch.length >= batchSize) {
+          await flushBatch();
+        }
       }
-    }
-    logger.info(`[CharacterRaidParticipation] Step 6/6 complete (${elapsed()})`);
-    await cacheService.invalidatePattern(/^characters:profile:/);
 
-    logger.info(
-      `[CharacterRaidParticipation] Rebuild complete in ${elapsed()}: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`,
-    );
-    return { deleted: deleteResult.deletedCount ?? 0, inserted: rows.length };
+      await flushBatch();
+
+      if (inserted === 0) {
+        await db.createCollection(tempCollectionName);
+      }
+
+      logger.info(`[CharacterRaidParticipation] Step 4/6 complete: staged ${inserted} participation rows (${elapsed()})`);
+
+      logger.info("[CharacterRaidParticipation] Step 5/6: creating indexes on rebuilt participation rows");
+      const schemaIndexes = CharacterRaidParticipation.schema.indexes() as Array<[Record<string, unknown>, Record<string, unknown>]>;
+      const indexSpecs = schemaIndexes.map(([key, options]) => ({ key, ...options })) as mongoose.mongo.IndexDescription[];
+      if (indexSpecs.length > 0) {
+        await tempCollection.createIndexes(indexSpecs);
+      }
+      logger.info(`[CharacterRaidParticipation] Step 5/6 complete (${elapsed()})`);
+
+      logger.info("[CharacterRaidParticipation] Step 6/6: swapping rebuilt participation rows into place");
+      const previousRows = await CharacterRaidParticipation.estimatedDocumentCount();
+      await tempCollection.rename(targetCollectionName, { dropTarget: true });
+      logger.info(`[CharacterRaidParticipation] Step 6/6 complete: replaced ${previousRows} rows with ${inserted} rows (${elapsed()})`);
+
+      await cacheService.invalidatePattern(/^characters:profile:/);
+
+      logger.info(
+        `[CharacterRaidParticipation] Rebuild complete in ${elapsed()}: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${previousRows}, inserted ${inserted}`,
+      );
+
+      return { deleted: previousRows, inserted };
+    } catch (error) {
+      await db
+        .collection(tempCollectionName)
+        .drop()
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   async getGuildRaidCharactersByRealmName(realm: string, name: string, zoneId: number): Promise<GuildRaidCharacterRosterResponse | null> {
@@ -1860,10 +1886,7 @@ class CharacterService {
             };
 
       [timelineRows, rankingRows] = await Promise.all([
-        CharacterRaidParticipation.find(timelineMatch)
-          .collation(CASE_INSENSITIVE_COLLATION)
-          .sort({ firstSeenAt: 1, zoneId: 1 })
-          .lean(),
+        CharacterRaidParticipation.find(timelineMatch).collation(CASE_INSENSITIVE_COLLATION).sort({ firstSeenAt: 1, zoneId: 1 }).lean(),
         canonicalIds.length > 0
           ? CharacterLeaderboard.find({
               wclCanonicalCharacterId: { $in: canonicalIds },
@@ -1911,8 +1934,12 @@ class CharacterService {
       character.region = latestTimelineRow.characterRegion;
     }
 
-    const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter((id): id is number => typeof id === "number");
-    const raids = await Raid.find({ id: { $in: raidIds } }).select("id name -_id").lean();
+    const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter(
+      (id): id is number => typeof id === "number",
+    );
+    const raids = await Raid.find({ id: { $in: raidIds } })
+      .select("id name -_id")
+      .lean();
     const raidNameById = new Map(raids.map((raid) => [raid.id, raid.name]));
     const guildHistoryByGuild = new Map<
       string,

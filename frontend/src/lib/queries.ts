@@ -58,6 +58,9 @@ export const queryKeys = {
     detail: (raidId: number) => ["raidAnalytics", "detail", raidId] as const,
     all: ["raidAnalytics", "all"] as const,
   },
+  guildNetwork: {
+    meta: ["guildNetwork", "meta"] as const,
+  },
   compare: {
     raid: (raidId: number) => ["compare", "raid", raidId] as const,
   },
@@ -292,6 +295,15 @@ export function useAllRaidAnalytics(enabled: boolean) {
     queryKey: queryKeys.raidAnalytics.all,
     queryFn: () => api.getAllRaidAnalytics(),
     enabled,
+  });
+}
+
+export function useGuildNetworkMeta() {
+  return useQuery({
+    queryKey: queryKeys.guildNetwork.meta,
+    queryFn: () => api.getGuildNetworkMeta(),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -1,0 +1,3301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Raider Constellation</title>
+    <style>
+      :root {
+        --bg: #050711;
+        --panel: #0b1020;
+        --line: rgba(148, 163, 184, 0.22);
+        --line-strong: rgba(148, 163, 184, 0.38);
+        --text: #f8fafc;
+        --muted: #a5b4c8;
+        --quiet: #738196;
+        --blue: #60a5fa;
+        --blue-strong: #2563eb;
+        --amber: #fbbf24;
+        --shadow: rgba(0, 0, 0, 0.34);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+
+      .app {
+        position: relative;
+        display: block;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        position: absolute;
+        z-index: 4;
+        top: 12px;
+        left: 12px;
+        width: 252px;
+        display: grid;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .side-section {
+        display: grid;
+        gap: 9px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(7, 11, 22, 0.72);
+        padding: 10px;
+        box-shadow: 0 8px 14px var(--shadow);
+        backdrop-filter: blur(12px);
+        pointer-events: auto;
+      }
+
+      .search-island {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        width: 292px;
+        z-index: 5;
+      }
+
+      .filters-panel summary {
+        min-height: 30px;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 740;
+        list-style-position: inside;
+      }
+
+      .filter-body {
+        display: grid;
+        gap: 9px;
+        margin-top: 8px;
+      }
+
+      .side-section h3 {
+        margin: 0;
+        color: var(--quiet);
+        font-size: 0.72rem;
+        font-weight: 760;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .mode-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .mode-row .button {
+        font-size: 0.72rem;
+        padding: 0 4px;
+      }
+
+      .glink {
+        cursor: pointer;
+      }
+
+      .glink:hover {
+        color: var(--blue);
+        text-decoration: underline;
+      }
+
+      .timeline.dimmed {
+        opacity: 0.55;
+      }
+
+      .button {
+        min-height: 33px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .button:hover {
+        border-color: color-mix(in srgb, var(--blue) 54%, var(--line-strong));
+        background: #162033;
+      }
+
+      .button.active {
+        border-color: color-mix(in srgb, var(--blue-strong) 70%, white);
+        background: var(--blue-strong);
+      }
+
+      .field {
+        display: grid;
+        gap: 5px;
+      }
+
+      .field label {
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 650;
+      }
+
+      select,
+      input[type="text"] {
+        min-height: 32px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #070b16;
+        color: var(--text);
+        padding: 0 10px;
+        outline: none;
+        width: 100%;
+      }
+
+      select:focus,
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--blue) 80%, white);
+        outline-offset: 1px;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #070b16;
+        padding: 0 10px;
+        color: var(--muted);
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+
+      .toggle input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--blue);
+      }
+
+      .search-results {
+        display: none;
+        gap: 5px;
+        max-height: 360px;
+        overflow: auto;
+      }
+
+      .search-results.visible {
+        display: grid;
+      }
+
+      .search-result {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 7px 9px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .search-result:hover {
+        border-color: rgba(96, 165, 250, 0.48);
+        background: rgba(37, 99, 235, 0.16);
+      }
+
+      .search-kind {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        background: rgba(96, 165, 250, 0.14);
+        color: #bfdbfe;
+        padding: 1px 6px;
+        font-size: 0.6rem;
+        font-weight: 760;
+      }
+
+      .search-kind.guild {
+        background: rgba(251, 191, 36, 0.14);
+        color: #fde68a;
+      }
+
+      .identity-line {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .identity-line .name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .realm-inline,
+      .realm-muted {
+        color: var(--quiet);
+        font-size: 0.72em;
+        font-weight: 620;
+      }
+
+      .realm-muted {
+        font-size: 0.96em;
+      }
+
+      .class-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .class-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #070b16;
+        padding: 3px 8px;
+        font-size: 0.68rem;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .class-chip .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+
+      .class-chip.on {
+        border-color: rgba(96, 165, 250, 0.6);
+        background: rgba(37, 99, 235, 0.22);
+        color: var(--text);
+      }
+
+      .hint {
+        color: var(--quiet);
+        font-size: 0.72rem;
+        line-height: 1.55;
+      }
+
+      .hint b {
+        color: var(--muted);
+      }
+
+      .stage {
+        position: absolute;
+        inset: 0;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 25% 18%, rgba(96, 165, 250, 0.1), transparent 30%),
+          radial-gradient(circle at 80% 80%, rgba(167, 139, 250, 0.08), transparent 26%),
+          #050711;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .stage-top {
+        position: absolute;
+        z-index: 3;
+        top: 12px;
+        left: 276px;
+        right: 316px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .stage-title {
+        max-width: min(480px, 55vw);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.68);
+        padding: 10px 13px;
+        box-shadow: 0 8px 18px var(--shadow);
+        backdrop-filter: blur(12px);
+        pointer-events: none;
+      }
+
+      .stage-title h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .stage-title p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .stat-strip {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 7px;
+        margin-left: auto;
+      }
+
+      .stat {
+        min-width: 72px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(5, 7, 17, 0.68);
+        padding: 7px 9px;
+        backdrop-filter: blur(12px);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 0.95rem;
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.68rem;
+      }
+
+      .timeline {
+        position: absolute;
+        z-index: 3;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: stretch;
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: rgba(5, 7, 17, 0.88);
+        padding: 7px;
+        box-shadow: 0 8px 18px var(--shadow);
+      }
+
+      .play-btn {
+        flex: 0 0 auto;
+        width: 38px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #101827;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .play-btn:hover {
+        background: #162033;
+      }
+
+      .tier-cells {
+        display: flex;
+        flex: 1 1 auto;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .tier-cell {
+        flex: 1 1 0;
+        min-width: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        padding: 3px 2px 4px;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .tier-cell:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .tier-cell.active {
+        border-color: rgba(96, 165, 250, 0.55);
+        background: rgba(37, 99, 235, 0.22);
+      }
+
+      .tier-cell .bar {
+        height: 3px;
+        border-radius: 99px;
+        margin-bottom: 4px;
+        opacity: 0.85;
+      }
+
+      .tier-cell .abbr {
+        display: block;
+        font-size: 0.66rem;
+        font-weight: 760;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tier-cell .yr {
+        display: block;
+        font-size: 0.6rem;
+        color: var(--quiet);
+      }
+
+      .tooltip {
+        position: absolute;
+        z-index: 6;
+        display: none;
+        max-width: 320px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: rgba(7, 11, 22, 0.96);
+        padding: 8px 10px;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        color: var(--muted);
+        pointer-events: none;
+        box-shadow: 0 10px 22px var(--shadow);
+      }
+
+      .tooltip b {
+        color: var(--text);
+      }
+
+      .overlay {
+        position: absolute;
+        z-index: 5;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 7, 17, 0.78);
+        padding: 24px;
+      }
+
+      .overlay.visible {
+        display: flex;
+      }
+
+      .notice {
+        width: min(480px, 100%);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: #080d19;
+        padding: 16px;
+      }
+
+      .notice strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .notice p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .inspector-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 15px 16px 12px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(7, 11, 22, 0.86);
+        backdrop-filter: blur(12px);
+      }
+
+      .inspector-header h2 {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 780;
+      }
+
+      .inspector-header p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 0.77rem;
+        line-height: 1.45;
+      }
+
+      .inspector-body {
+        display: grid;
+        align-content: start;
+        gap: 13px;
+        padding: 13px 16px 20px;
+        min-width: 0;
+      }
+
+      .panel {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .panel h3 {
+        margin: 0;
+        color: var(--quiet);
+        font-size: 0.72rem;
+        font-weight: 760;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 9px 10px;
+        min-width: 0;
+      }
+
+      .row-main {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 0.82rem;
+        font-weight: 720;
+      }
+
+      .row-main span:first-child {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .row-sub {
+        margin-top: 3px;
+        color: var(--quiet);
+        font-size: 0.71rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .list {
+        display: grid;
+        gap: 6px;
+      }
+
+      button.card {
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        color: inherit;
+      }
+
+      button.card:hover,
+      button.card.active {
+        border-color: rgba(96, 165, 250, 0.5);
+        background: rgba(37, 99, 235, 0.16);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+
+      .chip {
+        display: inline-flex;
+        max-width: 100%;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #070b16;
+        color: var(--muted);
+        padding: 2px 8px;
+        font-size: 0.68rem;
+        cursor: pointer;
+      }
+
+      .chip:hover {
+        border-color: rgba(96, 165, 250, 0.5);
+        color: var(--text);
+      }
+
+      .chip.static {
+        cursor: default;
+      }
+
+      .roster-bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 46px;
+        margin-top: 6px;
+      }
+
+      .roster-bars button {
+        flex: 1 1 0;
+        min-width: 2px;
+        border: none;
+        border-radius: 2px 2px 0 0;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.55;
+      }
+
+      .roster-bars button.on {
+        opacity: 1;
+        outline: 1px solid rgba(255, 255, 255, 0.6);
+      }
+
+      .clear-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .clear-row .button {
+        flex: 1;
+        font-size: 0.76rem;
+        min-height: 29px;
+      }
+
+      .drawer-toggle {
+        position: absolute;
+        z-index: 6;
+        top: 66px;
+        right: 12px;
+        min-height: 32px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: rgba(16, 24, 39, 0.82);
+        padding: 0 12px;
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 760;
+        cursor: pointer;
+        box-shadow: 0 8px 14px var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .inspector {
+        position: absolute;
+        z-index: 5;
+        top: 106px;
+        right: 12px;
+        bottom: 70px;
+        width: min(360px, calc(100vw - 48px));
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(7, 11, 22, 0.78);
+        box-shadow: 0 12px 22px var(--shadow);
+        backdrop-filter: blur(14px);
+        overflow-y: auto;
+        transform: translateX(0);
+        transition: transform 180ms ease-out, opacity 180ms ease-out;
+      }
+
+      .inspector.collapsed {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(calc(100% + 22px));
+      }
+
+      @media (max-width: 1180px) {
+        .sidebar {
+          width: 232px;
+        }
+
+        .stage-top {
+          left: 256px;
+          right: 304px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="side-section view-island">
+          <h3>View</h3>
+          <div class="mode-row">
+            <button class="button active" id="modeGalaxy" type="button">Raid view</button>
+            <button class="button" id="modeAll" type="button">All raids</button>
+            <button class="button" id="modeFlow" type="button">Lineages</button>
+          </div>
+        </div>
+
+        <div class="side-section filters-island">
+          <details class="filters-panel">
+            <summary>Filters</summary>
+            <div class="filter-body">
+              <div class="field">
+                <label for="minReports">Min reports per guild &amp; tier</label>
+                <select id="minReports">
+                  <option value="1">1+ · everyone</option>
+                  <option value="2" selected>2+ · regulars</option>
+                  <option value="3">3+ · core raiders</option>
+                  <option value="5">5+ · committed core</option>
+                  <option value="10">10+ · die-hards</option>
+                </select>
+              </div>
+              <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
+              <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
+              <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" /></label>
+              <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
+              <div class="clear-row">
+                <button class="button" id="resetView" type="button">Reset view</button>
+                <button class="button" id="clearSel" type="button">Clear selection</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="side-section search-island">
+          <h3>Search</h3>
+          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
+          <div class="search-results" id="searchResults"></div>
+        </div>
+      </aside>
+
+      <main class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <div class="stage-top">
+          <div class="stage-title">
+            <h2 id="titleMain">Loading…</h2>
+            <p id="titleSub"></p>
+          </div>
+          <div class="stat-strip" id="stats"></div>
+        </div>
+        <div class="timeline" id="timeline" style="display: none">
+          <button class="play-btn" id="playBtn" type="button" title="Play through tiers">▶</button>
+          <div class="tier-cells" id="tierCells"></div>
+        </div>
+        <div class="tooltip" id="tooltip"></div>
+        <div class="overlay visible" id="loading">
+          <div class="notice">
+            <strong>Loading the universe</strong>
+            <p id="loadingText">Fetching every character × guild × tier…</p>
+          </div>
+        </div>
+        <div class="overlay" id="errorBox">
+          <div class="notice">
+            <strong>Something broke</strong>
+            <p id="errorText"></p>
+          </div>
+        </div>
+      </main>
+
+      <button class="drawer-toggle" id="toggleInspector" type="button">Summary</button>
+      <aside class="inspector collapsed" id="inspectorPanel">
+        <div class="inspector-header">
+          <h2 id="insTitle">Inspector</h2>
+          <p id="insSub">Click a character dot or a guild cluster.</p>
+        </div>
+        <div class="inspector-body" id="insBody"></div>
+      </aside>
+    </div>
+
+    <script>
+      "use strict";
+
+      /* ============================== constants ============================== */
+
+      const CLASS_NAMES = {
+        1: "Death Knight", 2: "Druid", 3: "Hunter", 4: "Mage", 5: "Monk", 6: "Paladin",
+        7: "Priest", 8: "Rogue", 9: "Shaman", 10: "Warlock", 11: "Warrior", 12: "Demon Hunter", 13: "Evoker",
+      };
+      const CLASS_COLORS = {
+        1: "#C41E3A", 2: "#FF7C0A", 3: "#AAD372", 4: "#3FC7EB", 5: "#00FF98", 6: "#F48CBA",
+        7: "#FFFFFF", 8: "#FFF468", 9: "#0070DD", 10: "#8788EE", 11: "#C69B6D", 12: "#A330C9", 13: "#33937F",
+        0: "#94a3b8",
+      };
+      const EXPANSION_COLORS = {
+        "Mists of Pandaria": "#2dd4bf",
+        "Warlords of Draenor": "#f97316",
+        "Legion": "#a3e635",
+        "Battle for Azeroth": "#38bdf8",
+        "Shadowlands": "#c084fc",
+        "Dragonflight": "#facc15",
+        "The War Within": "#fb7185",
+        "Midnight": "#818cf8",
+      };
+      const PHYLLO_ANGLE = 2.39996322972865332; // golden angle
+      const DOT_SPACING = 7; // world units between phyllotaxis slots
+      const HULL_PAD = 10;
+      const TRANS_MS = 950;
+      const PLAY_MS = 2600;
+      const LUMP = -1; // alluvial pseudo-guild that pools tiny rosters
+      const ALLUVIAL_MIN_ROSTER = 4;
+      const ALLUVIAL_K = 0.9; // vertical px per character
+      const ALLUVIAL_NODE_W = 26;
+      const ALLUVIAL_COL_PITCH = 215;
+
+      /* ============================== state ============================== */
+
+      const M = { tiers: [], realms: [], guilds: [], chars: [] }; // loaded model
+      const F = {}; // filtered + derived model, rebuilt by rebuild()
+      const view = {
+        mode: "galaxy",
+        tier: 0,
+        minReports: 2,
+        classFilter: new Set(),
+        showFlows: true,
+        showTrails: true,
+        showFibers: false,
+        showLabels: true,
+        inspectorOpen: false,
+        selChar: -1,
+        selGuild: -1,
+        hover: null, // {kind:"char"|"guild"|"flow", ...}
+        tf: { galaxy: { x: 0, y: 0, k: 1 }, all: { x: 0, y: 0, k: 1 }, flow: { x: 0, y: 0, k: 1 } },
+        trans: null, // tier transition animation
+        playing: false,
+        playTimer: null,
+        fitted: { galaxy: false, all: false, flow: false },
+      };
+
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const stage = document.getElementById("stage");
+      const tooltip = document.getElementById("tooltip");
+      const els = Object.fromEntries(
+        ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
+         "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
+         "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows", "tglTrails", "tglFibers",
+         "tglLabels", "resetView", "clearSel", "inspectorPanel", "toggleInspector"]
+          .map((id) => [id, document.getElementById(id)]),
+      );
+
+      /* ============================== helpers ============================== */
+
+      const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[m]);
+      const fmt = (v) => new Intl.NumberFormat("en-US").format(v || 0);
+      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+      function hash32(str) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < str.length; i += 1) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 0x01000193);
+        }
+        return h >>> 0;
+      }
+
+      const RAID_ABBRS = {
+        "siege of orgrimmar": "SOO",
+        "highmaul": "HM",
+        "blackrock foundry": "BRF",
+        "hellfire citadel": "HFC",
+        "the emerald nightmare": "EN",
+        "trial of valor": "TOV",
+        "the nighthold": "NH",
+        "tomb of sargeras": "TOS",
+        "antorus the burning throne": "ABT",
+        "uldir": "ULD",
+        "battle of dazar alor": "BOD",
+        "crucible of storms": "COS",
+        "the eternal palace": "EP",
+        "ny alotha": "NYA",
+        "ny alotha the waking city": "NYA",
+        "castle nathria": "CN",
+        "sanctum of domination": "SOD",
+        "sepulcher of the first ones": "SFO",
+        "vault of the incarnates": "VOTI",
+        "aberrus the shadowed crucible": "ATSC",
+        "amirdrassil the dream s hope": "ADH",
+        "nerub ar palace": "NP",
+        "liberation of undermine": "LOU",
+        "manaforge omega": "MO",
+        "vs dr mqd": "VDM",
+      };
+
+      function tierAbbr(name) {
+        const normalized = normalizeSearch(name);
+        if (RAID_ABBRS[normalized]) return RAID_ABBRS[normalized];
+        const words = String(name).replace(/[,'’]/g, "").replace(/[/&+]/g, " ").split(/\s+/).filter(Boolean);
+        if (words.length === 1) return words[0].slice(0, 4);
+        return words
+          .filter((w) => !/^(the|of|a|an)$/i.test(w))
+          .map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w[0].toUpperCase()))
+          .join("")
+          .slice(0, 6);
+      }
+
+      function monthYear(iso) {
+        if (!iso) return "";
+        return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(new Date(iso));
+      }
+
+      function expColor(expansion) {
+        return EXPANSION_COLORS[expansion] || "#94a3b8";
+      }
+
+      const SEARCH_CHAR_MAP = {
+        æ: "ae", œ: "oe", ø: "o", Ø: "o", đ: "d", Đ: "d", ð: "d", Ð: "d",
+        þ: "th", Þ: "th", ł: "l", Ł: "l", ß: "ss",
+      };
+
+      function normalizeSearch(value) {
+        return String(value || "")
+          .replace(/[æœøØđĐðÐþÞłŁß]/g, (ch) => SEARCH_CHAR_MAP[ch] || ch)
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+      }
+
+      function realmLabel(realm) {
+        return String(realm || "Unknown")
+          .split("-")
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+          .join(" ");
+      }
+
+      function guildLabel(g, options = {}) {
+        if (g === LUMP) return "Pugs & small groups";
+        const guild = M.guilds[g];
+        if (options.full) return `${guild.name}-${realmLabel(guild.realm)}`;
+        return guild.name;
+      }
+
+      function characterLabel(c, options = {}) {
+        const ch = M.chars[c];
+        if (options.full) return `${ch.name}-${realmLabel(ch.realm)}`;
+        return ch.name;
+      }
+
+      function realmInline(realm) {
+        return `<span class="realm-inline">${esc(realmLabel(realm))}</span>`;
+      }
+
+      function guildIdentityHtml(g, options = {}) {
+        if (g === LUMP) return `<span class="identity-line"><span class="name">${esc(guildLabel(g))}</span></span>`;
+        const guild = M.guilds[g];
+        const style = options.color ? ` style="color:${options.color}"` : "";
+        const showRealm = options.showRealm || (options.realmIfDuplicate && guild.duplicateName);
+        return `<span class="identity-line"${style}><span class="name">${esc(guild.name)}</span>${showRealm ? realmInline(guild.realm) : ""}</span>`;
+      }
+
+      function characterIdentityHtml(c, options = {}) {
+        const ch = M.chars[c];
+        const style = options.color ? ` style="color:${options.color}"` : "";
+        const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
+        return `<span class="identity-line"${style}><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>`;
+      }
+
+      function hullRadius(n) {
+        return DOT_SPACING * Math.sqrt(Math.max(1, n)) + HULL_PAD;
+      }
+
+      // phyllotaxis slot offsets, lazily extended
+      let phX = new Float32Array(0);
+      let phY = new Float32Array(0);
+      function ensurePhyllo(n) {
+        if (phX.length >= n) return;
+        const size = Math.max(n, 1024);
+        const nx = new Float32Array(size);
+        const ny = new Float32Array(size);
+        nx.set(phX); ny.set(phY);
+        for (let i = phX.length; i < size; i += 1) {
+          const r = DOT_SPACING * Math.sqrt(i + 0.6);
+          nx[i] = Math.cos(i * PHYLLO_ANGLE) * r;
+          ny[i] = Math.sin(i * PHYLLO_ANGLE) * r;
+        }
+        phX = nx; phY = ny;
+      }
+
+      /* ============================== data load ============================== */
+
+      async function boot() {
+        try {
+          els.loadingText.textContent = "Fetching every character × guild × tier…";
+          const res = await fetch("/api/universe", { cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "universe request failed");
+
+          M.tiers = data.tiers;
+          M.realms = data.realms;
+          M.guilds = data.guilds.map(([name, realmIdx], g) => ({
+            name,
+            realm: M.realms[realmIdx] || "Unknown",
+            hue: hash32(name + "::" + g) % 360,
+            searchKey: normalizeSearch(`${name} ${M.realms[realmIdx] || "Unknown"}`),
+            nameKey: normalizeSearch(name),
+            duplicateName: false,
+          }));
+          const guildNameCounts = new Map();
+          for (const guild of M.guilds) guildNameCounts.set(guild.nameKey, (guildNameCounts.get(guild.nameKey) || 0) + 1);
+          for (const guild of M.guilds) guild.duplicateName = (guildNameCounts.get(guild.nameKey) || 0) > 1;
+
+          M.chars = data.characters.map(([name, realmIdx, classID, mem, aliases]) => {
+            const realm = M.realms[realmIdx] || "Unknown";
+            const aliasText = Array.isArray(aliases) ? aliases.join(" ") : "";
+            return {
+              name,
+              realm,
+              classID: CLASS_NAMES[classID] ? classID : 0,
+              mem, // flat [t, g, reports, ...]
+              searchKey: normalizeSearch(`${name} ${realm} ${aliasText}`),
+              nameKey: normalizeSearch(name),
+              duplicateName: false,
+              total: (() => { let s = 0; for (let i = 2; i < mem.length; i += 3) s += mem[i]; return s; })(),
+            };
+          });
+          const charNameCounts = new Map();
+          for (const ch of M.chars) charNameCounts.set(ch.nameKey, (charNameCounts.get(ch.nameKey) || 0) + 1);
+          for (const ch of M.chars) ch.duplicateName = (charNameCounts.get(ch.nameKey) || 0) > 1;
+
+          els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} characters across ${M.tiers.length} tiers…`;
+          await new Promise((r) => setTimeout(r, 30)); // let the text paint
+
+          view.tier = M.tiers.length - 1;
+          rebuild();
+          buildClassGrid();
+          buildTimeline();
+          fitGalaxy();
+          els.loading.classList.remove("visible");
+          els.timeline.style.display = "flex";
+          updateHud();
+          renderInspector();
+          requestAnimationFrame(frame);
+        } catch (err) {
+          els.loading.classList.remove("visible");
+          els.errorText.textContent = err.message;
+          els.errorBox.classList.add("visible");
+        }
+      }
+
+      /* ============================== rebuild (filter → layout → tiers → flows) ============================== */
+
+      function rebuild() {
+        const TC = M.tiers.length;
+        const CC = M.chars.length;
+        const GC = M.guilds.length;
+        const mr = view.minReports;
+
+        // -- pass 1: per-tier presence with primary guild, secondaries, career guild pairs
+        const tierChars = Array.from({ length: TC }, () => []); // [c, g, r] triples
+        const tierSecondaries = Array.from({ length: TC }, () => []);
+        const pairW = new Map();
+        const charTiers = new Array(CC).fill(null);
+        const firstTier = new Int32Array(CC).fill(-1);
+
+        for (let c = 0; c < CC; c += 1) {
+          const mem = M.chars[c].mem;
+          const careerGuilds = [];
+          for (let i = 0; i < mem.length; ) {
+            const t = mem[i];
+            let best = -1;
+            let bestR = 0;
+            let j = i;
+            const entries = [];
+            for (; j < mem.length && mem[j] === t; j += 3) {
+              const g = mem[j + 1];
+              const r = mem[j + 2];
+              if (r >= mr) {
+                entries.push(g, r);
+                if (r > bestR || (r === bestR && g < best)) { best = g; bestR = r; }
+              }
+            }
+            if (entries.length) {
+              tierChars[t].push(c, best, bestR);
+              for (let k = 0; k < entries.length; k += 2) {
+                const g = entries[k];
+                if (g !== best) tierSecondaries[t].push(c, g);
+                if (!careerGuilds.includes(g)) careerGuilds.push(g);
+              }
+              (charTiers[c] || (charTiers[c] = [])).push(t);
+              if (firstTier[c] === -1) firstTier[c] = t;
+            }
+            i = j;
+          }
+          for (let a = 0; a < careerGuilds.length; a += 1) {
+            for (let b = a + 1; b < careerGuilds.length; b += 1) {
+              const lo = Math.min(careerGuilds[a], careerGuilds[b]);
+              const hi = Math.max(careerGuilds[a], careerGuilds[b]);
+              const key = lo * 100000 + hi;
+              pairW.set(key, (pairW.get(key) || 0) + 1);
+            }
+          }
+        }
+
+        // -- pass 2: rosters and the maximum roster a guild ever fields (sizes its gravity well)
+        const guildMax = new Int32Array(GC);
+        const rosters = Array.from({ length: TC }, () => new Map()); // g -> count
+        for (let t = 0; t < TC; t += 1) {
+          const arr = tierChars[t];
+          const roster = rosters[t];
+          for (let i = 0; i < arr.length; i += 3) {
+            roster.set(arr[i + 1], (roster.get(arr[i + 1]) || 0) + 1);
+          }
+          for (const [g, n] of roster) if (n > guildMax[g]) guildMax[g] = n;
+        }
+        const active = [];
+        for (let g = 0; g < GC; g += 1) if (guildMax[g] > 0) active.push(g);
+
+        // -- guild constellation layout: force sim over the career-overlap meta-graph.
+        // Guilds that ever exchanged players end up adjacent, so migrations are short
+        // hops and community structure becomes geography. Positions are stable across
+        // the whole timeline.
+        const gx = new Float32Array(GC);
+        const gy = new Float32Array(GC);
+        const gr = new Float32Array(GC);
+        for (const g of active) gr[g] = hullRadius(guildMax[g]) + 16;
+
+        const order = active.slice().sort((a, b) => guildMax[b] - guildMax[a] || a - b);
+        order.forEach((g, i) => {
+          const r = 90 * Math.sqrt(i + 0.5);
+          gx[g] = Math.cos(i * PHYLLO_ANGLE) * r;
+          gy[g] = Math.sin(i * PHYLLO_ANGLE) * r;
+        });
+
+        const edges = [];
+        for (const [key, w] of pairW) {
+          edges.push([Math.floor(key / 100000), key % 100000, w]);
+        }
+
+        const ITERS = 420;
+        for (let iter = 0; iter < ITERS; iter += 1) {
+          const temp = 1 - (iter / ITERS) * 0.75;
+          for (const [a, b, w] of edges) {
+            const dx = gx[b] - gx[a];
+            const dy = gy[b] - gy[a];
+            const d = Math.max(1, Math.hypot(dx, dy));
+            const ideal = gr[a] + gr[b] + 60;
+            const strength = 0.004 * Math.min(1, Math.log1p(w) / 3);
+            const f = (d - ideal) * strength * temp;
+            const fx = (dx / d) * f;
+            const fy = (dy / d) * f;
+            gx[a] += fx; gy[a] += fy;
+            gx[b] -= fx; gy[b] -= fy;
+          }
+          for (let i = 0; i < active.length; i += 1) {
+            const a = active[i];
+            for (let j = i + 1; j < active.length; j += 1) {
+              const b = active[j];
+              const dx = gx[b] - gx[a];
+              const dy = gy[b] - gy[a];
+              let d = Math.hypot(dx, dy);
+              if (d < 1) d = 1;
+              const minD = gr[a] + gr[b] + 14;
+              let f;
+              if (d < minD) {
+                f = (minD - d) * 0.42 * temp;
+              } else {
+                f = Math.min(5, 42000 / (d * d)) * temp * 0.5;
+              }
+              const fx = (dx / d) * f;
+              const fy = (dy / d) * f;
+              gx[a] -= fx; gy[a] -= fy;
+              gx[b] += fx; gy[b] += fy;
+            }
+          }
+          for (const g of active) {
+            gx[g] *= 1 - 0.0015 * temp;
+            gy[g] *= 1 - 0.0015 * temp;
+          }
+        }
+
+        // -- per-tier character positions: phyllotaxis packing around the guild well.
+        // Member ordering is a stable per-character hash so a raider keeps roughly the
+        // same seat in their guild from tier to tier; only real changes move dots far.
+        const ord = new Float64Array(CC);
+        for (let c = 0; c < CC; c += 1) ord[c] = hash32("c" + c) / 4294967296;
+
+        const tiers = [];
+        for (let t = 0; t < TC; t += 1) {
+          const arr = tierChars[t];
+          const count = arr.length / 3;
+          const members = new Map(); // g -> slot indices
+          const td = {
+            count,
+            c: new Int32Array(count),
+            g: new Int32Array(count),
+            r: new Int32Array(count),
+            x: new Float32Array(count),
+            y: new Float32Array(count),
+            slotOf: new Map(),
+            members,
+            roster: rosters[t],
+            secondaries: tierSecondaries[t],
+            grid: null,
+          };
+          for (let i = 0, s = 0; i < arr.length; i += 3, s += 1) {
+            td.c[s] = arr[i];
+            td.g[s] = arr[i + 1];
+            td.r[s] = arr[i + 2];
+            td.slotOf.set(arr[i], s);
+            let list = members.get(arr[i + 1]);
+            if (!list) members.set(arr[i + 1], (list = []));
+            list.push(s);
+          }
+          for (const [g, slots] of members) {
+            slots.sort((a, b) => ord[td.c[a]] - ord[td.c[b]]);
+            ensurePhyllo(slots.length);
+            for (let k = 0; k < slots.length; k += 1) {
+              const s = slots[k];
+              td.x[s] = gx[g] + phX[k];
+              td.y[s] = gy[g] + phY[k];
+            }
+          }
+          tiers.push(td);
+        }
+
+        // -- migrations between consecutive tiers + churn stats
+        const flows = new Array(TC).fill(null);
+        const stats = new Array(TC).fill(null);
+        for (let t = 0; t < TC; t += 1) {
+          const td = tiers[t];
+          const st = { present: td.count, guilds: td.roster.size, stayed: 0, switched: 0, newFaces: 0, returning: 0, departed: 0 };
+          if (t > 0) {
+            const prev = tiers[t - 1];
+            const flowMap = new Map(); // gPrev*100000+gCur -> { n, cs: sample char idxs }
+            for (let s = 0; s < td.count; s += 1) {
+              const c = td.c[s];
+              const prevSlot = prev.slotOf.get(c);
+              if (prevSlot !== undefined) {
+                const a = prev.g[prevSlot];
+                const b = td.g[s];
+                if (a === b) st.stayed += 1; else st.switched += 1;
+                const key = a * 100000 + b;
+                let flow = flowMap.get(key);
+                if (!flow) flowMap.set(key, (flow = { n: 0, cs: [] }));
+                flow.n += 1;
+                if (flow.cs.length < 30) flow.cs.push(c);
+              } else if (firstTier[c] === t) {
+                st.newFaces += 1;
+              } else {
+                st.returning += 1;
+              }
+            }
+            for (let s = 0; s < prev.count; s += 1) {
+              if (!td.slotOf.has(prev.c[s])) st.departed += 1;
+            }
+            flows[t] = flowMap;
+          }
+          stats[t] = st;
+        }
+
+        F.tiers = tiers;
+        F.flows = flows;
+        F.stats = stats;
+        F.charTiers = charTiers;
+        F.firstTier = firstTier;
+        F.gx = gx;
+        F.gy = gy;
+        F.guildMax = guildMax;
+        F.active = active;
+        F.ord = ord;
+        F.allTime = null;
+
+        buildAlluvial();
+
+        // drop selections that the new filter erased
+        if (view.selChar >= 0 && !(charTiers[view.selChar] || []).length) view.selChar = -1;
+        if (view.selGuild >= 0 && guildMax[view.selGuild] === 0) view.selGuild = -1;
+        view.trans = null;
+        view.hover = null;
+      }
+
+      /* ============================== alluvial layout ============================== */
+
+      function buildAlluvial() {
+        const TC = M.tiers.length;
+        const columns = [];
+        const colFlows = new Array(TC).fill(null);
+
+        const lumpOf = (t, g) => ((F.tiers[t].roster.get(g) || 0) >= ALLUVIAL_MIN_ROSTER ? g : LUMP);
+
+        for (let t = 0; t < TC; t += 1) {
+          const roster = F.tiers[t].roster;
+          const nodes = [];
+          let lumpCount = 0;
+          for (const [g, n] of roster) {
+            if (n >= ALLUVIAL_MIN_ROSTER) nodes.push({ g, count: n });
+            else lumpCount += n;
+          }
+          nodes.sort((a, b) => F.gy[a.g] - F.gy[b.g] || F.gx[a.g] - F.gx[b.g]);
+          if (lumpCount > 0) nodes.push({ g: LUMP, count: lumpCount });
+
+          let y = 0;
+          const byG = new Map();
+          for (const node of nodes) {
+            node.x = t * ALLUVIAL_COL_PITCH;
+            node.y = y;
+            node.h = Math.max(3, node.count * ALLUVIAL_K);
+            y += node.h + 7;
+            byG.set(node.g, node);
+          }
+          columns.push({ nodes, byG, height: y });
+        }
+
+        for (let t = 1; t < TC; t += 1) {
+          const raw = F.flows[t];
+          if (!raw) continue;
+          const agg = new Map();
+          for (const [key, f] of raw) {
+            const a = lumpOf(t - 1, Math.floor(key / 100000));
+            const b = lumpOf(t, key % 100000);
+            const k2 = (a + 2) * 100000 + (b + 2);
+            let cur = agg.get(k2);
+            if (!cur) agg.set(k2, (cur = { n: 0, cs: [] }));
+            cur.n += f.n;
+            for (const c of f.cs) if (cur.cs.length < 12) cur.cs.push(c);
+          }
+          const list = [];
+          for (const [k2, f] of agg) {
+            const a = Math.floor(k2 / 100000) - 2;
+            const b = (k2 % 100000) - 2;
+            if (f.n < 2 && a !== b) continue;
+            list.push({ a, b, n: f.n, cs: f.cs });
+          }
+
+          const prevCol = columns[t - 1];
+          const col = columns[t];
+          const yOf = (byG, g) => { const node = byG.get(g); return node ? node.y + node.h / 2 : 0; };
+
+          // allocate slots within each node, sorted by partner position to minimise crossings
+          const bySrc = new Map();
+          const byDst = new Map();
+          for (const flow of list) {
+            if (!prevCol.byG.has(flow.a) || !col.byG.has(flow.b)) continue;
+            (bySrc.get(flow.a) || bySrc.set(flow.a, []).get(flow.a)).push(flow);
+            (byDst.get(flow.b) || byDst.set(flow.b, []).get(flow.b)).push(flow);
+          }
+          for (const [g, flowsOut] of bySrc) {
+            flowsOut.sort((p, q) => yOf(col.byG, p.b) - yOf(col.byG, q.b));
+            const node = prevCol.byG.get(g);
+            const total = flowsOut.reduce((s, f) => s + f.n * ALLUVIAL_K, 0);
+            const scale = total > node.h ? node.h / total : 1;
+            let y = node.y;
+            for (const f of flowsOut) {
+              f.w = Math.max(0.8, f.n * ALLUVIAL_K * scale);
+              f.ya = y;
+              y += f.n * ALLUVIAL_K * scale;
+            }
+          }
+          for (const [g, flowsIn] of byDst) {
+            flowsIn.sort((p, q) => yOf(prevCol.byG, p.a) - yOf(prevCol.byG, q.a));
+            const node = col.byG.get(g);
+            const total = flowsIn.reduce((s, f) => s + f.n * ALLUVIAL_K, 0);
+            const scale = total > node.h ? node.h / total : 1;
+            let y = node.y;
+            for (const f of flowsIn) {
+              f.yb = y;
+              y += f.n * ALLUVIAL_K * scale;
+            }
+          }
+          colFlows[t] = list.filter((f) => f.ya !== undefined && f.yb !== undefined);
+        }
+
+        F.alluvial = { columns, flows: colFlows };
+      }
+
+      /* ============================== view transforms ============================== */
+
+      function tf() {
+        return view.tf[view.mode];
+      }
+
+      function toWorld(px, py) {
+        const t = tf();
+        return { x: (px - t.x) / t.k, y: (py - t.y) / t.k };
+      }
+
+      function fitBounds(t, x0, y0, x1, y1) {
+        const rect = stage.getBoundingClientRect();
+        const w = Math.max(1, x1 - x0);
+        const h = Math.max(1, y1 - y0);
+        const k = clamp(Math.min((rect.width - 60) / w, (rect.height - 140) / h), 0.02, 2.5);
+        t.k = k;
+        t.x = rect.width / 2 - (x0 + w / 2) * k;
+        t.y = (rect.height - 60) / 2 - (y0 + h / 2) * k;
+      }
+
+      function fitGalaxy() {
+        // Fit the roster-weighted core of the current tier; lone outlier guilds can
+        // sit off-screen rather than shrinking the whole constellation to a blob.
+        const td = F.tiers[view.tier];
+        let weight = 0, mx = 0, my = 0;
+        for (const [g, n] of td.roster) { weight += n; mx += F.gx[g] * n; my += F.gy[g] * n; }
+        if (!weight) { fitBounds(view.tf.galaxy, -100, -100, 100, 100); view.fitted.galaxy = true; return; }
+        mx /= weight; my /= weight;
+        let vx = 0, vy = 0;
+        for (const [g, n] of td.roster) {
+          vx += n * (F.gx[g] - mx) ** 2;
+          vy += n * (F.gy[g] - my) ** 2;
+        }
+        const rx = Math.max(260, Math.sqrt(vx / weight) * 2.3);
+        const ry = Math.max(260, Math.sqrt(vy / weight) * 2.3);
+        fitBounds(view.tf.galaxy, mx - rx, my - ry, mx + rx, my + ry);
+        view.fitted.galaxy = true;
+      }
+
+      function fitFlow() {
+        const cols = F.alluvial.columns;
+        const maxH = Math.max(120, ...cols.map((c) => c.height));
+        fitBounds(view.tf.flow, -40, -70, (cols.length - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W + 160, Math.min(maxH, 2400));
+        view.fitted.flow = true;
+      }
+
+      function panTo(wx, wy) {
+        const rect = stage.getBoundingClientRect();
+        const t = tf();
+        t.x = rect.width / 2 - wx * t.k;
+        t.y = (rect.height - 60) / 2 - wy * t.k;
+      }
+
+      /* ============================== all-time career graph ============================== */
+
+      // Aggregates every tier: loyalists pack inside their one guild's cluster, while
+      // multi-guild characters float at the weighted centre of every guild they raided
+      // with, tethered to each by a fiber. The career social graph in one picture.
+      function allTimeHullN(at, g) {
+        return Math.max(1, at.hullN.get(g) || Math.ceil((at.roster.get(g) || 1) * 0.34));
+      }
+
+      function buildAllTimeGuildLayout(at, multis) {
+        const active = Array.from(at.roster.keys()).sort((a, b) => at.roster.get(b) - at.roster.get(a) || a - b);
+        const pairW = new Map();
+        for (const [, totals] of multis) {
+          const entries = Array.from(totals.entries());
+          for (let a = 0; a < entries.length; a += 1) {
+            for (let b = a + 1; b < entries.length; b += 1) {
+              const ga = entries[a][0];
+              const gb = entries[b][0];
+              const lo = Math.min(ga, gb);
+              const hi = Math.max(ga, gb);
+              const key = lo * 100000 + hi;
+              pairW.set(key, (pairW.get(key) || 0) + Math.sqrt(Math.min(entries[a][1], entries[b][1])));
+            }
+          }
+        }
+
+        for (const g of active) {
+          at.gr[g] = hullRadius(allTimeHullN(at, g)) + 74;
+        }
+        active.forEach((g, i) => {
+          const sourceD = Math.hypot(F.gx[g], F.gy[g]);
+          if (sourceD > 1) {
+            at.gx[g] = F.gx[g] * 2.2;
+            at.gy[g] = F.gy[g] * 2.2;
+          } else {
+            const r = 170 * Math.sqrt(i + 0.5);
+            at.gx[g] = Math.cos(i * PHYLLO_ANGLE) * r;
+            at.gy[g] = Math.sin(i * PHYLLO_ANGLE) * r;
+          }
+        });
+
+        const edges = [];
+        for (const [key, w] of pairW) edges.push([Math.floor(key / 100000), key % 100000, w]);
+
+        const ITERS = 520;
+        for (let iter = 0; iter < ITERS; iter += 1) {
+          const temp = 1 - (iter / ITERS) * 0.78;
+          for (const [a, b, w] of edges) {
+            const dx = at.gx[b] - at.gx[a];
+            const dy = at.gy[b] - at.gy[a];
+            const d = Math.max(1, Math.hypot(dx, dy));
+            const ideal = at.gr[a] + at.gr[b] + 190;
+            const strength = 0.0028 * Math.min(1, Math.log1p(w) / 4);
+            const f = (d - ideal) * strength * temp;
+            const fx = (dx / d) * f;
+            const fy = (dy / d) * f;
+            at.gx[a] += fx; at.gy[a] += fy;
+            at.gx[b] -= fx; at.gy[b] -= fy;
+          }
+          for (let i = 0; i < active.length; i += 1) {
+            const a = active[i];
+            for (let j = i + 1; j < active.length; j += 1) {
+              const b = active[j];
+              const dx = at.gx[b] - at.gx[a];
+              const dy = at.gy[b] - at.gy[a];
+              let d = Math.hypot(dx, dy);
+              if (d < 1) d = 1;
+              const minD = at.gr[a] + at.gr[b] + 70;
+              let f;
+              if (d < minD) {
+                f = (minD - d) * 0.48 * temp;
+              } else {
+                f = Math.min(8, 125000 / (d * d)) * temp * 0.42;
+              }
+              const fx = (dx / d) * f;
+              const fy = (dy / d) * f;
+              at.gx[a] -= fx; at.gy[a] -= fy;
+              at.gx[b] += fx; at.gy[b] += fy;
+            }
+          }
+          for (const g of active) {
+            at.gx[g] *= 1 - 0.0007 * temp;
+            at.gy[g] *= 1 - 0.0007 * temp;
+          }
+        }
+      }
+
+      function relaxAllTimeBridgeSlots(at, multiSlots) {
+        const active = Array.from(at.roster.keys());
+        for (let iter = 0; iter < 3; iter += 1) {
+          for (const [s, memberGuilds] of multiSlots) {
+            let x = at.x[s];
+            let y = at.y[s];
+            for (const g of active) {
+              if (memberGuilds.has(g)) continue;
+              let dx = x - at.gx[g];
+              let dy = y - at.gy[g];
+              let d = Math.hypot(dx, dy);
+              if (d < 0.1) {
+                const angle = (hash32(`${at.c[s]}:${g}`) % 6283) / 1000;
+                dx = Math.cos(angle);
+                dy = Math.sin(angle);
+                d = 1;
+              }
+              const minD = hullRadius(allTimeHullN(at, g)) + 18;
+              if (d < minD) {
+                const push = (minD - d) * 0.72;
+                x += (dx / d) * push;
+                y += (dy / d) * push;
+              }
+            }
+            at.x[s] = x;
+            at.y[s] = y;
+          }
+        }
+      }
+
+      function buildAllTime() {
+        if (F.allTime) return F.allTime;
+        const mr = view.minReports;
+        const singles = new Map(); // g -> [[c, reports]]
+        const multis = [];
+        let count = 0;
+        for (let c = 0; c < M.chars.length; c += 1) {
+          const mem = M.chars[c].mem;
+          const totals = new Map();
+          for (let i = 0; i < mem.length; i += 3) {
+            if (mem[i + 2] >= mr) totals.set(mem[i + 1], (totals.get(mem[i + 1]) || 0) + mem[i + 2]);
+          }
+          if (!totals.size) continue;
+          count += 1;
+          if (totals.size === 1) {
+            const [g, rep] = totals.entries().next().value;
+            let list = singles.get(g);
+            if (!list) singles.set(g, (list = []));
+            list.push([c, rep]);
+          } else {
+            multis.push([c, totals]);
+          }
+        }
+
+        const at = {
+          count,
+          c: new Int32Array(count),
+          g: new Int32Array(count),
+          rep: new Int32Array(count),
+          guildN: new Int32Array(count),
+          x: new Float32Array(count),
+          y: new Float32Array(count),
+          gx: new Float32Array(M.guilds.length),
+          gy: new Float32Array(M.guilds.length),
+          gr: new Float32Array(M.guilds.length),
+          slotOf: new Map(),
+          roster: new Map(), // g -> distinct members ever
+          hullN: new Map(), // g -> loyalist count (sizes the hull)
+          fibers: [], // [slot, g, reports, slot, g, reports, ...] for multi-guild characters
+          multiCount: multis.length,
+          nomads: multis.map(([c, totals]) => [c, totals.size]).sort((p, q) => q[1] - p[1]).slice(0, 14),
+          selMaskG: -2,
+          selMask: null,
+          grid: null,
+        };
+
+        for (const [g, list] of singles) {
+          at.hullN.set(g, list.length);
+          at.roster.set(g, (at.roster.get(g) || 0) + list.length);
+        }
+        for (const [, totals] of multis) {
+          for (const [g] of totals) at.roster.set(g, (at.roster.get(g) || 0) + 1);
+        }
+        buildAllTimeGuildLayout(at, multis);
+
+        let s = 0;
+        for (const [g, list] of singles) {
+          list.sort((p, q) => F.ord[p[0]] - F.ord[q[0]]);
+          ensurePhyllo(list.length);
+          for (let k = 0; k < list.length; k += 1) {
+            at.c[s] = list[k][0];
+            at.g[s] = g;
+            at.rep[s] = list[k][1];
+            at.guildN[s] = 1;
+            at.x[s] = at.gx[g] + phX[k];
+            at.y[s] = at.gy[g] + phY[k];
+            at.slotOf.set(list[k][0], s);
+            s += 1;
+          }
+        }
+        const multiSlots = [];
+        for (const [c, totals] of multis) {
+          let wsum = 0, x = 0, y = 0, best = -1, bestW = 0, repSum = 0;
+          for (const [g, w] of totals) {
+            const ww = Math.sqrt(w);
+            wsum += ww;
+            x += at.gx[g] * ww;
+            y += at.gy[g] * ww;
+            repSum += w;
+            if (w > bestW) { bestW = w; best = g; }
+          }
+          const h = hash32("m" + c);
+          const rad = 8 + ((h >>> 8) % 26);
+          at.c[s] = c;
+          at.g[s] = best;
+          at.rep[s] = repSum;
+          at.guildN[s] = totals.size;
+          at.x[s] = x / wsum + Math.cos(h % 6283 / 1000) * rad;
+          at.y[s] = y / wsum + Math.sin(h % 6283 / 1000) * rad;
+          at.slotOf.set(c, s);
+          for (const [g, w] of totals) at.fibers.push(s, g, w);
+          multiSlots.push([s, new Set(totals.keys())]);
+          s += 1;
+        }
+        relaxAllTimeBridgeSlots(at, multiSlots);
+
+        F.allTime = at;
+        return at;
+      }
+
+      function fitAll() {
+        const at = buildAllTime();
+        let weight = 0, mx = 0, my = 0;
+        for (const [g, n] of at.roster) { weight += n; mx += at.gx[g] * n; my += at.gy[g] * n; }
+        if (!weight) { fitBounds(view.tf.all, -100, -100, 100, 100); view.fitted.all = true; return; }
+        mx /= weight; my /= weight;
+        let vx = 0, vy = 0;
+        for (const [g, n] of at.roster) {
+          vx += n * (at.gx[g] - mx) ** 2;
+          vy += n * (at.gy[g] - my) ** 2;
+        }
+        const rx = Math.max(340, Math.sqrt(vx / weight) * 2.55);
+        const ry = Math.max(340, Math.sqrt(vy / weight) * 2.55);
+        fitBounds(view.tf.all, mx - rx, my - ry, mx + rx, my + ry);
+        view.fitted.all = true;
+      }
+
+      // characters whose guild changed since the previous tier, as ready-to-draw lines
+      function tierTrails(t) {
+        const td = F.tiers[t];
+        if (td.trailsAll) return td.trailsAll;
+        const out = [];
+        if (t > 0) {
+          const prev = F.tiers[t - 1];
+          for (let s = 0; s < td.count; s += 1) {
+            const ps = prev.slotOf.get(td.c[s]);
+            if (ps !== undefined && prev.g[ps] !== td.g[s]) {
+              out.push([prev.x[ps], prev.y[ps], td.x[s], td.y[s], td.c[s]]);
+            }
+          }
+        }
+        td.trailsAll = out;
+        return out;
+      }
+
+      /* ============================== tier switching ============================== */
+
+      function setTier(t, animate = true) {
+        t = clamp(t, 0, M.tiers.length - 1);
+        if (t === view.tier) return;
+        const from = F.tiers[view.tier];
+        const to = F.tiers[t];
+        view.tier = t;
+
+        if (animate && view.mode === "galaxy") {
+          const prevX = new Float32Array(to.count).fill(NaN);
+          const prevY = new Float32Array(to.count).fill(NaN);
+          const trails = [];
+          for (let s = 0; s < to.count; s += 1) {
+            const slot = from.slotOf.get(to.c[s]);
+            if (slot !== undefined) {
+              prevX[s] = from.x[slot];
+              prevY[s] = from.y[slot];
+              if (from.g[slot] !== to.g[s] && trails.length < 4000) {
+                trails.push([from.x[slot], from.y[slot], to.x[s], to.y[s], to.c[s]]);
+              }
+            }
+          }
+          const leavers = [];
+          for (let s = 0; s < from.count && leavers.length < 6000; s += 1) {
+            if (!to.slotOf.has(from.c[s])) leavers.push([from.x[s], from.y[s], from.c[s]]);
+          }
+          view.trans = { start: performance.now(), prevX, prevY, trails, leavers };
+        } else {
+          view.trans = null;
+        }
+
+        updateHud();
+        renderInspector();
+      }
+
+      function startPlay() {
+        if (view.playing) return;
+        view.playing = true;
+        els.playBtn.textContent = "❚❚";
+        if (view.tier >= M.tiers.length - 1) setTier(0);
+        view.playTimer = setInterval(() => {
+          if (view.tier >= M.tiers.length - 1) { stopPlay(); return; }
+          setTier(view.tier + 1);
+        }, PLAY_MS);
+      }
+
+      function stopPlay() {
+        view.playing = false;
+        els.playBtn.textContent = "▶";
+        if (view.playTimer) clearInterval(view.playTimer);
+        view.playTimer = null;
+      }
+
+      /* ============================== HUD (title, stats, timeline) ============================== */
+
+      function updateHud() {
+        const tier = M.tiers[view.tier];
+        if (view.mode === "galaxy") {
+          els.titleMain.textContent = tier.name;
+          els.titleSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · tier ${view.tier + 1} of ${M.tiers.length}`;
+        } else if (view.mode === "all") {
+          const first = M.tiers[0];
+          const last = M.tiers[M.tiers.length - 1];
+          els.titleMain.textContent = "All raids combined";
+          els.titleSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · multi-guild raiders float between every guild of their career`;
+        } else {
+          els.titleMain.textContent = "Guild lineages";
+          els.titleSub.textContent = "Each band is a guild's roster flowing through time. Ribbons are raiders who stayed or moved.";
+        }
+        renderStats();
+        renderTimeline();
+      }
+
+      function renderStats() {
+        let items;
+        if (view.mode === "galaxy") {
+          const st = F.stats[view.tier];
+          items = [
+            ["Raiders", st.present],
+            ["Guilds", st.guilds],
+            ["Stayed", st.stayed],
+            ["Switched", st.switched],
+            ["Returned", st.returning],
+            ["New", st.newFaces],
+            ["Gone", st.departed],
+          ];
+          if (view.tier === 0) items = items.slice(0, 2);
+        } else if (view.mode === "all") {
+          const at = buildAllTime();
+          items = [
+            ["Characters", at.count],
+            ["Guilds", at.roster.size],
+            ["Loyalists", at.count - at.multiCount],
+            ["Multi-guild", at.multiCount],
+          ];
+        } else {
+          let migrations = 0;
+          for (const flowMap of F.flows) {
+            if (!flowMap) continue;
+            for (const [key, flow] of flowMap) {
+              if (Math.floor(key / 100000) !== key % 100000) migrations += flow.n;
+            }
+          }
+          items = [
+            ["Tiers", M.tiers.length],
+            ["Guilds", F.active.length],
+            ["Characters", M.chars.reduce((s, ch, c) => s + ((F.charTiers[c] || []).length ? 1 : 0), 0)],
+            ["Guild switches", migrations],
+          ];
+        }
+        els.stats.innerHTML = items
+          .map(([label, value]) => `<div class="stat"><strong>${fmt(value)}</strong><span>${label}</span></div>`)
+          .join("");
+      }
+
+      function buildTimeline() {
+        els.tierCells.innerHTML = M.tiers
+          .map((tier, t) => `
+            <button class="tier-cell" type="button" data-t="${t}" title="${esc(tier.name)} · ${esc(tier.expansion)} · ${monthYear(tier.start)}">
+              <span class="bar" style="background:${expColor(tier.expansion)}"></span>
+              <span class="abbr">${esc(tierAbbr(tier.name))}</span>
+              <span class="yr">${tier.start ? new Date(tier.start).getFullYear() : ""}</span>
+            </button>`)
+          .join("");
+        for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
+          cell.addEventListener("click", () => {
+            stopPlay();
+            if (view.mode === "all") setMode("galaxy");
+            setTier(Number(cell.dataset.t));
+          });
+        }
+        renderTimeline();
+      }
+
+      function renderTimeline() {
+        for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
+          cell.classList.toggle("active", Number(cell.dataset.t) === view.tier);
+        }
+      }
+
+      /* ============================== inspector panels ============================== */
+
+      function setInspectorOpen(open) {
+        view.inspectorOpen = open;
+        els.inspectorPanel.classList.toggle("collapsed", !open);
+        els.toggleInspector.textContent = open ? "Hide panel" : "Summary";
+      }
+
+      function renderInspector() {
+        if (view.selChar >= 0) return renderCharPanel(view.selChar);
+        if (view.selGuild >= 0) return renderGuildPanel(view.selGuild);
+        if (view.mode === "all") return renderAllPanel();
+        renderTierPanel();
+      }
+
+      function nameChips(flow, max = 8) {
+        const shown = flow.cs.slice(0, max);
+        const extra = flow.n - shown.length;
+        return shown
+          .map((c) => `<span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">${esc(characterLabel(c))}</span>`)
+          .join("") + (extra > 0 ? `<span class="chip static">+${fmt(extra)} more</span>` : "");
+      }
+
+      function bindInspectorActions() {
+        for (const el of els.insBody.querySelectorAll("[data-sel-guild]")) {
+          el.addEventListener("click", () => selectGuild(Number(el.dataset.selGuild)));
+        }
+        for (const el of els.insBody.querySelectorAll("[data-sel-char]")) {
+          el.addEventListener("click", () => selectChar(Number(el.dataset.selChar)));
+        }
+        for (const el of els.insBody.querySelectorAll("[data-go-tier]")) {
+          el.addEventListener("click", () => { stopPlay(); setTier(Number(el.dataset.goTier)); });
+        }
+      }
+
+      function renderTierPanel() {
+        const t = view.tier;
+        const tier = M.tiers[t];
+        const td = F.tiers[t];
+        els.insTitle.textContent = "Raid summary";
+        els.insSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · ${fmt(td.count)} raiders in ${fmt(td.roster.size)} guilds`;
+
+        const top = Array.from(td.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        const moves = [];
+        if (F.flows[t]) {
+          for (const [key, flow] of F.flows[t]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a !== b && flow.n >= 2) moves.push([a, b, flow]);
+          }
+          moves.sort((p, q) => q[2].n - p[2].n);
+        }
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Biggest rosters</h3>
+            <div class="list">
+              ${top.map(([g, n]) => `
+                <button class="card" type="button" data-sel-guild="${g}">
+                  <div class="row-main">${guildIdentityHtml(g, { realmIfDuplicate: true })}<span>${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Biggest moves vs previous tier</h3>
+            <div class="list">
+              ${moves.length === 0 ? `<div class="card"><div class="row-sub">${t === 0 ? "First tracked tier — no previous tier." : "No multi-raider moves under this filter."}</div></div>` : ""}
+              ${moves.slice(0, 10).map(([a, b, flow]) => `
+                <div class="card">
+                  <div class="row-main">
+                    <span><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span> → <span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span></span>
+                    <span>${fmt(flow.n)}</span>
+                  </div>
+                  <div class="chips">${nameChips(flow)}</div>
+                </div>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderAllPanel() {
+        const at = buildAllTime();
+        const first = M.tiers[0];
+        const last = M.tiers[M.tiers.length - 1];
+        els.insTitle.textContent = "All raids combined";
+        els.insSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · ${fmt(at.count)} characters, ${fmt(at.multiCount)} of them in 2+ guilds`;
+
+        const top = Array.from(at.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Most distinct members ever</h3>
+            <div class="list">
+              ${top.map(([g, n]) => `
+                <button class="card" type="button" data-sel-guild="${g}">
+                  <div class="row-main">${guildIdentityHtml(g, { realmIfDuplicate: true })}<span>${fmt(n)}</span></div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Serial movers (most guilds in a career)</h3>
+            <div class="list">
+              ${at.nomads.map(([c, n]) => `
+                <button class="card" type="button" data-sel-char="${c}">
+                  <div class="row-main">
+                    ${characterIdentityHtml(c, { realmIfDuplicate: true, color: CLASS_COLORS[M.chars[c].classID] })}
+                    <span>${fmt(n)} guilds</span>
+                  </div>
+                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(M.chars[c].realm))}</span> · ${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
+                </button>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderGuildPanel(g) {
+        const guild = M.guilds[g];
+        const t = view.tier;
+        const rosterNow = F.tiers[t].roster.get(g) || 0;
+
+        const history = M.tiers.map((tier, i) => ({ i, n: F.tiers[i].roster.get(g) || 0 }));
+        const peak = Math.max(1, ...history.map((h) => h.n));
+        const activeTiers = history.filter((h) => h.n > 0);
+
+        // tenure of current/overall members in this guild
+        const tenure = new Map();
+        for (let i = 0; i < M.tiers.length; i += 1) {
+          const slots = F.tiers[i].members.get(g);
+          if (!slots) continue;
+          for (const s of slots) {
+            const c = F.tiers[i].c[s];
+            tenure.set(c, (tenure.get(c) || 0) + 1);
+          }
+        }
+        const mainstays = Array.from(tenure.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+        const inflow = [];
+        const outflow = [];
+        if (F.flows[t]) {
+          for (const [key, flow] of F.flows[t]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (b === g && a !== g) inflow.push([a, flow]);
+          }
+        }
+        if (F.flows[t + 1]) {
+          for (const [key, flow] of F.flows[t + 1]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a === g && b !== g) outflow.push([b, flow]);
+          }
+        }
+        inflow.sort((p, q) => q[1].n - p[1].n);
+        outflow.sort((p, q) => q[1].n - p[1].n);
+
+        els.insTitle.textContent = guild.name;
+        els.insSub.textContent = `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Roster across tiers — click to jump</h3>
+            <div class="card">
+              <div class="roster-bars">
+                ${history.map((h) => `
+                  <button type="button" data-go-tier="${h.i}" title="${esc(M.tiers[h.i].name)}: ${fmt(h.n)} raiders"
+                    class="${h.i === t ? "on" : ""}"
+                    style="height:${Math.max(2, (h.n / peak) * 44)}px;background:hsl(${guild.hue} 65% 58%)"></button>`).join("")}
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Joined this tier from</h3>
+            <div class="list">
+              ${inflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked arrivals from the previous tier.</div></div>` : ""}
+              ${inflow.slice(0, 6).map(([a, flow]) => `
+                <div class="card">
+                  <div class="row-main"><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span><span>+${fmt(flow.n)}</span></div>
+                  <div class="chips">${nameChips(flow, 6)}</div>
+                </div>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Left for (next tier)</h3>
+            <div class="list">
+              ${outflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked departures to the next tier.</div></div>` : ""}
+              ${outflow.slice(0, 6).map(([b, flow]) => `
+                <div class="card">
+                  <div class="row-main"><span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span><span>−${fmt(flow.n)}</span></div>
+                  <div class="chips">${nameChips(flow, 6)}</div>
+                </div>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Mainstays (most tiers in this guild)</h3>
+            <div class="chips">
+              ${mainstays.map(([c, n]) => `
+                <span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">
+                  ${characterIdentityHtml(c, { realmIfDuplicate: true })} · ${n}
+                </span>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function renderCharPanel(c) {
+        const ch = M.chars[c];
+        const tiersAttended = F.charTiers[c] || [];
+        const career = [];
+        const guildsSeen = new Set();
+        for (const t of tiersAttended) {
+          const td = F.tiers[t];
+          const s = td.slotOf.get(c);
+          career.push({ t, g: td.g[s], r: td.r[s] });
+          guildsSeen.add(td.g[s]);
+        }
+        const first = career.length ? M.tiers[career[0].t] : null;
+        const last = career.length ? M.tiers[career[career.length - 1].t] : null;
+
+        els.insTitle.textContent = ch.name;
+        els.insSub.textContent = `${realmLabel(ch.realm)} · ${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
+
+        els.insBody.innerHTML = `
+          <section class="panel">
+            <h3>Career ${first ? `· ${monthYear(first.start)} → ${monthYear(last.start)}` : ""}</h3>
+            <div class="list">
+              ${career.map((step) => `
+                <button class="card ${step.t === view.tier ? "active" : ""}" type="button" data-go-tier="${step.t}">
+                  <div class="row-main">
+                    ${guildIdentityHtml(step.g, { realmIfDuplicate: true })}
+                    <span style="color:${expColor(M.tiers[step.t].expansion)}">${tierAbbr(M.tiers[step.t].name)}</span>
+                  </div>
+                  <div class="row-sub">${esc(M.tiers[step.t].name)} · ${fmt(step.r)} reports</div>
+                </button>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Guilds</h3>
+            <div class="chips">
+              ${Array.from(guildsSeen).map((g) => `
+                <span class="chip" data-sel-guild="${g}" style="border-color:hsl(${M.guilds[g].hue} 65% 58% / 0.6)">${esc(guildLabel(g))}</span>`).join("")}
+            </div>
+          </section>`;
+        bindInspectorActions();
+      }
+
+      function selectGuild(g) {
+        view.selGuild = g === LUMP ? -1 : g;
+        view.selChar = -1;
+        setInspectorOpen(true);
+        renderInspector();
+      }
+
+      function selectChar(c) {
+        view.selChar = c;
+        view.selGuild = -1;
+        setInspectorOpen(true);
+        const tiersAttended = F.charTiers[c] || [];
+        if (view.mode === "galaxy" && tiersAttended.length && !tiersAttended.includes(view.tier)) {
+          stopPlay();
+          setTier(tiersAttended[tiersAttended.length - 1]);
+        }
+        renderInspector();
+      }
+
+      function clearSelection() {
+        view.selChar = -1;
+        view.selGuild = -1;
+        renderInspector();
+      }
+
+      /* ============================== sidebar widgets ============================== */
+
+      function buildClassGrid() {
+        if (!els.classGrid) return;
+        els.classGrid.innerHTML = Object.entries(CLASS_NAMES)
+          .map(([id, name]) => `
+            <button class="class-chip" type="button" data-class="${id}">
+              <span class="dot" style="background:${CLASS_COLORS[id]}"></span>${esc(name)}
+            </button>`)
+          .join("");
+        for (const chip of els.classGrid.querySelectorAll("[data-class]")) {
+          chip.addEventListener("click", () => {
+            const id = Number(chip.dataset.class);
+            if (view.classFilter.has(id)) view.classFilter.delete(id);
+            else view.classFilter.add(id);
+            chip.classList.toggle("on", view.classFilter.has(id));
+          });
+        }
+      }
+
+      function focusGuild(g) {
+        view.selGuild = g;
+        view.selChar = -1;
+        setInspectorOpen(true);
+        if (view.mode === "galaxy" && !F.tiers[view.tier].roster.has(g)) {
+          for (let t = M.tiers.length - 1; t >= 0; t -= 1) {
+            if (F.tiers[t].roster.has(g)) { stopPlay(); setTier(t); break; }
+          }
+        }
+        if (view.mode === "all") {
+          const at = buildAllTime();
+          panTo(at.gx[g], at.gy[g]);
+        } else if (view.mode !== "flow") {
+          panTo(F.gx[g], F.gy[g]);
+        }
+        renderInspector();
+      }
+
+      let searchTimer = null;
+      function runSearch() {
+        const q = normalizeSearch(els.search.value);
+        if (q.length < 2) {
+          els.searchResults.classList.remove("visible");
+          els.searchResults.innerHTML = "";
+          return;
+        }
+        const hits = [];
+        for (let c = 0; c < M.chars.length; c += 1) {
+          const ch = M.chars[c];
+          if (!ch.searchKey.includes(q)) continue;
+          const tiersAttended = (F.charTiers[c] || []).length;
+          if (!tiersAttended) continue;
+          hits.push({
+            type: "char",
+            id: c,
+            score: ch.nameKey.startsWith(q) ? 0 : 1,
+            weight: tiersAttended * 10000 + ch.total,
+            label: ch.name,
+            tiersAttended,
+          });
+        }
+        for (let g = 0; g < M.guilds.length; g += 1) {
+          if (F.guildMax[g] === 0) continue;
+          const guild = M.guilds[g];
+          if (!guild.searchKey.includes(q)) continue;
+          let tiersActive = 0;
+          for (let t = 0; t < M.tiers.length; t += 1) if (F.tiers[t].roster.has(g)) tiersActive += 1;
+          hits.push({
+            type: "guild",
+            id: g,
+            score: guild.nameKey.startsWith(q) ? 0 : 1,
+            weight: F.guildMax[g] * 1000 + tiersActive,
+            label: guild.name,
+            tiersActive,
+          });
+        }
+        hits.sort((a, b) => a.score - b.score || b.weight - a.weight || a.label.localeCompare(b.label));
+        els.searchResults.innerHTML = hits.slice(0, 20)
+          .map((hit) => {
+            if (hit.type === "guild") {
+              const g = hit.id;
+              const guild = M.guilds[g];
+              return `
+                <button class="search-result" type="button" data-search-kind="guild" data-search-id="${g}">
+                  <div class="row-main">
+                    ${guildIdentityHtml(g, { color: `hsl(${guild.hue} 70% 72%)` })}
+                    <span class="search-kind guild">Guild</span>
+                  </div>
+                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(guild.realm))}</span> · peak roster ${fmt(F.guildMax[g])} · active ${hit.tiersActive} ${hit.tiersActive === 1 ? "tier" : "tiers"}</div>
+                </button>`;
+            }
+            const c = hit.id;
+            const ch = M.chars[c];
+            return `
+              <button class="search-result" type="button" data-search-kind="char" data-search-id="${c}">
+                <div class="row-main">
+                  ${characterIdentityHtml(c, { color: CLASS_COLORS[ch.classID] })}
+                  <span class="search-kind">Character</span>
+                </div>
+                <div class="row-sub"><span class="realm-muted">${esc(realmLabel(ch.realm))}</span> · ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports</div>
+              </button>`;
+          })
+          .join("");
+        els.searchResults.classList.toggle("visible", hits.length > 0);
+        for (const btn of els.searchResults.querySelectorAll("[data-search-kind]")) {
+          btn.addEventListener("click", () => {
+            const id = Number(btn.dataset.searchId);
+            if (btn.dataset.searchKind === "guild") focusGuild(id);
+            else selectChar(id);
+            els.searchResults.classList.remove("visible");
+          });
+        }
+      }
+
+      /* ============================== galaxy rendering ============================== */
+
+      function resizeCanvas() {
+        const rect = stage.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+        canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
+      }
+
+      function dotAlpha(c, g) {
+        let a = 0.92;
+        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.1;
+        if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.22;
+        if (view.selChar >= 0) a *= c === view.selChar ? 1 : 0.1;
+        return a;
+      }
+
+      function previousDotAlpha(c, g, current) {
+        const currentSlot = current.slotOf.get(c);
+        let a = currentSlot === undefined ? 0.26 : current.g[currentSlot] === g ? 0.1 : 0.22;
+        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.12;
+        if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.18;
+        if (view.selChar >= 0) a *= c === view.selChar ? 2.5 : 0.1;
+        return Math.min(0.65, a);
+      }
+
+      function selectedCharacterGuilds() {
+        if (view.selChar < 0) return null;
+        const guilds = new Set();
+        for (const tt of F.charTiers[view.selChar] || []) {
+          const td = F.tiers[tt];
+          const s = td.slotOf.get(view.selChar);
+          if (s !== undefined) guilds.add(td.g[s]);
+        }
+        return guilds;
+      }
+
+      function hitGuildLabelAt(world, transform, g, x, y, fontPx) {
+        const label = guildLabel(g);
+        const pad = 5 / transform.k;
+        ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+        const width = ctx.measureText(label).width;
+        return world.x >= x - width / 2 - pad &&
+          world.x <= x + width / 2 + pad &&
+          world.y >= y - fontPx - pad &&
+          world.y <= y + pad;
+      }
+
+      function hitVisibleGalaxyLabel(world, transform, roster, positions, previous = false) {
+        if (!view.showLabels) return null;
+        const visibleGuilds = selectedCharacterGuilds();
+        const fontPx = clamp((previous ? 10 : 11) / transform.k, 4, previous ? 180 : 200);
+        for (const [g, n] of roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const x = positions.gx[g];
+          const y = positions.gy[g] - hullRadius(n) - 3 / transform.k;
+          if (hitGuildLabelAt(world, transform, g, x, y, fontPx)) return g;
+        }
+        return null;
+      }
+
+      function hitVisibleAllLabel(world, transform, at) {
+        if (!view.showLabels) return null;
+        const visibleGuilds = selectedCharacterGuilds();
+        const fontPx = clamp(11 / transform.k, 4, 200);
+        for (const [g] of at.roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const x = at.gx[g];
+          const y = at.gy[g] - hullRadius(allTimeHullN(at, g)) - 3 / transform.k;
+          if (hitGuildLabelAt(world, transform, g, x, y, fontPx)) return g;
+        }
+        return null;
+      }
+
+      function drawPreviousTierContext(t, current) {
+        if (view.tier <= 0) return;
+        const prev = F.tiers[view.tier - 1];
+
+        ctx.save();
+        ctx.setLineDash([5 / t.k, 5 / t.k]);
+        for (const [g, n] of prev.roster) {
+          const isCurrent = current.roster.has(g);
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const r = hullRadius(n);
+          ctx.beginPath();
+          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(148, 163, 184, ${isSel || isHover ? 0.16 : isCurrent ? 0.045 : 0.085})`;
+          ctx.fill();
+          ctx.lineWidth = (isSel || isHover ? 1.5 : 0.9) / t.k;
+          ctx.strokeStyle = `rgba(203, 213, 225, ${isSel || isHover ? 0.55 : isCurrent ? 0.18 : 0.32})`;
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        const buckets = new Map();
+        for (let s = 0; s < prev.count; s += 1) {
+          const alpha = previousDotAlpha(prev.c[s], prev.g[s], current);
+          if (alpha < 0.02) continue;
+          const bucket = Math.min(13, Math.max(1, Math.round(alpha * 20)));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.3 + Math.min(2, Math.sqrt(prev.r[s]) * 0.32);
+          path.moveTo(prev.x[s] + r, prev.y[s]);
+          path.arc(prev.x[s], prev.y[s], r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = bucket / 20;
+          ctx.fillStyle = "#94a3b8";
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        if (!view.showLabels) return;
+        const visibleGuilds = selectedCharacterGuilds();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g, n] of prev.roster) {
+          if (current.roster.has(g)) continue;
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const label = guildLabel(g);
+          const fontPx = clamp(10 / t.k, 4, 180);
+          const x = F.gx[g];
+          const y = F.gy[g] - hullRadius(n) - 3 / t.k;
+          ctx.font = `650 ${fontPx}px Inter, system-ui, sans-serif`;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(label, x, y);
+          ctx.fillStyle = isSel || isHover ? "#e2e8f0" : "rgba(203, 213, 225, 0.68)";
+          ctx.fillText(label, x, y);
+        }
+      }
+
+      function drawGalaxy(now) {
+        const t = tf();
+        const td = F.tiers[view.tier];
+        const tier = M.tiers[view.tier];
+
+        let p = 1;
+        if (view.trans) {
+          p = clamp((now - view.trans.start) / TRANS_MS, 0, 1);
+          if (p >= 1) view.trans = null;
+        }
+        const pe = ease(p);
+
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
+
+        drawPreviousTierContext(t, td);
+
+        // guild hulls
+        for (const [g, n] of td.roster) {
+          const r = hullRadius(n);
+          const guild = M.guilds[g];
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          ctx.beginPath();
+          ctx.arc(F.gx[g], F.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(${guild.hue} 65% 58% / ${isSel || isHover ? 0.16 : 0.07})`;
+          ctx.fill();
+          if (isSel || isHover) {
+            ctx.lineWidth = 1.6 / t.k;
+            ctx.strokeStyle = `hsl(${guild.hue} 70% 65% / 0.8)`;
+            ctx.stroke();
+          }
+        }
+
+        // aggregated migration arrows from the previous tier
+        if (view.showFlows && F.flows[view.tier]) {
+          for (const [key, flow] of F.flows[view.tier]) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            const n = flow.n;
+            if (a === b || n < 2) continue;
+            const x0 = F.gx[a], y0 = F.gy[a], x1 = F.gx[b], y1 = F.gy[b];
+            const mx = (x0 + x1) / 2 - (y1 - y0) * 0.14;
+            const my = (y0 + y1) / 2 + (x1 - x0) * 0.14;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.quadraticCurveTo(mx, my, x1, y1);
+            ctx.strokeStyle = `rgba(251, 191, 36, ${Math.min(0.55, 0.1 + n * 0.03)})`;
+            ctx.lineWidth = Math.min(7, 0.8 + Math.sqrt(n));
+            ctx.stroke();
+            // arrowhead
+            const ux = x1 - mx, uy = y1 - my;
+            const ul = Math.max(1, Math.hypot(ux, uy));
+            const ax = x1 - (ux / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
+            const ay = y1 - (uy / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
+            const size = Math.min(14, 4 + Math.sqrt(n) * 1.6);
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - (ux / ul) * size - (uy / ul) * size * 0.5, ay - (uy / ul) * size + (ux / ul) * size * 0.5);
+            ctx.lineTo(ax - (ux / ul) * size + (uy / ul) * size * 0.5, ay - (uy / ul) * size - (ux / ul) * size * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(0.6, 0.15 + n * 0.03)})`;
+            ctx.fill();
+          }
+        }
+
+        // cross-guild fibers: characters who logged with several guilds in the same tier
+        if (view.showFibers && td.secondaries.length) {
+          ctx.beginPath();
+          const cap = Math.min(td.secondaries.length, 7000);
+          for (let i = 0; i < cap; i += 2) {
+            const c = td.secondaries[i];
+            const g = td.secondaries[i + 1];
+            const s = td.slotOf.get(c);
+            if (s === undefined) continue;
+            ctx.moveTo(td.x[s], td.y[s]);
+            ctx.lineTo(F.gx[g], F.gy[g]);
+          }
+          ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
+          ctx.lineWidth = 0.7 / t.k;
+          ctx.stroke();
+        }
+
+        // persistent per-character migration lines from the previous tier
+        if (view.showTrails && view.tier > 0) {
+          const lines = tierTrails(view.tier);
+          if (lines.length) {
+            const paths = new Map();
+            for (const [x0, y0, x1, y1, c] of lines) {
+              const cls = M.chars[c].classID;
+              let path = paths.get(cls);
+              if (!path) paths.set(cls, (path = new Path2D()));
+              path.moveTo(x0, y0);
+              path.lineTo(x1, y1);
+            }
+            ctx.globalAlpha = 0.3;
+            ctx.lineWidth = 0.9 / Math.sqrt(t.k);
+            for (const [cls, path] of paths) {
+              ctx.strokeStyle = CLASS_COLORS[cls];
+              ctx.stroke(path);
+            }
+            ctx.globalAlpha = 1;
+          }
+        }
+
+        // leavers fade out where they last stood
+        if (view.trans && view.trans.leavers.length) {
+          const alpha = (1 - pe) * 0.5;
+          if (alpha > 0.02) {
+            const paths = new Map();
+            for (const [x, y, c] of view.trans.leavers) {
+              const cls = M.chars[c].classID;
+              let path = paths.get(cls);
+              if (!path) paths.set(cls, (path = new Path2D()));
+              path.moveTo(x + 1.8, y);
+              path.arc(x, y, 1.8, 0, Math.PI * 2);
+            }
+            ctx.globalAlpha = alpha;
+            for (const [cls, path] of paths) {
+              ctx.fillStyle = CLASS_COLORS[cls];
+              ctx.fill(path);
+            }
+            ctx.globalAlpha = 1;
+          }
+        }
+
+        // migration trails
+        if (view.trans && view.trans.trails.length) {
+          ctx.lineWidth = 1 / t.k;
+          for (const [x0, y0, x1, y1, c] of view.trans.trails) {
+            const cx = x0 + (x1 - x0) * pe;
+            const cy = y0 + (y1 - y0) * pe;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(cx, cy);
+            ctx.strokeStyle = CLASS_COLORS[M.chars[c].classID] + "55";
+            ctx.stroke();
+          }
+        }
+
+        // character dots, batched by class × alpha bucket
+        const buckets = new Map();
+        const trans = view.trans;
+        for (let s = 0; s < td.count; s += 1) {
+          let x = td.x[s];
+          let y = td.y[s];
+          let alpha = dotAlpha(td.c[s], td.g[s]);
+          if (trans) {
+            const px = trans.prevX[s];
+            if (Number.isNaN(px)) {
+              alpha *= pe; // newcomer fades in
+            } else {
+              x = px + (x - px) * pe;
+              y = trans.prevY[s] + (y - trans.prevY[s]) * pe;
+            }
+          }
+          if (alpha < 0.02) continue;
+          const bucket = M.chars[td.c[s]].classID * 16 + Math.min(15, Math.round(alpha * 10));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.7 + Math.min(2.4, Math.sqrt(td.r[s]) * 0.45);
+          path.moveTo(x + r, y);
+          path.arc(x, y, r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = (bucket % 16) / 10;
+          ctx.fillStyle = CLASS_COLORS[Math.floor(bucket / 16)];
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        // selected character: career path through the constellation + ring
+        if (view.selChar >= 0) drawCareerPath(view.selChar, t);
+
+        // hovered character ring
+        if (view.hover && view.hover.kind === "char") {
+          const s = view.hover.s;
+          ctx.beginPath();
+          ctx.arc(td.x[s], td.y[s], 5, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = 1.4 / t.k;
+          ctx.stroke();
+        }
+
+        // guild labels (always shown while the toggle is on)
+        if (view.showLabels) drawGuildLabels(t, td.roster);
+
+        // character names once zoomed in far enough to read them
+        drawCharLabels(t, td);
+
+        ctx.restore();
+      }
+
+      function drawGuildLabels(t, roster) {
+        const visibleGuilds = selectedCharacterGuilds();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g, n] of roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && (view.hover.kind === "guild") && view.hover.g === g;
+          const guild = M.guilds[g];
+          const label = guildLabel(g);
+          const fontPx = clamp(11 / t.k, 4, 200);
+          ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+          const x = F.gx[g];
+          const y = F.gy[g] - hullRadius(n) - 3 / t.k;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(label, x, y);
+          ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
+          ctx.fillText(label, x, y);
+        }
+      }
+
+      function drawAllGuildLabels(t, at) {
+        const visibleGuilds = selectedCharacterGuilds();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        for (const [g] of at.roster) {
+          if (visibleGuilds && !visibleGuilds.has(g)) continue;
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          const guild = M.guilds[g];
+          const label = guildLabel(g);
+          const fontPx = clamp(11 / t.k, 4, 200);
+          const x = at.gx[g];
+          const y = at.gy[g] - hullRadius(allTimeHullN(at, g)) - 3 / t.k;
+          ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(label, x, y);
+          ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${guild.hue} 70% 78%)`;
+          ctx.fillText(label, x, y);
+        }
+      }
+
+      function drawCharLabels(t, src, minK = 3.2) {
+        if (t.k < minK) return;
+        const rect = stage.getBoundingClientRect();
+        const wx0 = -t.x / t.k - 20;
+        const wy0 = -t.y / t.k - 20;
+        const wx1 = (rect.width - t.x) / t.k + 20;
+        const wy1 = (rect.height - t.y) / t.k + 20;
+        const fontPx = 10 / t.k;
+        ctx.font = `600 ${fontPx}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (let s = 0; s < src.count; s += 1) {
+          const x = src.x[s];
+          const y = src.y[s];
+          if (x < wx0 || x > wx1 || y < wy0 || y > wy1) continue;
+          const ch = M.chars[src.c[s]];
+          const label = characterLabel(src.c[s]);
+          ctx.lineWidth = 2.6 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.88)";
+          ctx.strokeText(label, x, y + 3.4);
+          ctx.fillStyle = CLASS_COLORS[ch.classID];
+          ctx.fillText(label, x, y + 3.4);
+        }
+      }
+
+      function drawCareerPath(c, t) {
+        const tiersAttended = F.charTiers[c] || [];
+        if (!tiersAttended.length) return;
+        const points = tiersAttended.map((tt) => {
+          const td = F.tiers[tt];
+          const s = td.slotOf.get(c);
+          return { t: tt, x: td.x[s], y: td.y[s] };
+        });
+
+        ctx.lineWidth = 2.4 / Math.sqrt(t.k);
+        for (let i = 1; i < points.length; i += 1) {
+          const a = points[i - 1];
+          const b = points[i];
+          const gap = b.t - a.t > 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          const mx = (a.x + b.x) / 2 - (b.y - a.y) * 0.1;
+          const my = (a.y + b.y) / 2 + (b.x - a.x) * 0.1;
+          ctx.quadraticCurveTo(mx, my, b.x, b.y);
+          ctx.setLineDash(gap ? [6 / t.k, 6 / t.k] : []);
+          const hueShift = 30 + (i / points.length) * 30;
+          ctx.strokeStyle = `hsl(${hueShift} 95% 62% / 0.9)`;
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        const fontPx = clamp(10 / t.k, 3, 60);
+        ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (const point of points) {
+          const isCurrent = point.t === view.tier;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, (isCurrent ? 5 : 3.4) / Math.sqrt(t.k), 0, Math.PI * 2);
+          ctx.fillStyle = isCurrent ? "#fbbf24" : "rgba(255,255,255,0.92)";
+          ctx.fill();
+          const label = tierAbbr(M.tiers[point.t].name);
+          ctx.lineWidth = 3 / t.k;
+          ctx.strokeStyle = "rgba(5, 7, 17, 0.85)";
+          ctx.strokeText(label, point.x, point.y - 11 / t.k);
+          ctx.fillStyle = "#fde68a";
+          ctx.fillText(label, point.x, point.y - 11 / t.k);
+        }
+      }
+
+      /* ============================== all-time rendering ============================== */
+
+      function drawAll() {
+        const t = tf();
+        const at = buildAllTime();
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
+
+        // guild hulls sized by loyalist core
+        for (const [g] of at.roster) {
+          const r = hullRadius(allTimeHullN(at, g));
+          const guild = M.guilds[g];
+          const isSel = g === view.selGuild;
+          const isHover = view.hover && view.hover.kind === "guild" && view.hover.g === g;
+          ctx.beginPath();
+          ctx.arc(at.gx[g], at.gy[g], r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(${guild.hue} 65% 58% / ${isSel || isHover ? 0.16 : 0.07})`;
+          ctx.fill();
+          if (isSel || isHover) {
+            ctx.lineWidth = 1.6 / t.k;
+            ctx.strokeStyle = `hsl(${guild.hue} 70% 65% / 0.8)`;
+            ctx.stroke();
+          }
+        }
+
+        // career fibers: every multi-guild character tethered to each of their guilds
+        if (view.showFibers && at.fibers.length) {
+          for (let i = 0; i < at.fibers.length; i += 3) {
+            const s = at.fibers[i];
+            const g = at.fibers[i + 1];
+            const reports = at.fibers[i + 2];
+            const isSel = view.selGuild === g || view.selChar === at.c[s];
+            ctx.beginPath();
+            ctx.moveTo(at.x[s], at.y[s]);
+            ctx.lineTo(at.gx[g], at.gy[g]);
+            ctx.strokeStyle = isSel ? "rgba(251, 191, 36, 0.45)" : "rgba(148, 163, 184, 0.055)";
+            ctx.lineWidth = (isSel ? 0.9 : 0.45) / t.k + Math.min(2.4, Math.sqrt(reports) * 0.08) / Math.sqrt(t.k);
+            ctx.stroke();
+          }
+        }
+
+        // membership mask so a selected guild keeps ALL its members lit, including
+        // multi-guild characters whose primary guild is elsewhere
+        let mask = null;
+        if (view.selGuild >= 0) {
+          if (at.selMaskG !== view.selGuild) {
+            const m = new Uint8Array(at.count);
+            for (let s = 0; s < at.count; s += 1) {
+              const mem = M.chars[at.c[s]].mem;
+              for (let i = 0; i < mem.length; i += 3) {
+                if (mem[i + 1] === view.selGuild && mem[i + 2] >= view.minReports) { m[s] = 1; break; }
+              }
+            }
+            at.selMask = m;
+            at.selMaskG = view.selGuild;
+          }
+          mask = at.selMask;
+        }
+
+        // dots
+        const buckets = new Map();
+        for (let s = 0; s < at.count; s += 1) {
+          const cls = M.chars[at.c[s]].classID;
+          let alpha = 0.92;
+          if (view.classFilter.size && !view.classFilter.has(cls)) alpha *= 0.1;
+          if (mask && !mask[s]) alpha *= 0.22;
+          if (view.selChar >= 0) alpha *= at.c[s] === view.selChar ? 1 : 0.1;
+          if (alpha < 0.02) continue;
+          const bucket = cls * 16 + Math.min(15, Math.round(alpha * 10));
+          let path = buckets.get(bucket);
+          if (!path) buckets.set(bucket, (path = new Path2D()));
+          const r = 1.7 + Math.min(2.4, Math.sqrt(at.rep[s]) * 0.28);
+          path.moveTo(at.x[s] + r, at.y[s]);
+          path.arc(at.x[s], at.y[s], r, 0, Math.PI * 2);
+        }
+        for (const [bucket, path] of buckets) {
+          ctx.globalAlpha = (bucket % 16) / 10;
+          ctx.fillStyle = CLASS_COLORS[Math.floor(bucket / 16)];
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = 1;
+
+        // selected character: amber tethers to every guild of their career
+        if (view.selChar >= 0) {
+          const s = at.slotOf.get(view.selChar);
+          if (s !== undefined) {
+            const mem = M.chars[view.selChar].mem;
+            const seen = new Set();
+            ctx.lineWidth = 1.8 / Math.sqrt(t.k);
+            ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
+            for (let i = 0; i < mem.length; i += 3) {
+              const g = mem[i + 1];
+              if (mem[i + 2] < view.minReports || seen.has(g)) continue;
+              seen.add(g);
+              ctx.beginPath();
+              ctx.moveTo(at.x[s], at.y[s]);
+              ctx.lineTo(at.gx[g], at.gy[g]);
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(at.x[s], at.y[s], 6 / Math.sqrt(t.k), 0, Math.PI * 2);
+            ctx.strokeStyle = "#fbbf24";
+            ctx.lineWidth = 2 / Math.sqrt(t.k);
+            ctx.stroke();
+          }
+        }
+
+        // hovered character ring
+        if (view.hover && view.hover.kind === "char") {
+          const s = view.hover.s;
+          ctx.beginPath();
+          ctx.arc(at.x[s], at.y[s], 5, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.9)";
+          ctx.lineWidth = 1.4 / t.k;
+          ctx.stroke();
+        }
+
+        if (view.showLabels) drawAllGuildLabels(t, at);
+        drawCharLabels(t, at, 4.2);
+
+        ctx.restore();
+      }
+
+      function hitAll(px, py) {
+        const at = buildAllTime();
+        const world = toWorld(px, py);
+        const transform = tf();
+        const { cell, grid } = buildGrid(at);
+        const reach = Math.max(6, 8 / transform.k);
+        let best = null;
+        let bestD = reach;
+        const cx = Math.floor(world.x / cell);
+        const cy = Math.floor(world.y / cell);
+        for (let ix = cx - 1; ix <= cx + 1; ix += 1) {
+          for (let iy = cy - 1; iy <= cy + 1; iy += 1) {
+            const list = grid.get(`${ix}:${iy}`);
+            if (!list) continue;
+            for (const s of list) {
+              const d = Math.hypot(world.x - at.x[s], world.y - at.y[s]);
+              if (d < bestD) { bestD = d; best = s; }
+            }
+          }
+        }
+        if (best !== null) return { kind: "char", s: best, c: at.c[best], g: at.g[best] };
+
+        const labelG = hitVisibleAllLabel(world, transform, at);
+        if (labelG !== null) return { kind: "guild", g: labelG };
+
+        let bestG = null;
+        let bestGD = Infinity;
+        for (const [g] of at.roster) {
+          const d = Math.hypot(world.x - at.gx[g], world.y - at.gy[g]);
+          if (d < hullRadius(allTimeHullN(at, g)) && d < bestGD) { bestGD = d; bestG = g; }
+        }
+        if (bestG !== null) return { kind: "guild", g: bestG };
+        return null;
+      }
+
+      /* ============================== alluvial rendering ============================== */
+
+      function flowColor(f, highlight) {
+        if (highlight) return "rgba(251, 191, 36, 0.72)";
+        if (f.a === f.b && f.a !== LUMP) {
+          return `hsl(${M.guilds[f.a].hue} 60% 55% / 0.4)`;
+        }
+        if (f.a === f.b) return "rgba(148, 163, 184, 0.16)";
+        return "rgba(148, 163, 184, 0.17)";
+      }
+
+      function drawFlow() {
+        const t = tf();
+        const { columns, flows } = F.alluvial;
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.scale(t.k, t.k);
+
+        const selG = view.selGuild;
+        const hover = view.hover;
+        const selTiers = view.selChar >= 0 ? F.charTiers[view.selChar] || [] : [];
+
+        // ribbons
+        for (let i = 1; i < columns.length; i += 1) {
+          if (!flows[i]) continue;
+          const x0 = (i - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W;
+          const x1 = i * ALLUVIAL_COL_PITCH;
+          const cpx = (x1 - x0) * 0.45;
+          for (const f of flows[i]) {
+            const isSel = selG >= 0 && (f.a === selG || f.b === selG);
+            const isHover = hover && hover.kind === "flow" && hover.f === f;
+            ctx.beginPath();
+            ctx.moveTo(x0, f.ya);
+            ctx.bezierCurveTo(x0 + cpx, f.ya, x1 - cpx, f.yb, x1, f.yb);
+            ctx.lineTo(x1, f.yb + f.w);
+            ctx.bezierCurveTo(x1 - cpx, f.yb + f.w, x0 + cpx, f.ya + f.w, x0, f.ya + f.w);
+            ctx.closePath();
+            ctx.fillStyle = flowColor(f, isSel || isHover);
+            ctx.fill();
+          }
+        }
+
+        // nodes
+        for (let i = 0; i < columns.length; i += 1) {
+          const isCurrentTier = i === view.tier;
+          for (const node of columns[i].nodes) {
+            const isSel = node.g === selG;
+            const isHover = hover && hover.kind === "node" && hover.node === node;
+            const hue = node.g === LUMP ? null : M.guilds[node.g].hue;
+            ctx.fillStyle = node.g === LUMP
+              ? "rgba(115, 129, 150, 0.55)"
+              : `hsl(${hue} 62% ${isSel || isHover ? 66 : 52}% / ${isSel || isHover ? 1 : 0.85})`;
+            ctx.fillRect(node.x, node.y, ALLUVIAL_NODE_W, node.h);
+            if (isSel) {
+              ctx.lineWidth = 1.6 / t.k;
+              ctx.strokeStyle = "#fbbf24";
+              ctx.strokeRect(node.x, node.y, ALLUVIAL_NODE_W, node.h);
+            }
+            const apparentH = node.h * t.k;
+            if ((apparentH > 9 || isSel || isHover) && node.g !== LUMP) {
+              const fontPx = clamp(10.5 / t.k, 2.5, 80);
+              ctx.font = `650 ${fontPx}px Inter, system-ui, sans-serif`;
+              ctx.textAlign = "left";
+              ctx.textBaseline = "middle";
+              const label = M.guilds[node.g].name;
+              ctx.lineWidth = 3 / t.k;
+              ctx.strokeStyle = "rgba(5, 7, 17, 0.8)";
+              ctx.strokeText(label, node.x + ALLUVIAL_NODE_W + 4 / t.k, node.y + node.h / 2);
+              ctx.fillStyle = isSel || isHover ? "#fbbf24" : `hsl(${hue} 60% 78% / 0.9)`;
+              ctx.fillText(label, node.x + ALLUVIAL_NODE_W + 4 / t.k, node.y + node.h / 2);
+            }
+          }
+          // column header
+          const tier = M.tiers[i];
+          const fontPx = clamp(12 / t.k, 3, 90);
+          ctx.font = `800 ${fontPx}px Inter, system-ui, sans-serif`;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "bottom";
+          const hx = i * ALLUVIAL_COL_PITCH;
+          const hy = -18 / t.k;
+          ctx.fillStyle = isCurrentTier ? "#fbbf24" : expColor(tier.expansion);
+          ctx.fillText(tierAbbr(tier.name), hx, hy);
+          ctx.font = `600 ${fontPx * 0.72}px Inter, system-ui, sans-serif`;
+          ctx.fillStyle = "rgba(165, 180, 200, 0.75)";
+          ctx.fillText(tier.start ? String(new Date(tier.start).getFullYear()) : "", hx, hy + fontPx * 0.85);
+        }
+
+        // selected character path across columns
+        if (view.selChar >= 0 && selTiers.length) {
+          ctx.beginPath();
+          let started = false;
+          for (const tt of selTiers) {
+            const td = F.tiers[tt];
+            const s = td.slotOf.get(view.selChar);
+            const g = td.g[s];
+            const node = columns[tt].byG.get((td.roster.get(g) || 0) >= ALLUVIAL_MIN_ROSTER ? g : LUMP);
+            if (!node) continue;
+            const x = node.x + ALLUVIAL_NODE_W / 2;
+            const y = node.y + node.h / 2;
+            if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
+          }
+          ctx.strokeStyle = "rgba(251, 191, 36, 0.9)";
+          ctx.lineWidth = 2.4 / t.k;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      /* ============================== frame loop ============================== */
+
+      function frame(now) {
+        const rect = stage.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        if (F.tiers) {
+          if (view.mode === "galaxy") drawGalaxy(now);
+          else if (view.mode === "all") drawAll();
+          else drawFlow();
+        }
+        requestAnimationFrame(frame);
+      }
+
+      /* ============================== hit testing ============================== */
+
+      function buildGrid(td) {
+        if (td.grid) return td.grid;
+        const cell = 22;
+        const grid = new Map();
+        for (let s = 0; s < td.count; s += 1) {
+          const key = `${Math.floor(td.x[s] / cell)}:${Math.floor(td.y[s] / cell)}`;
+          let list = grid.get(key);
+          if (!list) grid.set(key, (list = []));
+          list.push(s);
+        }
+        td.grid = { cell, grid };
+        return td.grid;
+      }
+
+      function hitGalaxy(px, py) {
+        const world = toWorld(px, py);
+        const td = F.tiers[view.tier];
+        const transform = tf();
+        const { cell, grid } = buildGrid(td);
+        const reach = Math.max(6, 8 / transform.k);
+        let best = null;
+        let bestD = reach;
+        const cx = Math.floor(world.x / cell);
+        const cy = Math.floor(world.y / cell);
+        for (let ix = cx - 1; ix <= cx + 1; ix += 1) {
+          for (let iy = cy - 1; iy <= cy + 1; iy += 1) {
+            const list = grid.get(`${ix}:${iy}`);
+            if (!list) continue;
+            for (const s of list) {
+              const d = Math.hypot(world.x - td.x[s], world.y - td.y[s]);
+              if (d < bestD) { bestD = d; best = s; }
+            }
+          }
+        }
+        if (best !== null) return { kind: "char", s: best, c: td.c[best], g: td.g[best] };
+
+        const labelG = hitVisibleGalaxyLabel(world, transform, td.roster, F);
+        if (labelG !== null) return { kind: "guild", g: labelG };
+
+        let bestG = null;
+        let bestGD = Infinity;
+        for (const [g, n] of td.roster) {
+          const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
+          if (d < hullRadius(n) && d < bestGD) { bestGD = d; bestG = g; }
+        }
+        if (bestG !== null) return { kind: "guild", g: bestG };
+        if (view.tier > 0) {
+          const prev = F.tiers[view.tier - 1];
+          const prevLabelG = hitVisibleGalaxyLabel(world, transform, Array.from(prev.roster).filter(([g]) => !td.roster.has(g)), F, true);
+          if (prevLabelG !== null) return { kind: "guild", g: prevLabelG, previous: true };
+          for (const [g, n] of prev.roster) {
+            if (td.roster.has(g)) continue;
+            const d = Math.hypot(world.x - F.gx[g], world.y - F.gy[g]);
+            if (d < hullRadius(n) && d < bestGD) { bestGD = d; bestG = g; }
+          }
+          if (bestG !== null) return { kind: "guild", g: bestG, previous: true };
+        }
+        return null;
+      }
+
+      function hitFlow(px, py) {
+        const world = toWorld(px, py);
+        const { columns, flows } = F.alluvial;
+        const col = Math.round(world.x / ALLUVIAL_COL_PITCH);
+
+        // headers
+        if (world.y < -6 && col >= 0 && col < columns.length && Math.abs(world.x - col * ALLUVIAL_COL_PITCH) < 90) {
+          return { kind: "header", t: col };
+        }
+
+        // nodes
+        const colIdx = Math.floor((world.x + 40) / ALLUVIAL_COL_PITCH);
+        for (const i of [colIdx, colIdx + 1]) {
+          if (i < 0 || i >= columns.length) continue;
+          if (world.x >= i * ALLUVIAL_COL_PITCH - 2 && world.x <= i * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W + 2) {
+            for (const node of columns[i].nodes) {
+              if (world.y >= node.y - 1 && world.y <= node.y + node.h + 1) return { kind: "node", node, t: i };
+            }
+          }
+        }
+
+        // ribbons
+        const gap = Math.ceil(world.x / ALLUVIAL_COL_PITCH);
+        if (gap >= 1 && gap < columns.length && flows[gap]) {
+          const x0 = (gap - 1) * ALLUVIAL_COL_PITCH + ALLUVIAL_NODE_W;
+          const x1 = gap * ALLUVIAL_COL_PITCH;
+          if (world.x > x0 && world.x < x1) {
+            const u = (world.x - x0) / (x1 - x0);
+            const su = u * u * (3 - 2 * u);
+            let best = null;
+            for (const f of flows[gap]) {
+              const yTop = f.ya + (f.yb - f.ya) * su;
+              if (world.y >= yTop - 1 && world.y <= yTop + f.w + 1) {
+                if (!best || f.w < best.w) best = f;
+              }
+            }
+            if (best) return { kind: "flow", f: best, t: gap };
+          }
+        }
+        return null;
+      }
+
+      /* ============================== tooltip ============================== */
+
+      function showTooltip(px, py, html) {
+        tooltip.innerHTML = html;
+        tooltip.style.display = "block";
+        const rect = stage.getBoundingClientRect();
+        const tw = tooltip.offsetWidth;
+        const th = tooltip.offsetHeight;
+        tooltip.style.left = `${clamp(px + 16, 4, rect.width - tw - 6)}px`;
+        tooltip.style.top = `${clamp(py + 14, 4, rect.height - th - 6)}px`;
+      }
+
+      function hideTooltip() {
+        tooltip.style.display = "none";
+      }
+
+      function flowNames(f, max = 8) {
+        const names = (f.cs || []).slice(0, max).map((c) => characterLabel(c)).join(", ");
+        if (!names) return "";
+        const extra = f.n - Math.min(f.cs.length, max);
+        return `<br><span style="color:#cbd5e1">${esc(names)}${extra > 0 ? ` +${fmt(extra)} more` : ""}</span>`;
+      }
+
+      function tooltipFor(hit) {
+        if (hit.kind === "char") {
+          const ch = M.chars[hit.c];
+          const tiersAttended = (F.charTiers[hit.c] || []).length;
+          if (view.mode === "all") {
+            const at = F.allTime;
+            return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
+              ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · main guild ${esc(guildLabel(hit.g))}<br>
+              ${fmt(at.rep[hit.s])} reports across ${fmt(at.guildN[hit.s])} ${at.guildN[hit.s] === 1 ? "guild" : "guilds"} · ${tiersAttended} tiers · click for career`;
+          }
+          const td = F.tiers[view.tier];
+          const reports = td.r[hit.s];
+          return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
+            ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${esc(guildLabel(hit.g))}<br>
+            ${fmt(reports)} reports this tier · ${tiersAttended} tiers tracked · click for career`;
+        }
+        if (hit.kind === "guild") {
+          if (view.mode === "all") {
+            const at = F.allTime;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(at.roster.get(hit.g) || 0)} distinct members all time · click to inspect`;
+          }
+          const n = F.tiers[view.tier].roster.get(hit.g) || 0;
+          if (!n && hit.previous && view.tier > 0) {
+            const prev = F.tiers[view.tier - 1];
+            const prevN = prev.roster.get(hit.g) || 0;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(prevN)} raiders in previous tier · click to inspect`;
+          }
+          return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} raiders this tier · click to inspect`;
+        }
+        if (hit.kind === "node") {
+          return `<b>${esc(guildLabel(hit.node.g))}</b><br>${fmt(hit.node.count)} raiders in ${esc(M.tiers[hit.t].name)}`;
+        }
+        if (hit.kind === "flow") {
+          const f = hit.f;
+          const from = M.tiers[hit.t - 1];
+          const to = M.tiers[hit.t];
+          if (f.a === f.b) {
+            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} raiders stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}${flowNames(f)}`;
+          }
+          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} raiders moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}${flowNames(f)}`;
+        }
+        if (hit.kind === "header") {
+          return `<b>${esc(M.tiers[hit.t].name)}</b><br>${esc(M.tiers[hit.t].expansion)} · click to set current tier`;
+        }
+        return "";
+      }
+
+      /* ============================== pointer interactions ============================== */
+
+      const pointer = { down: false, moved: false, x: 0, y: 0 };
+
+      canvas.addEventListener("pointerdown", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        pointer.down = true;
+        pointer.moved = false;
+        pointer.x = event.clientX - rect.left;
+        pointer.y = event.clientY - rect.top;
+        canvas.setPointerCapture(event.pointerId);
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        if (pointer.down) {
+          const dx = px - pointer.x;
+          const dy = py - pointer.y;
+          if (Math.abs(dx) + Math.abs(dy) > 3) pointer.moved = true;
+          if (pointer.moved) {
+            tf().x += dx;
+            tf().y += dy;
+            hideTooltip();
+          }
+          pointer.x = px;
+          pointer.y = py;
+          return;
+        }
+        if (!F.tiers) return;
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : view.mode === "all" ? hitAll(px, py) : hitFlow(px, py);
+        view.hover = hit;
+        canvas.style.cursor = hit ? "pointer" : "default";
+        if (hit) showTooltip(px, py, tooltipFor(hit));
+        else hideTooltip();
+      });
+
+      canvas.addEventListener("pointerup", (event) => {
+        const wasDrag = pointer.moved;
+        pointer.down = false;
+        try { canvas.releasePointerCapture(event.pointerId); } catch {}
+        if (wasDrag || !F.tiers) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const hit = view.mode === "galaxy" ? hitGalaxy(px, py) : view.mode === "all" ? hitAll(px, py) : hitFlow(px, py);
+        if (!hit) { clearSelection(); return; }
+        if (hit.kind === "char") selectChar(hit.c);
+        else if (hit.kind === "guild") selectGuild(hit.g);
+        else if (hit.kind === "node") selectGuild(hit.node.g);
+        else if (hit.kind === "header") { stopPlay(); setTier(hit.t, false); }
+        else if (hit.kind === "flow" && hit.f.a !== LUMP) selectGuild(hit.f.a === hit.f.b ? hit.f.a : hit.f.b);
+      });
+
+      canvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const t = tf();
+        const before = toWorld(px, py);
+        const factor = event.deltaY > 0 ? 0.88 : 1.14;
+        t.k = clamp(t.k * factor, 0.015, 6);
+        t.x = px - before.x * t.k;
+        t.y = py - before.y * t.k;
+        hideTooltip();
+      }, { passive: false });
+
+      /* ============================== top-level events ============================== */
+
+      function setMode(mode) {
+        view.mode = mode;
+        els.modeGalaxy.classList.toggle("active", mode === "galaxy");
+        els.modeAll.classList.toggle("active", mode === "all");
+        els.modeFlow.classList.toggle("active", mode === "flow");
+        els.timeline.classList.toggle("dimmed", mode === "all");
+        if (mode === "flow" && !view.fitted.flow) fitFlow();
+        if (mode === "all" && !view.fitted.all) fitAll();
+        if (mode === "galaxy" && !view.fitted.galaxy) fitGalaxy();
+        view.hover = null;
+        hideTooltip();
+        updateHud();
+        renderInspector();
+      }
+
+      els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
+      els.modeAll.addEventListener("click", () => setMode("all"));
+      els.modeFlow.addEventListener("click", () => setMode("flow"));
+      els.toggleInspector.addEventListener("click", () => setInspectorOpen(!view.inspectorOpen));
+
+      els.minReports.addEventListener("change", () => {
+        view.minReports = Number(els.minReports.value);
+        els.loadingText.textContent = "Recomputing constellation…";
+        els.loading.classList.add("visible");
+        setTimeout(() => {
+          rebuild();
+          view.fitted.galaxy = false;
+          view.fitted.all = false;
+          view.fitted.flow = false;
+          if (view.mode === "galaxy") fitGalaxy();
+          else if (view.mode === "all") fitAll();
+          else fitFlow();
+          els.loading.classList.remove("visible");
+          updateHud();
+          renderInspector();
+        }, 30);
+      });
+
+      els.tglFlows.addEventListener("change", () => { view.showFlows = els.tglFlows.checked; });
+      els.tglTrails.addEventListener("change", () => { view.showTrails = els.tglTrails.checked; });
+      els.tglFibers.addEventListener("change", () => { view.showFibers = els.tglFibers.checked; });
+      els.tglLabels.addEventListener("change", () => { view.showLabels = els.tglLabels.checked; });
+
+      els.search.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(runSearch, 160);
+      });
+
+      els.resetView.addEventListener("click", () => {
+        if (view.mode === "galaxy") fitGalaxy();
+        else if (view.mode === "all") fitAll();
+        else fitFlow();
+      });
+      els.clearSel.addEventListener("click", clearSelection);
+      els.playBtn.addEventListener("click", () => {
+        if (view.playing) stopPlay();
+        else startPlay();
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+        if (event.key === "ArrowRight") { stopPlay(); setTier(view.tier + 1); }
+        else if (event.key === "ArrowLeft") { stopPlay(); setTier(view.tier - 1); }
+        else if (event.key === " ") { event.preventDefault(); view.playing ? stopPlay() : startPlay(); }
+        else if (event.key === "Escape") clearSelection();
+      });
+
+      window.addEventListener("resize", resizeCanvas);
+      if ("ResizeObserver" in window) new ResizeObserver(resizeCanvas).observe(stage);
+
+      resizeCanvas();
+      boot();
+    </script>
+  </body>
+</html>

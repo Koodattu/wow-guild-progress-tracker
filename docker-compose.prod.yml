@@ -3,8 +3,12 @@ services:
     image: mongo:7
     container_name: wow-prog-db
     restart: unless-stopped
-    command: ["mongod", "--wiredTigerCacheSizeGB", "0.5"]
-    mem_limit: 1024m
+    command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
+    mem_limit: 2g
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     ports:
       - "27017:27017"
     volumes:

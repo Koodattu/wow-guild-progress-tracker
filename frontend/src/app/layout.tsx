@@ -40,6 +40,7 @@ export default function RootLayout({
 }>) {
   const pathname = usePathname();
   const isLivestreamsPage = pathname === "/livestreams";
+  const isNetworkAnalyticsPage = pathname === "/analytics/network";
   const isHomePage = pathname === "/";
   const robotsContent =
     pathname.startsWith("/admin") || pathname.startsWith("/profile")
@@ -187,7 +188,7 @@ export default function RootLayout({
             <NextIntlClientProvider locale={locale} messages={messages}>
               <Navigation />
               {children}
-              {!isLivestreamsPage && <Footer />}
+              {!isLivestreamsPage && !isNetworkAnalyticsPage && <Footer />}
             </NextIntlClientProvider>
           </AuthProvider>
         </QueryProvider>

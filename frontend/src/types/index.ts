@@ -1516,6 +1516,46 @@ export interface RaidAnalyticsListItem {
   lastCalculated: string;
 }
 
+// ============================================================================
+// GUILD NETWORK TYPES
+// ============================================================================
+
+export interface GuildNetworkTier {
+  id: number;
+  name: string;
+  expansion: string;
+  start: string | null;
+  end: string | null;
+  participations: number;
+}
+
+export type GuildNetworkGuildTuple = [name: string, realmIdx: number];
+export type GuildNetworkCharacterTuple = [name: string, realmIdx: number, classID: number, memberships: number[], aliases?: string[]];
+
+export interface GuildNetworkUniverse {
+  schemaVersion: number;
+  generatedAt: string;
+  sourceUpdatedAt: string | null;
+  rowCount: number;
+  tiers: GuildNetworkTier[];
+  realms: string[];
+  guilds: GuildNetworkGuildTuple[];
+  characters: GuildNetworkCharacterTuple[];
+}
+
+export interface GuildNetworkMeta {
+  schemaVersion: number;
+  generatedAt: string;
+  sourceUpdatedAt: string | null;
+  rowCount: number;
+  tierCount: number;
+  guildCount: number;
+  characterCount: number;
+  byteLength: number;
+  chunkCount: number;
+  etag: string;
+}
+
 // ============================================================
 // RAID COMPARE TYPES
 // ============================================================

@@ -28,6 +28,7 @@ import charactersRouter from "./routes/characters";
 import searchRouter from "./routes/search";
 import pickemsRouter from "./routes/pickems";
 import discordRouter from "./routes/discord";
+import guildNetworkRouter from "./routes/guild-network";
 import pickemService from "./services/pickem.service";
 import discordBotService from "./services/discord-bot.service";
 import backgroundGuildProcessor from "./services/background-guild-processor.service";
@@ -181,6 +182,7 @@ app.use("/api/character-rankings", characterRankingsRouter);
 app.use("/api/characters", charactersRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/discord", discordRouter);
+app.use("/api/guild-network", guildNetworkRouter);
 
 // ============================================================================
 // HEALTH CHECK WITH STARTUP STATUS
@@ -438,6 +440,18 @@ async function runBackgroundInitialization(): Promise<void> {
     );
   } else {
     logger.info("CALCULATE_RAID_ANALYTICS_ON_STARTUP is disabled, skipping startup raid analytics calculation");
+  }
+
+  // Ensure the public guild network page has an active snapshot after deploy.
+  if (process.env.ENSURE_GUILD_NETWORK_SNAPSHOT_ON_STARTUP !== "false") {
+    logger.info("ENSURE_GUILD_NETWORK_SNAPSHOT_ON_STARTUP is enabled");
+    optionalTasks.push(
+      runStartupTask("Ensure guild network snapshot", async () => {
+        await scheduler.ensureGuildNetworkSnapshotOnStartup();
+      }).then(() => {}),
+    );
+  } else {
+    logger.info("ENSURE_GUILD_NETWORK_SNAPSHOT_ON_STARTUP is disabled, skipping startup guild network snapshot check");
   }
 
   // Wait for all optional tasks to complete

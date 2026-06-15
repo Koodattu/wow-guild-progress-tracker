@@ -6,6 +6,7 @@ import twitchService, { StreamStatus } from "./twitch.service";
 import tierListService from "./tierlist.service";
 import characterService from "./character.service";
 import raidAnalyticsService from "./raid-analytics.service";
+import guildNetworkService from "./guild-network.service";
 import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
 import taskTracker from "./task-tracker.service";
@@ -64,6 +65,7 @@ const HOME_CACHE_REFRESH_MS = parseInt(process.env.HOME_CACHE_REFRESH_MINUTES ||
 
 interface GuildBatchUpdateStats {
   attempted: number;
+  skipped: number;
   succeeded: number;
   failed: number;
   withNewData: number;
@@ -105,14 +107,23 @@ class UpdateScheduler {
   private isUpdatingCharacterRankings: boolean = false;
   private isQueueingReportCharacterBackfill: boolean = false;
   private isUpdatingCharacterRaidParticipations: boolean = false;
+  private isRebuildingGuildNetworkSnapshot: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
   private isCheckingHiatus: boolean = false;
   private isUpdatingRaiderIOGuilds: boolean = false;
   private lastCacheWarmTime: number = 0;
 
+  private getBlockingDatabaseMaintenanceJob(): string | null {
+    if (this.isUpdatingCharacterRaidParticipations) return "character raid participation rebuild";
+    if (this.isRebuildingGuildNetworkSnapshot) return "guild network snapshot rebuild";
+    if (this.isUpdatingCharacterRankings) return "character rankings refresh";
+    return null;
+  }
+
   private async updateGuildProgressBatch(guilds: IGuild[], logPrefix: string, throttleMs: number, yieldEvery: number = 1): Promise<GuildBatchUpdateStats> {
     const stats: GuildBatchUpdateStats = {
-      attempted: guilds.length,
+      attempted: 0,
+      skipped: 0,
       succeeded: 0,
       failed: 0,
       withNewData: 0,
@@ -120,8 +131,16 @@ class UpdateScheduler {
     };
 
     for (let i = 0; i < guilds.length; i++) {
+      const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+      if (blockingJob) {
+        stats.skipped = guilds.length - i;
+        logger.info(`${logPrefix} Deferring ${stats.skipped} guild(s) while ${blockingJob} is running`);
+        break;
+      }
+
       const guild = guilds[i];
       logger.info(`${logPrefix} Guild ${i + 1}/${guilds.length}: ${guild.name}`);
+      stats.attempted++;
 
       try {
         const result = await guildService.updateGuildProgress((guild._id as mongoose.Types.ObjectId).toString());
@@ -482,7 +501,7 @@ class UpdateScheduler {
           logger.info("[Nightly/CharacterRaidParticipation] Previous rebuild still in progress, skipping...");
           return;
         }
-        await this.rebuildCharacterRaidParticipations();
+        await this.rebuildCharacterRaidParticipations().catch(() => undefined);
       },
       {
         timezone: "Europe/Helsinki",
@@ -506,11 +525,11 @@ class UpdateScheduler {
       },
     );
 
-    // NIGHTLY: Update all guild crests (at 8 AM Finnish time)
+    // NIGHTLY: Update all guild crests (at 9:30 AM Finnish time)
     // Guild crests can be changed by guilds or sometimes fail to fetch initially
-    // Independent of other data - safe to run in parallel with character rankings
+    // Independent of other data; keep it off the 08:00 maintenance window.
     cron.schedule(
-      "0 8 * * *",
+      "30 9 * * *",
       async () => {
         if (this.isUpdatingGuildCrests) {
           logger.info("[Nightly/GuildCrests] Previous update still in progress, skipping...");
@@ -580,7 +599,7 @@ class UpdateScheduler {
     logger.info("    * Tier lists calculation: daily at 06:00");
     logger.info("    * Raid analytics calculation: daily at 07:00");
     logger.info("    * Character raid participation rebuild: daily at 08:00");
-    logger.info("    * Guild crests update: daily at 08:00");
+    logger.info("    * Guild crests update: daily at 09:30");
     logger.info("    * Character rankings refresh + leaderboard rebuild: daily at 08:30");
     logger.info("    * Hiatus event check: daily at 09:00");
     logger.info("    * Full cache warmup: daily at 11:00");
@@ -693,6 +712,27 @@ class UpdateScheduler {
       .then(() => logger.info("[Admin] Character raid participation rebuild completed"))
       .catch((err) => logger.error("[Admin] Character raid participation rebuild failed:", err));
     return true;
+  }
+
+  triggerGuildNetworkSnapshotRebuild(): boolean {
+    if (this.isRebuildingGuildNetworkSnapshot) {
+      return false;
+    }
+    this.rebuildGuildNetworkSnapshot()
+      .then(() => logger.info("[Admin] Guild network snapshot rebuild completed"))
+      .catch((err) => logger.error("[Admin] Guild network snapshot rebuild failed:", err));
+    return true;
+  }
+
+  async ensureGuildNetworkSnapshotOnStartup(): Promise<void> {
+    const existing = await guildNetworkService.getActiveMeta();
+    if (existing) {
+      logger.info(`[GuildNetwork] Active snapshot already exists (${existing.characterCount} characters, generated ${existing.generatedAt.toISOString()})`);
+      return;
+    }
+
+    logger.info("[GuildNetwork] No active snapshot found; building initial snapshot");
+    await this.rebuildGuildNetworkSnapshot();
   }
 
   // Calculate tier lists on startup (if enabled)
@@ -840,6 +880,12 @@ class UpdateScheduler {
 
   // HOT HOURS: Update active guilds at the configured interval during 16:00-01:00
   async updateActiveGuilds(): Promise<void> {
+    const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+    if (blockingJob) {
+      logger.info(`[Hot/Active] Skipping active guild update while ${blockingJob} is running`);
+      return;
+    }
+
     this.isUpdatingHotActive = true;
     const taskId = await taskTracker.start("Update Active Guilds (Hot Hours)");
 
@@ -888,14 +934,14 @@ class UpdateScheduler {
       const stats = await this.updateGuildProgressBatch(guilds, "[Hot/Active]", 100);
 
       logger.info(
-        `[Hot/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+        `[Hot/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, skipped ${stats.skipped}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
       );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       if (this.shouldWarmCachesAfterUpdate(stats)) {
         await this.debouncedWarmCurrentRaidCaches();
       }
-      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, guildsSkipped: stats.skipped, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Hot/Active] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -906,6 +952,12 @@ class UpdateScheduler {
 
   // HOT HOURS: Update currently raiding guilds at the configured interval during 16:00-01:00
   private async updateRaidingGuilds(): Promise<void> {
+    const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+    if (blockingJob) {
+      logger.info(`[Hot/Raiding] Skipping raiding guild update while ${blockingJob} is running`);
+      return;
+    }
+
     this.isUpdatingHotRaiding = true;
     const taskId = await taskTracker.start("Update Raiding Guilds (Hot Hours)");
 
@@ -925,14 +977,14 @@ class UpdateScheduler {
       const stats = await this.updateGuildProgressBatch(raidingGuilds, "[Hot/Raiding]", 100);
 
       logger.info(
-        `[Hot/Raiding] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+        `[Hot/Raiding] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, skipped ${stats.skipped}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
       );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       if (this.shouldWarmCachesAfterUpdate(stats)) {
         await this.debouncedWarmCurrentRaidCaches();
       }
-      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, guildsSkipped: stats.skipped, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Hot/Raiding] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -943,6 +995,12 @@ class UpdateScheduler {
 
   // OFF HOURS: Update active guilds (every hour during 01:00-16:00)
   private async updateActiveGuildsOffHours(): Promise<void> {
+    const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+    if (blockingJob) {
+      logger.info(`[Off/Active] Skipping active guild update while ${blockingJob} is running`);
+      return;
+    }
+
     this.isUpdatingOffActive = true;
     const taskId = await taskTracker.start("Update Active Guilds (Off Hours)");
 
@@ -969,14 +1027,14 @@ class UpdateScheduler {
       const stats = await this.updateGuildProgressBatch(guilds, "[Off/Active]", 100);
 
       logger.info(
-        `[Off/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+        `[Off/Active] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, skipped ${stats.skipped}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
       );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       if (this.shouldWarmCachesAfterUpdate(stats)) {
         await this.debouncedWarmCurrentRaidCaches();
       }
-      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, guildsSkipped: stats.skipped, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Off/Active] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -987,6 +1045,12 @@ class UpdateScheduler {
 
   // OFF HOURS: Update inactive guilds (once daily at 10:00)
   async updateInactiveGuilds(): Promise<void> {
+    const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+    if (blockingJob) {
+      logger.info(`[Daily/Inactive] Skipping inactive guild update while ${blockingJob} is running`);
+      return;
+    }
+
     this.isUpdatingOffInactive = true;
     const taskId = await taskTracker.start("Update Inactive Guilds (Daily)");
 
@@ -1011,14 +1075,14 @@ class UpdateScheduler {
       const stats = await this.updateGuildProgressBatch(guilds, "[Daily/Inactive]", 2000, 5);
 
       logger.info(
-        `[Daily/Inactive] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
+        `[Daily/Inactive] Completed updating ${stats.succeeded}/${stats.attempted} guild(s), failed ${stats.failed}, skipped ${stats.skipped}, new data ${stats.withNewData}, raiding changes ${stats.raidingStatusChanged}`,
       );
 
       // Warm current raid caches with fresh data (stale-while-revalidate handles serving old data)
       if (this.shouldWarmCachesAfterUpdate(stats)) {
         await this.debouncedWarmCurrentRaidCaches();
       }
-      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
+      await taskTracker.complete(taskId, { guildsUpdated: stats.succeeded, guildsFailed: stats.failed, guildsSkipped: stats.skipped, withNewData: stats.withNewData, raidingStatusChanged: stats.raidingStatusChanged });
     } catch (error) {
       logger.error("[Daily/Inactive] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
@@ -1240,15 +1304,43 @@ class UpdateScheduler {
   private async rebuildCharacterRaidParticipations(): Promise<void> {
     this.isUpdatingCharacterRaidParticipations = true;
     const taskId = await taskTracker.start("Rebuild Character Raid Participations");
+    let participationRebuildCompleted = false;
 
     try {
       const result = await characterService.rebuildCharacterRaidParticipations();
       await taskTracker.complete(taskId, result);
+      participationRebuildCompleted = true;
     } catch (error) {
       logger.error("[CharacterRaidParticipation] Rebuild error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+      throw error;
     } finally {
       this.isUpdatingCharacterRaidParticipations = false;
+    }
+
+    if (participationRebuildCompleted) {
+      try {
+        await this.rebuildGuildNetworkSnapshot();
+      } catch {
+        // rebuildGuildNetworkSnapshot records its own task failure; keep the
+        // participation rebuild status independent.
+      }
+    }
+  }
+
+  private async rebuildGuildNetworkSnapshot(): Promise<void> {
+    this.isRebuildingGuildNetworkSnapshot = true;
+    const taskId = await taskTracker.start("Rebuild Guild Network Snapshot");
+
+    try {
+      const result = await guildNetworkService.rebuildSnapshot();
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[GuildNetwork] Snapshot rebuild error:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      this.isRebuildingGuildNetworkSnapshot = false;
     }
   }
 

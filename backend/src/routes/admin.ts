@@ -2439,6 +2439,21 @@ router.post("/trigger/rebuild-character-raid-participations", async (req: Reques
   }
 });
 
+// Rebuild the production guild network snapshot from materialized character raid participations.
+router.post("/trigger/rebuild-guild-network", async (req: Request, res: Response) => {
+  try {
+    const started = scheduler.triggerGuildNetworkSnapshotRebuild();
+    if (!started) {
+      res.json({ success: false, message: "Guild network snapshot rebuild is already running" });
+      return;
+    }
+    res.json({ success: true, message: "Guild network snapshot rebuild started in background" });
+  } catch (error) {
+    logger.error("Error triggering guild network snapshot rebuild:", error);
+    res.status(500).json({ error: "Failed to trigger guild network snapshot rebuild" });
+  }
+});
+
 // Rebuild the materialized leaderboard collection (fast, no WCL API calls)
 router.get("/trigger/rebuild-leaderboard", async (req: Request, res: Response) => {
   try {
