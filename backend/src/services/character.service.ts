@@ -8,6 +8,7 @@ import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import Guild from "../models/Guild";
 import Ranking from "../models/Ranking";
 import Raid from "../models/Raid";
+import Report from "../models/Report";
 import logger from "../utils/logger";
 import { resolveRole, slugifySpecName } from "../utils/spec";
 import cacheService from "./cache.service";
@@ -1469,54 +1470,28 @@ class CharacterService {
 
     try {
       logger.info("[CharacterRaidParticipation] Step 4/6: aggregating Heroic/Mythic report appearances into temporary participation rows");
-      const tempCollection = db.collection(tempCollectionName);
-      const batchSize = 5000;
-      let inserted = 0;
-      let batch: Record<string, unknown>[] = [];
+      await db.collection(tempCollectionName).drop().catch(() => undefined);
+      await Report.collection.createIndex({ zoneId: 1, "fightSequence.difficulty": 1, code: 1 }, { background: true });
 
-      const flushBatch = async (): Promise<void> => {
-        if (batch.length === 0) return;
-        await tempCollection.insertMany(batch, { ordered: false });
-        inserted += batch.length;
-        logger.info(`[CharacterRaidParticipation] Step 4/6 progress: staged ${inserted} rows (${elapsed()})`);
-        batch = [];
-      };
-
-      const cursor = CharacterReportAppearance.aggregate<Record<string, unknown>>([
-        { $match: { reportZoneId: { $gt: 0 } } },
+      await Report.aggregate([
+        {
+          $match: {
+            zoneId: { $gt: 0 },
+            "fightSequence.difficulty": { $in: [4, 5] },
+          },
+        },
+        { $project: { _id: 0, code: 1 } },
         {
           $lookup: {
-            from: "reports",
-            let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }],
-                  },
-                },
-              },
-              { $project: { _id: 0, fightSequence: 1 } },
-            ],
-            as: "report",
+            from: CharacterReportAppearance.collection.name,
+            localField: "code",
+            foreignField: "reportCode",
+            as: "appearance",
           },
         },
-        { $unwind: "$report" },
-        {
-          $addFields: {
-            heroicMythicFightCount: {
-              $size: {
-                $filter: {
-                  input: { $ifNull: ["$report.fightSequence", []] },
-                  as: "fight",
-                  cond: { $in: ["$$fight.difficulty", [4, 5]] },
-                },
-              },
-            },
-          },
-        },
-        { $match: { heroicMythicFightCount: { $gt: 0 } } },
-        { $sort: { reportStartTime: 1 } },
+        { $unwind: "$appearance" },
+        { $replaceRoot: { newRoot: "$appearance" } },
+        { $match: { reportZoneId: { $gt: 0 } } },
         {
           $group: {
             _id: {
@@ -1534,16 +1509,23 @@ class CharacterService {
                 $cond: [{ $eq: [{ $ifNull: ["$wclCanonicalCharacterId", null] }, null] }, "$characterRegion", null],
               },
             },
-            characterId: { $first: "$characterId" },
-            wclCanonicalCharacterId: { $first: "$wclCanonicalCharacterId" },
-            zoneId: { $first: "$reportZoneId" },
-            reportGuildId: { $first: "$reportGuildId" },
-            reportGuildName: { $last: "$reportGuildName" },
-            reportGuildRealm: { $last: "$reportGuildRealm" },
-            characterName: { $last: "$characterName" },
-            characterRealm: { $last: "$characterRealm" },
-            characterRegion: { $last: "$characterRegion" },
-            classID: { $last: "$classID" },
+            latest: {
+              $top: {
+                sortBy: { reportStartTime: -1, reportCode: -1 },
+                output: {
+                  characterId: "$characterId",
+                  wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+                  zoneId: "$reportZoneId",
+                  reportGuildId: "$reportGuildId",
+                  reportGuildName: "$reportGuildName",
+                  reportGuildRealm: "$reportGuildRealm",
+                  characterName: "$characterName",
+                  characterRealm: "$characterRealm",
+                  characterRegion: "$characterRegion",
+                  classID: "$classID",
+                },
+              },
+            },
             firstSeenAt: { $min: "$reportStartTime" },
             lastSeenAt: { $max: "$reportStartTime" },
             reportCount: { $sum: 1 },
@@ -1552,16 +1534,16 @@ class CharacterService {
         {
           $project: {
             _id: 0,
-            characterId: 1,
-            wclCanonicalCharacterId: 1,
-            zoneId: 1,
-            reportGuildId: 1,
-            reportGuildName: 1,
-            reportGuildRealm: 1,
-            characterName: 1,
-            characterRealm: 1,
-            characterRegion: 1,
-            classID: 1,
+            characterId: { $ifNull: ["$latest.characterId", null] },
+            wclCanonicalCharacterId: { $ifNull: ["$latest.wclCanonicalCharacterId", null] },
+            zoneId: "$latest.zoneId",
+            reportGuildId: "$latest.reportGuildId",
+            reportGuildName: "$latest.reportGuildName",
+            reportGuildRealm: "$latest.reportGuildRealm",
+            characterName: "$latest.characterName",
+            characterRealm: "$latest.characterRealm",
+            characterRegion: "$latest.characterRegion",
+            classID: "$latest.classID",
             firstSeenAt: 1,
             lastSeenAt: 1,
             reportCount: 1,
@@ -1569,23 +1551,18 @@ class CharacterService {
             updatedAt: "$$NOW",
           },
         },
+        { $out: tempCollectionName },
       ])
         .allowDiskUse(true)
-        .cursor({ batchSize: 1000 });
+        .exec();
 
-      for await (const row of cursor) {
-        batch.push(row);
-        if (batch.length >= batchSize) {
-          await flushBatch();
-        }
-      }
-
-      await flushBatch();
-
-      if (inserted === 0) {
+      const tempCollection = db.collection(tempCollectionName);
+      const tempExists = (await db.listCollections({ name: tempCollectionName }, { nameOnly: true }).toArray()).length > 0;
+      if (!tempExists) {
         await db.createCollection(tempCollectionName);
       }
 
+      const inserted = await tempCollection.estimatedDocumentCount();
       logger.info(`[CharacterRaidParticipation] Step 4/6 complete: staged ${inserted} participation rows (${elapsed()})`);
 
       logger.info("[CharacterRaidParticipation] Step 5/6: creating indexes on rebuilt participation rows");

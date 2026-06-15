@@ -94,5 +94,6 @@ ReportSchema.index({ guildId: 1, startTime: -1 });
 ReportSchema.index({ code: 1 }, { unique: true });
 ReportSchema.index({ isOngoing: 1 });
 ReportSchema.index({ guildId: 1, charactersFetchStatus: 1, startTime: 1 });
+ReportSchema.index({ zoneId: 1, "fightSequence.difficulty": 1, code: 1 });
 
 export default mongoose.model<IReport>("Report", ReportSchema);

@@ -340,6 +340,12 @@ class UpdateScheduler {
     }, POLLING_FIGHT_VODS_MS);
 
     this.homeCacheRefreshInterval = setInterval(async () => {
+      const blockingJob = this.getBlockingDatabaseMaintenanceJob();
+      if (blockingJob) {
+        logger.info(`[HomeCache] Skipping refresh while ${blockingJob} is running`);
+        return;
+      }
+
       if (this.isRefreshingHomeCache) {
         logger.info("[HomeCache] Previous refresh still in progress, skipping...");
         return;

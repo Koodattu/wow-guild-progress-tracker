@@ -1,9 +1,9 @@
 import mongoose from "mongoose";
 import logger from "../utils/logger";
 
-const parseMongoOption = (name: string, fallback: number): number => {
+const parseMongoOption = (name: string, fallback: number, allowZero = false): number => {
   const value = Number.parseInt(process.env[name] || "", 10);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+  return Number.isFinite(value) && (allowZero ? value >= 0 : value > 0) ? value : fallback;
 };
 
 const connectDB = async (): Promise<void> => {
@@ -14,7 +14,7 @@ const connectDB = async (): Promise<void> => {
       maxPoolSize: parseMongoOption("MONGODB_MAX_POOL_SIZE", 20),
       minPoolSize: parseMongoOption("MONGODB_MIN_POOL_SIZE", 2),
       serverSelectionTimeoutMS: parseMongoOption("MONGODB_SERVER_SELECTION_TIMEOUT_MS", 10000),
-      socketTimeoutMS: parseMongoOption("MONGODB_SOCKET_TIMEOUT_MS", 120000),
+      socketTimeoutMS: parseMongoOption("MONGODB_SOCKET_TIMEOUT_MS", 0, true),
     });
 
     logger.info("MongoDB connected successfully");

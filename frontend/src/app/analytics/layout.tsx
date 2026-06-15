@@ -19,6 +19,10 @@ function tabClass(active: boolean) {
 export default function AnalyticsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  if (pathname === "/analytics/network") {
+    return <div className="w-full">{children}</div>;
+  }
+
   return (
     <div className="w-full">
       <div className="px-4 md:px-6">
