@@ -897,6 +897,7 @@ class BackgroundGuildProcessor {
             }
 
             rankedCharacters = Array.isArray(wclReport.rankedCharacters) ? wclReport.rankedCharacters : [];
+            const reportActors = Array.isArray(wclReport.masterData?.actors) ? wclReport.masterData.actors : [];
             canonicalMatches = characterService.buildCanonicalMatchesFromRankedCharacters(rankedCharacters);
             rankedResult = await characterService.upsertCharactersFromReportAppearances({
               reportCode: wclReport.code,
@@ -906,6 +907,7 @@ class BackgroundGuildProcessor {
               reportGuildName: guild.name,
               reportGuildRealm: guild.realm,
               rankedCharacters,
+              reportActors,
             });
           }
 

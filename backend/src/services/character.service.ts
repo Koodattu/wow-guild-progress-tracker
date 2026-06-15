@@ -338,6 +338,12 @@ type WclRankedCharacter = {
   }>;
 };
 
+type WclReportPlayerActor = {
+  name?: string;
+  server?: string;
+  subType?: string;
+};
+
 type WclReportRankingCharacter = {
   name: string;
   className: string;
@@ -420,6 +426,36 @@ class CharacterService {
 
   private getReportRankingMatchKey(parts: { region: string; realm: string; name: string }): string {
     return `${this.normalizeIdentityPart(parts.region)}:${this.normalizeIdentityPart(parts.realm)}:${this.normalizeIdentityPart(parts.name)}`;
+  }
+
+  private getReportActorMatchKey(parts: { realm: string; name: string }): string {
+    return `${this.normalizeIdentityPart(parts.realm)}:${this.normalizeIdentityPart(parts.name)}`;
+  }
+
+  private buildReportActorClassMap(reportActors: WclReportPlayerActor[] = []): Map<string, number> {
+    const classByIdentity = new Map<string, number>();
+    const conflictedKeys = new Set<string>();
+
+    for (const actor of reportActors) {
+      if (!actor.name || !actor.server || !actor.subType) continue;
+
+      const classID = this.getClassIdFromWclClassName(actor.subType);
+      if (!classID) continue;
+
+      const key = this.getReportActorMatchKey({ realm: actor.server, name: actor.name });
+      const existingClassID = classByIdentity.get(key);
+      if (existingClassID !== undefined && existingClassID !== classID) {
+        conflictedKeys.add(key);
+        classByIdentity.delete(key);
+        continue;
+      }
+
+      if (!conflictedKeys.has(key)) {
+        classByIdentity.set(key, classID);
+      }
+    }
+
+    return classByIdentity;
   }
 
   buildCanonicalMatchesFromRankedCharacters(rankedCharacters: WclRankedCharacter[]): ReportRankingCanonicalMatch[] {
@@ -552,10 +588,13 @@ class CharacterService {
     reportGuildName: string;
     reportGuildRealm: string;
     rankedCharacters: WclRankedCharacter[];
+    reportActors?: WclReportPlayerActor[];
   }): Promise<{ processed: number; skipped: number }> {
     const reportSeenAt = params.reportStartTime instanceof Date ? params.reportStartTime : new Date(params.reportStartTime);
+    const reportActorClassByIdentity = this.buildReportActorClassMap(params.reportActors);
     let processed = 0;
     let skipped = 0;
+    let correctedClassIDs = 0;
 
     await this.ensureCharacterIdentityIndexes();
 
@@ -564,11 +603,26 @@ class CharacterService {
       const name = rankedCharacter.name;
       const realm = rankedCharacter.server?.slug;
       const region = rankedCharacter.server?.region?.slug;
-      const classID = rankedCharacter.classID;
+      const rankedClassID = rankedCharacter.classID;
+      const actorClassID = name && realm ? reportActorClassByIdentity.get(this.getReportActorMatchKey({ realm, name })) : undefined;
+      const classID = actorClassID ?? rankedClassID;
 
       if (!canonicalID || !name || !realm || !region || !classID) {
         skipped += 1;
         continue;
+      }
+
+      if (actorClassID && rankedClassID && actorClassID !== rankedClassID) {
+        await CharacterReportAppearance.deleteMany({
+          reportCode: params.reportCode,
+          wclCanonicalCharacterId: canonicalID,
+          classID: rankedClassID,
+          appearanceSource: "rankedCharacters",
+          characterName: new RegExp(`^${this.escapeRegex(name)}$`, "i"),
+          characterRealm: new RegExp(`^${this.escapeRegex(realm)}$`, "i"),
+          characterRegion: new RegExp(`^${this.escapeRegex(region)}$`, "i"),
+        });
+        correctedClassIDs += 1;
       }
 
       const character = await Character.findOneAndUpdate(
@@ -647,6 +701,10 @@ class CharacterService {
 
       await this.updateReportGuildHistory(character._id as mongoose.Types.ObjectId, params.reportGuildName, params.reportGuildRealm, reportSeenAt);
       processed += 1;
+    }
+
+    if (correctedClassIDs > 0) {
+      logger.info(`[CharacterReportAppearance] ${params.reportCode}: corrected ${correctedClassIDs} rankedCharacters class IDs from report masterData actors`);
     }
 
     return { processed, skipped };

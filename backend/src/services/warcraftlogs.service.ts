@@ -370,6 +370,14 @@ class WarcraftLogsService {
             code
             startTime
             endTime
+            masterData @include(if: $includeRankedCharacters) {
+              actors(type: "Player") {
+                id
+                name
+                server
+                subType
+              }
+            }
             rankedCharacters @include(if: $includeRankedCharacters) {
               canonicalID
               name
