@@ -10,6 +10,7 @@ import Ranking from "../models/Ranking";
 import Raid from "../models/Raid";
 import logger from "../utils/logger";
 import { resolveRole, slugifySpecName } from "../utils/spec";
+import cacheService from "./cache.service";
 import rateLimitService from "./rate-limit.service";
 import wclService from "./warcraftlogs.service";
 import mongoose from "mongoose";
@@ -1468,9 +1469,41 @@ class CharacterService {
     const zoneBackfilledReports = await this.backfillAppearanceReportZoneIds();
     logger.info(`[CharacterRaidParticipation] Step 3/6 zone ID fill complete: updated ${zoneBackfilledReports} report groups (${elapsed()})`);
 
-    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating report appearances into raid participations");
+    logger.info("[CharacterRaidParticipation] Step 3/6: aggregating Heroic/Mythic report appearances into raid participations");
     const rows = await CharacterReportAppearance.aggregate([
       { $match: { reportZoneId: { $gt: 0 } } },
+      {
+        $lookup: {
+          from: "reports",
+          let: { reportCode: "$reportCode", guildId: "$reportGuildId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ["$code", "$$reportCode"] }, { $eq: ["$guildId", "$$guildId"] }],
+                },
+              },
+            },
+            { $project: { _id: 0, fightSequence: 1 } },
+          ],
+          as: "report",
+        },
+      },
+      { $unwind: "$report" },
+      {
+        $addFields: {
+          heroicMythicFightCount: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ["$report.fightSequence", []] },
+                as: "fight",
+                cond: { $in: ["$$fight.difficulty", [4, 5]] },
+              },
+            },
+          },
+        },
+      },
+      { $match: { heroicMythicFightCount: { $gt: 0 } } },
       {
         $sort: {
           reportStartTime: 1,
@@ -1550,6 +1583,7 @@ class CharacterService {
       }
     }
     logger.info(`[CharacterRaidParticipation] Step 6/6 complete (${elapsed()})`);
+    await cacheService.invalidatePattern(/^characters:profile:/);
 
     logger.info(
       `[CharacterRaidParticipation] Rebuild complete in ${elapsed()}: relinked ${relinkedCanonicalClasses.relinkedGroups}/${relinkedCanonicalClasses.groups} canonical-class groups across ${relinkedCanonicalClasses.canonicalIds} multi-class canonical IDs, matched ${matchedFallbackAppearances} fallback appearances, deleted ${deleteResult.deletedCount}, inserted ${rows.length}`,

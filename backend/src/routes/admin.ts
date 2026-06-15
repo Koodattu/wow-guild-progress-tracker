@@ -2378,6 +2378,23 @@ router.post("/trigger/rebuild-character-ranking-leaderboards", async (req: Reque
   }
 });
 
+// Remove derived character ranking rows that have no stored Mythic report-ranking evidence (no WCL API calls)
+router.post("/trigger/prune-character-rankings-without-mythic-evidence", async (req: Request, res: Response) => {
+  try {
+    const result = await characterRankingBackfillService.pruneRankingsWithoutMythicEvidence();
+    res.json({
+      success: true,
+      message:
+        `Pruned ${result.invalidPairs} invalid character/raid pairs: ` +
+        `${result.rankingsDeleted} rankings, ${result.leaderboardEntriesDeleted} leaderboard entries, ${result.backfillItemsDeleted} backfill items removed`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error pruning character rankings without Mythic evidence:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to prune character rankings" });
+  }
+});
+
 // Trigger Raider.IO update for all WCL-not-found guilds (same as nightly 9 AM job)
 router.post("/trigger/update-raiderio-guilds", async (req: Request, res: Response) => {
   try {

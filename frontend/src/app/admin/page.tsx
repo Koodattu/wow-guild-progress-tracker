@@ -26,6 +26,7 @@ import {
   triggerBackfillReportCharacters,
   triggerBackfillCharacterRankings,
   triggerRebuildCharacterRankingLeaderboards,
+  triggerPruneCharacterRankingsWithoutMythicEvidence,
   triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
   triggerUpdateRaiderIOGuilds,
@@ -537,7 +538,12 @@ export default function AdminPage() {
     try {
       const result = await triggerFn();
       setTriggerMessage({ type: "success", text: result.message });
-      if (triggerName === "backfill-character-rankings" || triggerName === "refresh-character-ranking-candidates" || triggerName === "rebuild-character-ranking-leaderboards") {
+      if (
+        triggerName === "backfill-character-rankings" ||
+        triggerName === "refresh-character-ranking-candidates" ||
+        triggerName === "rebuild-character-ranking-leaderboards" ||
+        triggerName === "prune-character-rankings-without-mythic-evidence"
+      ) {
         const status = await api.getAdminCharacterRankingBackfillStatus();
         setCharacterRankingBackfillStatus(status);
       }
@@ -1263,6 +1269,20 @@ export default function AdminPage() {
                       <span>Rebuild Character Ranking Tables</span>
                       {triggerLoading === "rebuild-character-ranking-leaderboards" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["rebuild-character-ranking-leaderboards"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("prune-character-rankings-without-mythic-evidence", triggerPruneCharacterRankingsWithoutMythicEvidence)}
+                      disabled={
+                        triggerLoading === "prune-character-rankings-without-mythic-evidence" ||
+                        triggerCooldowns["prune-character-rankings-without-mythic-evidence"] ||
+                        characterRankingBackfillStatus?.processor.isRunning ||
+                        characterRankingBackfillStatus?.leaderboardRebuild.isRunning
+                      }
+                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                    >
+                      <span>Prune Non-Mythic Ranking Rows</span>
+                      {triggerLoading === "prune-character-rankings-without-mythic-evidence" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["prune-character-rankings-without-mythic-evidence"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     {characterRankingBackfillStatus && characterBackfillQueue && (
                       <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">

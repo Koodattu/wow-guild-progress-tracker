@@ -1781,6 +1781,13 @@ export interface CharacterRankingLeaderboardRebuildTriggerResponse extends Trigg
   status: CharacterRankingBackfillStatusResponse;
 }
 
+export interface CharacterRankingMythicEvidenceCleanupResponse extends TriggerResponse {
+  invalidPairs: number;
+  rankingsDeleted: number;
+  leaderboardEntriesDeleted: number;
+  backfillItemsDeleted: number;
+}
+
 export interface AdminRaidOption {
   id: number;
   name: string;

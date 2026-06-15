@@ -4,7 +4,6 @@ import { ROLE_BY_CLASS_AND_SPEC, Role } from "../config/specs";
 import Character from "../models/Character";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import CharacterRankingBackfill, { CharacterRankingBackfillStatus, ICharacterRankingBackfill } from "../models/CharacterRankingBackfill";
-import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import Raid from "../models/Raid";
 import Ranking from "../models/Ranking";
@@ -180,6 +179,13 @@ export interface CharacterRankingLeaderboardRebuildTriggerResult {
   status: CharacterRankingBackfillStatusResponse;
 }
 
+export interface CharacterRankingMythicEvidenceCleanupResult {
+  invalidPairs: number;
+  rankingsDeleted: number;
+  leaderboardEntriesDeleted: number;
+  backfillItemsDeleted: number;
+}
+
 interface ProcessOutcome {
   status: "completed" | "skipped";
   reason: string;
@@ -343,6 +349,64 @@ class CharacterRankingBackfillService {
     };
   }
 
+  async pruneRankingsWithoutMythicEvidence(): Promise<CharacterRankingMythicEvidenceCleanupResult> {
+    if (this.isRunning) {
+      throw new Error("Character ranking backfill is running; wait for it to finish before pruning rankings");
+    }
+    if (this.leaderboardRebuild.isRunning) {
+      throw new Error("Character leaderboard rebuild is running; wait for it to finish before pruning rankings");
+    }
+
+    logger.info("[CharacterRankingBackfill] Pruning rankings without stored Mythic report ranking evidence");
+
+    const invalidPairs = await this.findPairsWithoutMythicEvidence();
+    if (invalidPairs.length === 0) {
+      return {
+        invalidPairs: 0,
+        rankingsDeleted: 0,
+        leaderboardEntriesDeleted: 0,
+        backfillItemsDeleted: 0,
+      };
+    }
+
+    let rankingsDeleted = 0;
+    let leaderboardEntriesDeleted = 0;
+    let backfillItemsDeleted = 0;
+    const batchSize = 250;
+
+    for (let index = 0; index < invalidPairs.length; index += batchSize) {
+      const batch = invalidPairs.slice(index, index + batchSize);
+      const pairConditions = batch.map((pair) => ({
+        wclCanonicalCharacterId: pair.wclCanonicalCharacterId,
+        classID: pair.classID,
+        zoneId: pair.zoneId,
+      }));
+
+      const [rankingResult, leaderboardResult, backfillResult] = await Promise.all([
+        Ranking.deleteMany({ difficulty: MYTHIC_DIFFICULTY, $or: pairConditions }),
+        CharacterLeaderboard.deleteMany({ difficulty: MYTHIC_DIFFICULTY, $or: pairConditions }),
+        CharacterRankingBackfill.deleteMany({ $or: pairConditions }),
+      ]);
+
+      rankingsDeleted += rankingResult.deletedCount ?? 0;
+      leaderboardEntriesDeleted += leaderboardResult.deletedCount ?? 0;
+      backfillItemsDeleted += backfillResult.deletedCount ?? 0;
+    }
+
+    await Promise.all([cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey()), cacheService.invalidatePattern(/^characters:profile:/)]);
+
+    logger.info(
+      `[CharacterRankingBackfill] Pruned ${invalidPairs.length} invalid pairs: ${rankingsDeleted} rankings, ${leaderboardEntriesDeleted} leaderboard entries, ${backfillItemsDeleted} backfill items`,
+    );
+
+    return {
+      invalidPairs: invalidPairs.length,
+      rankingsDeleted,
+      leaderboardEntriesDeleted,
+      backfillItemsDeleted,
+    };
+  }
+
   startProcessing(): boolean {
     if (this.isRunning) {
       return false;
@@ -367,25 +431,29 @@ class CharacterRankingBackfillService {
   async enqueueMissingItems(): Promise<CharacterRankingBackfillEnqueueResult> {
     const startedAt = Date.now();
     const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
-    logger.info("[CharacterRankingBackfill] Discovering character/raid candidates from canonical raid participation");
+    logger.info("[CharacterRankingBackfill] Discovering character/raid candidates from stored Mythic report ranking appearances");
 
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } }).select("id name -_id").lean();
     const raidNameById = new Map(raids.map((raid) => [raid.id, raid.name]));
 
-    const rows = await CharacterRaidParticipation.aggregate<CandidateAggregateRow>([
+    const rows = await CharacterReportAppearance.aggregate<CandidateAggregateRow>([
       {
         $match: {
           wclCanonicalCharacterId: { $type: "number" },
-          zoneId: { $in: TRACKED_RAIDS },
+          reportZoneId: { $in: TRACKED_RAIDS },
           characterId: { $ne: null },
+          hidden: { $ne: true },
+          appearanceSource: "reportRankings",
+          rankingFightIds: { $exists: true, $ne: [] },
         },
       },
+      { $sort: { reportStartTime: 1 } },
       {
         $group: {
           _id: {
             wclCanonicalCharacterId: "$wclCanonicalCharacterId",
             classID: "$classID",
-            zoneId: "$zoneId",
+            zoneId: "$reportZoneId",
           },
           characterId: { $last: "$characterId" },
           wclCanonicalCharacterId: { $last: "$wclCanonicalCharacterId" },
@@ -393,10 +461,12 @@ class CharacterRankingBackfillService {
           realm: { $last: "$characterRealm" },
           region: { $last: "$characterRegion" },
           classID: { $last: "$classID" },
-          zoneId: { $last: "$zoneId" },
-          reportCount: { $sum: "$reportCount" },
-          firstSeenAt: { $min: "$firstSeenAt" },
-          lastSeenAt: { $max: "$lastSeenAt" },
+          zoneId: { $last: "$reportZoneId" },
+          appearanceCount: { $sum: 1 },
+          reportCodes: { $addToSet: "$reportCode" },
+          rankingFightIdLists: { $push: "$rankingFightIds" },
+          firstSeenAt: { $min: "$reportStartTime" },
+          lastSeenAt: { $max: "$reportStartTime" },
         },
       },
       {
@@ -409,9 +479,17 @@ class CharacterRankingBackfillService {
           region: 1,
           classID: 1,
           zoneId: 1,
-          appearanceCount: "$reportCount",
-          reportCount: 1,
-          mythicFightCount: { $literal: 0 },
+          appearanceCount: 1,
+          reportCount: { $size: "$reportCodes" },
+          mythicFightCount: {
+            $sum: {
+              $map: {
+                input: "$rankingFightIdLists",
+                as: "fightIds",
+                in: { $size: { $ifNull: ["$$fightIds", []] } },
+              },
+            },
+          },
           mythicKillCount: { $literal: 0 },
           firstSeenAt: 1,
           lastSeenAt: 1,
@@ -419,7 +497,7 @@ class CharacterRankingBackfillService {
       },
     ]).allowDiskUse(true);
 
-    logger.info(`[CharacterRankingBackfill] Candidate discovery found ${rows.length} canonical participation character/raid pairs (${elapsed()})`);
+    logger.info(`[CharacterRankingBackfill] Candidate discovery found ${rows.length} canonical Mythic character/raid pairs (${elapsed()})`);
 
     const observedSpecRows = await CharacterReportAppearance.aggregate<{
       _id: { wclCanonicalCharacterId: number; classID: number; zoneId: number };
@@ -432,6 +510,8 @@ class CharacterRankingBackfillService {
           wclCanonicalCharacterId: { $type: "number" },
           reportZoneId: { $in: TRACKED_RAIDS },
           hidden: { $ne: true },
+          appearanceSource: "reportRankings",
+          rankingFightIds: { $exists: true, $ne: [] },
         },
       },
       {
@@ -676,6 +756,88 @@ class CharacterRankingBackfillService {
     this.leaderboardRebuild.completedAt = new Date();
     this.leaderboardRebuild.lastMessage = `Rebuild complete: ${this.leaderboardRebuild.processedPairs} pairs, ${this.leaderboardRebuild.writtenEntries} leaderboard entries`;
     logger.info(`[CharacterRankingBackfill] ${this.leaderboardRebuild.lastMessage}`);
+  }
+
+  private async findPairsWithoutMythicEvidence(): Promise<Array<{ wclCanonicalCharacterId: number; classID: number; zoneId: number }>> {
+    const byKey = new Map<string, { wclCanonicalCharacterId: number; classID: number; zoneId: number }>();
+    const rankingPairs = await Ranking.aggregate<{ wclCanonicalCharacterId: number; classID: number; zoneId: number }>(
+      this.buildPairsWithoutMythicEvidencePipeline({
+        difficulty: MYTHIC_DIFFICULTY,
+        zoneId: { $in: TRACKED_RAIDS },
+        wclCanonicalCharacterId: { $type: "number" },
+      }),
+    ).allowDiskUse(true);
+    const leaderboardPairs = await CharacterLeaderboard.aggregate<{ wclCanonicalCharacterId: number; classID: number; zoneId: number }>(
+      this.buildPairsWithoutMythicEvidencePipeline({
+        difficulty: MYTHIC_DIFFICULTY,
+        zoneId: { $in: TRACKED_RAIDS },
+        wclCanonicalCharacterId: { $type: "number" },
+      }),
+    ).allowDiskUse(true);
+    const backfillPairs = await CharacterRankingBackfill.aggregate<{ wclCanonicalCharacterId: number; classID: number; zoneId: number }>(
+      this.buildPairsWithoutMythicEvidencePipeline({
+        zoneId: { $in: TRACKED_RAIDS },
+        wclCanonicalCharacterId: { $type: "number" },
+      }),
+    ).allowDiskUse(true);
+
+    for (const pair of [...rankingPairs, ...leaderboardPairs, ...backfillPairs]) {
+      byKey.set(`${pair.wclCanonicalCharacterId}:${pair.classID}:${pair.zoneId}`, pair);
+    }
+
+    return [...byKey.values()];
+  }
+
+  private buildPairsWithoutMythicEvidencePipeline(match: Record<string, unknown>): any[] {
+    return [
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            wclCanonicalCharacterId: "$wclCanonicalCharacterId",
+            classID: "$classID",
+            zoneId: "$zoneId",
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "characterreportappearances",
+          let: {
+            canonicalId: "$_id.wclCanonicalCharacterId",
+            classId: "$_id.classID",
+            zoneId: "$_id.zoneId",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$wclCanonicalCharacterId", "$$canonicalId"] },
+                    { $eq: ["$classID", "$$classId"] },
+                    { $eq: ["$reportZoneId", "$$zoneId"] },
+                    { $eq: ["$appearanceSource", "reportRankings"] },
+                    { $ne: ["$hidden", true] },
+                    { $gt: [{ $size: { $ifNull: ["$rankingFightIds", []] } }, 0] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "mythicEvidence",
+        },
+      },
+      { $match: { mythicEvidence: { $size: 0 } } },
+      {
+        $project: {
+          _id: 0,
+          wclCanonicalCharacterId: "$_id.wclCanonicalCharacterId",
+          classID: "$_id.classID",
+          zoneId: "$_id.zoneId",
+        },
+      },
+    ];
   }
 
   private async resetInterruptedItems(): Promise<void> {

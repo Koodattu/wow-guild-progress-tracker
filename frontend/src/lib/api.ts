@@ -81,6 +81,7 @@ import {
   CharacterRankingBackfillStatusResponse,
   CharacterRankingBackfillTriggerResponse,
   CharacterRankingLeaderboardRebuildTriggerResponse,
+  CharacterRankingMythicEvidenceCleanupResponse,
   AdminGuildDetail,
   VerifyReportsResponse,
   QueueRescanResponse,
@@ -1495,6 +1496,15 @@ export async function triggerRebuildCharacterRankingLeaderboards(): Promise<Char
     credentials: "include",
   });
   if (!response.ok) throw new Error("Failed to trigger character ranking leaderboard rebuild");
+  return response.json();
+}
+
+export async function triggerPruneCharacterRankingsWithoutMythicEvidence(): Promise<CharacterRankingMythicEvidenceCleanupResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/prune-character-rankings-without-mythic-evidence`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to prune character rankings without Mythic evidence");
   return response.json();
 }
 
