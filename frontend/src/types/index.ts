@@ -1365,10 +1365,31 @@ export type CharacterProfileResponse = {
     encounterId: number | null;
     encounterName: string | null;
     metric: string | null;
+    role: string | null;
     specName: string | null;
     rankPercent: number | null;
     score: number;
     partition: number | null;
+    updatedAt?: string;
+  }>;
+  mechanics: Array<{
+    zoneId: number;
+    raidName: string;
+    encounterId: number | null;
+    encounterName: string | null;
+    metric: string | null;
+    role: string | null;
+    specName: string | null;
+    rankPercent: number | null;
+    score: number;
+    parseScore: number | null;
+    survivalScore: number | null;
+    pulls: number;
+    deaths: number;
+    survivedPulls: number;
+    earlyDeaths: number;
+    averageDeathPercent: number | null;
+    deathDataAvailable: boolean;
     updatedAt?: string;
   }>;
 };
@@ -1672,6 +1693,54 @@ export interface RateLimitConfig {
 export interface RateLimitResponse {
   status: RateLimitStatus;
   config: RateLimitConfig;
+}
+
+export interface WarcraftLogsUserAuthStatus {
+  enabled: boolean;
+  connected: boolean;
+  redirectUri: string;
+  tokenExpiresAt?: string;
+  connectedAt?: string;
+  connectedByUsername?: string;
+  wclUserId?: number;
+  wclUserName?: string;
+  scope?: string;
+  lastRefreshAt?: string;
+  lastRefreshError?: string;
+  lastVerifiedAt?: string;
+  lastVerifiedError?: string;
+  deathEvents: {
+    pending: number;
+    failed: number;
+    archived: number;
+  };
+}
+
+export interface WarcraftLogsUserReportProbeResponse {
+  success: boolean;
+  report: {
+    code: string;
+    archiveStatus?: {
+      isArchived: boolean;
+      isAccessible: boolean;
+      archiveDate?: number | null;
+    };
+  } | null;
+  deathEventProbe: {
+    fightsTested: number;
+    eventCount: number | null;
+  } | null;
+}
+
+export interface DeathEventsResetResponse {
+  success: boolean;
+  message: string;
+  statuses: Array<"failed" | "archived">;
+  modifiedCount: number;
+  matchedCount: number;
+  guildsMatched: number;
+  queued: number;
+  skipped: number;
 }
 
 export interface ErrorBreakdown {

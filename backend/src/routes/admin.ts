@@ -28,12 +28,215 @@ import characterMechanicsService from "../services/character-mechanics.service";
 import characterRankingBackfillService from "../services/character-ranking-backfill.service";
 import characterAchievementService from "../services/character-achievement.service";
 import wclService from "../services/warcraftlogs.service";
+import wclUserAuthService from "../services/warcraftlogs-user-auth.service";
 import blizzardService from "../services/blizzard.service";
 
 const router = Router();
 
 // Apply admin middleware to all routes
 router.use(requireAdmin);
+
+function getFrontendUrl(): string {
+  return process.env.NODE_ENV === "production" ? "https://suomiwow.vaarattu.tv" : "http://localhost:3000";
+}
+
+function getAllowedDeathResetStatuses(value: unknown): Array<"failed" | "archived"> {
+  if (!Array.isArray(value)) {
+    return ["failed", "archived"];
+  }
+
+  const statuses = value.filter((status): status is "failed" | "archived" => status === "failed" || status === "archived");
+  return statuses.length > 0 ? Array.from(new Set(statuses)) : ["failed", "archived"];
+}
+
+// ============================================================
+// WARCRAFT LOGS USER OAUTH
+// ============================================================
+
+router.get("/wcl-user/status", async (req: Request, res: Response) => {
+  try {
+    const [authStatus, deathEventCounts] = await Promise.all([
+      wclUserAuthService.getStatus(),
+      Fight.aggregate([
+        { $match: { deathEventsFetchStatus: { $in: ["pending", "failed", "archived"] } } },
+        { $group: { _id: "$deathEventsFetchStatus", count: { $sum: 1 } } },
+      ]),
+    ]);
+    const countsByStatus = new Map(deathEventCounts.map((entry: { _id: string; count: number }) => [entry._id, entry.count]));
+
+    res.json({
+      ...authStatus,
+      deathEvents: {
+        pending: countsByStatus.get("pending") || 0,
+        failed: countsByStatus.get("failed") || 0,
+        archived: countsByStatus.get("archived") || 0,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching WCL user auth status:", error);
+    res.status(500).json({ error: "Failed to fetch WCL user auth status" });
+  }
+});
+
+router.get("/wcl-user/authorize", async (req: Request, res: Response) => {
+  try {
+    const adminUser = (req as any).user;
+    const url = wclUserAuthService.createAuthorizationUrl(adminUser._id.toString());
+    res.json({ url });
+  } catch (error) {
+    logger.error("Error creating WCL user authorization URL:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to create WCL user authorization URL" });
+  }
+});
+
+router.get("/wcl-user/callback", async (req: Request, res: Response) => {
+  try {
+    const adminUser = (req as any).user;
+    const { code, state } = req.query;
+    const oauthError = typeof req.query.error === "string" ? req.query.error : null;
+
+    if (oauthError) {
+      return res.redirect(`${getFrontendUrl()}/admin?wclUser=error&reason=${encodeURIComponent(oauthError)}`);
+    }
+
+    if (!code || typeof code !== "string" || !state || typeof state !== "string") {
+      return res.redirect(`${getFrontendUrl()}/admin?wclUser=error&reason=missing_code_or_state`);
+    }
+
+    if (!wclUserAuthService.validateState(state, adminUser._id.toString())) {
+      return res.redirect(`${getFrontendUrl()}/admin?wclUser=error&reason=invalid_state`);
+    }
+
+    await wclUserAuthService.exchangeCodeAndStore(code, adminUser);
+    res.redirect(`${getFrontendUrl()}/admin?wclUser=connected`);
+  } catch (error) {
+    logger.error("Error in WCL user OAuth callback:", error);
+    res.redirect(`${getFrontendUrl()}/admin?wclUser=error&reason=callback_failed`);
+  }
+});
+
+router.post("/wcl-user/verify", async (req: Request, res: Response) => {
+  try {
+    const user = await wclUserAuthService.verifyCurrentUser();
+    res.json({ success: true, user, status: await wclUserAuthService.getStatus() });
+  } catch (error) {
+    logger.error("Error verifying WCL user auth:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to verify WCL user auth" });
+  }
+});
+
+router.post("/wcl-user/probe-report", async (req: Request, res: Response) => {
+  try {
+    const reportCode = typeof req.body?.reportCode === "string" ? req.body.reportCode.trim() : "";
+    if (!/^[a-zA-Z0-9]+$/.test(reportCode)) {
+      return res.status(400).json({ error: "A valid reportCode is required" });
+    }
+
+    const archiveQuery = `
+      query($reportCode: String!) {
+        rateLimitData {
+          limitPerHour
+          pointsSpentThisHour
+          pointsResetIn
+        }
+        reportData {
+          report(code: $reportCode) {
+            code
+            archiveStatus {
+              isArchived
+              isAccessible
+              archiveDate
+            }
+          }
+        }
+      }
+    `;
+
+    const archiveData = await wclService.queryUser<any>(archiveQuery, { reportCode });
+    const storedFights = await Fight.find({ reportCode, reportEndTime: { $gt: 0 } }).select("fightId").sort({ fightId: 1 }).limit(50).lean();
+
+    let deathEventProbe: { fightsTested: number; eventCount: number | null } | null = null;
+    if (storedFights.length > 0) {
+      const deathData = await wclService.getDeathEventsForReport(
+        reportCode,
+        storedFights.map((fight) => fight.fightId),
+        { forceUserEndpoint: true },
+      );
+      const events = deathData.reportData?.report?.events?.data;
+      deathEventProbe = {
+        fightsTested: storedFights.length,
+        eventCount: Array.isArray(events) ? events.length : null,
+      };
+    }
+
+    res.json({
+      success: true,
+      report: archiveData.reportData?.report || null,
+      deathEventProbe,
+    });
+  } catch (error) {
+    logger.error("Error probing WCL user report access:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to probe WCL report access" });
+  }
+});
+
+router.delete("/wcl-user", async (req: Request, res: Response) => {
+  try {
+    await wclUserAuthService.disconnect();
+    res.json({ success: true, message: "Warcraft Logs user authorization disconnected" });
+  } catch (error) {
+    logger.error("Error disconnecting WCL user auth:", error);
+    res.status(500).json({ error: "Failed to disconnect WCL user authorization" });
+  }
+});
+
+router.post("/death-events/reset-failed-archived", async (req: Request, res: Response) => {
+  try {
+    const statuses = getAllowedDeathResetStatuses(req.body?.statuses);
+    const shouldQueue = req.body?.queue !== false;
+    const query = {
+      reportEndTime: { $gt: 0 },
+      deathEventsFetchStatus: { $in: statuses },
+    };
+
+    const guildIds = shouldQueue ? await Fight.distinct("guildId", query) : [];
+    const resetResult = await Fight.updateMany(query, {
+      $set: { deathEventsFetchStatus: "pending" },
+      $unset: {
+        deathEventsFetchFailedAt: 1,
+        deathEventsFetchError: 1,
+      },
+    });
+
+    let queued = 0;
+    let skipped = 0;
+    if (shouldQueue && guildIds.length > 0) {
+      const guilds = await Guild.find({ _id: { $in: guildIds }, initialFetchCompleted: true });
+      for (const guild of guilds) {
+        try {
+          await backgroundGuildProcessor.queueGuild(guild, 5, "rescan_deaths");
+          queued++;
+        } catch {
+          skipped++;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Reset ${resetResult.modifiedCount} death-event fight rows to pending${shouldQueue ? ` and queued ${queued} guilds` : ""}`,
+      statuses,
+      modifiedCount: resetResult.modifiedCount,
+      matchedCount: resetResult.matchedCount,
+      guildsMatched: guildIds.length,
+      queued,
+      skipped,
+    });
+  } catch (error) {
+    logger.error("Error resetting failed/archived death event fetches:", error);
+    res.status(500).json({ error: "Failed to reset failed/archived death event fetches" });
+  }
+});
 
 // ============================================================
 // USER MANAGEMENT

@@ -5,6 +5,7 @@ import { CHARACTER_ACCOUNT_SIGNAL_VERSION } from "../config/achievement-signals"
 import Character from "../models/Character";
 import CharacterAccountGroup from "../models/CharacterAccountGroup";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
+import CharacterMechanicsLeaderboard from "../models/CharacterMechanicsLeaderboard";
 import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import Guild from "../models/Guild";
@@ -19,6 +20,21 @@ import wclService from "./warcraftlogs.service";
 import mongoose from "mongoose";
 
 const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 } as const;
+
+type ProfileMetric = "dps" | "hps";
+type ProfileRole = "dps" | "healer" | "tank";
+
+type ProfileLeaderboardRow = {
+  zoneId: number;
+  type?: string;
+  encounterId?: number | null;
+  metric?: ProfileMetric | string | null;
+  role?: ProfileRole | string | null;
+  specName?: string | null;
+  classID?: number;
+  rankPercent?: number | null;
+  score?: number | null;
+};
 
 interface IWarcraftLogsAllStars {
   partition: number;
@@ -256,10 +272,31 @@ export type CharacterProfileResponse = {
     encounterId: number | null;
     encounterName: string | null;
     metric: string | null;
+    role: string | null;
     specName: string | null;
     rankPercent: number | null;
     score: number;
     partition: number | null;
+    updatedAt?: Date;
+  }>;
+  mechanics: Array<{
+    zoneId: number;
+    raidName: string;
+    encounterId: number | null;
+    encounterName: string | null;
+    metric: string | null;
+    role: string | null;
+    specName: string | null;
+    rankPercent: number | null;
+    score: number;
+    parseScore: number | null;
+    survivalScore: number | null;
+    pulls: number;
+    deaths: number;
+    survivedPulls: number;
+    earlyDeaths: number;
+    averageDeathPercent: number | null;
+    deathDataAvailable: boolean;
     updatedAt?: Date;
   }>;
 };
@@ -2043,6 +2080,119 @@ class CharacterService {
     }));
   }
 
+  private getProfileRowRole(row: ProfileLeaderboardRow): ProfileRole {
+    if (row.role === "dps" || row.role === "healer" || row.role === "tank") {
+      return row.role;
+    }
+
+    if (row.classID && row.specName) {
+      return resolveRole(row.classID, row.specName);
+    }
+
+    return "dps";
+  }
+
+  private compareProfileLeaderboardRows(a: ProfileLeaderboardRow, b: ProfileLeaderboardRow): number {
+    const rankDiff = (b.rankPercent ?? -1) - (a.rankPercent ?? -1);
+    if (rankDiff !== 0) return rankDiff;
+    return (b.score ?? 0) - (a.score ?? 0);
+  }
+
+  private selectPreferredProfileRows<T extends ProfileLeaderboardRow>(rows: T[], overallType: "allstars" | "overall"): T[] {
+    const rowsByZone = new Map<number, T[]>();
+    for (const row of rows) {
+      const zoneRows = rowsByZone.get(row.zoneId) ?? [];
+      zoneRows.push(row);
+      rowsByZone.set(row.zoneId, zoneRows);
+    }
+
+    const selectedRows: T[] = [];
+
+    for (const zoneRows of rowsByZone.values()) {
+      const bossRows = zoneRows.filter((row) => row.type !== overallType && row.encounterId !== null && row.encounterId !== undefined);
+      const evidenceRows = bossRows.length > 0 ? bossRows : zoneRows;
+      const specStats = new Map<
+        string,
+        {
+          specName: string;
+          role: ProfileRole;
+          encounters: Set<number>;
+          rows: number;
+          rankTotal: number;
+          rankCount: number;
+          metrics: Set<ProfileMetric>;
+        }
+      >();
+
+      for (const row of evidenceRows) {
+        if (!row.specName) continue;
+        const role = this.getProfileRowRole(row);
+        const key = `${row.specName}|${role}`;
+        const stat =
+          specStats.get(key) ??
+          {
+            specName: row.specName,
+            role,
+            encounters: new Set<number>(),
+            rows: 0,
+            rankTotal: 0,
+            rankCount: 0,
+            metrics: new Set<ProfileMetric>(),
+          };
+
+        if (typeof row.encounterId === "number") stat.encounters.add(row.encounterId);
+        stat.rows += 1;
+        if (row.metric === "dps" || row.metric === "hps") stat.metrics.add(row.metric);
+        if (typeof row.rankPercent === "number" && Number.isFinite(row.rankPercent)) {
+          stat.rankTotal += row.rankPercent;
+          stat.rankCount += 1;
+        }
+        specStats.set(key, stat);
+      }
+
+      const preferredSpec = Array.from(specStats.values()).sort((a, b) => {
+        const encounterDiff = b.encounters.size - a.encounters.size;
+        if (encounterDiff !== 0) return encounterDiff;
+        const rowDiff = b.rows - a.rows;
+        if (rowDiff !== 0) return rowDiff;
+        const avgA = a.rankCount > 0 ? a.rankTotal / a.rankCount : -1;
+        const avgB = b.rankCount > 0 ? b.rankTotal / b.rankCount : -1;
+        return avgB - avgA;
+      })[0];
+
+      const hasMetric = (metric: ProfileMetric, specName?: string) =>
+        zoneRows.some((row) => row.metric === metric && (!specName || row.specName === specName));
+
+      const preferredMetric: ProfileMetric =
+        preferredSpec?.role === "healer"
+          ? hasMetric("hps", preferredSpec.specName)
+            ? "hps"
+            : "dps"
+          : hasMetric("dps", preferredSpec?.specName)
+            ? "dps"
+            : "hps";
+
+      selectedRows.push(
+        ...zoneRows.filter((row) => (row.type === overallType || row.encounterId === null || row.encounterId === undefined) && row.metric === preferredMetric),
+      );
+
+      const rowsByEncounter = new Map<number, T[]>();
+      for (const row of bossRows) {
+        if (row.metric !== preferredMetric || typeof row.encounterId !== "number") continue;
+        const encounterRows = rowsByEncounter.get(row.encounterId) ?? [];
+        encounterRows.push(row);
+        rowsByEncounter.set(row.encounterId, encounterRows);
+      }
+
+      for (const encounterRows of rowsByEncounter.values()) {
+        const preferredSpecRows = preferredSpec ? encounterRows.filter((row) => row.specName === preferredSpec.specName) : [];
+        selectedRows.push([...(preferredSpecRows.length > 0 ? preferredSpecRows : encounterRows)].sort((a, b) => this.compareProfileLeaderboardRows(a, b))[0]);
+      }
+    }
+
+    return selectedRows.sort((a, b) => b.zoneId - a.zoneId || this.compareProfileLeaderboardRows(a, b));
+  }
+
   async getCharacterProfileByRealmName(realm: string, name: string, classId?: number): Promise<CharacterProfileLookupResponse | null> {
     const exactCharacterMatch = {
       characterRealm: realm,
@@ -2123,6 +2273,7 @@ class CharacterService {
 
     let timelineRows: any[] = [];
     let rankingRows: any[] = [];
+    let mechanicsRows: any[] = [];
     let character: {
       wclCanonicalCharacterId: number | null;
       name: string;
@@ -2158,7 +2309,7 @@ class CharacterService {
               zoneId: { $in: TRACKED_RAIDS },
             };
 
-      [timelineRows, rankingRows] = await Promise.all([
+      const [rawTimelineRows, rawRankingRows, rawMechanicsRows] = await Promise.all([
         CharacterRaidParticipation.find(timelineMatch).collation(CASE_INSENSITIVE_COLLATION).sort({ firstSeenAt: 1, zoneId: 1 }).lean(),
         canonicalIds.length > 0
           ? CharacterLeaderboard.find({
@@ -2169,7 +2320,19 @@ class CharacterService {
               .sort({ zoneId: -1, score: -1 })
               .lean()
           : Promise.resolve([]),
+        canonicalIds.length > 0
+          ? CharacterMechanicsLeaderboard.find({
+              wclCanonicalCharacterId: { $in: canonicalIds },
+              classID: selectedChoice.classID,
+              zoneId: { $in: TRACKED_RAIDS },
+            })
+              .sort({ zoneId: -1, score: -1 })
+              .lean()
+          : Promise.resolve([]),
       ]);
+      timelineRows = rawTimelineRows;
+      rankingRows = this.selectPreferredProfileRows(rawRankingRows as any[], "allstars");
+      mechanicsRows = this.selectPreferredProfileRows(rawMechanicsRows as any[], "overall");
     } else {
       const fallbackCharacter = await Character.findOne({
         realm,
@@ -2186,7 +2349,7 @@ class CharacterService {
       profileCanonicalIds = [fallbackCharacter.wclCanonicalCharacterId];
       profileClassId = fallbackCharacter.classID;
 
-      [timelineRows, rankingRows] = await Promise.all([
+      const [rawTimelineRows, rawRankingRows, rawMechanicsRows] = await Promise.all([
         CharacterRaidParticipation.find({ wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId, zoneId: { $in: TRACKED_RAIDS } })
           .sort({ firstSeenAt: 1, zoneId: 1 })
           .lean(),
@@ -2197,7 +2360,17 @@ class CharacterService {
         })
           .sort({ zoneId: -1, score: -1 })
           .lean(),
+        CharacterMechanicsLeaderboard.find({
+          wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId,
+          classID: fallbackCharacter.classID,
+          zoneId: { $in: TRACKED_RAIDS },
+        })
+          .sort({ zoneId: -1, score: -1 })
+          .lean(),
       ]);
+      timelineRows = rawTimelineRows;
+      rankingRows = this.selectPreferredProfileRows(rawRankingRows as any[], "allstars");
+      mechanicsRows = this.selectPreferredProfileRows(rawMechanicsRows as any[], "overall");
     }
 
     const latestTimelineRow = [...timelineRows].sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())[0];
@@ -2207,7 +2380,7 @@ class CharacterService {
       character.region = latestTimelineRow.characterRegion;
     }
 
-    const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId)])).filter(
+    const raidIds = Array.from(new Set([...timelineRows.map((row) => row.zoneId), ...rankingRows.map((row: any) => row.zoneId), ...mechanicsRows.map((row: any) => row.zoneId)])).filter(
       (id): id is number => typeof id === "number",
     );
     const raids = await Raid.find({ id: { $in: raidIds } })
@@ -2372,10 +2545,31 @@ class CharacterService {
         encounterId: row.encounterId ?? null,
         encounterName: row.encounterName || null,
         metric: row.metric ?? null,
+        role: row.role ?? null,
         specName: row.specName ?? null,
         rankPercent: row.rankPercent ?? null,
         score: row.score ?? 0,
         partition: row.partition ?? null,
+        updatedAt: row.updatedAt,
+      })),
+      mechanics: mechanicsRows.map((row: any) => ({
+        zoneId: row.zoneId,
+        raidName: raidNameById.get(row.zoneId) || `Raid ${row.zoneId}`,
+        encounterId: row.encounterId ?? null,
+        encounterName: row.encounterName || null,
+        metric: row.metric ?? null,
+        role: row.role ?? null,
+        specName: row.specName ?? null,
+        rankPercent: row.rankPercent ?? null,
+        score: row.score ?? 0,
+        parseScore: row.parseScore ?? null,
+        survivalScore: row.survivalScore ?? null,
+        pulls: row.pulls ?? 0,
+        deaths: row.deaths ?? 0,
+        survivedPulls: row.survivedPulls ?? 0,
+        earlyDeaths: row.earlyDeaths ?? 0,
+        averageDeathPercent: row.averageDeathPercent ?? null,
+        deathDataAvailable: row.deathDataAvailable === true,
         updatedAt: row.updatedAt,
       })),
     };

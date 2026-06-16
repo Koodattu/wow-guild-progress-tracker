@@ -13,7 +13,7 @@ export interface IPlayerDeath {
   deathTime: number; // Fight time when death occurred (ms, relative to fight start)
 }
 
-export type DeathEventsFetchStatus = "pending" | "fetched" | "failed";
+export type DeathEventsFetchStatus = "pending" | "fetched" | "failed" | "archived";
 
 export interface IFight extends Document {
   reportCode: string; // WCL report code this fight belongs to
@@ -87,7 +87,7 @@ const FightSchema: Schema = new Schema(
     ],
     deathEventsFetchStatus: {
       type: String,
-      enum: ["pending", "fetched", "failed"],
+      enum: ["pending", "fetched", "failed", "archived"],
       default: "pending",
       index: true,
     },

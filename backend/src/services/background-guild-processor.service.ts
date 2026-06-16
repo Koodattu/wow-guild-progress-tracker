@@ -141,6 +141,10 @@ class BackgroundGuildProcessor {
     this.deathRescanIndexesCreated = true;
   }
 
+  private isArchivedReportError(errorMessage: string): boolean {
+    return errorMessage.includes("This report has been archived") && errorMessage.includes("/user API endpoint");
+  }
+
   /**
    * Stop the background processor
    */
@@ -646,15 +650,17 @@ class BackgroundGuildProcessor {
       await this.ensureDeathRescanIndexes();
 
       const jobStartedAt = new Date();
+      const deathStatusFilters: any[] = [
+        { deathEventsFetchStatus: "pending" },
+        { deathEventsFetchStatus: { $exists: false } },
+        { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $lt: jobStartedAt } },
+        { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $exists: false } },
+      ];
+
       const pendingFightQuery = {
         guildId: guild._id,
         reportEndTime: { $gt: 0 },
-        $or: [
-          { deathEventsFetchStatus: "pending" },
-          { deathEventsFetchStatus: { $exists: false } },
-          { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $lt: jobStartedAt } },
-          { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $exists: false } },
-        ],
+        $or: deathStatusFilters,
       };
 
       const reportCodes = (await Fight.distinct("reportCode", pendingFightQuery)).filter((code): code is string => typeof code === "string" && code.length > 0);
@@ -758,6 +764,7 @@ class BackgroundGuildProcessor {
           await new Promise((resolve) => setTimeout(resolve, this.config.fetchDelay));
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const isArchivedReport = this.isArchivedReportError(errorMessage);
           guildLog.error(`[DeathRescan] Failed to process report ${reportCode}: ${errorMessage}`);
 
           await Fight.updateMany(
@@ -767,7 +774,7 @@ class BackgroundGuildProcessor {
             },
             {
               $set: {
-                deathEventsFetchStatus: "failed",
+                deathEventsFetchStatus: isArchivedReport ? "archived" : "failed",
                 deathEventsFetchFailedAt: new Date(),
                 deathEventsFetchError: errorMessage,
               },

@@ -82,6 +82,8 @@ import {
   TaskLogStats,
   AdminGuildReportsResponse,
   AdminReportRaidGroup,
+  WarcraftLogsUserAuthStatus,
+  WarcraftLogsUserReportProbeResponse,
 } from "@/types";
 
 type TabType = "overview" | "users" | "guilds" | "characters" | "pickems" | "system" | "tasks";
@@ -176,6 +178,9 @@ export default function AdminPage() {
   // System tab data (Rate Limits & Processing Queue)
   const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
   const [rateLimitConfig, setRateLimitConfig] = useState<RateLimitConfig | null>(null);
+  const [wclUserAuthStatus, setWclUserAuthStatus] = useState<WarcraftLogsUserAuthStatus | null>(null);
+  const [wclProbeReportCode, setWclProbeReportCode] = useState("");
+  const [wclProbeResult, setWclProbeResult] = useState<WarcraftLogsUserReportProbeResponse | null>(null);
   const [processorStatus, setProcessorStatus] = useState<ProcessorStatus | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStatistics | null>(null);
   const [characterRankingBackfillStatus, setCharacterRankingBackfillStatus] = useState<CharacterRankingBackfillStatusResponse | null>(null);
@@ -304,6 +309,23 @@ export default function AdminPage() {
     }
   }, [user, authLoading, router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const wclUserResult = params.get("wclUser");
+    if (!wclUserResult) return;
+
+    setActiveTab("system");
+    if (wclUserResult === "connected") {
+      setTriggerMessage({ type: "success", text: "Warcraft Logs user authorization connected" });
+    } else {
+      setTriggerMessage({ type: "error", text: `Warcraft Logs authorization failed: ${params.get("reason") || "unknown error"}` });
+    }
+    setTimeout(() => setTriggerMessage(null), 7000);
+    router.replace("/admin");
+  }, [router]);
+
   // Fetch data based on active tab
   useEffect(() => {
     if (!user?.isAdmin) return;
@@ -371,8 +393,9 @@ export default function AdminPage() {
           }
 
           case "system": {
-            const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
+            const [rateLimitData, wclUserAuthData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
               api.getAdminRateLimitStatus(),
+              api.getAdminWarcraftLogsUserAuthStatus(),
               api.getAdminProcessingQueueStats(),
               api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
               api.getAdminProcessingQueueErrors(1, 50),
@@ -381,6 +404,7 @@ export default function AdminPage() {
             ]);
             setRateLimitStatus(rateLimitData.status);
             setRateLimitConfig(rateLimitData.config);
+            setWclUserAuthStatus(wclUserAuthData);
             setProcessorStatus(queueStatsData.processor);
             setQueueStats(queueStatsData.queue);
             setQueueItems(queueData.items);
@@ -442,8 +466,9 @@ export default function AdminPage() {
     if (activeTab === "system" && user?.isAdmin) {
       const interval = setInterval(async () => {
         try {
-          const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
+          const [rateLimitData, wclUserAuthData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
             api.getAdminRateLimitStatus(),
+            api.getAdminWarcraftLogsUserAuthStatus(),
             api.getAdminProcessingQueueStats(),
             api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
             api.getAdminProcessingQueueErrors(1, 50),
@@ -452,6 +477,7 @@ export default function AdminPage() {
           ]);
           setRateLimitStatus(rateLimitData.status);
           setRateLimitConfig(rateLimitData.config);
+          setWclUserAuthStatus(wclUserAuthData);
           setProcessorStatus(queueStatsData.processor);
           setQueueStats(queueStatsData.queue);
           setQueueItems(queueData.items);
@@ -581,6 +607,136 @@ export default function AdminPage() {
       setTriggerMessage({
         type: "error",
         text: error instanceof Error ? error.message : "Failed to trigger action",
+      });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const refreshWclUserAuthStatus = async () => {
+    const status = await api.getAdminWarcraftLogsUserAuthStatus();
+    setWclUserAuthStatus(status);
+    return status;
+  };
+
+  const refreshSystemQueueState = async () => {
+    const [queueStatsData, queueData, errorsData] = await Promise.all([
+      api.getAdminProcessingQueueStats(),
+      api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
+      api.getAdminProcessingQueueErrors(1, 50),
+    ]);
+    setProcessorStatus(queueStatsData.processor);
+    setQueueStats(queueStatsData.queue);
+    setQueueItems(queueData.items);
+    setQueueTotalPages(queueData.pagination.totalPages);
+    setErrorItems(errorsData.items);
+  };
+
+  const handleConnectWclUser = async () => {
+    setTriggerLoading("wcl-user-connect");
+    setTriggerMessage(null);
+    try {
+      const { url } = await api.getAdminWarcraftLogsUserAuthUrl();
+      window.location.href = url;
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to start Warcraft Logs authorization",
+      });
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleVerifyWclUser = async () => {
+    setTriggerLoading("wcl-user-verify");
+    setTriggerMessage(null);
+    try {
+      const result = await api.verifyAdminWarcraftLogsUserAuth();
+      setWclUserAuthStatus(result.status);
+      setTriggerMessage({ type: "success", text: `Warcraft Logs user verified: ${result.user.name}` });
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to verify Warcraft Logs user",
+      });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleProbeWclReport = async () => {
+    const reportCode = wclProbeReportCode.trim();
+    if (!reportCode) {
+      setTriggerMessage({ type: "error", text: "Enter a report code to probe" });
+      return;
+    }
+
+    setTriggerLoading("wcl-user-probe");
+    setTriggerMessage(null);
+    setWclProbeResult(null);
+    try {
+      const result = await api.probeAdminWarcraftLogsUserReport(reportCode);
+      setWclProbeResult(result);
+      const archiveStatus = result.report?.archiveStatus;
+      setTriggerMessage({
+        type: "success",
+        text: archiveStatus
+          ? `Report probe complete: archived=${archiveStatus.isArchived ? "yes" : "no"}, accessible=${archiveStatus.isAccessible ? "yes" : "no"}`
+          : "Report probe complete",
+      });
+      await refreshWclUserAuthStatus();
+      setTimeout(() => setTriggerMessage(null), 7000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to probe report access",
+      });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleDisconnectWclUser = async () => {
+    if (!confirm("Disconnect the stored Warcraft Logs user authorization? Archived report retries will stop working until you connect again.")) {
+      return;
+    }
+
+    setTriggerLoading("wcl-user-disconnect");
+    setTriggerMessage(null);
+    try {
+      const result = await api.disconnectAdminWarcraftLogsUserAuth();
+      await refreshWclUserAuthStatus();
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to disconnect Warcraft Logs user authorization",
+      });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleResetFailedArchivedDeaths = async () => {
+    const failed = wclUserAuthStatus?.deathEvents.failed || 0;
+    const archived = wclUserAuthStatus?.deathEvents.archived || 0;
+    if (!confirm(`Reset ${failed} failed and ${archived} archived death-event fight rows to pending, then queue affected guilds for death rescan?`)) {
+      return;
+    }
+
+    setTriggerLoading("death-events-reset");
+    setTriggerMessage(null);
+    try {
+      const result = await api.resetAdminFailedArchivedDeathEvents(["failed", "archived"], true);
+      setTriggerMessage({ type: "success", text: result.message });
+      await Promise.all([refreshWclUserAuthStatus(), refreshSystemQueueState()]);
+      setTimeout(() => setTriggerMessage(null), 7000);
+    } catch (error) {
+      setTriggerMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to reset death event fetches",
       });
     } finally {
       setTriggerLoading(null);
@@ -2979,6 +3135,132 @@ export default function AdminPage() {
                     <span className="mr-4">Warning: {rateLimitConfig.warningThreshold}%</span>
                     <span>Pause at: {rateLimitConfig.pauseThreshold}%</span>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Warcraft Logs User Authorization */}
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span>🔐</span> WarcraftLogs User Access
+              </h2>
+              {wclUserAuthStatus && (
+                <div className="bg-gray-800 rounded-lg p-6 space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">OAuth</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-block w-3 h-3 rounded-full ${wclUserAuthStatus.enabled ? "bg-green-500" : "bg-red-500"}`} />
+                        <span className={`text-lg font-bold ${wclUserAuthStatus.enabled ? "text-green-400" : "text-red-400"}`}>
+                          {wclUserAuthStatus.enabled ? "Configured" : "Missing"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500 break-all">{wclUserAuthStatus.redirectUri}</p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Connected User</h4>
+                      <p className={`text-lg font-bold mt-1 ${wclUserAuthStatus.connected ? "text-white" : "text-amber-400"}`}>
+                        {wclUserAuthStatus.wclUserName || (wclUserAuthStatus.connected ? "Connected" : "Not connected")}
+                      </p>
+                      {wclUserAuthStatus.connectedByUsername && <p className="text-sm text-gray-500">by {wclUserAuthStatus.connectedByUsername}</p>}
+                      {wclUserAuthStatus.tokenExpiresAt && <p className="text-sm text-gray-500">token: {formatDate(wclUserAuthStatus.tokenExpiresAt)}</p>}
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Death Fetch Gaps</h4>
+                      <p className="text-sm text-gray-300 mt-2">
+                        <span className="text-amber-300 font-semibold">{wclUserAuthStatus.deathEvents.pending}</span> pending
+                      </p>
+                      <p className="text-sm text-gray-300">
+                        <span className="text-red-300 font-semibold">{wclUserAuthStatus.deathEvents.failed}</span> failed
+                      </p>
+                      <p className="text-sm text-gray-300">
+                        <span className="text-purple-300 font-semibold">{wclUserAuthStatus.deathEvents.archived}</span> archived
+                      </p>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-gray-400 text-sm">Verification</h4>
+                      <p className="text-sm text-gray-300 mt-2">{wclUserAuthStatus.lastVerifiedAt ? formatDate(wclUserAuthStatus.lastVerifiedAt) : "Not verified"}</p>
+                      {wclUserAuthStatus.lastVerifiedError && <p className="mt-1 text-xs text-red-300" title={wclUserAuthStatus.lastVerifiedError}>{wclUserAuthStatus.lastVerifiedError}</p>}
+                      {wclUserAuthStatus.lastRefreshError && <p className="mt-1 text-xs text-red-300" title={wclUserAuthStatus.lastRefreshError}>{wclUserAuthStatus.lastRefreshError}</p>}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleConnectWclUser}
+                      disabled={!wclUserAuthStatus.enabled || triggerLoading === "wcl-user-connect"}
+                      className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {wclUserAuthStatus.connected ? "Reconnect WCL User" : "Connect WCL User"}
+                    </button>
+                    <button
+                      onClick={handleVerifyWclUser}
+                      disabled={!wclUserAuthStatus.connected || triggerLoading === "wcl-user-verify"}
+                      className="px-3 py-2 bg-gray-700 text-gray-200 text-sm rounded hover:bg-gray-600 disabled:opacity-50"
+                    >
+                      Verify User
+                    </button>
+                    <button
+                      onClick={handleResetFailedArchivedDeaths}
+                      disabled={triggerLoading === "death-events-reset" || (wclUserAuthStatus.deathEvents.failed === 0 && wclUserAuthStatus.deathEvents.archived === 0)}
+                      className="px-3 py-2 bg-amber-600 text-white text-sm rounded hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      Reset Failed/Archived Deaths
+                    </button>
+                    <button
+                      onClick={handleDisconnectWclUser}
+                      disabled={!wclUserAuthStatus.connected || triggerLoading === "wcl-user-disconnect"}
+                      className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <label className="flex-1">
+                      <span className="block text-sm text-gray-400 mb-1">Archived report probe</span>
+                      <input
+                        value={wclProbeReportCode}
+                        onChange={(event) => setWclProbeReportCode(event.target.value)}
+                        placeholder="Report code"
+                        className="w-full bg-gray-700 text-white rounded-lg px-3 py-2"
+                      />
+                    </label>
+                    <button
+                      onClick={handleProbeWclReport}
+                      disabled={!wclUserAuthStatus.connected || triggerLoading === "wcl-user-probe"}
+                      className="px-3 py-2 bg-gray-700 text-gray-200 text-sm rounded hover:bg-gray-600 disabled:opacity-50"
+                    >
+                      Probe Report
+                    </button>
+                  </div>
+
+                  {wclProbeResult && (
+                    <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                          <span className="block text-gray-500">Report</span>
+                          <span className="font-semibold text-white">{wclProbeResult.report?.code || "Unknown"}</span>
+                        </div>
+                        <div>
+                          <span className="block text-gray-500">Archived</span>
+                          <span className="font-semibold text-white">{wclProbeResult.report?.archiveStatus?.isArchived ? "Yes" : "No"}</span>
+                        </div>
+                        <div>
+                          <span className="block text-gray-500">Accessible</span>
+                          <span className={`font-semibold ${wclProbeResult.report?.archiveStatus?.isAccessible ? "text-green-300" : "text-red-300"}`}>
+                            {wclProbeResult.report?.archiveStatus?.isAccessible ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-gray-500">Death Events</span>
+                          <span className="font-semibold text-white">
+                            {wclProbeResult.deathEventProbe ? `${wclProbeResult.deathEventProbe.eventCount ?? "?"} from ${wclProbeResult.deathEventProbe.fightsTested} fights` : "No stored fights"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

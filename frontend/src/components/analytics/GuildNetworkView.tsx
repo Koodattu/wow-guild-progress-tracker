@@ -52,7 +52,7 @@ export default function GuildNetworkView() {
   useEffect(() => {
     let active = true;
 
-    fetch("/guild-network-poc/index.html", { cache: "force-cache" })
+    fetch("/guild-network-poc/index.html", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`Failed to load network shell (${response.status})`);
         return response.text();

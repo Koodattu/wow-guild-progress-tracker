@@ -5704,13 +5704,15 @@ class GuildService {
     logger.info("[RescanDeaths] Queueing all guilds for death events rescan");
     await this.ensureDeathBackfillIndexes();
 
+    const deathStatusFilters: any[] = [
+      { deathEventsFetchStatus: "pending" },
+      { deathEventsFetchStatus: { $exists: false } },
+      { deathEventsFetchStatus: "failed" },
+    ];
+
     const pendingGuildIds = await Fight.distinct("guildId", {
       reportEndTime: { $gt: 0 },
-      $or: [
-        { deathEventsFetchStatus: "pending" },
-        { deathEventsFetchStatus: { $exists: false } },
-        { deathEventsFetchStatus: "failed" },
-      ],
+      $or: deathStatusFilters,
     });
     const guilds = await Guild.find({ _id: { $in: pendingGuildIds }, initialFetchCompleted: true });
     let queued = 0;

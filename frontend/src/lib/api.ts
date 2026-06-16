@@ -72,6 +72,9 @@ import {
   CharacterRaidReportsResponse,
   RateLimitResponse,
   RateLimitStatus,
+  WarcraftLogsUserAuthStatus,
+  WarcraftLogsUserReportProbeResponse,
+  DeathEventsResetResponse,
   ProcessingQueueStatsResponse,
   ProcessingQueueResponse,
   ProcessingQueueErrorsResponse,
@@ -1207,6 +1210,67 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to toggle rate limit pause");
     return response.json();
+  },
+
+  async getAdminWarcraftLogsUserAuthStatus(): Promise<WarcraftLogsUserAuthStatus> {
+    const response = await fetch(`${API_URL}/api/admin/wcl-user/status`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch WCL user auth status");
+    return response.json();
+  },
+
+  async getAdminWarcraftLogsUserAuthUrl(): Promise<{ url: string }> {
+    const response = await fetch(`${API_URL}/api/admin/wcl-user/authorize`, {
+      credentials: "include",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to create WCL user authorization URL");
+    return data;
+  },
+
+  async verifyAdminWarcraftLogsUserAuth(): Promise<{ success: boolean; user: { id: number; name: string }; status: WarcraftLogsUserAuthStatus }> {
+    const response = await fetch(`${API_URL}/api/admin/wcl-user/verify`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to verify WCL user authorization");
+    return data;
+  },
+
+  async probeAdminWarcraftLogsUserReport(reportCode: string): Promise<WarcraftLogsUserReportProbeResponse> {
+    const response = await fetch(`${API_URL}/api/admin/wcl-user/probe-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ reportCode }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to probe WCL report access");
+    return data;
+  },
+
+  async disconnectAdminWarcraftLogsUserAuth(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${API_URL}/api/admin/wcl-user`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to disconnect WCL user authorization");
+    return data;
+  },
+
+  async resetAdminFailedArchivedDeathEvents(statuses: Array<"failed" | "archived"> = ["failed", "archived"], queue = true): Promise<DeathEventsResetResponse> {
+    const response = await fetch(`${API_URL}/api/admin/death-events/reset-failed-archived`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ statuses, queue }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Failed to reset death event fetches");
+    return data;
   },
 
   async getAdminProcessingQueueStats(): Promise<ProcessingQueueStatsResponse> {

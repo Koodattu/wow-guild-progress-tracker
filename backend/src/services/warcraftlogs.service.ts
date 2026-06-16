@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import logger from "../utils/logger";
 import { GUILDS_DEV, GUILDS_PROD, TrackedGuild } from "../config/guilds";
 import rateLimitService, { WCLRateLimitData } from "./rate-limit.service";
+import wclUserAuthService from "./warcraftlogs-user-auth.service";
 
 interface WCLAuthResponse {
   access_token: string;
@@ -94,12 +95,30 @@ class WarcraftLogsService {
   }
 
   async query<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false, serverErrorRetries: number = 0): Promise<T> {
+    return this.queryEndpoint<T>("client", query, variables, retryOnGatewayTimeout, serverErrorRetries);
+  }
+
+  async queryUser<T>(query: string, variables?: any, retryOnGatewayTimeout: boolean = false, serverErrorRetries: number = 0): Promise<T> {
+    return this.queryEndpoint<T>("user", query, variables, retryOnGatewayTimeout, serverErrorRetries);
+  }
+
+  async hasUserAuthConnected(): Promise<boolean> {
+    return wclUserAuthService.hasConnectedUser();
+  }
+
+  private async queryEndpoint<T>(
+    endpoint: "client" | "user",
+    query: string,
+    variables?: any,
+    retryOnGatewayTimeout: boolean = false,
+    serverErrorRetries: number = 0,
+  ): Promise<T> {
     // Add delay between requests to avoid bursting
     await this.requestDelay();
 
-    const token = await this.authenticate();
+    const token = endpoint === "client" ? await this.authenticate() : await wclUserAuthService.getAccessToken();
 
-    const response = await fetch("https://www.warcraftlogs.com/api/v2/client", {
+    const response = await fetch(`https://www.warcraftlogs.com/api/v2/${endpoint}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -114,21 +133,21 @@ class WarcraftLogsService {
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default to 60s if not specified
       logger.warn(`⚠️  Rate limited by WCL API! Waiting ${Math.floor(waitTime / 1000)}s before retry...`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
+      return this.queryEndpoint<T>(endpoint, query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
     }
 
     // Handle gateway timeouts with infinite retry (only for initial fetch)
     if (retryOnGatewayTimeout && (response.status === 504 || response.statusText === "Gateway Time-out")) {
       logger.warn(`⚠️  Gateway timeout from WCL API! Retrying in 15 seconds...`);
       await new Promise((resolve) => setTimeout(resolve, 15000)); // Wait 15 seconds
-      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
+      return this.queryEndpoint<T>(endpoint, query, variables, retryOnGatewayTimeout, serverErrorRetries); // Retry the request
     }
 
     if (response.status >= 500 && response.status < 600 && serverErrorRetries > 0) {
       const waitTime = (4 - serverErrorRetries) * 2000;
       logger.warn(`⚠️  WCL API ${response.status} ${response.statusText}; retrying in ${waitTime}ms (${serverErrorRetries} retries left)`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return this.query<T>(query, variables, retryOnGatewayTimeout, serverErrorRetries - 1);
+      return this.queryEndpoint<T>(endpoint, query, variables, retryOnGatewayTimeout, serverErrorRetries - 1);
     }
 
     if (!response.ok) {
@@ -137,16 +156,21 @@ class WarcraftLogsService {
 
     const result = (await response.json()) as any;
 
-    if (result.errors) {
-      throw new Error(`WCL GraphQL error: ${JSON.stringify(result.errors)}`);
-    }
-
     // Update global rate limit tracking from response
     if (result.data?.rateLimitData) {
       this.updateRateLimitFromResponse(result.data.rateLimitData);
     }
 
+    if (result.errors) {
+      throw new Error(`WCL GraphQL error: ${JSON.stringify(result.errors)}`);
+    }
+
     return result.data as T;
+  }
+
+  private isArchivedReportError(error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return errorMessage.includes("This report has been archived") && errorMessage.includes("/user API endpoint");
   }
 
   // Get guild reports without zone filter to see all available reports
@@ -1059,11 +1083,10 @@ class WarcraftLogsService {
    * Fetch death events for multiple fights in a report (more efficient)
    * Returns all deaths grouped by fight ID
    */
-  async getDeathEventsForReport(reportCode: string, fightIds: number[]) {
+  async getDeathEventsForReport(reportCode: string, fightIds: number[], options: { forceUserEndpoint?: boolean } = {}) {
     // Use maximum API limit to fetch all deaths
     const queryLimit = 10000;
 
-    logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, ${fightIds.length} fights)`);
     const query = `
       query($reportCode: String!, $fightIds: [Int]!, $limit: Int!) {
         rateLimitData {
@@ -1101,7 +1124,32 @@ class WarcraftLogsService {
       limit: queryLimit,
     };
 
-    return this.query<any>(query, variables);
+    if (options.forceUserEndpoint) {
+      logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/user (forced, report: ${reportCode}, ${fightIds.length} fights)`);
+      return this.queryUser<any>(query, variables);
+    }
+
+    try {
+      logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, ${fightIds.length} fights)`);
+      return await this.query<any>(query, variables);
+    } catch (error) {
+      if (!this.isArchivedReportError(error)) {
+        throw error;
+      }
+
+      if (!(await this.hasUserAuthConnected())) {
+        throw error;
+      }
+
+      try {
+        logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/user (archived retry, report: ${reportCode}, ${fightIds.length} fights)`);
+        return await this.queryUser<any>(query, variables);
+      } catch (userError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const userMessage = userError instanceof Error ? userError.message : String(userError);
+        throw new Error(`${originalMessage}; WCL /user retry failed: ${userMessage}`);
+      }
+    }
   }
 
   /**
