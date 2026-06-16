@@ -25,6 +25,7 @@ import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
 import characterService from "../services/character.service";
 import characterRankingBackfillService from "../services/character-ranking-backfill.service";
+import characterAchievementService from "../services/character-achievement.service";
 import wclService from "../services/warcraftlogs.service";
 import blizzardService from "../services/blizzard.service";
 
@@ -1706,6 +1707,20 @@ router.get("/character-ranking-backfill/status", async (req: Request, res: Respo
 });
 
 // ============================================================
+// CHARACTER ACHIEVEMENT ACCOUNT MATCHING
+// ============================================================
+
+router.get("/character-achievement-backfill/status", async (req: Request, res: Response) => {
+  try {
+    const status = await characterAchievementService.getStatus();
+    res.json(status);
+  } catch (error) {
+    logger.error("Error fetching character achievement backfill status:", error);
+    res.status(500).json({ error: "Failed to fetch character achievement backfill status" });
+  }
+});
+
+// ============================================================
 // GUILD PROCESSING QUEUE
 // ============================================================
 
@@ -2361,6 +2376,38 @@ router.post("/trigger/backfill-character-rankings", async (req: Request, res: Re
   } catch (error) {
     logger.error("Error triggering character ranking backfill:", error);
     res.status(500).json({ error: "Failed to trigger character ranking backfill" });
+  }
+});
+
+// Queue and start Blizzard achievement fingerprint backfill for account matching
+router.post("/trigger/backfill-character-achievements", async (req: Request, res: Response) => {
+  try {
+    const refreshCandidates = req.body?.refreshCandidates === true;
+    const result = await characterAchievementService.triggerBackfill({ refreshCandidates });
+    const queueMessage = `${result.enqueue.queued} new character achievement item(s) queued, ${result.enqueue.existing} already tracked, ${result.enqueue.skippedWithFingerprint} already fingerprinted`;
+    res.json({
+      success: true,
+      message: result.started ? `Character achievement backfill started: ${queueMessage}` : `Character achievement backfill is already running: ${queueMessage}`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error triggering character achievement backfill:", error);
+    res.status(500).json({ error: "Failed to trigger character achievement backfill" });
+  }
+});
+
+// Rebuild character account groups from stored high-confidence achievement matches (no Blizzard API calls)
+router.post("/trigger/rebuild-character-account-groups", async (req: Request, res: Response) => {
+  try {
+    const result = await characterAchievementService.rebuildAccountGroups();
+    res.json({
+      success: true,
+      message: `Character account groups rebuilt: ${result.groups} groups, ${result.matchedCharacters} characters, ${result.highConfidenceEdges} high-confidence edges`,
+      ...result,
+    });
+  } catch (error) {
+    logger.error("Error rebuilding character account groups:", error);
+    res.status(500).json({ error: "Failed to rebuild character account groups" });
   }
 });
 

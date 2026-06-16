@@ -11,6 +11,7 @@ import cacheService from "./cache.service";
 import cacheWarmerService from "./cache-warmer.service";
 import taskTracker from "./task-tracker.service";
 import fightVodService from "./fight-vod.service";
+import characterAchievementService from "./character-achievement.service";
 import { CURRENT_RAID_IDS } from "../config/guilds";
 import logger from "../utils/logger";
 
@@ -106,6 +107,7 @@ class UpdateScheduler {
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
   private isQueueingReportCharacterBackfill: boolean = false;
+  private isQueueingCharacterAchievementBackfill: boolean = false;
   private isUpdatingCharacterRaidParticipations: boolean = false;
   private isRebuildingGuildNetworkSnapshot: boolean = false;
   private isUpdatingRaidAnalytics: boolean = false;
@@ -403,6 +405,21 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Queue character achievement fingerprints for account matching (at 1:30 AM Finnish time)
+    cron.schedule(
+      "30 1 * * *",
+      async () => {
+        if (this.isQueueingCharacterAchievementBackfill) {
+          logger.info("[Nightly/CharacterAchievementBackfill] Previous queueing run still in progress, skipping...");
+          return;
+        }
+        await this.queueCharacterAchievementBackfill();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Update all guilds' world ranks for current raid (at 4 AM Finnish time)
     // WCL sometimes updates world ranks with a delay, so this ensures we catch those updates
     cron.schedule(
@@ -598,6 +615,7 @@ class UpdateScheduler {
     logger.info("  - Fight VOD resolver: every 30 minutes");
     logger.info("  - Nightly jobs (Europe/Helsinki):");
     logger.info("    * Report character backfill queue: daily at 01:00");
+    logger.info("    * Character achievement account matching backfill: daily at 01:30");
     logger.info("    * Fight VOD cleanup: daily at 02:30");
     logger.info("    * Refetch recent reports: daily at 03:00");
     logger.info("    * World ranks update: daily at 04:00");
@@ -706,6 +724,30 @@ class UpdateScheduler {
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isQueueingReportCharacterBackfill = false;
+    }
+  }
+
+  async queueCharacterAchievementBackfill(): Promise<void> {
+    this.isQueueingCharacterAchievementBackfill = true;
+    const taskId = await taskTracker.start("Queue Character Achievement Backfill");
+
+    try {
+      const result = await characterAchievementService.triggerBackfill();
+      logger.info(
+        `[Nightly/CharacterAchievementBackfill] Queued ${result.enqueue.queued} new character(s), updated ${result.enqueue.updated}, existing ${result.enqueue.existing}, processorStarted=${result.started}`,
+      );
+      await taskTracker.complete(taskId, {
+        queued: result.enqueue.queued,
+        updated: result.enqueue.updated,
+        existing: result.enqueue.existing,
+        skippedWithFingerprint: result.enqueue.skippedWithFingerprint,
+        processorStarted: result.started,
+      });
+    } catch (error) {
+      logger.error("[Nightly/CharacterAchievementBackfill] Error queueing jobs:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isQueueingCharacterAchievementBackfill = false;
     }
   }
 

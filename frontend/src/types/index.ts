@@ -1307,6 +1307,24 @@ export type CharacterProfileResponse = {
       lastSeenAt: string;
       reportCount: number;
     }>;
+    account?: {
+      groupId: string;
+      signalVersion: string;
+      generatedAt: string;
+      minScore: number;
+      maxScore: number;
+      avgScore: number;
+      characters: Array<{
+        characterId: string;
+        name: string;
+        realm: string;
+        region: string;
+        classID: number;
+        guildName?: string | null;
+        guildRealm?: string | null;
+        lastMythicSeenAt?: string | null;
+      }>;
+    };
   };
   raidTimeline: Array<{
     zoneId: number;
@@ -1826,6 +1844,84 @@ export interface CharacterRankingMythicEvidenceCleanupResponse extends TriggerRe
   rankingsDeleted: number;
   leaderboardEntriesDeleted: number;
   backfillItemsDeleted: number;
+}
+
+export type CharacterAchievementBackfillItemStatus = "pending" | "in_progress" | "completed" | "not_found" | "skipped" | "failed";
+
+export interface CharacterAchievementBackfillItem {
+  id: string;
+  characterId: string;
+  wclCanonicalCharacterId: number;
+  name: string;
+  realm: string;
+  region: string;
+  classID: number;
+  signalVersion: string;
+  status: CharacterAchievementBackfillItemStatus;
+  attempts: number;
+  maxAttempts: number;
+  httpStatus?: number | null;
+  errorCode?: string | null;
+  isPermanentError: boolean;
+  completionReason?: string | null;
+  lastError?: string | null;
+  lastErrorAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  nextAttemptAt: string;
+  lastActivityAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CharacterAchievementBackfillStatusResponse {
+  processor: {
+    isRunning: boolean;
+    isWaitingForRateLimit: boolean;
+    currentItem: CharacterAchievementBackfillItem | null;
+    lastMessage: string | null;
+    startedAt: string | null;
+  };
+  queue: {
+    pending: number;
+    inProgress: number;
+    completed: number;
+    notFound: number;
+    skipped: number;
+    failed: number;
+    total: number;
+    terminal: number;
+  };
+  fingerprints: number;
+  tokens: number;
+  matches: {
+    high: number;
+    medium: number;
+    total: number;
+  };
+  groups: number;
+  signalVersion: string;
+  signalAchievementCount: number;
+  recentFailures: CharacterAchievementBackfillItem[];
+  updatedAt: string;
+}
+
+export interface CharacterAchievementBackfillTriggerResponse extends TriggerResponse {
+  started: boolean;
+  enqueue: {
+    candidates: number;
+    queued: number;
+    existing: number;
+    updated: number;
+    skippedWithFingerprint: number;
+  };
+  status: CharacterAchievementBackfillStatusResponse;
+}
+
+export interface CharacterAccountGroupRebuildResponse extends TriggerResponse {
+  groups: number;
+  matchedCharacters: number;
+  highConfidenceEdges: number;
 }
 
 export interface AdminRaidOption {

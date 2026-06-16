@@ -84,6 +84,9 @@ import {
   CharacterRankingBackfillTriggerResponse,
   CharacterRankingLeaderboardRebuildTriggerResponse,
   CharacterRankingMythicEvidenceCleanupResponse,
+  CharacterAchievementBackfillStatusResponse,
+  CharacterAchievementBackfillTriggerResponse,
+  CharacterAccountGroupRebuildResponse,
   AdminGuildDetail,
   VerifyReportsResponse,
   QueueRescanResponse,
@@ -1195,6 +1198,14 @@ export const api = {
     return response.json();
   },
 
+  async getAdminCharacterAchievementBackfillStatus(): Promise<CharacterAchievementBackfillStatusResponse> {
+    const response = await fetch(`${API_URL}/api/admin/character-achievement-backfill/status`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to fetch character achievement backfill status");
+    return response.json();
+  },
+
   async getAdminProcessingQueue(page: number = 1, limit: number = 20, status?: ProcessingStatus): Promise<ProcessingQueueResponse> {
     const params = new URLSearchParams({
       page: String(page),
@@ -1519,6 +1530,26 @@ export async function triggerBackfillCharacterRankings(refreshCandidates = false
     body: JSON.stringify({ refreshCandidates }),
   });
   if (!response.ok) throw new Error("Failed to trigger character ranking backfill");
+  return response.json();
+}
+
+export async function triggerBackfillCharacterAchievements(refreshCandidates = false): Promise<CharacterAchievementBackfillTriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/backfill-character-achievements`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshCandidates }),
+  });
+  if (!response.ok) throw new Error("Failed to trigger character achievement backfill");
+  return response.json();
+}
+
+export async function triggerRebuildCharacterAccountGroups(): Promise<CharacterAccountGroupRebuildResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-character-account-groups`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to rebuild character account groups");
   return response.json();
 }
 

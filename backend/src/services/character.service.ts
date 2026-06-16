@@ -1,7 +1,9 @@
 import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
 import { CLASSES } from "../config/classes";
 import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
+import { CHARACTER_ACCOUNT_SIGNAL_VERSION } from "../config/achievement-signals";
 import Character from "../models/Character";
+import CharacterAccountGroup from "../models/CharacterAccountGroup";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import CharacterReportAppearance from "../models/CharacterReportAppearance";
 import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
@@ -216,6 +218,24 @@ export type CharacterProfileResponse = {
       lastSeenAt: Date;
       reportCount: number;
     }>;
+    account?: {
+      groupId: string;
+      signalVersion: string;
+      generatedAt: Date;
+      minScore: number;
+      maxScore: number;
+      avgScore: number;
+      characters: Array<{
+        characterId: string;
+        name: string;
+        realm: string;
+        region: string;
+        classID: number;
+        guildName?: string | null;
+        guildRealm?: string | null;
+        lastMythicSeenAt?: Date | null;
+      }>;
+    };
   };
   raidTimeline: Array<{
     zoneId: number;
@@ -2265,6 +2285,22 @@ class CharacterService {
       { $sort: { lastSeenAt: -1, name: 1, realm: 1 } },
     ]).collation(CASE_INSENSITIVE_COLLATION);
 
+    const profileCharacterDoc =
+      profileCanonicalIds.length > 0 && profileClassId
+        ? await Character.findOne({
+            wclCanonicalCharacterId: { $in: profileCanonicalIds },
+            classID: profileClassId,
+          })
+            .select("_id")
+            .lean<{ _id: mongoose.Types.ObjectId }>()
+        : null;
+    const accountGroup = profileCharacterDoc
+      ? await CharacterAccountGroup.findOne({
+          signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
+          characterIds: profileCharacterDoc._id,
+        }).lean()
+      : null;
+
     return {
       type: "profile",
       character: {
@@ -2282,6 +2318,26 @@ class CharacterService {
           lastSeenAt: entry.lastSeenAt,
         })),
         nameHistory,
+        account: accountGroup
+          ? {
+              groupId: accountGroup._id.toString(),
+              signalVersion: accountGroup.signalVersion,
+              generatedAt: accountGroup.generatedAt,
+              minScore: accountGroup.minScore,
+              maxScore: accountGroup.maxScore,
+              avgScore: accountGroup.avgScore,
+              characters: accountGroup.members.map((member) => ({
+                characterId: member.characterId.toString(),
+                name: member.name,
+                realm: member.realm,
+                region: member.region,
+                classID: member.classID,
+                guildName: member.guildName ?? null,
+                guildRealm: member.guildRealm ?? null,
+                lastMythicSeenAt: member.lastMythicSeenAt ?? null,
+              })),
+            }
+          : undefined,
       },
       raidTimeline: timelineRows.map((row) => ({
         zoneId: row.zoneId,

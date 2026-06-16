@@ -25,6 +25,8 @@ import {
   triggerRescanCharacters,
   triggerBackfillReportCharacters,
   triggerBackfillCharacterRankings,
+  triggerBackfillCharacterAchievements,
+  triggerRebuildCharacterAccountGroups,
   triggerRebuildCharacterRankingLeaderboards,
   triggerPruneCharacterRankingsWithoutMythicEvidence,
   triggerRebuildCharacterRaidParticipations,
@@ -73,6 +75,7 @@ import {
   AdminCharacter,
   AdminCharacterStats,
   CharacterRankingBackfillStatusResponse,
+  CharacterAchievementBackfillStatusResponse,
   AdminRaidOption,
   DeleteCharacterRankingsPreviewResponse,
   TaskLogEntry,
@@ -176,6 +179,7 @@ export default function AdminPage() {
   const [processorStatus, setProcessorStatus] = useState<ProcessorStatus | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStatistics | null>(null);
   const [characterRankingBackfillStatus, setCharacterRankingBackfillStatus] = useState<CharacterRankingBackfillStatusResponse | null>(null);
+  const [characterAchievementBackfillStatus, setCharacterAchievementBackfillStatus] = useState<CharacterAchievementBackfillStatusResponse | null>(null);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [queuePage, setQueuePage] = useState(1);
   const [queueTotalPages, setQueueTotalPages] = useState(1);
@@ -315,12 +319,13 @@ export default function AdminPage() {
       try {
         switch (activeTab) {
           case "overview": {
-            const [overviewData, rateLimitData, queueStatsData, adminRaidsData, characterRankingBackfillData] = await Promise.all([
+            const [overviewData, rateLimitData, queueStatsData, adminRaidsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
               api.getAdminOverview(),
               api.getAdminRateLimitStatus(),
               api.getAdminProcessingQueueStats(),
               getAdminRaids(),
               api.getAdminCharacterRankingBackfillStatus(),
+              api.getAdminCharacterAchievementBackfillStatus(),
             ]);
             setOverview(overviewData);
             setRateLimitStatus(rateLimitData.status);
@@ -329,6 +334,7 @@ export default function AdminPage() {
             setQueueStats(queueStatsData.queue);
             setAdminRaids(adminRaidsData.raids);
             setCharacterRankingBackfillStatus(characterRankingBackfillData);
+            setCharacterAchievementBackfillStatus(characterAchievementBackfillData);
             break;
           }
 
@@ -365,12 +371,13 @@ export default function AdminPage() {
           }
 
           case "system": {
-            const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData] = await Promise.all([
+            const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
               api.getAdminRateLimitStatus(),
               api.getAdminProcessingQueueStats(),
               api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
               api.getAdminProcessingQueueErrors(1, 50),
               api.getAdminCharacterRankingBackfillStatus(),
+              api.getAdminCharacterAchievementBackfillStatus(),
             ]);
             setRateLimitStatus(rateLimitData.status);
             setRateLimitConfig(rateLimitData.config);
@@ -380,6 +387,7 @@ export default function AdminPage() {
             setQueueTotalPages(queueData.pagination.totalPages);
             setErrorItems(errorsData.items);
             setCharacterRankingBackfillStatus(characterRankingBackfillData);
+            setCharacterAchievementBackfillStatus(characterAchievementBackfillData);
             break;
           }
 
@@ -434,12 +442,13 @@ export default function AdminPage() {
     if (activeTab === "system" && user?.isAdmin) {
       const interval = setInterval(async () => {
         try {
-          const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData] = await Promise.all([
+          const [rateLimitData, queueStatsData, queueData, errorsData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
             api.getAdminRateLimitStatus(),
             api.getAdminProcessingQueueStats(),
             api.getAdminProcessingQueue(queuePage, 20, queueFilter || undefined),
             api.getAdminProcessingQueueErrors(1, 50),
             api.getAdminCharacterRankingBackfillStatus(),
+            api.getAdminCharacterAchievementBackfillStatus(),
           ]);
           setRateLimitStatus(rateLimitData.status);
           setRateLimitConfig(rateLimitData.config);
@@ -449,6 +458,7 @@ export default function AdminPage() {
           setQueueTotalPages(queueData.pagination.totalPages);
           setErrorItems(errorsData.items);
           setCharacterRankingBackfillStatus(characterRankingBackfillData);
+          setCharacterAchievementBackfillStatus(characterAchievementBackfillData);
         } catch (err) {
           console.error("Error refreshing system data:", err);
         }
@@ -468,10 +478,15 @@ export default function AdminPage() {
 
     const interval = setInterval(async () => {
       try {
-        const [rateLimitData, characterRankingBackfillData] = await Promise.all([api.getAdminRateLimitStatus(), api.getAdminCharacterRankingBackfillStatus()]);
+        const [rateLimitData, characterRankingBackfillData, characterAchievementBackfillData] = await Promise.all([
+          api.getAdminRateLimitStatus(),
+          api.getAdminCharacterRankingBackfillStatus(),
+          api.getAdminCharacterAchievementBackfillStatus(),
+        ]);
         setRateLimitStatus(rateLimitData.status);
         setRateLimitConfig(rateLimitData.config);
         setCharacterRankingBackfillStatus(characterRankingBackfillData);
+        setCharacterAchievementBackfillStatus(characterAchievementBackfillData);
       } catch (err) {
         console.error("Error refreshing overview status:", err);
       }
@@ -530,6 +545,9 @@ export default function AdminPage() {
     characterLeaderboardRebuild && characterLeaderboardRebuild.totalPairs > 0
       ? Math.round((characterLeaderboardRebuild.processedPairs / characterLeaderboardRebuild.totalPairs) * 100)
       : 0;
+  const characterAchievementQueue = characterAchievementBackfillStatus?.queue;
+  const characterAchievementPercent =
+    characterAchievementQueue && characterAchievementQueue.total > 0 ? Math.round((characterAchievementQueue.terminal / characterAchievementQueue.total) * 100) : 0;
 
   // Handler for scheduler triggers with 10-second cooldown per button
   const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
@@ -546,6 +564,10 @@ export default function AdminPage() {
       ) {
         const status = await api.getAdminCharacterRankingBackfillStatus();
         setCharacterRankingBackfillStatus(status);
+      }
+      if (triggerName === "backfill-character-achievements" || triggerName === "refresh-character-achievement-candidates" || triggerName === "rebuild-character-account-groups") {
+        const status = await api.getAdminCharacterAchievementBackfillStatus();
+        setCharacterAchievementBackfillStatus(status);
       }
 
       // Set cooldown for this specific button
@@ -1256,6 +1278,104 @@ export default function AdminPage() {
                       {triggerLoading === "refresh-character-ranking-candidates" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["refresh-character-ranking-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
+                    <button
+                      onClick={() => handleTrigger("backfill-character-achievements", triggerBackfillCharacterAchievements)}
+                      disabled={triggerLoading === "backfill-character-achievements" || triggerCooldowns["backfill-character-achievements"]}
+                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
+                    >
+                      <span>Backfill Character Achievements</span>
+                      {triggerLoading === "backfill-character-achievements" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["backfill-character-achievements"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("refresh-character-achievement-candidates", () => triggerBackfillCharacterAchievements(true))}
+                      disabled={triggerLoading === "refresh-character-achievement-candidates" || triggerCooldowns["refresh-character-achievement-candidates"]}
+                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
+                    >
+                      <span>Discover Missing Achievement Fingerprints</span>
+                      {triggerLoading === "refresh-character-achievement-candidates" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["refresh-character-achievement-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("rebuild-character-account-groups", triggerRebuildCharacterAccountGroups)}
+                      disabled={
+                        triggerLoading === "rebuild-character-account-groups" ||
+                        triggerCooldowns["rebuild-character-account-groups"] ||
+                        characterAchievementBackfillStatus?.processor.isRunning
+                      }
+                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
+                    >
+                      <span>Rebuild Character Account Groups</span>
+                      {triggerLoading === "rebuild-character-account-groups" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rebuild-character-account-groups"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    {characterAchievementBackfillStatus && characterAchievementQueue && (
+                      <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-white">Achievement account matching</span>
+                          <span className={characterAchievementBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
+                            {characterAchievementBackfillStatus.processor.isWaitingForRateLimit
+                              ? "Rate limited"
+                              : characterAchievementBackfillStatus.processor.isRunning
+                                ? "Running"
+                                : "Idle"}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full bg-cyan-500" style={{ width: `${Math.min(100, characterAchievementPercent)}%` }} />
+                        </div>
+                        <div className="grid grid-cols-5 gap-2 text-center tabular-nums">
+                          <div>
+                            <div className="text-amber-400 font-semibold">{characterAchievementQueue.pending}</div>
+                            <div className="text-gray-500">pending</div>
+                          </div>
+                          <div>
+                            <div className="text-blue-400 font-semibold">{characterAchievementQueue.inProgress}</div>
+                            <div className="text-gray-500">running</div>
+                          </div>
+                          <div>
+                            <div className="text-green-400 font-semibold">{characterAchievementQueue.completed}</div>
+                            <div className="text-gray-500">done</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 font-semibold">{characterAchievementQueue.notFound}</div>
+                            <div className="text-gray-500">missing</div>
+                          </div>
+                          <div>
+                            <div className="text-red-400 font-semibold">{characterAchievementQueue.failed}</div>
+                            <div className="text-gray-500">failed</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-gray-500 tabular-nums">
+                          <span>{characterAchievementPercent}% complete</span>
+                          <span>{characterAchievementBackfillStatus.fingerprints} fingerprints</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
+                          <div>
+                            <div className="text-cyan-300 font-semibold">{characterAchievementBackfillStatus.matches.high}</div>
+                            <div className="text-gray-500">high edges</div>
+                          </div>
+                          <div>
+                            <div className="text-sky-300 font-semibold">{characterAchievementBackfillStatus.matches.medium}</div>
+                            <div className="text-gray-500">medium edges</div>
+                          </div>
+                          <div>
+                            <div className="text-emerald-300 font-semibold">{characterAchievementBackfillStatus.groups}</div>
+                            <div className="text-gray-500">groups</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-gray-500">
+                          <span>{characterAchievementBackfillStatus.signalAchievementCount} signal achievements</span>
+                          <span>{characterAchievementBackfillStatus.tokens} indexed tokens</span>
+                        </div>
+                        {characterAchievementBackfillStatus.processor.currentItem && (
+                          <div className="text-gray-400 truncate">
+                            Current: {characterAchievementBackfillStatus.processor.currentItem.name}-{characterAchievementBackfillStatus.processor.currentItem.realm}
+                          </div>
+                        )}
+                        {characterAchievementBackfillStatus.processor.lastMessage && <div className="text-gray-500 truncate">{characterAchievementBackfillStatus.processor.lastMessage}</div>}
+                      </div>
+                    )}
                     <button
                       onClick={() => handleTrigger("rebuild-character-ranking-leaderboards", triggerRebuildCharacterRankingLeaderboards)}
                       disabled={
