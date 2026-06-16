@@ -72,26 +72,12 @@
       }
 
       .search-island {
-        position: fixed;
-        top: 12px;
-        right: 12px;
-        width: 292px;
         z-index: 5;
-      }
-
-      .filters-panel summary {
-        min-height: 30px;
-        cursor: pointer;
-        color: var(--muted);
-        font-size: 0.78rem;
-        font-weight: 740;
-        list-style-position: inside;
       }
 
       .filter-body {
         display: grid;
         gap: 9px;
-        margin-top: 8px;
       }
 
       .side-section h3 {
@@ -327,7 +313,7 @@
         z-index: 3;
         top: 12px;
         left: 276px;
-        right: 316px;
+        right: 384px;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -684,28 +670,10 @@
         min-height: 29px;
       }
 
-      .drawer-toggle {
-        position: absolute;
-        z-index: 6;
-        top: 66px;
-        right: 12px;
-        min-height: 32px;
-        border: 1px solid var(--line-strong);
-        border-radius: 8px;
-        background: rgba(16, 24, 39, 0.82);
-        padding: 0 12px;
-        color: var(--text);
-        font-size: 0.78rem;
-        font-weight: 760;
-        cursor: pointer;
-        box-shadow: 0 8px 14px var(--shadow);
-        backdrop-filter: blur(12px);
-      }
-
       .inspector {
         position: absolute;
         z-index: 5;
-        top: 106px;
+        top: 12px;
         right: 12px;
         bottom: 70px;
         width: min(360px, calc(100vw - 48px));
@@ -716,14 +684,6 @@
         box-shadow: 0 12px 22px var(--shadow);
         backdrop-filter: blur(14px);
         overflow-y: auto;
-        transform: translateX(0);
-        transition: transform 180ms ease-out, opacity 180ms ease-out;
-      }
-
-      .inspector.collapsed {
-        opacity: 0;
-        pointer-events: none;
-        transform: translateX(calc(100% + 22px));
       }
 
       @media (max-width: 1180px) {
@@ -733,7 +693,7 @@
 
         .stage-top {
           left: 256px;
-          right: 304px;
+          right: 372px;
         }
       }
     </style>
@@ -751,29 +711,27 @@
         </div>
 
         <div class="side-section filters-island">
-          <details class="filters-panel">
-            <summary>Filters</summary>
-            <div class="filter-body">
-              <div class="field">
-                <label for="minReports">Min reports per guild &amp; tier</label>
-                <select id="minReports">
-                  <option value="1">1+ · everyone</option>
-                  <option value="2" selected>2+ · regulars</option>
-                  <option value="3">3+ · core raiders</option>
-                  <option value="5">5+ · committed core</option>
-                  <option value="10">10+ · die-hards</option>
-                </select>
-              </div>
-              <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
-              <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" checked /></label>
-              <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" /></label>
-              <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
-              <div class="clear-row">
-                <button class="button" id="resetView" type="button">Reset view</button>
-                <button class="button" id="clearSel" type="button">Clear selection</button>
-              </div>
+          <h3>Filters</h3>
+          <div class="filter-body">
+            <div class="field">
+              <label for="minReports">Min reports per guild &amp; tier</label>
+              <select id="minReports">
+                <option value="1">1+ · everyone</option>
+                <option value="2" selected>2+ · regulars</option>
+                <option value="3">3+ · core raiders</option>
+                <option value="5">5+ · committed core</option>
+                <option value="10">10+ · die-hards</option>
+              </select>
             </div>
-          </details>
+            <label class="toggle"><span>Migration flows</span><input id="tglFlows" type="checkbox" checked /></label>
+            <label class="toggle"><span>Migration lines</span><input id="tglTrails" type="checkbox" /></label>
+            <label class="toggle"><span>Cross-guild fibers</span><input id="tglFibers" type="checkbox" /></label>
+            <label class="toggle"><span>Guild labels</span><input id="tglLabels" type="checkbox" checked /></label>
+            <div class="clear-row">
+              <button class="button" id="resetView" type="button">Reset view</button>
+              <button class="button" id="clearSel" type="button">Clear selection</button>
+            </div>
+          </div>
         </div>
 
         <div class="side-section search-island">
@@ -811,8 +769,7 @@
         </div>
       </main>
 
-      <button class="drawer-toggle" id="toggleInspector" type="button">Summary</button>
-      <aside class="inspector collapsed" id="inspectorPanel">
+      <aside class="inspector" id="inspectorPanel">
         <div class="inspector-header">
           <h2 id="insTitle">Inspector</h2>
           <p id="insSub">Click a character dot or a guild cluster.</p>
@@ -866,10 +823,10 @@
         minReports: 2,
         classFilter: new Set(),
         showFlows: true,
-        showTrails: true,
+        showTrails: false,
         showFibers: false,
         showLabels: true,
-        inspectorOpen: false,
+        inspectorOpen: true,
         selChar: -1,
         selGuild: -1,
         hover: null, // {kind:"char"|"guild"|"flow", ...}
@@ -888,7 +845,7 @@
         ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
          "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
          "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows", "tglTrails", "tglFibers",
-         "tglLabels", "resetView", "clearSel", "inspectorPanel", "toggleInspector"]
+         "tglLabels", "resetView", "clearSel", "inspectorPanel"]
           .map((id) => [id, document.getElementById(id)]),
       );
 
@@ -1728,6 +1685,57 @@
         return out;
       }
 
+      function drawTriangleArrow(x, y, dx, dy, size, fillStyle) {
+        const len = Math.hypot(dx, dy);
+        if (len < 0.1) return;
+        const ux = dx / len;
+        const uy = dy / len;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - ux * size - uy * size * 0.5, y - uy * size + ux * size * 0.5);
+        ctx.lineTo(x - ux * size + uy * size * 0.5, y - uy * size - ux * size * 0.5);
+        ctx.closePath();
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      }
+
+      function quadraticPoint(x0, y0, cx, cy, x1, y1, u) {
+        const inv = 1 - u;
+        return {
+          x: inv * inv * x0 + 2 * inv * u * cx + u * u * x1,
+          y: inv * inv * y0 + 2 * inv * u * cy + u * u * y1,
+        };
+      }
+
+      function quadraticTangent(x0, y0, cx, cy, x1, y1, u) {
+        return {
+          x: 2 * (1 - u) * (cx - x0) + 2 * u * (x1 - cx),
+          y: 2 * (1 - u) * (cy - y0) + 2 * u * (y1 - cy),
+        };
+      }
+
+      function drawQuadraticArrowheads(x0, y0, cx, cy, x1, y1, count, size, fillStyle) {
+        const n = Math.max(1, count);
+        for (let i = 0; i < n; i += 1) {
+          const u = n === 1 ? 0.72 : 0.34 + (0.5 * i) / (n - 1);
+          const p = quadraticPoint(x0, y0, cx, cy, x1, y1, u);
+          const d = quadraticTangent(x0, y0, cx, cy, x1, y1, u);
+          drawTriangleArrow(p.x, p.y, d.x, d.y, size, fillStyle);
+        }
+      }
+
+      function drawLineArrowheads(x0, y0, x1, y1, count, size, fillStyle) {
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.hypot(dx, dy);
+        if (len < 18) return;
+        const n = Math.max(1, count);
+        for (let i = 0; i < n; i += 1) {
+          const u = n === 1 ? 0.68 : 0.48 + (0.28 * i) / (n - 1);
+          drawTriangleArrow(x0 + dx * u, y0 + dy * u, dx, dy, size, fillStyle);
+        }
+      }
+
       /* ============================== tier switching ============================== */
 
       function setTier(t, animate = true) {
@@ -1865,16 +1873,15 @@
 
       function renderTimeline() {
         for (const cell of els.tierCells.querySelectorAll("[data-t]")) {
-          cell.classList.toggle("active", Number(cell.dataset.t) === view.tier);
+          cell.classList.toggle("active", view.mode !== "all" && Number(cell.dataset.t) === view.tier);
         }
       }
 
       /* ============================== inspector panels ============================== */
 
-      function setInspectorOpen(open) {
-        view.inspectorOpen = open;
-        els.inspectorPanel.classList.toggle("collapsed", !open);
-        els.toggleInspector.textContent = open ? "Hide panel" : "Summary";
+      function setInspectorOpen() {
+        view.inspectorOpen = true;
+        els.inspectorPanel.classList.remove("collapsed");
       }
 
       function renderInspector() {
@@ -1983,9 +1990,43 @@
         bindInspectorActions();
       }
 
+      function buildGuildCareerFlows(g) {
+        const joined = new Map();
+        const left = new Map();
+        const add = (map, otherGuild, flow) => {
+          let cur = map.get(otherGuild);
+          if (!cur) map.set(otherGuild, (cur = { n: 0, cs: [], seen: new Set() }));
+          cur.n += flow.n;
+          for (const c of flow.cs) {
+            if (cur.cs.length >= 40) break;
+            if (cur.seen.has(c)) continue;
+            cur.seen.add(c);
+            cur.cs.push(c);
+          }
+        };
+
+        for (let t = 1; t < M.tiers.length; t += 1) {
+          const flowMap = F.flows[t];
+          if (!flowMap) continue;
+          for (const [key, flow] of flowMap) {
+            const a = Math.floor(key / 100000);
+            const b = key % 100000;
+            if (a === b) continue;
+            if (b === g) add(joined, a, flow);
+            if (a === g) add(left, b, flow);
+          }
+        }
+
+        return {
+          joined: Array.from(joined.entries()).sort((p, q) => q[1].n - p[1].n),
+          left: Array.from(left.entries()).sort((p, q) => q[1].n - p[1].n),
+        };
+      }
+
       function renderGuildPanel(g) {
         const guild = M.guilds[g];
         const t = view.tier;
+        const allMode = view.mode === "all";
         const rosterNow = F.tiers[t].roster.get(g) || 0;
 
         const history = M.tiers.map((tier, i) => ({ i, n: F.tiers[i].roster.get(g) || 0 }));
@@ -2023,8 +2064,15 @@
         inflow.sort((p, q) => q[1].n - p[1].n);
         outflow.sort((p, q) => q[1].n - p[1].n);
 
+        const careerFlows = allMode ? buildGuildCareerFlows(g) : null;
+        const joinedRows = allMode ? careerFlows.joined : inflow;
+        const leftRows = allMode ? careerFlows.left : outflow;
+        const at = allMode ? buildAllTime() : null;
+
         els.insTitle.textContent = guild.name;
-        els.insSub.textContent = `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
+        els.insSub.textContent = allMode
+          ? `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(at.roster.get(g) || 0)} distinct members ever`
+          : `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
 
         els.insBody.innerHTML = `
           <section class="panel">
@@ -2033,30 +2081,30 @@
               <div class="roster-bars">
                 ${history.map((h) => `
                   <button type="button" data-go-tier="${h.i}" title="${esc(M.tiers[h.i].name)}: ${fmt(h.n)} raiders"
-                    class="${h.i === t ? "on" : ""}"
+                    class="${!allMode && h.i === t ? "on" : ""}"
                     style="height:${Math.max(2, (h.n / peak) * 44)}px;background:hsl(${guild.hue} 65% 58%)"></button>`).join("")}
               </div>
             </div>
           </section>
           <section class="panel">
-            <h3>Joined this tier from</h3>
+            <h3>${allMode ? "Joined across all tiers from" : "Joined this tier from"}</h3>
             <div class="list">
-              ${inflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked arrivals from the previous tier.</div></div>` : ""}
-              ${inflow.slice(0, 6).map(([a, flow]) => `
+              ${joinedRows.length === 0 ? `<div class="card"><div class="row-sub">${allMode ? "No tracked arrivals from another guild." : "No tracked arrivals from the previous tier."}</div></div>` : ""}
+              ${joinedRows.slice(0, allMode ? 8 : 6).map(([a, flow]) => `
                 <div class="card">
                   <div class="row-main"><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span><span>+${fmt(flow.n)}</span></div>
-                  <div class="chips">${nameChips(flow, 6)}</div>
+                  <div class="chips">${nameChips(flow, allMode ? 8 : 6)}</div>
                 </div>`).join("")}
             </div>
           </section>
           <section class="panel">
-            <h3>Left for (next tier)</h3>
+            <h3>${allMode ? "Left across all tiers for" : "Left for (next tier)"}</h3>
             <div class="list">
-              ${outflow.length === 0 ? `<div class="card"><div class="row-sub">No tracked departures to the next tier.</div></div>` : ""}
-              ${outflow.slice(0, 6).map(([b, flow]) => `
+              ${leftRows.length === 0 ? `<div class="card"><div class="row-sub">${allMode ? "No tracked departures to another guild." : "No tracked departures to the next tier."}</div></div>` : ""}
+              ${leftRows.slice(0, allMode ? 8 : 6).map(([b, flow]) => `
                 <div class="card">
                   <div class="row-main"><span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span><span>−${fmt(flow.n)}</span></div>
-                  <div class="chips">${nameChips(flow, 6)}</div>
+                  <div class="chips">${nameChips(flow, allMode ? 8 : 6)}</div>
                 </div>`).join("")}
             </div>
           </section>
@@ -2440,19 +2488,9 @@
             ctx.strokeStyle = `rgba(251, 191, 36, ${Math.min(0.55, 0.1 + n * 0.03)})`;
             ctx.lineWidth = Math.min(7, 0.8 + Math.sqrt(n));
             ctx.stroke();
-            // arrowhead
-            const ux = x1 - mx, uy = y1 - my;
-            const ul = Math.max(1, Math.hypot(ux, uy));
-            const ax = x1 - (ux / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
-            const ay = y1 - (uy / ul) * (hullRadius(td.roster.get(b) || 1) * 0.4);
             const size = Math.min(14, 4 + Math.sqrt(n) * 1.6);
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(ax - (ux / ul) * size - (uy / ul) * size * 0.5, ay - (uy / ul) * size + (ux / ul) * size * 0.5);
-            ctx.lineTo(ax - (ux / ul) * size + (uy / ul) * size * 0.5, ay - (uy / ul) * size - (ux / ul) * size * 0.5);
-            ctx.closePath();
-            ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(0.6, 0.15 + n * 0.03)})`;
-            ctx.fill();
+            const arrows = clamp(Math.floor(Math.hypot(x1 - x0, y1 - y0) / 120), 2, 5);
+            drawQuadraticArrowheads(x0, y0, mx, my, x1, y1, arrows, size, `rgba(251, 191, 36, ${Math.min(0.62, 0.18 + n * 0.03)})`);
           }
         }
 
@@ -2491,6 +2529,11 @@
               ctx.strokeStyle = CLASS_COLORS[cls];
               ctx.stroke(path);
             }
+            ctx.globalAlpha = 0.42;
+            for (const [x0, y0, x1, y1, c] of lines) {
+              const len = Math.hypot(x1 - x0, y1 - y0);
+              drawLineArrowheads(x0, y0, x1, y1, len > 90 ? 2 : 1, 3.7 / Math.sqrt(t.k), CLASS_COLORS[M.chars[c].classID]);
+            }
             ctx.globalAlpha = 1;
           }
         }
@@ -2527,6 +2570,7 @@
             ctx.lineTo(cx, cy);
             ctx.strokeStyle = CLASS_COLORS[M.chars[c].classID] + "55";
             ctx.stroke();
+            drawLineArrowheads(x0, y0, cx, cy, 1, 3.5 / Math.sqrt(t.k), CLASS_COLORS[M.chars[c].classID] + "66");
           }
         }
 
@@ -3244,7 +3288,6 @@
       els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
       els.modeAll.addEventListener("click", () => setMode("all"));
       els.modeFlow.addEventListener("click", () => setMode("flow"));
-      els.toggleInspector.addEventListener("click", () => setInspectorOpen(!view.inspectorOpen));
 
       els.minReports.addEventListener("change", () => {
         view.minReports = Number(els.minReports.value);
