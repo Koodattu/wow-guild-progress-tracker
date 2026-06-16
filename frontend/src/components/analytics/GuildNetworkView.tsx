@@ -41,8 +41,8 @@ function injectUniverseUrl(html: string, universeUrl: string): string {
 }
 
 export default function GuildNetworkView() {
-  const { data: meta } = useGuildNetworkMeta();
-  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const { data: meta, isPending: isMetaPending } = useGuildNetworkMeta();
+  const [networkShell, setNetworkShell] = useState<{ srcDoc: string; universeUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const universeUrl = useMemo(() => {
@@ -50,34 +50,39 @@ export default function GuildNetworkView() {
   }, [meta?.etag]);
 
   useEffect(() => {
-    let active = true;
+    if (isMetaPending) return;
 
-    fetch("/guild-network-poc/index.html", { cache: "no-store" })
+    let active = true;
+    const controller = new AbortController();
+
+    fetch("/guild-network-poc/index.html", { cache: "no-store", signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`Failed to load network shell (${response.status})`);
         return response.text();
       })
       .then((html) => {
         if (!active) return;
-        setSrcDoc(injectUniverseUrl(html, universeUrl));
+        setNetworkShell({ srcDoc: injectUniverseUrl(html, universeUrl), universeUrl });
         setError(null);
       })
       .catch((err) => {
         if (!active) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to load network shell");
       });
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [universeUrl]);
+  }, [isMetaPending, universeUrl]);
 
   return (
     <div className="h-[calc(100vh-5rem)] min-h-[640px] w-full overflow-hidden bg-[#050711]">
       {error ? (
         <div className="grid h-full place-items-center px-4 text-sm font-semibold text-red-200">{error}</div>
-      ) : srcDoc ? (
-        <iframe key={meta?.etag || "latest"} srcDoc={srcDoc} title="Raider Network" className="block h-full w-full border-0" loading="eager" />
+      ) : networkShell ? (
+        <iframe key={networkShell.universeUrl} srcDoc={networkShell.srcDoc} title="Raider Network" className="block h-full w-full border-0" loading="eager" />
       ) : (
         <div className="grid h-full place-items-center px-4 text-sm font-semibold text-slate-300">Loading raider network…</div>
       )}

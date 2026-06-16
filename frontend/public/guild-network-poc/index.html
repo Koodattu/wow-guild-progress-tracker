@@ -939,6 +939,32 @@
          "tglLabels", "resetView", "clearSel", "inspectorPanel"]
           .map((id) => [id, document.getElementById(id)]),
       );
+      const listenerController = new AbortController();
+      const listenerSignal = listenerController.signal;
+      const pendingTimers = new Set();
+      let destroyed = false;
+      let frameId = null;
+      let resizeObserver = null;
+      let universeController = null;
+
+      function defer(callback, delay) {
+        const timer = setTimeout(() => {
+          pendingTimers.delete(timer);
+          if (!destroyed) callback();
+        }, delay);
+        pendingTimers.add(timer);
+        return timer;
+      }
+
+      function delay(delayMs) {
+        return new Promise((resolve) => {
+          const timer = setTimeout(() => {
+            pendingTimers.delete(timer);
+            resolve();
+          }, delayMs);
+          pendingTimers.add(timer);
+        });
+      }
 
       /* ============================== helpers ============================== */
 
@@ -1270,8 +1296,11 @@
           els.loadingText.textContent = "Fetching every character × guild × tier…";
           const params = new URLSearchParams(window.location.search);
           const universeUrl = params.get("universe") || "/api/guild-network/universe";
-          const res = await fetch(universeUrl, { cache: "force-cache" });
+          const controller = new AbortController();
+          universeController = controller;
+          const res = await fetch(universeUrl, { cache: "force-cache", signal: controller.signal });
           const data = await res.json();
+          if (destroyed) return;
           if (!res.ok) throw new Error(data.error || "universe request failed");
 
           M.tiers = data.tiers;
@@ -1316,7 +1345,8 @@
           updateIdentityButtons();
 
           els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} ${entityPlural()} across ${M.tiers.length} tiers…`;
-          await new Promise((r) => setTimeout(r, 30)); // let the text paint
+          await delay(30); // let the text paint
+          if (destroyed) return;
 
           view.tier = M.tiers.length - 1;
           rebuild();
@@ -1327,11 +1357,14 @@
           els.timeline.style.display = "flex";
           updateHud();
           renderInspector();
-          requestAnimationFrame(frame);
+          frameId = requestAnimationFrame(frame);
         } catch (err) {
+          if (destroyed || (err instanceof DOMException && err.name === "AbortError")) return;
           els.loading.classList.remove("visible");
-          els.errorText.textContent = err.message;
+          els.errorText.textContent = err instanceof Error ? err.message : "Failed to load guild network universe";
           els.errorBox.classList.add("visible");
+        } finally {
+          universeController = null;
         }
       }
 
@@ -2154,7 +2187,7 @@
             stopPlay();
             if (view.mode === "all") setMode("galaxy");
             setTier(Number(cell.dataset.t));
-          });
+          }, { signal: listenerSignal });
         }
         renderTimeline();
       }
@@ -2189,13 +2222,13 @@
 
       function bindInspectorActions() {
         for (const el of els.insBody.querySelectorAll("[data-sel-guild]")) {
-          el.addEventListener("click", () => selectGuild(Number(el.dataset.selGuild)));
+          el.addEventListener("click", () => selectGuild(Number(el.dataset.selGuild)), { signal: listenerSignal });
         }
         for (const el of els.insBody.querySelectorAll("[data-sel-char]")) {
-          el.addEventListener("click", () => selectChar(Number(el.dataset.selChar)));
+          el.addEventListener("click", () => selectChar(Number(el.dataset.selChar)), { signal: listenerSignal });
         }
         for (const el of els.insBody.querySelectorAll("[data-go-tier]")) {
-          el.addEventListener("click", () => { stopPlay(); setTier(Number(el.dataset.goTier)); });
+          el.addEventListener("click", () => { stopPlay(); setTier(Number(el.dataset.goTier)); }, { signal: listenerSignal });
         }
       }
 
@@ -2502,7 +2535,7 @@
             if (view.classFilter.has(id)) view.classFilter.delete(id);
             else view.classFilter.add(id);
             chip.classList.toggle("on", view.classFilter.has(id));
-          });
+          }, { signal: listenerSignal });
         }
       }
 
@@ -2598,7 +2631,7 @@
             if (btn.dataset.searchKind === "guild") focusGuild(id);
             else selectChar(id);
             els.searchResults.classList.remove("visible");
-          });
+          }, { signal: listenerSignal });
         }
       }
 
@@ -3313,6 +3346,7 @@
       /* ============================== frame loop ============================== */
 
       function frame(now) {
+        if (destroyed) return;
         const rect = stage.getBoundingClientRect();
         const ratio = window.devicePixelRatio || 1;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -3322,7 +3356,7 @@
           else if (view.mode === "all") drawAll();
           else drawFlow();
         }
-        requestAnimationFrame(frame);
+        frameId = requestAnimationFrame(frame);
       }
 
       /* ============================== hit testing ============================== */
@@ -3513,7 +3547,7 @@
         pointer.x = event.clientX - rect.left;
         pointer.y = event.clientY - rect.top;
         canvas.setPointerCapture(event.pointerId);
-      });
+      }, { signal: listenerSignal });
 
       canvas.addEventListener("pointermove", (event) => {
         const rect = canvas.getBoundingClientRect();
@@ -3538,7 +3572,7 @@
         canvas.style.cursor = hit ? "pointer" : "default";
         if (hit) showTooltip(px, py, tooltipFor(hit));
         else hideTooltip();
-      });
+      }, { signal: listenerSignal });
 
       canvas.addEventListener("pointerup", (event) => {
         const wasDrag = pointer.moved;
@@ -3556,7 +3590,7 @@
         else if (hit.kind === "node") selectGuild(hit.node.g);
         else if (hit.kind === "header") { stopPlay(); setTier(hit.t, false); }
         else if (hit.kind === "flow" && hit.f.a !== LUMP) selectGuild(hit.f.a === hit.f.b ? hit.f.a : hit.f.b);
-      });
+      }, { signal: listenerSignal });
 
       canvas.addEventListener("wheel", (event) => {
         event.preventDefault();
@@ -3570,7 +3604,7 @@
         t.x = px - before.x * t.k;
         t.y = py - before.y * t.k;
         hideTooltip();
-      }, { passive: false });
+      }, { passive: false, signal: listenerSignal });
 
       /* ============================== top-level events ============================== */
 
@@ -3598,7 +3632,7 @@
         F.allTime = null;
         els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} ${entityPlural()} across ${M.tiers.length} tiers…`;
         els.loading.classList.add("visible");
-        setTimeout(() => {
+        defer(() => {
           rebuild();
           if (view.mode === "galaxy") fitGalaxy();
           else if (view.mode === "all") fitAll();
@@ -3626,17 +3660,17 @@
         renderInspector();
       }
 
-      els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
-      els.modeAll.addEventListener("click", () => setMode("all"));
-      els.modeFlow.addEventListener("click", () => setMode("flow"));
-      els.identityCharacter.addEventListener("click", () => setIdentity("character"));
-      els.identityAccount.addEventListener("click", () => setIdentity("account"));
+      els.modeGalaxy.addEventListener("click", () => setMode("galaxy"), { signal: listenerSignal });
+      els.modeAll.addEventListener("click", () => setMode("all"), { signal: listenerSignal });
+      els.modeFlow.addEventListener("click", () => setMode("flow"), { signal: listenerSignal });
+      els.identityCharacter.addEventListener("click", () => setIdentity("character"), { signal: listenerSignal });
+      els.identityAccount.addEventListener("click", () => setIdentity("account"), { signal: listenerSignal });
 
       els.minReports.addEventListener("change", () => {
         view.minReports = Number(els.minReports.value);
         els.loadingText.textContent = "Recomputing constellation…";
         els.loading.classList.add("visible");
-        setTimeout(() => {
+        defer(() => {
           rebuild();
           view.fitted.galaxy = false;
           view.fitted.all = false;
@@ -3649,28 +3683,28 @@
           renderInspector();
           runSearch();
         }, 30);
-      });
+      }, { signal: listenerSignal });
 
-      els.tglFlows.addEventListener("change", () => { view.showFlows = els.tglFlows.checked; });
-      els.tglTrails.addEventListener("change", () => { view.showTrails = els.tglTrails.checked; });
-      els.tglFibers.addEventListener("change", () => { view.showFibers = els.tglFibers.checked; });
-      els.tglLabels.addEventListener("change", () => { view.showLabels = els.tglLabels.checked; });
+      els.tglFlows.addEventListener("change", () => { view.showFlows = els.tglFlows.checked; }, { signal: listenerSignal });
+      els.tglTrails.addEventListener("change", () => { view.showTrails = els.tglTrails.checked; }, { signal: listenerSignal });
+      els.tglFibers.addEventListener("change", () => { view.showFibers = els.tglFibers.checked; }, { signal: listenerSignal });
+      els.tglLabels.addEventListener("change", () => { view.showLabels = els.tglLabels.checked; }, { signal: listenerSignal });
 
       els.search.addEventListener("input", () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(runSearch, 160);
-      });
+      }, { signal: listenerSignal });
 
       els.resetView.addEventListener("click", () => {
         if (view.mode === "galaxy") fitGalaxy();
         else if (view.mode === "all") fitAll();
         else fitFlow();
-      });
-      els.clearSel.addEventListener("click", clearSelection);
+      }, { signal: listenerSignal });
+      els.clearSel.addEventListener("click", clearSelection, { signal: listenerSignal });
       els.playBtn.addEventListener("click", () => {
         if (view.playing) stopPlay();
         else startPlay();
-      });
+      }, { signal: listenerSignal });
 
       window.addEventListener("keydown", (event) => {
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
@@ -3678,10 +3712,52 @@
         else if (event.key === "ArrowLeft") { stopPlay(); setTier(view.tier - 1); }
         else if (event.key === " ") { event.preventDefault(); view.playing ? stopPlay() : startPlay(); }
         else if (event.key === "Escape") clearSelection();
-      });
+      }, { signal: listenerSignal });
 
-      window.addEventListener("resize", resizeCanvas);
-      if ("ResizeObserver" in window) new ResizeObserver(resizeCanvas).observe(stage);
+      window.addEventListener("resize", resizeCanvas, { signal: listenerSignal });
+      if ("ResizeObserver" in window) {
+        resizeObserver = new ResizeObserver(resizeCanvas);
+        resizeObserver.observe(stage);
+      }
+
+      function destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        listenerController.abort();
+        if (universeController) universeController.abort();
+        if (frameId !== null) {
+          cancelAnimationFrame(frameId);
+          frameId = null;
+        }
+        stopPlay();
+        if (searchTimer) {
+          clearTimeout(searchTimer);
+          searchTimer = null;
+        }
+        for (const timer of pendingTimers) clearTimeout(timer);
+        pendingTimers.clear();
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+          resizeObserver = null;
+        }
+        view.hover = null;
+        view.trans = null;
+        view.classFilter.clear();
+        M.tiers = [];
+        M.realms = [];
+        M.guilds = [];
+        M.baseChars = [];
+        M.chars = [];
+        M.accountGroups = [];
+        M.accountChars = null;
+        for (const key of Object.keys(F)) delete F[key];
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+
+      window.addEventListener("pagehide", (event) => {
+        if (!event.persisted) destroy();
+      }, { signal: listenerSignal });
 
       resizeCanvas();
       boot();
