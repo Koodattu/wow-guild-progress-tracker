@@ -2723,16 +2723,18 @@ router.post("/trigger/rebuild-character-mechanics-leaderboards", async (req: Req
   try {
     const scope: string = req.body?.scope || "current";
     const { TRACKED_RAIDS, CURRENT_RAID_IDS } = await import("../config/guilds");
-    const zoneIds = scope === "all" ? TRACKED_RAIDS : CURRENT_RAID_IDS;
+    const raidId = req.body?.raidId ? Number(req.body.raidId) : undefined;
+    const zoneIds = Number.isFinite(raidId) ? [raidId as number] : scope === "all" ? TRACKED_RAIDS : CURRENT_RAID_IDS;
+    const targetLabel = Number.isFinite(raidId) ? `raid ${raidId}` : scope === "all" ? "all tracked raids" : "current tier";
 
     characterMechanicsService
       .buildMechanicsLeaderboards(zoneIds)
-      .then(() => logger.info(`[Admin] Character mechanics leaderboard rebuild completed for scope=${scope}`))
+      .then(() => logger.info(`[Admin] Character mechanics leaderboard rebuild completed for ${targetLabel}`))
       .catch((err) => logger.error("[Admin] Character mechanics leaderboard rebuild failed:", err));
 
     res.json({
       success: true,
-      message: scope === "all" ? "Character mechanics leaderboard rebuild started for all tracked raids" : "Character mechanics leaderboard rebuild started for current tier",
+      message: `Character mechanics leaderboard rebuild started for ${targetLabel}`,
       zoneIds,
     });
   } catch (error) {

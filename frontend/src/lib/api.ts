@@ -1653,6 +1653,17 @@ export async function triggerRebuildCharacterRankingLeaderboards(): Promise<Char
   return response.json();
 }
 
+export async function triggerRebuildCharacterMechanicsLeaderboards(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-character-mechanics-leaderboards`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raidId, scope }),
+  });
+  if (!response.ok) throw new Error("Failed to trigger character mechanics leaderboard rebuild");
+  return response.json();
+}
+
 export async function triggerPruneCharacterRankingsWithoutMythicEvidence(): Promise<CharacterRankingMythicEvidenceCleanupResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/prune-character-rankings-without-mythic-evidence`, {
     method: "POST",

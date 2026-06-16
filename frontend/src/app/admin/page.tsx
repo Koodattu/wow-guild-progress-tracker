@@ -28,6 +28,7 @@ import {
   triggerBackfillCharacterAchievements,
   triggerRebuildCharacterAccountGroups,
   triggerRebuildCharacterRankingLeaderboards,
+  triggerRebuildCharacterMechanicsLeaderboards,
   triggerPruneCharacterRankingsWithoutMythicEvidence,
   triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
@@ -1338,6 +1339,19 @@ export default function AdminPage() {
                         <span>Calculate Raid Analytics</span>
                         {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
                         {triggerCooldowns["raid-analytics"] && <span className="text-xs text-gray-400">⏱️</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+                          handleTrigger("character-mechanics", () => triggerRebuildCharacterMechanicsLeaderboards(raidId, scope));
+                        }}
+                        disabled={triggerLoading === "character-mechanics" || triggerCooldowns["character-mechanics"]}
+                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
+                      >
+                        <span>Calculate Mechanics Scores</span>
+                        {triggerLoading === "character-mechanics" && <span className="animate-spin">⏳</span>}
+                        {triggerCooldowns["character-mechanics"] && <span className="text-xs text-gray-400">⏱️</span>}
                       </button>
                       <button
                         onClick={() => {
