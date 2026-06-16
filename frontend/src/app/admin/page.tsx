@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
@@ -126,6 +126,26 @@ function SortableRankingItem({ id, rank, onRemove }: { id: string; rank: number;
           </svg>
         </button>
       )}
+    </div>
+  );
+}
+
+function ManualActionCard({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
+  return (
+    <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+      <h3 className="text-white font-medium flex items-center gap-2 text-balance">
+        <span>{icon}</span> {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function ManualActionGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</h4>
+      <div className="space-y-2">{children}</div>
     </div>
   );
 }
@@ -576,6 +596,13 @@ export default function AdminPage() {
   const characterAchievementQueue = characterAchievementBackfillStatus?.queue;
   const characterAchievementPercent =
     characterAchievementQueue && characterAchievementQueue.total > 0 ? Math.round((characterAchievementQueue.terminal / characterAchievementQueue.total) * 100) : 0;
+  const characterRankingPipelineBusy = characterRankingBackfillStatus?.processor.isRunning || characterRankingBackfillStatus?.leaderboardRebuild.isRunning;
+
+  const getSelectedStatRaidTarget = () => {
+    const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
+    const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
+    return { raidId, scope };
+  };
 
   // Handler for scheduler triggers with 10-second cooldown per button
   const handleTrigger = async (triggerName: string, triggerFn: () => Promise<TriggerResponse>) => {
@@ -613,6 +640,25 @@ export default function AdminPage() {
     } finally {
       setTriggerLoading(null);
     }
+  };
+
+  const renderTriggerButton = (triggerName: string, label: string, triggerFn: () => Promise<TriggerResponse>, options?: { disabled?: boolean }) => {
+    const isLoading = triggerLoading === triggerName;
+    const isCoolingDown = triggerCooldowns[triggerName];
+
+    return (
+      <button
+        onClick={() => handleTrigger(triggerName, triggerFn)}
+        disabled={isLoading || isCoolingDown || options?.disabled}
+        className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-between gap-3 text-left transition-[background-color,transform]"
+      >
+        <span className="min-w-0 text-pretty">{label}</span>
+        <span className="flex shrink-0 items-center gap-1">
+          {isLoading && <span className="animate-spin">⏳</span>}
+          {isCoolingDown && <span className="text-xs text-gray-400">⏱️</span>}
+        </span>
+      </button>
+    );
   };
 
   const refreshWclUserAuthStatus = async () => {
@@ -1231,455 +1277,251 @@ export default function AdminPage() {
                 <span>⚙️</span> Manual Actions
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Guild Updates */}
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                    <span>🏰</span> Guild Updates
-                  </h3>
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => handleTrigger("active-guilds", triggerUpdateActiveGuilds)}
-                      disabled={triggerLoading === "active-guilds" || triggerCooldowns["active-guilds"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Check Active Guilds</span>
-                      {triggerLoading === "active-guilds" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["active-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("inactive-guilds", triggerUpdateInactiveGuilds)}
-                      disabled={triggerLoading === "inactive-guilds" || triggerCooldowns["inactive-guilds"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Check Inactive Guilds</span>
-                      {triggerLoading === "inactive-guilds" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["inactive-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("all-guilds", triggerUpdateAllGuilds)}
-                      disabled={triggerLoading === "all-guilds" || triggerCooldowns["all-guilds"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Check All Guilds</span>
-                      {triggerLoading === "all-guilds" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["all-guilds"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("refetch-reports", triggerRefetchRecentReports)}
-                      disabled={triggerLoading === "refetch-reports" || triggerCooldowns["refetch-reports"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Refetch Recent Reports</span>
-                      {triggerLoading === "refetch-reports" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["refetch-reports"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <ManualActionCard icon="🏰" title="Guild & Report Intake">
+                  <ManualActionGroup title="Guild state">
+                    {renderTriggerButton("active-guilds", "Check Active Guilds", triggerUpdateActiveGuilds)}
+                    {renderTriggerButton("inactive-guilds", "Check Inactive Guilds", triggerUpdateInactiveGuilds)}
+                    {renderTriggerButton("all-guilds", "Check All Guilds", triggerUpdateAllGuilds)}
+                    {renderTriggerButton("update-raiderio", "Update Raider.IO Guilds", triggerUpdateRaiderIOGuilds)}
+                    {renderTriggerButton("guild-crests", "Update Guild Crests", triggerUpdateGuildCrests)}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="Report queues">
+                    {renderTriggerButton("refetch-reports", "Refetch Recent Reports", triggerRefetchRecentReports)}
+                    {renderTriggerButton("rescan-deaths", "Rescan Death Events", triggerRescanDeathEvents)}
+                    {renderTriggerButton("rescan-characters", "Rescan Characters", triggerRescanCharacters)}
+                    {renderTriggerButton("backfill-report-characters", "Backfill Report Characters", triggerBackfillReportCharacters)}
+                  </ManualActionGroup>
+                </ManualActionCard>
 
-                {/* Statistics & Analytics */}
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                    <span>📊</span> Statistics & Analytics
-                  </h3>
-                  <div className="space-y-3">
-                    {/* Raid tier selector */}
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Target Raid Tier</label>
-                      <select
-                        value={selectedStatRaidId}
-                        onChange={(e) => setSelectedStatRaidId(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-                      >
-                        <option value="all">All Raids</option>
-                        <option value="current">Current Tier Only</option>
-                        {adminRaids.map((raid) => (
-                          <option key={raid.id} value={String(raid.id)}>
-                            {raid.name}
-                            {raid.isCurrent ? " (current)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => {
-                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
-                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
-                          handleTrigger("all-statistics", () => triggerCalculateAllStatistics(raidId, scope));
-                        }}
-                        disabled={triggerLoading === "all-statistics" || triggerCooldowns["all-statistics"]}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                      >
-                        <span>Calculate Statistics</span>
-                        {triggerLoading === "all-statistics" && <span className="animate-spin">⏳</span>}
-                        {triggerCooldowns["all-statistics"] && <span className="text-xs text-gray-400">⏱️</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
-                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
-                          handleTrigger("tier-lists", () => triggerCalculateTierLists(raidId, scope));
-                        }}
-                        disabled={triggerLoading === "tier-lists" || triggerCooldowns["tier-lists"]}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                      >
-                        <span>Calculate Tier Lists</span>
-                        {triggerLoading === "tier-lists" && <span className="animate-spin">⏳</span>}
-                        {triggerCooldowns["tier-lists"] && <span className="text-xs text-gray-400">⏱️</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
-                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
-                          handleTrigger("raid-analytics", () => triggerCalculateRaidAnalytics(raidId, scope));
-                        }}
-                        disabled={triggerLoading === "raid-analytics" || triggerCooldowns["raid-analytics"]}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                      >
-                        <span>Calculate Raid Analytics</span>
-                        {triggerLoading === "raid-analytics" && <span className="animate-spin">⏳</span>}
-                        {triggerCooldowns["raid-analytics"] && <span className="text-xs text-gray-400">⏱️</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
-                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
-                          handleTrigger("character-mechanics", () => triggerRebuildCharacterMechanicsLeaderboards(raidId, scope));
-                        }}
-                        disabled={triggerLoading === "character-mechanics" || triggerCooldowns["character-mechanics"]}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                      >
-                        <span>Calculate Mechanics Scores</span>
-                        {triggerLoading === "character-mechanics" && <span className="animate-spin">⏳</span>}
-                        {triggerCooldowns["character-mechanics"] && <span className="text-xs text-gray-400">⏱️</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
-                          const scope = selectedStatRaidId === "all" ? ("all" as const) : ("current" as const);
-                          handleTrigger("world-ranks", () => triggerUpdateWorldRanks(raidId, scope));
-                        }}
-                        disabled={triggerLoading === "world-ranks" || triggerCooldowns["world-ranks"]}
-                        className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                      >
-                        <span>Update World Ranks</span>
-                        {triggerLoading === "world-ranks" && <span className="animate-spin">⏳</span>}
-                        {triggerCooldowns["world-ranks"] && <span className="text-xs text-gray-400">⏱️</span>}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <ManualActionCard icon="📊" title="Raid Metrics">
+                  <ManualActionGroup title="Target raid tier">
+                    <select
+                      value={selectedStatRaidId}
+                      onChange={(e) => setSelectedStatRaidId(e.target.value)}
+                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="all">All Raids</option>
+                      <option value="current">Current Tier Only</option>
+                      {adminRaids.map((raid) => (
+                        <option key={raid.id} value={String(raid.id)}>
+                          {raid.name}
+                          {raid.isCurrent ? " (current)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </ManualActionGroup>
+                  <ManualActionGroup title="Derived metrics">
+                    {renderTriggerButton("all-statistics", "Calculate Statistics", () => {
+                      const { raidId, scope } = getSelectedStatRaidTarget();
+                      return triggerCalculateAllStatistics(raidId, scope);
+                    })}
+                    {renderTriggerButton("tier-lists", "Calculate Tier Lists", () => {
+                      const { raidId, scope } = getSelectedStatRaidTarget();
+                      return triggerCalculateTierLists(raidId, scope);
+                    })}
+                    {renderTriggerButton("raid-analytics", "Calculate Raid Analytics", () => {
+                      const { raidId, scope } = getSelectedStatRaidTarget();
+                      return triggerCalculateRaidAnalytics(raidId, scope);
+                    })}
+                    {renderTriggerButton("character-mechanics", "Calculate Mechanics Scores", () => {
+                      const { raidId, scope } = getSelectedStatRaidTarget();
+                      return triggerRebuildCharacterMechanicsLeaderboards(raidId, scope);
+                    })}
+                    {renderTriggerButton("world-ranks", "Update World Ranks", () => {
+                      const { raidId, scope } = getSelectedStatRaidTarget();
+                      return triggerUpdateWorldRanks(raidId, scope);
+                    })}
+                  </ManualActionGroup>
+                </ManualActionCard>
 
-                {/* Other Actions */}
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                    <span>🔧</span> Other Actions
-                  </h3>
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => handleTrigger("twitch-streams", triggerCheckTwitchStreams)}
-                      disabled={triggerLoading === "twitch-streams" || triggerCooldowns["twitch-streams"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Check Twitch Streams</span>
-                      {triggerLoading === "twitch-streams" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["twitch-streams"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("backfill-fight-vods", triggerBackfillFightVods)}
-                      disabled={triggerLoading === "backfill-fight-vods" || triggerCooldowns["backfill-fight-vods"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Backfill Best-Pull VODs</span>
-                      {triggerLoading === "backfill-fight-vods" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["backfill-fight-vods"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("guild-crests", triggerUpdateGuildCrests)}
-                      disabled={triggerLoading === "guild-crests" || triggerCooldowns["guild-crests"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Update Guild Crests</span>
-                      {triggerLoading === "guild-crests" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["guild-crests"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("rescan-deaths", triggerRescanDeathEvents)}
-                      disabled={triggerLoading === "rescan-deaths" || triggerCooldowns["rescan-deaths"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Rescan Death Events</span>
-                      {triggerLoading === "rescan-deaths" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rescan-deaths"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("rescan-characters", triggerRescanCharacters)}
-                      disabled={triggerLoading === "rescan-characters" || triggerCooldowns["rescan-characters"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Rescan Characters</span>
-                      {triggerLoading === "rescan-characters" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rescan-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("backfill-report-characters", triggerBackfillReportCharacters)}
-                      disabled={triggerLoading === "backfill-report-characters" || triggerCooldowns["backfill-report-characters"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Backfill Report Characters</span>
-                      {triggerLoading === "backfill-report-characters" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["backfill-report-characters"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("backfill-character-rankings", triggerBackfillCharacterRankings)}
-                      disabled={triggerLoading === "backfill-character-rankings" || triggerCooldowns["backfill-character-rankings"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Backfill Character Rankings</span>
-                      {triggerLoading === "backfill-character-rankings" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["backfill-character-rankings"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("refresh-character-ranking-candidates", () => triggerBackfillCharacterRankings(true))}
-                      disabled={triggerLoading === "refresh-character-ranking-candidates" || triggerCooldowns["refresh-character-ranking-candidates"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Discover Missing Ranking Pairs</span>
-                      {triggerLoading === "refresh-character-ranking-candidates" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["refresh-character-ranking-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("backfill-character-achievements", triggerBackfillCharacterAchievements)}
-                      disabled={triggerLoading === "backfill-character-achievements" || triggerCooldowns["backfill-character-achievements"]}
-                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
-                    >
-                      <span>Start Achievement Backfill</span>
-                      {triggerLoading === "backfill-character-achievements" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["backfill-character-achievements"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("refresh-character-achievement-candidates", () => triggerBackfillCharacterAchievements(true))}
-                      disabled={triggerLoading === "refresh-character-achievement-candidates" || triggerCooldowns["refresh-character-achievement-candidates"]}
-                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
-                    >
-                      <span>Retry Missing Achievement Fingerprints</span>
-                      {triggerLoading === "refresh-character-achievement-candidates" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["refresh-character-achievement-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("rebuild-character-account-groups", triggerRebuildCharacterAccountGroups)}
-                      disabled={
-                        triggerLoading === "rebuild-character-account-groups" ||
-                        triggerCooldowns["rebuild-character-account-groups"] ||
-                        characterAchievementBackfillStatus?.processor.isRunning
-                      }
-                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
-                    >
-                      <span>Rebuild Character Account Groups</span>
-                      {triggerLoading === "rebuild-character-account-groups" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rebuild-character-account-groups"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("rebuild-guild-network-snapshot", triggerRebuildGuildNetworkSnapshot)}
-                      disabled={triggerLoading === "rebuild-guild-network-snapshot" || triggerCooldowns["rebuild-guild-network-snapshot"]}
-                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
-                    >
-                      <span>Rebuild Guild Network Snapshot</span>
-                      {triggerLoading === "rebuild-guild-network-snapshot" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rebuild-guild-network-snapshot"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    {characterAchievementBackfillStatus && characterAchievementQueue && (
-                      <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium text-white">Achievement account matching</span>
-                          <span className={characterAchievementBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
-                            {characterAchievementBackfillStatus.processor.isWaitingForRateLimit
-                              ? "Rate limited"
-                              : characterAchievementBackfillStatus.processor.isRunning
-                                ? "Running"
-                                : "Idle"}
-                          </span>
+                <ManualActionCard icon="⚔️" title="Character Ranking Pipeline">
+                  <ManualActionGroup title="1. Queue rankings">
+                    {renderTriggerButton("backfill-character-rankings", "Backfill Character Rankings", triggerBackfillCharacterRankings)}
+                    {renderTriggerButton("refresh-character-ranking-candidates", "Discover Missing Ranking Pairs", () => triggerBackfillCharacterRankings(true))}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="2. Publish ranking tables">
+                    {renderTriggerButton("prune-character-rankings-without-mythic-evidence", "Prune Non-Mythic Ranking Rows", triggerPruneCharacterRankingsWithoutMythicEvidence, {
+                      disabled: characterRankingPipelineBusy,
+                    })}
+                    {renderTriggerButton("rebuild-character-ranking-leaderboards", "Rebuild Character Ranking Tables", triggerRebuildCharacterRankingLeaderboards, {
+                      disabled: characterRankingPipelineBusy,
+                    })}
+                  </ManualActionGroup>
+                  {characterRankingBackfillStatus && characterBackfillQueue && (
+                    <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium text-white">Character ranking backfill</span>
+                        <span className={characterRankingBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
+                          {characterRankingBackfillStatus.processor.isWaitingForRateLimit
+                            ? "Waiting for WCL reset"
+                            : characterRankingBackfillStatus.processor.isRunning
+                              ? "Running"
+                              : "Idle"}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, characterBackfillPercent)}%` }} />
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 text-center tabular-nums">
+                        <div>
+                          <div className="text-amber-400 font-semibold">{characterBackfillQueue.pending}</div>
+                          <div className="text-gray-500">pending</div>
                         </div>
-                        <div className="w-full bg-gray-700 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full bg-cyan-500" style={{ width: `${Math.min(100, characterAchievementPercent)}%` }} />
+                        <div>
+                          <div className="text-blue-400 font-semibold">{characterBackfillQueue.inProgress}</div>
+                          <div className="text-gray-500">running</div>
                         </div>
-                        <div className="grid grid-cols-5 gap-2 text-center tabular-nums">
-                          <div>
-                            <div className="text-amber-400 font-semibold">{characterAchievementQueue.pending}</div>
-                            <div className="text-gray-500">pending</div>
-                          </div>
-                          <div>
-                            <div className="text-blue-400 font-semibold">{characterAchievementQueue.inProgress}</div>
-                            <div className="text-gray-500">running</div>
-                          </div>
-                          <div>
-                            <div className="text-green-400 font-semibold">{characterAchievementQueue.completed}</div>
-                            <div className="text-gray-500">done</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-400 font-semibold">{characterAchievementQueue.notFound}</div>
-                            <div className="text-gray-500">missing</div>
-                          </div>
-                          <div>
-                            <div className="text-red-400 font-semibold">{characterAchievementQueue.failed}</div>
-                            <div className="text-gray-500">failed</div>
-                          </div>
+                        <div>
+                          <div className="text-green-400 font-semibold">{characterBackfillQueue.completed}</div>
+                          <div className="text-gray-500">done</div>
                         </div>
+                        <div>
+                          <div className="text-gray-400 font-semibold">{characterBackfillQueue.skipped}</div>
+                          <div className="text-gray-500">skipped</div>
+                        </div>
+                        <div>
+                          <div className="text-red-400 font-semibold">{characterBackfillQueue.failed}</div>
+                          <div className="text-gray-500">failed</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-gray-500 tabular-nums">
+                        <span>{characterBackfillPercent}% complete</span>
+                        <span>{characterBackfillQueue.rankingsWritten} rankings written</span>
+                      </div>
+                      {(characterBackfillQueue.observedSpecItems > 0 || characterBackfillQueue.fallbackSpecItems > 0) && (
                         <div className="flex items-center justify-between text-gray-500 tabular-nums">
-                          <span>{characterAchievementPercent}% complete</span>
-                          <span>{characterAchievementBackfillStatus.fingerprints} fingerprints</span>
+                          <span>{characterBackfillQueue.observedSpecItems} observed-spec items</span>
+                          <span>{characterBackfillQueue.fallbackSpecItems} fallback items</span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
-                          <div>
-                            <div className="text-cyan-300 font-semibold">{characterAchievementBackfillStatus.matches.high}</div>
-                            <div className="text-gray-500">high edges</div>
-                          </div>
-                          <div>
-                            <div className="text-sky-300 font-semibold">{characterAchievementBackfillStatus.matches.medium}</div>
-                            <div className="text-gray-500">medium edges</div>
-                          </div>
-                          <div>
-                            <div className="text-emerald-300 font-semibold">{characterAchievementBackfillStatus.groups}</div>
-                            <div className="text-gray-500">groups</div>
-                          </div>
+                      )}
+                      {characterRankingBackfillStatus.processor.currentItem && (
+                        <div className="text-gray-400 truncate">
+                          Current: {characterRankingBackfillStatus.processor.currentItem.name}-{characterRankingBackfillStatus.processor.currentItem.realm} /{" "}
+                          {characterRankingBackfillStatus.processor.currentItem.raidName ?? `Raid ${characterRankingBackfillStatus.processor.currentItem.zoneId}`}
                         </div>
-                        <div className="flex items-center justify-between text-gray-500">
-                          <span>{characterAchievementBackfillStatus.signalAchievementCount} signal achievements</span>
-                          <span>{characterAchievementBackfillStatus.tokens} indexed tokens</span>
-                        </div>
-                        {characterAchievementBackfillStatus.processor.currentItem && (
-                          <div className="text-gray-400 truncate">
-                            Current: {characterAchievementBackfillStatus.processor.currentItem.name}-{characterAchievementBackfillStatus.processor.currentItem.realm}
+                      )}
+                      {characterLeaderboardRebuild && (characterLeaderboardRebuild.isRunning || characterLeaderboardRebuild.processedPairs > 0 || characterLeaderboardRebuild.lastError) && (
+                        <div className="border-t border-gray-700 pt-2 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium text-white">Leaderboard table rebuild</span>
+                            <span className={characterLeaderboardRebuild.isRunning ? "text-blue-400" : characterLeaderboardRebuild.lastError ? "text-red-400" : "text-green-400"}>
+                              {characterLeaderboardRebuild.isRunning ? "Running" : characterLeaderboardRebuild.lastError ? "Failed" : "Idle"}
+                            </span>
                           </div>
-                        )}
-                        {characterAchievementBackfillStatus.processor.lastMessage && <div className="text-gray-500 truncate">{characterAchievementBackfillStatus.processor.lastMessage}</div>}
+                          <div className="w-full bg-gray-700 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, characterLeaderboardRebuildPercent)}%` }} />
+                          </div>
+                          <div className="flex items-center justify-between text-gray-500 tabular-nums">
+                            <span>
+                              {characterLeaderboardRebuild.processedPairs}/{characterLeaderboardRebuild.totalPairs} pairs
+                            </span>
+                            <span>{characterLeaderboardRebuild.writtenEntries} entries written</span>
+                          </div>
+                          {characterLeaderboardRebuild.lastMessage && <div className="text-gray-400 truncate">{characterLeaderboardRebuild.lastMessage}</div>}
+                          {characterLeaderboardRebuild.lastError && <div className="text-red-400 truncate">{characterLeaderboardRebuild.lastError}</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </ManualActionCard>
+
+                <ManualActionCard icon="🧬" title="Character Identity Pipeline">
+                  <ManualActionGroup title="1. Achievement fingerprints">
+                    {renderTriggerButton("backfill-character-achievements", "Start Achievement Backfill", triggerBackfillCharacterAchievements)}
+                    {renderTriggerButton("refresh-character-achievement-candidates", "Retry Missing Achievement Fingerprints", () => triggerBackfillCharacterAchievements(true))}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="2. Account groups">
+                    {renderTriggerButton("rebuild-character-account-groups", "Rebuild Character Account Groups", triggerRebuildCharacterAccountGroups, {
+                      disabled: characterAchievementBackfillStatus?.processor.isRunning,
+                    })}
+                  </ManualActionGroup>
+                  {characterAchievementBackfillStatus && characterAchievementQueue && (
+                    <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium text-white">Achievement account matching</span>
+                        <span className={characterAchievementBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
+                          {characterAchievementBackfillStatus.processor.isWaitingForRateLimit
+                            ? "Rate limited"
+                            : characterAchievementBackfillStatus.processor.isRunning
+                              ? "Running"
+                              : "Idle"}
+                        </span>
                       </div>
-                    )}
-                    <button
-                      onClick={() => handleTrigger("rebuild-character-ranking-leaderboards", triggerRebuildCharacterRankingLeaderboards)}
-                      disabled={
-                        triggerLoading === "rebuild-character-ranking-leaderboards" ||
-                        triggerCooldowns["rebuild-character-ranking-leaderboards"] ||
-                        characterRankingBackfillStatus?.processor.isRunning ||
-                        characterRankingBackfillStatus?.leaderboardRebuild.isRunning
-                      }
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Rebuild Character Ranking Tables</span>
-                      {triggerLoading === "rebuild-character-ranking-leaderboards" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rebuild-character-ranking-leaderboards"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("prune-character-rankings-without-mythic-evidence", triggerPruneCharacterRankingsWithoutMythicEvidence)}
-                      disabled={
-                        triggerLoading === "prune-character-rankings-without-mythic-evidence" ||
-                        triggerCooldowns["prune-character-rankings-without-mythic-evidence"] ||
-                        characterRankingBackfillStatus?.processor.isRunning ||
-                        characterRankingBackfillStatus?.leaderboardRebuild.isRunning
-                      }
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Prune Non-Mythic Ranking Rows</span>
-                      {triggerLoading === "prune-character-rankings-without-mythic-evidence" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["prune-character-rankings-without-mythic-evidence"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    {characterRankingBackfillStatus && characterBackfillQueue && (
-                      <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium text-white">Character ranking backfill</span>
-                          <span className={characterRankingBackfillStatus.processor.isRunning ? "text-blue-400" : "text-gray-400"}>
-                            {characterRankingBackfillStatus.processor.isWaitingForRateLimit
-                              ? "Waiting for WCL reset"
-                              : characterRankingBackfillStatus.processor.isRunning
-                                ? "Running"
-                                : "Idle"}
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-700 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, characterBackfillPercent)}%` }} />
-                        </div>
-                        <div className="grid grid-cols-5 gap-2 text-center">
-                          <div>
-                            <div className="text-amber-400 font-semibold">{characterBackfillQueue.pending}</div>
-                            <div className="text-gray-500">pending</div>
-                          </div>
-                          <div>
-                            <div className="text-blue-400 font-semibold">{characterBackfillQueue.inProgress}</div>
-                            <div className="text-gray-500">running</div>
-                          </div>
-                          <div>
-                            <div className="text-green-400 font-semibold">{characterBackfillQueue.completed}</div>
-                            <div className="text-gray-500">done</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-400 font-semibold">{characterBackfillQueue.skipped}</div>
-                            <div className="text-gray-500">skipped</div>
-                          </div>
-                          <div>
-                            <div className="text-red-400 font-semibold">{characterBackfillQueue.failed}</div>
-                            <div className="text-gray-500">failed</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-gray-500">
-                          <span>{characterBackfillPercent}% complete</span>
-                          <span>{characterBackfillQueue.rankingsWritten} rankings written</span>
-                        </div>
-                        {(characterBackfillQueue.observedSpecItems > 0 || characterBackfillQueue.fallbackSpecItems > 0) && (
-                          <div className="flex items-center justify-between text-gray-500">
-                            <span>{characterBackfillQueue.observedSpecItems} observed-spec items</span>
-                            <span>{characterBackfillQueue.fallbackSpecItems} fallback items</span>
-                          </div>
-                        )}
-                        {characterRankingBackfillStatus.processor.currentItem && (
-                          <div className="text-gray-400 truncate">
-                            Current: {characterRankingBackfillStatus.processor.currentItem.name}-{characterRankingBackfillStatus.processor.currentItem.realm} /{" "}
-                            {characterRankingBackfillStatus.processor.currentItem.raidName ?? `Raid ${characterRankingBackfillStatus.processor.currentItem.zoneId}`}
-                          </div>
-                        )}
-                        {characterLeaderboardRebuild && (characterLeaderboardRebuild.isRunning || characterLeaderboardRebuild.processedPairs > 0 || characterLeaderboardRebuild.lastError) && (
-                          <div className="border-t border-gray-700 pt-2 space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-medium text-white">Leaderboard table rebuild</span>
-                              <span className={characterLeaderboardRebuild.isRunning ? "text-blue-400" : characterLeaderboardRebuild.lastError ? "text-red-400" : "text-green-400"}>
-                                {characterLeaderboardRebuild.isRunning ? "Running" : characterLeaderboardRebuild.lastError ? "Failed" : "Idle"}
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-700 rounded-full h-1.5">
-                              <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, characterLeaderboardRebuildPercent)}%` }} />
-                            </div>
-                            <div className="flex items-center justify-between text-gray-500">
-                              <span>
-                                {characterLeaderboardRebuild.processedPairs}/{characterLeaderboardRebuild.totalPairs} pairs
-                              </span>
-                              <span>{characterLeaderboardRebuild.writtenEntries} entries written</span>
-                            </div>
-                            {characterLeaderboardRebuild.lastMessage && <div className="text-gray-400 truncate">{characterLeaderboardRebuild.lastMessage}</div>}
-                            {characterLeaderboardRebuild.lastError && <div className="text-red-400 truncate">{characterLeaderboardRebuild.lastError}</div>}
-                          </div>
-                        )}
+                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-cyan-500" style={{ width: `${Math.min(100, characterAchievementPercent)}%` }} />
                       </div>
-                    )}
-                    <button
-                      onClick={() => handleTrigger("rebuild-character-raid-participations", triggerRebuildCharacterRaidParticipations)}
-                      disabled={triggerLoading === "rebuild-character-raid-participations" || triggerCooldowns["rebuild-character-raid-participations"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Rebuild Character Raid Data</span>
-                      {triggerLoading === "rebuild-character-raid-participations" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["rebuild-character-raid-participations"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                    <button
-                      onClick={() => handleTrigger("update-raiderio", triggerUpdateRaiderIOGuilds)}
-                      disabled={triggerLoading === "update-raiderio" || triggerCooldowns["update-raiderio"]}
-                      className="w-full px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 disabled:opacity-50 flex items-center justify-between"
-                    >
-                      <span>Update Raider.IO Guilds</span>
-                      {triggerLoading === "update-raiderio" && <span className="animate-spin">⏳</span>}
-                      {triggerCooldowns["update-raiderio"] && <span className="text-xs text-gray-400">⏱️</span>}
-                    </button>
-                  </div>
-                </div>
+                      <div className="grid grid-cols-5 gap-2 text-center tabular-nums">
+                        <div>
+                          <div className="text-amber-400 font-semibold">{characterAchievementQueue.pending}</div>
+                          <div className="text-gray-500">pending</div>
+                        </div>
+                        <div>
+                          <div className="text-blue-400 font-semibold">{characterAchievementQueue.inProgress}</div>
+                          <div className="text-gray-500">running</div>
+                        </div>
+                        <div>
+                          <div className="text-green-400 font-semibold">{characterAchievementQueue.completed}</div>
+                          <div className="text-gray-500">done</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 font-semibold">{characterAchievementQueue.notFound}</div>
+                          <div className="text-gray-500">missing</div>
+                        </div>
+                        <div>
+                          <div className="text-red-400 font-semibold">{characterAchievementQueue.failed}</div>
+                          <div className="text-gray-500">failed</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-gray-500 tabular-nums">
+                        <span>{characterAchievementPercent}% complete</span>
+                        <span>{characterAchievementBackfillStatus.fingerprints} fingerprints</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
+                        <div>
+                          <div className="text-cyan-300 font-semibold">{characterAchievementBackfillStatus.matches.high}</div>
+                          <div className="text-gray-500">high edges</div>
+                        </div>
+                        <div>
+                          <div className="text-sky-300 font-semibold">{characterAchievementBackfillStatus.matches.medium}</div>
+                          <div className="text-gray-500">medium edges</div>
+                        </div>
+                        <div>
+                          <div className="text-emerald-300 font-semibold">{characterAchievementBackfillStatus.groups}</div>
+                          <div className="text-gray-500">groups</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-gray-500 tabular-nums">
+                        <span>{characterAchievementBackfillStatus.signalAchievementCount} signal achievements</span>
+                        <span>{characterAchievementBackfillStatus.tokens} indexed tokens</span>
+                      </div>
+                      {characterAchievementBackfillStatus.processor.currentItem && (
+                        <div className="text-gray-400 truncate">
+                          Current: {characterAchievementBackfillStatus.processor.currentItem.name}-{characterAchievementBackfillStatus.processor.currentItem.realm}
+                        </div>
+                      )}
+                      {characterAchievementBackfillStatus.processor.lastMessage && <div className="text-gray-500 truncate">{characterAchievementBackfillStatus.processor.lastMessage}</div>}
+                    </div>
+                  )}
+                </ManualActionCard>
+
+                <ManualActionCard icon="🕸️" title="Guild Network Pipeline">
+                  <ManualActionGroup title="1. Character raid data">
+                    {renderTriggerButton("rebuild-character-raid-participations", "Rebuild Character Raid Data", triggerRebuildCharacterRaidParticipations)}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="2. Snapshot only">
+                    {renderTriggerButton("rebuild-guild-network-snapshot", "Rebuild Guild Network Snapshot", triggerRebuildGuildNetworkSnapshot)}
+                  </ManualActionGroup>
+                </ManualActionCard>
+
+                <ManualActionCard icon="🎥" title="Streams & VODs">
+                  <ManualActionGroup title="Live status">
+                    {renderTriggerButton("twitch-streams", "Check Twitch Streams", triggerCheckTwitchStreams)}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="Fight media">
+                    {renderTriggerButton("backfill-fight-vods", "Backfill Best-Pull VODs", triggerBackfillFightVods)}
+                  </ManualActionGroup>
+                </ManualActionCard>
               </div>
             </div>
           </div>
