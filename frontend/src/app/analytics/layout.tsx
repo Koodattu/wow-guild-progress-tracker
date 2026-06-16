@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ANALYTICS_TABS = [
-  { href: "/analytics/raids", label: "Raid Stats" },
-  { href: "/analytics/network", label: "Raider Network" },
+  { href: "/analytics/raids", label: "Raid Analytics" },
+  { href: "/analytics/network", label: "Character Guild Network" },
 ] as const;
 
 function tabClass(active: boolean) {
@@ -19,7 +19,7 @@ function tabClass(active: boolean) {
 export default function AnalyticsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === "/analytics/network") {
+  if (pathname === "/analytics" || pathname === "/analytics/network") {
     return <div className="w-full">{children}</div>;
   }
 

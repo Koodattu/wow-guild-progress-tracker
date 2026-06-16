@@ -217,6 +217,7 @@
   },
   "tierListsPage": {
     "title": "Guild Tier Lists",
+    "subtitle": "Compare guild tier ratings by overall score, speed, and efficiency across raids.",
     "selectRaid": "Select Raid",
     "overallAllRaids": "Overall (All Raids)",
     "lastCalculated": "Last calculated",

@@ -217,6 +217,7 @@
   },
   "tierListsPage": {
     "title": "Kiltojen Tier Listat",
+    "subtitle": "Vertaile kiltojen tier-arvioita kokonaispisteiden, nopeuden ja tehokkuuden mukaan eri raideissa.",
     "selectRaid": "Valitse Raidi",
     "overallAllRaids": "Kokonaisarvio (Kaikki Raidit)",
     "lastCalculated": "Viimeksi laskettu",

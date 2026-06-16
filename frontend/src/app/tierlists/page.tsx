@@ -301,9 +301,12 @@ export default function TierListsPage() {
 
   return (
     <div className="w-full px-3 md:px-6">
-      <div className="mb-4 md:mb-6">
-        {/* Raid Selector and Last Calculated */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
+      <div className="flex flex-col gap-4 mb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl lg:text-3xl font-bold text-white text-balance">{t("title")}</h1>
+          <p className="text-sm text-gray-500 text-pretty">{t("subtitle")}</p>
+        </div>
+        <div className="flex flex-col gap-2 lg:items-end lg:shrink-0">
           <div className="flex items-end gap-3">
             <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} showOverall={true} />
             {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mb-2"></div>}
