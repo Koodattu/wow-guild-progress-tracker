@@ -10,6 +10,7 @@ const router = Router();
 
 const ALLOWED_ROLES = new Set(["dps", "healer", "tank"] as const);
 const ALLOWED_METRICS = new Set(["dps", "hps"] as const);
+const ALLOWED_SCORE_TYPES = new Set(["combined", "survival"] as const);
 const MYTHIC_DIFFICULTY = 5;
 
 const parseNumberQuery = (value: unknown): number | undefined => {
@@ -99,6 +100,8 @@ router.get("/", async (req: Request, res: Response) => {
 
     const metricRaw = parseStringQuery(req.query.metric)?.toLowerCase() ?? "dps";
     const metric = metricRaw as "dps" | "hps";
+    const scoreTypeRaw = parseStringQuery(req.query.scoreType)?.toLowerCase() ?? "combined";
+    const scoreType = scoreTypeRaw as "combined" | "survival";
 
     if (encounterId !== undefined && !Number.isFinite(encounterId)) {
       return res.status(400).json({ error: "Invalid encounterId" });
@@ -118,6 +121,9 @@ router.get("/", async (req: Request, res: Response) => {
     if (!ALLOWED_METRICS.has(metric)) {
       return res.status(400).json({ error: "Invalid metric" });
     }
+    if (!ALLOWED_SCORE_TYPES.has(scoreType)) {
+      return res.status(400).json({ error: "Invalid scoreType" });
+    }
     if (characterName !== undefined && characterName.length > 64) {
       return res.status(400).json({ error: "Invalid characterName" });
     }
@@ -132,6 +138,7 @@ router.get("/", async (req: Request, res: Response) => {
       specName,
       role,
       metric,
+      scoreType,
       page,
       limit,
       characterName,

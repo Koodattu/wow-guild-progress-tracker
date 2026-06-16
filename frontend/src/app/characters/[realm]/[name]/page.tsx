@@ -84,6 +84,31 @@ type MechanicsRaidGroup = {
   bossColumns: MechanicsBossColumn[];
 };
 
+type CharacterPerformanceTab = "rankings" | "mechanics" | "combined";
+type MechanicsScoreKind = "survival" | "combined";
+
+const CHARACTER_PERFORMANCE_TABS: Array<{
+  id: CharacterPerformanceTab;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "rankings",
+    label: "Rankings",
+    description: "Best available parses grouped by raid and boss.",
+  },
+  {
+    id: "mechanics",
+    label: "Mechanics",
+    description: "Survival score with early-death context.",
+  },
+  {
+    id: "combined",
+    label: "Combined",
+    description: "Combined Mythic score with early-death context.",
+  },
+];
+
 function formatShortDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -203,22 +228,39 @@ function RankingsMetricCell({ row, compact = false }: { row: Pick<CharacterRanki
   );
 }
 
-function MechanicsScoreCell({ row, compact = false }: { row?: CharacterMechanic; compact?: boolean }) {
+function getMechanicsScoreValue(row: CharacterMechanic, scoreKind: MechanicsScoreKind) {
+  return scoreKind === "survival" ? row.survivalScore : row.score;
+}
+
+function compareMechanicsRows(scoreKind: MechanicsScoreKind) {
+  return (a: CharacterMechanic, b: CharacterMechanic) => {
+    const scoreA = getMechanicsScoreValue(a, scoreKind) ?? -1;
+    const scoreB = getMechanicsScoreValue(b, scoreKind) ?? -1;
+    const scoreDiff = scoreB - scoreA;
+    if (scoreDiff !== 0) return scoreDiff;
+    return (b.rankPercent ?? -1) - (a.rankPercent ?? -1);
+  };
+}
+
+function MechanicsScoreCell({ row, scoreKind, compact = false }: { row?: CharacterMechanic; scoreKind: MechanicsScoreKind; compact?: boolean }) {
   if (!row) return <span className="text-gray-600">-</span>;
 
+  const value = getMechanicsScoreValue(row, scoreKind);
+  const colorValue = value === null || value === undefined ? 0 : Math.round(value);
+
   return (
-    <span className={`inline-flex items-center justify-end font-semibold tabular-nums ${compact ? "text-sm" : ""}`} style={{ color: getParseColor(Math.round(row.score)) }}>
-      {formatNullableScore(row.score)}
+    <span className={`inline-flex items-center justify-end font-semibold tabular-nums ${compact ? "text-sm" : ""}`} style={{ color: getParseColor(colorValue) }}>
+      {formatNullableScore(value)}
     </span>
   );
 }
 
-function MechanicsBossScoreCell({ row, compact = false }: { row?: CharacterMechanic; compact?: boolean }) {
+function MechanicsBossScoreCell({ row, scoreKind, compact = false }: { row?: CharacterMechanic; scoreKind: MechanicsScoreKind; compact?: boolean }) {
   if (!row) return <span className="text-gray-600">-</span>;
 
   return (
     <span className="inline-flex flex-col items-center gap-0.5 tabular-nums">
-      <MechanicsScoreCell row={row} compact={compact} />
+      <MechanicsScoreCell row={row} scoreKind={scoreKind} compact={compact} />
       <span className="text-[11px] font-medium leading-none text-gray-500">{formatEarlyDeaths(row)}</span>
     </span>
   );
@@ -244,6 +286,62 @@ function RankingsBossParseCell({ row, classId, compact = false }: { row?: Charac
       ) : null}
     </span>
   );
+}
+
+function buildMechanicsRaidGroups(rows: CharacterMechanic[] | undefined, raids: RaidInfo[], bossesByRaid: Map<number, Boss[]>, scoreKind: MechanicsScoreKind): MechanicsRaidGroup[] {
+  if (!rows?.length) return [];
+
+  const raidById = new Map(raids.map((raid) => [raid.id, raid]));
+  const compareMechanics = compareMechanicsRows(scoreKind);
+  const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; overall: CharacterMechanic[]; bossMechanics: Map<number, CharacterMechanic[]> }>();
+
+  rows.forEach((row) => {
+    if (!row.deathDataAvailable || row.survivalScore === null) return;
+
+    const group = groups.get(row.zoneId) ?? {
+      zoneId: row.zoneId,
+      raidName: row.raidName,
+      raid: raidById.get(row.zoneId),
+      overall: [],
+      bossMechanics: new Map<number, CharacterMechanic[]>(),
+    };
+
+    if (row.encounterId === null) {
+      group.overall.push(row);
+    } else {
+      const mechanics = group.bossMechanics.get(row.encounterId) ?? [];
+      mechanics.push(row);
+      group.bossMechanics.set(row.encounterId, mechanics);
+    }
+
+    groups.set(row.zoneId, group);
+  });
+
+  return Array.from(groups.values())
+    .sort((a, b) => b.zoneId - a.zoneId)
+    .map((group) => {
+      const bosses = bossesByRaid.get(group.zoneId) ?? [];
+      const bossEntries =
+        bosses.length > 0
+          ? bosses.map((boss) => [boss.id, boss.name, boss] as const)
+          : Array.from(group.bossMechanics.entries()).map(([encounterId, mechanics]) => {
+              const bestMechanic = [...mechanics].sort(compareMechanics)[0];
+              return [encounterId, bestMechanic.encounterName ?? `Encounter ${encounterId}`, undefined] as const;
+            });
+
+      return {
+        zoneId: group.zoneId,
+        raidName: group.raidName,
+        raid: group.raid,
+        bestOverall: [...group.overall].sort(compareMechanics)[0],
+        bossColumns: bossEntries.map(([encounterId, encounterName, boss]) => ({
+          encounterId,
+          encounterName,
+          boss,
+          bestMechanic: [...(group.bossMechanics.get(encounterId) ?? [])].sort(compareMechanics)[0],
+        })),
+      };
+    });
 }
 
 function RaidNameCell({ raid, muted = false }: { raid: RaidInfo; muted?: boolean }) {
@@ -591,6 +689,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const [timelineReportsLoading, setTimelineReportsLoading] = useState(false);
   const [timelineReportsError, setTimelineReportsError] = useState<string | null>(null);
   const [isNameHistoryOpen, setIsNameHistoryOpen] = useState(false);
+  const [activePerformanceTab, setActivePerformanceTab] = useState<CharacterPerformanceTab>("rankings");
   const timelineReportsRequestId = useRef(0);
   const { data: raids = [], isLoading: isLoadingRaids, error: raidsError } = useRaids();
   const profile = lookup?.type === "profile" ? lookup : null;
@@ -816,60 +915,8 @@ export default function CharacterProfilePage({ params }: PageProps) {
       });
   }, [profile, raids, bossesByRaid]);
 
-  const mechanicsRaidGroups = useMemo<MechanicsRaidGroup[]>(() => {
-    if (!profile?.mechanics?.length) return [];
-
-    const raidById = new Map(raids.map((raid) => [raid.id, raid]));
-    const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; overall: CharacterMechanic[]; bossMechanics: Map<number, CharacterMechanic[]> }>();
-
-    profile.mechanics.forEach((row) => {
-      if (!row.deathDataAvailable || row.survivalScore === null) return;
-
-      const group = groups.get(row.zoneId) ?? {
-        zoneId: row.zoneId,
-        raidName: row.raidName,
-        raid: raidById.get(row.zoneId),
-        overall: [],
-        bossMechanics: new Map<number, CharacterMechanic[]>(),
-      };
-
-      if (row.encounterId === null) {
-        group.overall.push(row);
-      } else {
-        const mechanics = group.bossMechanics.get(row.encounterId) ?? [];
-        mechanics.push(row);
-        group.bossMechanics.set(row.encounterId, mechanics);
-      }
-
-      groups.set(row.zoneId, group);
-    });
-
-    return Array.from(groups.values())
-      .sort((a, b) => b.zoneId - a.zoneId)
-      .map((group) => {
-        const bosses = bossesByRaid.get(group.zoneId) ?? [];
-        const bossEntries =
-          bosses.length > 0
-            ? bosses.map((boss) => [boss.id, boss.name, boss] as const)
-            : Array.from(group.bossMechanics.entries()).map(([encounterId, mechanics]) => {
-                const bestMechanic = [...mechanics].sort((a, b) => b.score - a.score)[0];
-                return [encounterId, bestMechanic.encounterName ?? `Encounter ${encounterId}`, undefined] as const;
-              });
-
-        return {
-          zoneId: group.zoneId,
-          raidName: group.raidName,
-          raid: group.raid,
-          bestOverall: [...group.overall].sort((a, b) => b.score - a.score)[0],
-          bossColumns: bossEntries.map(([encounterId, encounterName, boss]) => ({
-            encounterId,
-            encounterName,
-            boss,
-            bestMechanic: [...(group.bossMechanics.get(encounterId) ?? [])].sort((a, b) => b.score - a.score)[0],
-          })),
-        };
-      });
-  }, [profile, raids, bossesByRaid]);
+  const survivalRaidGroups = useMemo<MechanicsRaidGroup[]>(() => buildMechanicsRaidGroups(profile?.mechanics, raids, bossesByRaid, "survival"), [profile, raids, bossesByRaid]);
+  const combinedRaidGroups = useMemo<MechanicsRaidGroup[]>(() => buildMechanicsRaidGroups(profile?.mechanics, raids, bossesByRaid, "combined"), [profile, raids, bossesByRaid]);
 
   if (loading || isLoadingRaids) {
     return (
@@ -899,6 +946,13 @@ export default function CharacterProfilePage({ params }: PageProps) {
   const seenRange = `${formatShortDate(character.firstReportSeenAt)} - ${formatShortDate(character.lastReportSeenAt)}`;
   const externalUrls = getCharacterExternalUrls(character.region, character.realm, character.name);
   const nameHistory = character.nameHistory ?? [];
+  const activePerformanceConfig = CHARACTER_PERFORMANCE_TABS.find((tab) => tab.id === activePerformanceTab) ?? CHARACTER_PERFORMANCE_TABS[0];
+  const activeMechanicsScoreKind: MechanicsScoreKind = activePerformanceTab === "mechanics" ? "survival" : "combined";
+  const activeMechanicsRaidGroups = activePerformanceTab === "mechanics" ? survivalRaidGroups : combinedRaidGroups;
+  const activeMechanicsScoreLabel = activePerformanceTab === "mechanics" ? "Survival" : "Score";
+  const activeMechanicsBossLabel = activePerformanceTab === "mechanics" ? "Boss survival" : "Boss scores";
+  const activeMechanicsEmptyLabel =
+    activePerformanceTab === "mechanics" ? "No survival scores have been calculated for this character." : "No combined scores have been calculated for this character.";
 
   return (
     <main className="min-h-screen px-4 py-8">
@@ -1073,95 +1127,106 @@ export default function CharacterProfilePage({ params }: PageProps) {
         ) : null}
 
         <section className="rounded-lg border border-gray-700 bg-gray-900">
-          <div className="border-b border-gray-700 px-4 py-3">
-            <h2 className="text-lg font-semibold text-white">Rankings</h2>
-            <p className="text-sm text-gray-400">Best available parses grouped by raid and boss.</p>
-          </div>
-          {rankingRaidGroups.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-collapse">
-                <colgroup>
-                  <col className="w-[300px]" />
-                  <col className="w-[104px]" />
-                  <col className="w-[112px]" />
-                  <col />
-                </colgroup>
-                <thead>
-                  <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
-                    <th className="px-4 py-2.5">Raid</th>
-                    <th className="px-3 py-2.5 text-right">Metric</th>
-                    <th className="px-3 py-2.5 text-right">Score</th>
-                    <th className="px-3 py-2.5">Boss parses</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankingRaidGroups.map((group) => (
-                    <tr key={group.zoneId} className="border-b border-gray-800 last:border-0">
-                      <td className="px-4 py-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <IconImage
-                            iconFilename={group.raid?.iconUrl}
-                            alt={`${group.raidName} icon`}
-                            width={32}
-                            height={32}
-                            className="h-8 w-8 shrink-0 rounded object-cover ring-1 ring-white/10"
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate font-semibold leading-tight text-gray-100">{group.raidName}</div>
-                            <div className="mt-0.5 text-xs tabular-nums text-gray-500">{group.bossColumns.length} bosses</div>
-                          </div>
-                        </div>
-                      </td>
-                      {group.bestAllStars ? (
-                        <>
-                          <td className="px-3 py-4">
-                            <RankingsMetricCell row={group.bestAllStars} compact />
-                          </td>
-                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="px-3 py-4 text-right text-gray-600">-</td>
-                          <td className="px-3 py-4 text-right text-gray-600">-</td>
-                        </>
-                      )}
-                      <td className="px-3 py-3">
-                        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(56px, 1fr))` }}>
-                          {group.bossColumns.map((bossColumn) => (
-                            <div
-                              key={getBossKey(group.zoneId, bossColumn.encounterId)}
-                              className="flex min-w-0 flex-col items-center justify-start gap-1"
-                              title={bossColumn.encounterName}
-                              aria-label={`${bossColumn.encounterName} parse`}
-                            >
-                              <IconImage
-                                iconFilename={bossColumn.boss?.iconUrl}
-                                alt=""
-                                width={28}
-                                height={28}
-                                className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
-                              />
-                              <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} compact />
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="flex flex-col gap-3 border-b border-gray-700 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Performance</h2>
+              <p className="text-sm text-gray-400">{activePerformanceConfig.description}</p>
             </div>
-          ) : (
-            <div className="px-4 py-8 text-center text-gray-400">No rankings have been fetched for this character.</div>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-gray-700 bg-gray-900">
-          <div className="border-b border-gray-700 px-4 py-3">
-            <h2 className="text-lg font-semibold text-white">Mechanics</h2>
-            <p className="text-sm text-gray-400">Combined Mythic score with early-death context.</p>
+            <div className="inline-flex self-start rounded-md bg-gray-950/70 p-1 ring-1 ring-white/10">
+              {CHARACTER_PERFORMANCE_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActivePerformanceTab(tab.id)}
+                  className={`min-h-10 rounded px-3 py-2 text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] ${
+                    activePerformanceTab === tab.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-          {mechanicsRaidGroups.length ? (
+
+          {activePerformanceTab === "rankings" ? (
+            rankingRaidGroups.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1180px] border-collapse">
+                  <colgroup>
+                    <col className="w-[300px]" />
+                    <col className="w-[104px]" />
+                    <col className="w-[112px]" />
+                    <col />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
+                      <th className="px-4 py-2.5">Raid</th>
+                      <th className="px-3 py-2.5 text-right">Metric</th>
+                      <th className="px-3 py-2.5 text-right">Score</th>
+                      <th className="px-3 py-2.5">Boss parses</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankingRaidGroups.map((group) => (
+                      <tr key={group.zoneId} className="border-b border-gray-800 last:border-0">
+                        <td className="px-4 py-4">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <IconImage
+                              iconFilename={group.raid?.iconUrl}
+                              alt={`${group.raidName} icon`}
+                              width={32}
+                              height={32}
+                              className="h-8 w-8 shrink-0 rounded object-cover ring-1 ring-white/10"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold leading-tight text-gray-100">{group.raidName}</div>
+                              <div className="mt-0.5 text-xs tabular-nums text-gray-500">{group.bossColumns.length} bosses</div>
+                            </div>
+                          </div>
+                        </td>
+                        {group.bestAllStars ? (
+                          <>
+                            <td className="px-3 py-4">
+                              <RankingsMetricCell row={group.bestAllStars} compact />
+                            </td>
+                            <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatScore(group.bestAllStars.score)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-3 py-4 text-right text-gray-600">-</td>
+                            <td className="px-3 py-4 text-right text-gray-600">-</td>
+                          </>
+                        )}
+                        <td className="px-3 py-3">
+                          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(group.bossColumns.length, 1)}, minmax(56px, 1fr))` }}>
+                            {group.bossColumns.map((bossColumn) => (
+                              <div
+                                key={getBossKey(group.zoneId, bossColumn.encounterId)}
+                                className="flex min-w-0 flex-col items-center justify-start gap-1"
+                                title={bossColumn.encounterName}
+                                aria-label={`${bossColumn.encounterName} parse`}
+                              >
+                                <IconImage
+                                  iconFilename={bossColumn.boss?.iconUrl}
+                                  alt=""
+                                  width={28}
+                                  height={28}
+                                  className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
+                                />
+                                <RankingsBossParseCell row={bossColumn.bestRanking} classId={character.classID} compact />
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="px-4 py-8 text-center text-gray-400">No rankings have been fetched for this character.</div>
+            )
+          ) : activeMechanicsRaidGroups.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] border-collapse">
                 <colgroup>
@@ -1175,14 +1240,14 @@ export default function CharacterProfilePage({ params }: PageProps) {
                   <tr className="border-b border-gray-800 text-left text-xs font-semibold text-gray-400">
                     <th className="px-4 py-2.5">Raid</th>
                     <th className="px-3 py-2.5 text-right">Metric</th>
-                    <th className="px-3 py-2.5 text-right">Score</th>
+                    <th className="px-3 py-2.5 text-right">{activeMechanicsScoreLabel}</th>
                     <th className="px-3 py-2.5 text-right">Early deaths</th>
-                    <th className="px-3 py-2.5">Boss scores</th>
+                    <th className="px-3 py-2.5">{activeMechanicsBossLabel}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mechanicsRaidGroups.map((group) => (
-                    <tr key={`mechanics-${group.zoneId}`} className="border-b border-gray-800 last:border-0">
+                  {activeMechanicsRaidGroups.map((group) => (
+                    <tr key={`${activePerformanceTab}-${group.zoneId}`} className="border-b border-gray-800 last:border-0">
                       <td className="px-4 py-4">
                         <div className="flex min-w-0 items-center gap-3">
                           <IconImage
@@ -1204,7 +1269,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                             <RankingsMetricCell row={group.bestOverall} compact />
                           </td>
                           <td className="px-3 py-4 text-right">
-                            <MechanicsScoreCell row={group.bestOverall} />
+                            <MechanicsScoreCell row={group.bestOverall} scoreKind={activeMechanicsScoreKind} />
                           </td>
                           <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatEarlyDeaths(group.bestOverall)}</td>
                         </>
@@ -1222,7 +1287,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                               key={getBossKey(group.zoneId, bossColumn.encounterId)}
                               className="flex min-w-0 flex-col items-center justify-start gap-1"
                               title={bossColumn.encounterName}
-                              aria-label={`${bossColumn.encounterName} mechanics score`}
+                              aria-label={`${bossColumn.encounterName} ${activePerformanceTab === "mechanics" ? "survival score" : "combined score"}`}
                             >
                               <IconImage
                                 iconFilename={bossColumn.boss?.iconUrl}
@@ -1231,7 +1296,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                                 height={28}
                                 className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
                               />
-                              <MechanicsBossScoreCell row={bossColumn.bestMechanic} compact />
+                              <MechanicsBossScoreCell row={bossColumn.bestMechanic} scoreKind={activeMechanicsScoreKind} compact />
                             </div>
                           ))}
                         </div>
@@ -1242,7 +1307,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
               </table>
             </div>
           ) : (
-            <div className="px-4 py-8 text-center text-gray-400">No mechanics scores have been calculated for this character.</div>
+            <div className="px-4 py-8 text-center text-gray-400">{activeMechanicsEmptyLabel}</div>
           )}
         </section>
       </div>

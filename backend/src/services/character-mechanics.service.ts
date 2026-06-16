@@ -18,6 +18,7 @@ const FIGHT_CURSOR_BATCH_SIZE = 1000;
 
 type Metric = "dps" | "hps";
 type Role = "dps" | "healer" | "tank";
+type MechanicsScoreType = "combined" | "survival";
 
 type BuildResult = {
   zones: Array<{
@@ -557,12 +558,13 @@ class CharacterMechanicsService {
     specName?: string;
     role?: Role;
     metric?: Metric;
+    scoreType?: MechanicsScoreType;
     limit?: number;
     page?: number;
     characterName?: string;
     guildName?: string;
   }): Promise<QueryResponse> {
-    const { zoneId, encounterId, classId, specName, role, metric = "dps", limit = 100, page = 1, characterName, guildName } = options;
+    const { zoneId, encounterId, classId, specName, role, metric = "dps", scoreType = "combined", limit = 100, page = 1, characterName, guildName } = options;
     const normalizedSpecName = specName?.trim().toLowerCase();
     const normalizedRole = role?.toLowerCase() as Role | undefined;
     const normalizedCharacterName = characterName?.trim();
@@ -571,6 +573,7 @@ class CharacterMechanicsService {
     const partialGuildNameRegex = normalizedGuildName ? new RegExp(this.escapeRegex(normalizedGuildName), "i") : undefined;
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const isBossType = encounterId !== undefined;
+    const scoreField = scoreType === "survival" ? "survivalScore" : "score";
 
     const baseQuery: any = {
       zoneId,
@@ -591,6 +594,7 @@ class CharacterMechanicsService {
         normalizedSpecName,
         partialNameRegex,
         partialGuildNameRegex,
+        scoreType,
         page,
         safeLimit,
       });
@@ -617,7 +621,11 @@ class CharacterMechanicsService {
       needsGlobalRanks = true;
     }
 
-    const entries = await CharacterMechanicsLeaderboard.find(fetchQuery).sort({ score: -1, name: 1 }).skip(effectiveSkip).limit(safeLimit).lean();
+    const entries = await CharacterMechanicsLeaderboard.find(fetchQuery)
+      .sort({ [scoreField]: -1, name: 1 })
+      .skip(effectiveSkip)
+      .limit(safeLimit)
+      .lean();
 
     const ranks =
       needsGlobalRanks && entries.length > 0
@@ -625,7 +633,7 @@ class CharacterMechanicsService {
             entries.map(async (entry: any) => {
               const count = await CharacterMechanicsLeaderboard.countDocuments({
                 ...baseQuery,
-                score: { $gt: entry.score },
+                [scoreField]: { $gt: entry[scoreField] },
               });
               return count + 1;
             }),
@@ -633,7 +641,7 @@ class CharacterMechanicsService {
         : entries.map((_, index) => effectiveSkip + index + 1);
 
     return {
-      data: entries.map((entry: any, index) => this.toResponseRow(entry, ranks[index], isBossType)),
+      data: entries.map((entry: any, index) => this.toResponseRow(entry, ranks[index], isBossType, scoreType)),
       pagination: {
         totalItems,
         totalRankedItems,
@@ -649,10 +657,11 @@ class CharacterMechanicsService {
     normalizedSpecName: string;
     partialNameRegex?: RegExp;
     partialGuildNameRegex?: RegExp;
+    scoreType: MechanicsScoreType;
     page: number;
     safeLimit: number;
   }): Promise<QueryResponse> {
-    const { baseQuery, normalizedSpecName, partialNameRegex, partialGuildNameRegex, page, safeLimit } = options;
+    const { baseQuery, normalizedSpecName, partialNameRegex, partialGuildNameRegex, scoreType, page, safeLimit } = options;
     const entries = (await CharacterMechanicsLeaderboard.find({
       ...baseQuery,
       bossScores: { $elemMatch: { specName: normalizedSpecName, deathDataAvailable: true, survivalScore: { $ne: null } } },
@@ -679,7 +688,7 @@ class CharacterMechanicsService {
       scoredEntries.push(entry);
     }
 
-    scoredEntries.sort((a, b) => b.score - a.score || (a.name ?? "").localeCompare(b.name ?? ""));
+    scoredEntries.sort((a, b) => this.compareMechanicsRankValues(a, b, scoreType));
     const totalRankedItems = scoredEntries.length;
     let displayEntries = scoredEntries;
     if (partialNameRegex) displayEntries = displayEntries.filter((entry) => partialNameRegex.test(entry.name ?? ""));
@@ -691,7 +700,7 @@ class CharacterMechanicsService {
     const rankMap = new Map(scoredEntries.map((entry, index) => [entry, index + 1]));
 
     return {
-      data: pageEntries.map((entry) => this.toResponseRow(entry, rankMap.get(entry) ?? 0, false)),
+      data: pageEntries.map((entry) => this.toResponseRow(entry, rankMap.get(entry) ?? 0, false, scoreType)),
       pagination: {
         totalItems: displayEntries.length,
         totalRankedItems,
@@ -702,8 +711,20 @@ class CharacterMechanicsService {
     };
   }
 
-  private toResponseRow(entry: any, rank: number, isBossType: boolean): any {
+  private getMechanicsRankValue(entry: any, scoreType: MechanicsScoreType): number {
+    const value = scoreType === "survival" ? entry.survivalScore : entry.score;
+    return typeof value === "number" && Number.isFinite(value) ? value : -Infinity;
+  }
+
+  private compareMechanicsRankValues(a: any, b: any, scoreType: MechanicsScoreType): number {
+    const scoreDiff = this.getMechanicsRankValue(b, scoreType) - this.getMechanicsRankValue(a, scoreType);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  }
+
+  private toResponseRow(entry: any, rank: number, isBossType: boolean, scoreType: MechanicsScoreType = "combined"): any {
     const guild = entry.guildName && entry.guildRealm ? { name: entry.guildName, realm: entry.guildRealm } : null;
+    const scoreValue = this.getMechanicsRankValue(entry, scoreType);
     const row: any = {
       rank,
       character: {
@@ -727,7 +748,7 @@ class CharacterMechanicsService {
       },
       score: {
         type: "mechanics",
-        value: entry.score,
+        value: Number.isFinite(scoreValue) ? scoreValue : 0,
       },
       stats: {
         rankPercent: entry.rankPercent,

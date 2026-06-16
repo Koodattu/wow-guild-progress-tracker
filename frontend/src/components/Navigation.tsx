@@ -107,6 +107,7 @@ const getHorseRaceSegmentClass = (selected: boolean) =>
 
 export default function Navigation() {
   const pathname = usePathname();
+  const shouldRemoveBottomMargin = pathname === "/analytics/network";
   const t = useTranslations("navigation");
   const tEvents = useTranslations("eventsPage");
   const tInfo = useTranslations("infoDialog");
@@ -307,7 +308,7 @@ export default function Navigation() {
 
   return (
     <>
-      <nav className="mb-4 border-b border-gray-700 bg-gray-900">
+      <nav className={`${shouldRemoveBottomMargin ? "" : "mb-4 "}border-b border-gray-700 bg-gray-900`}>
         <div className="w-full px-4 md:px-6">
           <div className="flex h-14 items-center justify-between gap-3 md:h-16">
             {/* Left side: Logo and Desktop Navigation */}

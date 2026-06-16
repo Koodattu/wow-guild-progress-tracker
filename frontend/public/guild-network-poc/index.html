@@ -636,6 +636,60 @@
         cursor: default;
       }
 
+      .char-refs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        margin-top: 6px;
+      }
+
+      .char-ref {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.2;
+        cursor: pointer;
+      }
+
+      .char-ref:hover .char-ref-name {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .class-icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+        border-radius: 4px;
+        object-fit: cover;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+      }
+
+      .char-ref-name {
+        display: inline-flex;
+        align-items: baseline;
+        min-width: 0;
+        gap: 5px;
+        font-weight: 780;
+      }
+
+      .char-ref-name .name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .char-ref-meta,
+      .char-more {
+        color: var(--quiet);
+        font-size: 0.68rem;
+        font-weight: 700;
+      }
+
       .roster-bars {
         display: flex;
         align-items: flex-end;
@@ -791,6 +845,12 @@
         1: "#C41E3A", 2: "#FF7C0A", 3: "#AAD372", 4: "#3FC7EB", 5: "#00FF98", 6: "#F48CBA",
         7: "#FFFFFF", 8: "#FFF468", 9: "#0070DD", 10: "#8788EE", 11: "#C69B6D", 12: "#A330C9", 13: "#33937F",
         0: "#94a3b8",
+      };
+      const CLASS_ICON_FILES = {
+        1: "classicon_deathknight.jpg", 2: "classicon_druid.jpg", 3: "classicon_hunter.jpg", 4: "classicon_mage.jpg",
+        5: "classicon_monk.jpg", 6: "classicon_paladin.jpg", 7: "classicon_priest.jpg", 8: "classicon_rogue.jpg",
+        9: "classicon_shaman.jpg", 10: "classicon_warlock.jpg", 11: "classicon_warrior.jpg", 12: "classicon_demonhunter.jpg",
+        13: "classicon_evoker.jpg",
       };
       const EXPANSION_COLORS = {
         "Mists of Pandaria": "#2dd4bf",
@@ -967,6 +1027,24 @@
         const style = options.color ? ` style="color:${options.color}"` : "";
         const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
         return `<span class="identity-line"${style}><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>`;
+      }
+
+      function classIconHtml(classID) {
+        const file = CLASS_ICON_FILES[classID];
+        if (!file) return "";
+        return `<img class="class-icon" src="/icons/${file}" alt="" loading="lazy" />`;
+      }
+
+      function characterRefHtml(c, options = {}) {
+        const ch = M.chars[c];
+        const color = CLASS_COLORS[ch.classID] || CLASS_COLORS[0];
+        const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
+        const suffix = options.suffix ? `<span class="char-ref-meta">${esc(options.suffix)}</span>` : "";
+        return `<span class="char-ref" data-sel-char="${c}" title="${esc(CLASS_NAMES[ch.classID] || "Unknown")}">
+          ${classIconHtml(ch.classID)}
+          <span class="char-ref-name" style="color:${color}"><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>
+          ${suffix}
+        </span>`;
       }
 
       function hullRadius(n) {
@@ -1895,8 +1973,8 @@
         const shown = flow.cs.slice(0, max);
         const extra = flow.n - shown.length;
         return shown
-          .map((c) => `<span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">${esc(characterLabel(c))}</span>`)
-          .join("") + (extra > 0 ? `<span class="chip static">+${fmt(extra)} more</span>` : "");
+          .map((c) => characterRefHtml(c))
+          .join("") + (extra > 0 ? `<span class="char-more">+${fmt(extra)} more</span>` : "");
       }
 
       function bindInspectorActions() {
@@ -1949,7 +2027,7 @@
                     <span><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span> → <span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span></span>
                     <span>${fmt(flow.n)}</span>
                   </div>
-                  <div class="chips">${nameChips(flow)}</div>
+                  <div class="char-refs">${nameChips(flow)}</div>
                 </div>`).join("")}
             </div>
           </section>`;
@@ -1980,7 +2058,7 @@
               ${at.nomads.map(([c, n]) => `
                 <button class="card" type="button" data-sel-char="${c}">
                   <div class="row-main">
-                    ${characterIdentityHtml(c, { realmIfDuplicate: true, color: CLASS_COLORS[M.chars[c].classID] })}
+                    ${characterRefHtml(c, { realmIfDuplicate: true })}
                     <span>${fmt(n)} guilds</span>
                   </div>
                   <div class="row-sub"><span class="realm-muted">${esc(realmLabel(M.chars[c].realm))}</span> · ${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
@@ -2093,7 +2171,7 @@
               ${joinedRows.slice(0, allMode ? 8 : 6).map(([a, flow]) => `
                 <div class="card">
                   <div class="row-main"><span class="glink" data-sel-guild="${a}">${guildIdentityHtml(a, { realmIfDuplicate: true })}</span><span>+${fmt(flow.n)}</span></div>
-                  <div class="chips">${nameChips(flow, allMode ? 8 : 6)}</div>
+                  <div class="char-refs">${nameChips(flow, allMode ? 8 : 6)}</div>
                 </div>`).join("")}
             </div>
           </section>
@@ -2104,17 +2182,15 @@
               ${leftRows.slice(0, allMode ? 8 : 6).map(([b, flow]) => `
                 <div class="card">
                   <div class="row-main"><span class="glink" data-sel-guild="${b}">${guildIdentityHtml(b, { realmIfDuplicate: true })}</span><span>−${fmt(flow.n)}</span></div>
-                  <div class="chips">${nameChips(flow, allMode ? 8 : 6)}</div>
+                  <div class="char-refs">${nameChips(flow, allMode ? 8 : 6)}</div>
                 </div>`).join("")}
             </div>
           </section>
           <section class="panel">
             <h3>Mainstays (most tiers in this guild)</h3>
-            <div class="chips">
+            <div class="char-refs">
               ${mainstays.map(([c, n]) => `
-                <span class="chip" data-sel-char="${c}" style="border-color:${CLASS_COLORS[M.chars[c].classID]}55">
-                  ${characterIdentityHtml(c, { realmIfDuplicate: true })} · ${n}
-                </span>`).join("")}
+                ${characterRefHtml(c, { realmIfDuplicate: true, suffix: `${n}` })}`).join("")}
             </div>
           </section>`;
         bindInspectorActions();

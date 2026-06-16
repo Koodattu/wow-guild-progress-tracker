@@ -15,7 +15,7 @@ import { useTranslations } from "next-intl";
 interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
   bosses: Boss[];
-  variant?: "rankings" | "mechanics";
+  variant?: RankingTableVariant;
   partitionOptions?: PatchPartitionOption[];
   showPartitionSelector?: boolean;
   loading?: boolean;
@@ -49,6 +49,8 @@ type RankingFilters = {
   guildName?: string | null;
   page?: number;
 };
+
+type RankingTableVariant = "rankings" | "mechanics" | "combined";
 
 type ClassSpecSelectorProps = {
   selectedClass: ClassInfo | null;
@@ -329,7 +331,7 @@ function ClassSpecSelector({ selectedClass, selectedSpec, selectedRole, allClass
 type BuildRankingColumnsOptions = {
   selectedBoss: Boss | null;
   bosses: Boss[];
-  variant: "rankings" | "mechanics";
+  variant: RankingTableVariant;
   currentPage: number;
   pageSize: number;
   selectedSpec: string | null;
@@ -348,8 +350,23 @@ function formatMechanicsEarlyDeaths(row: CharacterRankingRow) {
   return `${mechanics.earlyDeaths}/${mechanics.pulls}`;
 }
 
+function isMechanicsVariant(variant: RankingTableVariant) {
+  return variant === "mechanics" || variant === "combined";
+}
+
+function getMechanicsScoreValue(row: CharacterRankingRow, variant: RankingTableVariant) {
+  if (variant === "mechanics") return row.stats.mechanics?.survivalScore;
+  return row.score.value;
+}
+
+function getMechanicsBossScoreValue(bossScore: NonNullable<CharacterRankingRow["bossScores"]>[number] | undefined, variant: RankingTableVariant) {
+  if (variant === "mechanics") return bossScore?.survivalScore;
+  return bossScore?.score;
+}
+
 function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
-  const isMechanics = variant === "mechanics";
+  const isMechanics = isMechanicsVariant(variant);
+  const isSurvival = variant === "mechanics";
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
 
@@ -435,12 +452,13 @@ function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageS
 
   columns.push({
     id: "metric",
-    header: isMechanics ? t("columnScore") : isShowingDamage ? (selectedMetric === "hps" ? t("columnHps") : t("columnDps")) : t("columnScore"),
+    header: isSurvival ? t("columnSurvival") : isMechanics ? t("columnCombined") : isShowingDamage ? (selectedMetric === "hps" ? t("columnHps") : t("columnDps")) : t("columnScore"),
     shrink: true,
     accessor: (row: CharacterRankingRow) => {
       if (isMechanics) {
-        const value = row.score.value;
-        return <span style={{ color: getParseColor(Math.round(value)), fontWeight: 700 }}>{formatScore(value)}</span>;
+        const value = getMechanicsScoreValue(row, variant);
+        const colorValue = value === null || value === undefined ? 0 : Math.round(value);
+        return <span style={{ color: getParseColor(colorValue), fontWeight: 700 }}>{formatScore(value)}</span>;
       }
       const value = isShowingDamage ? row.stats.bestAmount?.toFixed(1) : row.stats.allStars?.points?.toFixed(1);
       if (!value) return "—";
@@ -472,7 +490,7 @@ function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageS
         mobileHidden: true,
         accessor: (row: CharacterRankingRow) => {
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
-          const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
+          const value = isMechanics ? getMechanicsBossScoreValue(bossScore, variant) : bossScore?.rankPercent;
           if (!bossScore || value === undefined || value === null) return <span className="text-gray-600">—</span>;
           const pct = isMechanics ? Math.round(value) : Math.floor(value);
           const showSpecIcon = !selectedSpec && bossScore.specName;
@@ -500,15 +518,15 @@ function MobileBossScores({
   row: CharacterRankingRow;
   bosses: Boss[];
   selectedSpec: string | null;
-  variant: "rankings" | "mechanics";
+  variant: RankingTableVariant;
 }) {
-  const isMechanics = variant === "mechanics";
+  const isMechanics = isMechanicsVariant(variant);
 
   return (
     <div className="grid grid-cols-2 gap-2">
       {bosses.map((boss) => {
         const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
-        const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
+        const value = isMechanics ? getMechanicsBossScoreValue(bossScore, variant) : bossScore?.rankPercent;
         const pct = value !== undefined && value !== null ? (isMechanics ? Math.round(value) : Math.floor(value)) : null;
         const showSpecIcon = !selectedSpec && bossScore?.specName;
         const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
@@ -744,9 +762,13 @@ export function RankingTableWrapper({
       ? selectedBoss
         ? `${t("titleMechanicsForBoss")} ${selectedBoss.name}`
         : t("titleMechanics")
-      : selectedBoss
-        ? `${t("titleForBoss")} ${selectedBoss.name}`
-        : t("titleAllStars");
+      : variant === "combined"
+        ? selectedBoss
+          ? `${t("titleCombinedForBoss")} ${selectedBoss.name}`
+          : t("titleCombined")
+        : selectedBoss
+          ? `${t("titleForBoss")} ${selectedBoss.name}`
+          : t("titleAllStars");
 
   return (
     <div className="space-y-4">
