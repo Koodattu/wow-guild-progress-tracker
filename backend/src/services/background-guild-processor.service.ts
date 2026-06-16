@@ -533,12 +533,14 @@ class BackgroundGuildProcessor {
 
       // Fetch death events if enabled
       let deathsByFight = new Map<number, any[]>();
+      let deathEventsFetchedAt: Date | null = null;
       if (this.fetchDeathEvents && trackedFightIds.length > 0) {
         try {
           const deathData = await wclService.getDeathEventsForReport(report.code, trackedFightIds);
           if (deathData.reportData?.report) {
             const actors = deathData.reportData.report.masterData?.actors || [];
             deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, report.fights);
+            deathEventsFetchedAt = new Date();
           }
         } catch (error: any) {
           // Non-fatal, continue without death data
@@ -564,6 +566,14 @@ class BackgroundGuildProcessor {
 
         // Get deaths for this fight
         const deaths = deathsByFight.get(fight.id) || [];
+        const deathEventsFetchUpdate =
+          deathEventsFetchedAt !== null
+            ? {
+                deaths,
+                deathEventsFetchStatus: "fetched",
+                deathEventsFetchedAt,
+              }
+            : {};
 
         // Save fight to database
         const fightTimestamp = new Date(report.startTime + fight.startTime);
@@ -588,7 +598,7 @@ class BackgroundGuildProcessor {
               name: encounterPhases.find((ep: any) => ep.encounterID === encounterId)?.phases?.find((p: any) => p.id === pt.id)?.name,
             })),
             progressDisplay: phaseInfo.progressDisplay,
-            deaths: deaths,
+            ...deathEventsFetchUpdate,
             reportStartTime: report.startTime,
             reportEndTime: report.endTime || 0,
             fightStartTime: fight.startTime,
@@ -608,7 +618,7 @@ class BackgroundGuildProcessor {
 
   /**
    * Process a guild's death event rescan — fetch death events for all existing fights
-   * that have empty or no deaths array, grouped by report for efficiency.
+   * without a successful death event fetch marker, grouped by report for efficiency.
    */
   private async processGuildDeathRescan(queueItem: IGuildProcessingQueue): Promise<void> {
     const guildLog = getGuildLogger(queueItem.guildName, queueItem.guildRealm);
@@ -620,22 +630,30 @@ class BackgroundGuildProcessor {
         return;
       }
 
-      // Find all fights for this guild that have no death data
-      const fightsWithoutDeaths = await Fight.find({
+      const jobStartedAt = new Date();
+      const pendingFightQuery = {
         guildId: guild._id,
-        $or: [{ deaths: { $exists: false } }, { deaths: { $size: 0 } }, { deaths: null }],
-      }).lean();
+        reportEndTime: { $gt: 0 },
+        $or: [
+          { deathEventsFetchStatus: "pending" },
+          { deathEventsFetchStatus: { $exists: false } },
+          { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $lt: jobStartedAt } },
+          { deathEventsFetchStatus: "failed", deathEventsFetchFailedAt: { $exists: false } },
+        ],
+      };
 
-      guildLog.info(`[DeathRescan] Found ${fightsWithoutDeaths.length} fights without death data`);
+      const fightsNeedingDeaths = await Fight.find(pendingFightQuery).select("_id reportCode fightId fightStartTime").lean();
 
-      if (fightsWithoutDeaths.length === 0) {
+      guildLog.info(`[DeathRescan] Found ${fightsNeedingDeaths.length} fights needing death event fetch`);
+
+      if (fightsNeedingDeaths.length === 0) {
         await queueItem.markCompleted();
         return;
       }
 
       // Group fights by reportCode
-      const fightsByReport = new Map<string, typeof fightsWithoutDeaths>();
-      for (const fight of fightsWithoutDeaths) {
+      const fightsByReport = new Map<string, typeof fightsNeedingDeaths>();
+      for (const fight of fightsNeedingDeaths) {
         if (!fightsByReport.has(fight.reportCode)) {
           fightsByReport.set(fight.reportCode, []);
         }
@@ -647,8 +665,12 @@ class BackgroundGuildProcessor {
 
       let reportsProcessed = 0;
       let fightsUpdated = 0;
+      let deathEventsSaved = 0;
 
       for (const [reportCode, fights] of fightsByReport.entries()) {
+        await this.refreshProcessorPauseState();
+        await rateLimitService.refreshSharedState();
+
         // Check rate limit before each API call
         if (!rateLimitService.canProceedBackground()) {
           guildLog.info(`[DeathRescan] Rate limit threshold reached, pausing...`);
@@ -679,13 +701,34 @@ class BackgroundGuildProcessor {
 
             const deathsByFight = wclService.parseDeathEventsByFight(deathData.reportData.report, actors, fightInfos);
 
-            for (const fight of fights) {
+            const fetchedAt = new Date();
+            const operations = fights.map((fight) => {
               const deaths = deathsByFight.get(fight.fightId) || [];
-              if (deaths.length > 0) {
-                await Fight.updateOne({ _id: fight._id }, { $set: { deaths } });
-                fightsUpdated++;
-              }
+              deathEventsSaved += deaths.length;
+              return {
+                updateOne: {
+                  filter: { _id: fight._id },
+                  update: {
+                    $set: {
+                      deaths,
+                      deathEventsFetchStatus: "fetched" as const,
+                      deathEventsFetchedAt: fetchedAt,
+                    },
+                    $unset: {
+                      deathEventsFetchFailedAt: 1 as const,
+                      deathEventsFetchError: 1 as const,
+                    },
+                  },
+                },
+              };
+            });
+
+            if (operations.length > 0) {
+              await Fight.bulkWrite(operations);
+              fightsUpdated += operations.length;
             }
+          } else {
+            throw new Error("WCL report not found or inaccessible");
           }
 
           reportsProcessed++;
@@ -696,13 +739,26 @@ class BackgroundGuildProcessor {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
           guildLog.error(`[DeathRescan] Failed to process report ${reportCode}: ${errorMessage}`);
+
+          await Fight.updateMany(
+            { _id: { $in: fights.map((fight) => fight._id) } },
+            {
+              $set: {
+                deathEventsFetchStatus: "failed",
+                deathEventsFetchFailedAt: new Date(),
+                deathEventsFetchError: errorMessage,
+              },
+            },
+          );
+
           // Continue with next report — non-fatal per-report error
           reportsProcessed++;
+          await queueItem.updateProgress(reportsProcessed, fightsUpdated, reportsProcessed, totalReports);
         }
       }
 
       await queueItem.markCompleted();
-      guildLog.info(`[DeathRescan] Completed: ${reportsProcessed} reports processed, ${fightsUpdated} fights updated`);
+      guildLog.info(`[DeathRescan] Completed: ${reportsProcessed} reports processed, ${fightsUpdated} fights marked fetched, ${deathEventsSaved} death events saved`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       guildLog.error(`[DeathRescan] Fatal error: ${errorMessage}`);

@@ -13,6 +13,8 @@ export interface IPlayerDeath {
   deathTime: number; // Fight time when death occurred (ms, relative to fight start)
 }
 
+export type DeathEventsFetchStatus = "pending" | "fetched" | "failed";
+
 export interface IFight extends Document {
   reportCode: string; // WCL report code this fight belongs to
   guildId: mongoose.Types.ObjectId;
@@ -37,6 +39,10 @@ export interface IFight extends Document {
   progressDisplay?: string; // Human-readable like "45% P3"
   // Player deaths
   deaths?: IPlayerDeath[]; // All player deaths in chronological order
+  deathEventsFetchStatus?: DeathEventsFetchStatus;
+  deathEventsFetchedAt?: Date;
+  deathEventsFetchFailedAt?: Date;
+  deathEventsFetchError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +85,15 @@ const FightSchema: Schema = new Schema(
         deathTime: { type: Number, required: true },
       },
     ],
+    deathEventsFetchStatus: {
+      type: String,
+      enum: ["pending", "fetched", "failed"],
+      default: "pending",
+      index: true,
+    },
+    deathEventsFetchedAt: { type: Date },
+    deathEventsFetchFailedAt: { type: Date },
+    deathEventsFetchError: { type: String },
   },
   {
     timestamps: true,
@@ -91,5 +106,6 @@ FightSchema.index({ reportCode: 1, fightId: 1 }, { unique: true });
 FightSchema.index({ encounterID: 1, difficulty: 1, isKill: 1 });
 FightSchema.index({ guildId: 1, encounterID: 1, difficulty: 1, timestamp: 1 });
 FightSchema.index({ guildId: 1, zoneId: 1, encounterID: 1, difficulty: 1, fightPercentage: 1, timestamp: -1 });
+FightSchema.index({ guildId: 1, deathEventsFetchStatus: 1, reportEndTime: 1, reportCode: 1 });
 
 export default mongoose.model<IFight>("Fight", FightSchema);

@@ -106,6 +106,7 @@ class UpdateScheduler {
   private isUpdatingRefetchRecentReports: boolean = false;
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
+  private isQueueingDeathEventBackfill: boolean = false;
   private isQueueingReportCharacterBackfill: boolean = false;
   private isQueueingCharacterAchievementBackfill: boolean = false;
   private isUpdatingCharacterRaidParticipations: boolean = false;
@@ -383,6 +384,23 @@ class UpdateScheduler {
           return;
         }
         await this.updateInactiveGuilds();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // NIGHTLY: Queue death event backfill (at 00:30 Finnish time)
+    // The queued jobs skip fights already marked deathEventsFetchStatus="fetched".
+    // Uses lower priority than report-character backfill so later maintenance can overtake it.
+    cron.schedule(
+      "30 0 * * *",
+      async () => {
+        if (this.isQueueingDeathEventBackfill) {
+          logger.info("[Nightly/DeathEventBackfill] Previous queueing run still in progress, skipping...");
+          return;
+        }
+        await this.queueDeathEventBackfill();
       },
       {
         timezone: "Europe/Helsinki",
@@ -724,6 +742,22 @@ class UpdateScheduler {
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isQueueingReportCharacterBackfill = false;
+    }
+  }
+
+  async queueDeathEventBackfill(): Promise<void> {
+    this.isQueueingDeathEventBackfill = true;
+    const taskId = await taskTracker.start("Queue Death Event Backfill");
+
+    try {
+      const result = await guildService.queueAllGuildsForDeathRescan(25);
+      logger.info(`[Nightly/DeathEventBackfill] Queued ${result.queued} guild(s), skipped ${result.skipped}`);
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[Nightly/DeathEventBackfill] Error queueing jobs:", error);
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isQueueingDeathEventBackfill = false;
     }
   }
 
