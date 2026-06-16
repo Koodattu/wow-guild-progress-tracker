@@ -1,5 +1,6 @@
 import fetch, { Response } from "node-fetch";
 import mongoose from "mongoose";
+import { createHash } from "crypto";
 import { CHARACTER_ACCOUNT_SIGNAL_ACHIEVEMENT_ID_SET, CHARACTER_ACCOUNT_SIGNAL_VERSION } from "../config/achievement-signals";
 import { AuthToken } from "../models/Achievement";
 import Character, { ICharacter } from "../models/Character";
@@ -8,6 +9,7 @@ import CharacterAccountMatch, { CharacterAccountMatchConfidence } from "../model
 import CharacterAchievementFetchQueue, { CharacterAchievementFetchStatus, ICharacterAchievementFetchQueue } from "../models/CharacterAchievementFetchQueue";
 import CharacterAchievementFingerprint, { ICharacterAchievementFingerprint, ICharacterAchievementSignal } from "../models/CharacterAchievementFingerprint";
 import CharacterAchievementToken from "../models/CharacterAchievementToken";
+import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import logger from "../utils/logger";
 import cacheService from "./cache.service";
 import taskTracker from "./task-tracker.service";
@@ -481,8 +483,16 @@ class CharacterAchievementService {
             .select("_id name realm region classID guildName guildRealm lastMythicSeenAt")
             .lean<Array<Pick<ICharacter, "_id" | "name" | "realm" | "region" | "classID" | "guildName" | "guildRealm" | "lastMythicSeenAt">>>()
         : [];
+    const reportCountRows =
+      groupedCharacterIds.length > 0
+        ? await CharacterRaidParticipation.aggregate<{ _id: mongoose.Types.ObjectId; reportCount: number }>([
+            { $match: { characterId: { $in: groupedCharacterIds.map((id) => new mongoose.Types.ObjectId(id)) } } },
+            { $group: { _id: "$characterId", reportCount: { $sum: "$reportCount" } } },
+          ])
+        : [];
 
     const characterById = new Map(characters.map((character) => [String(character._id), character]));
+    const reportCountByCharacterId = new Map(reportCountRows.map((row) => [String(row._id), row.reportCount]));
     const edgeScoresByPair = new Map<string, number>();
     for (const edge of highConfidenceEdges) {
       const key = this.buildPairKey(String(edge.characterAId), String(edge.characterBId));
@@ -516,6 +526,14 @@ class CharacterAchievementService {
       }
 
       const groupKey = sortedIds.join(":");
+      const primaryMember = [...members].sort((a, b) => {
+        const reportDiff = (reportCountByCharacterId.get(String(b._id)) ?? 0) - (reportCountByCharacterId.get(String(a._id)) ?? 0);
+        if (reportDiff !== 0) return reportDiff;
+        const lastSeenA = a.lastMythicSeenAt ? new Date(a.lastMythicSeenAt).getTime() : 0;
+        const lastSeenB = b.lastMythicSeenAt ? new Date(b.lastMythicSeenAt).getTime() : 0;
+        return lastSeenB - lastSeenA || a.name.localeCompare(b.name);
+      })[0];
+      const totalReportCount = members.reduce((total, member) => total + (reportCountByCharacterId.get(String(member._id)) ?? 0), 0);
       activeGroupKeys.push(groupKey);
       matchedCharacters += members.length;
 
@@ -527,6 +545,9 @@ class CharacterAchievementService {
           },
           update: {
             $set: {
+              slug: primaryMember ? this.buildAccountSlug(primaryMember.name, groupKey) : this.buildAccountSlug("account", groupKey),
+              displayName: primaryMember?.name ?? "Account",
+              primaryCharacterId: primaryMember?._id ?? null,
               characterIds: members.map((member) => member._id),
               members: members.map((member) => ({
                 characterId: member._id,
@@ -537,8 +558,10 @@ class CharacterAchievementService {
                 guildName: member.guildName ?? null,
                 guildRealm: member.guildRealm ?? null,
                 lastMythicSeenAt: member.lastMythicSeenAt ?? null,
+                reportCount: reportCountByCharacterId.get(String(member._id)) ?? 0,
               })),
               edgeCount: scores.length,
+              totalReportCount,
               minScore: scores.length > 0 ? Math.min(...scores) : 0,
               maxScore: scores.length > 0 ? Math.max(...scores) : 0,
               avgScore: scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0,
@@ -560,7 +583,7 @@ class CharacterAchievementService {
       await CharacterAccountGroup.deleteMany({ signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION });
     }
 
-    await cacheService.invalidatePattern(/^characters:profile:/);
+    await Promise.all([cacheService.invalidatePattern(/^characters:profile:/), cacheService.invalidatePattern(/^accounts:/)]);
     logger.info(
       `[CharacterAchievementBackfill] Rebuilt account groups: groups=${operations.length}, matchedCharacters=${matchedCharacters}, highConfidenceEdges=${highConfidenceEdges.length}`,
     );
@@ -1157,6 +1180,19 @@ class CharacterAchievementService {
       .replace(/['’]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
+  }
+
+  private buildAccountSlug(displayName: string, groupKey: string): string {
+    const namePart = displayName
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    const hash = createHash("sha1").update(groupKey).digest("hex").slice(0, 8);
+    return `${namePart || "account"}-${hash}`;
   }
 
   private toToken(signal: ICharacterAchievementSignal): string {

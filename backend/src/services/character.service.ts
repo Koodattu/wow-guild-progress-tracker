@@ -236,8 +236,11 @@ export type CharacterProfileResponse = {
     }>;
     account?: {
       groupId: string;
+      slug?: string | null;
+      displayName?: string | null;
       signalVersion: string;
       generatedAt: Date;
+      totalReportCount: number;
       minScore: number;
       maxScore: number;
       avgScore: number;
@@ -250,6 +253,7 @@ export type CharacterProfileResponse = {
         guildName?: string | null;
         guildRealm?: string | null;
         lastMythicSeenAt?: Date | null;
+        reportCount?: number;
       }>;
     };
   };
@@ -327,6 +331,33 @@ export type CharacterProfileChoicesResponse = {
 };
 
 export type CharacterProfileLookupResponse = CharacterProfileResponse | CharacterProfileChoicesResponse;
+
+export type CharacterAccountResponse = {
+  account: {
+    id: string;
+    slug: string;
+    displayName: string;
+    signalVersion: string;
+    generatedAt: Date;
+    totalReportCount: number;
+    characterCount: number;
+    edgeCount: number;
+    minScore: number;
+    maxScore: number;
+    avgScore: number;
+  };
+  characters: Array<{
+    characterId: string;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+    guildName?: string | null;
+    guildRealm?: string | null;
+    lastMythicSeenAt?: Date | null;
+    reportCount: number;
+  }>;
+};
 
 export type CharacterRaidReportsResponse = {
   character: {
@@ -2080,6 +2111,60 @@ class CharacterService {
     }));
   }
 
+  async getCharacterAccountBySlug(accountSlug: string): Promise<CharacterAccountResponse | null> {
+    const normalizedSlug = accountSlug.trim().toLowerCase();
+    if (!normalizedSlug) return null;
+
+    const lookupConditions: Record<string, unknown>[] = [{ slug: normalizedSlug }];
+    if (mongoose.Types.ObjectId.isValid(accountSlug)) {
+      lookupConditions.push({ _id: new mongoose.Types.ObjectId(accountSlug) });
+    }
+
+    const group = await CharacterAccountGroup.findOne({
+      signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
+      $or: lookupConditions,
+    }).lean();
+
+    if (!group) return null;
+
+    const characters = [...(group.members ?? [])]
+      .map((member) => ({
+        characterId: member.characterId.toString(),
+        name: member.name,
+        realm: member.realm,
+        region: member.region,
+        classID: member.classID,
+        guildName: member.guildName ?? null,
+        guildRealm: member.guildRealm ?? null,
+        lastMythicSeenAt: member.lastMythicSeenAt ?? null,
+        reportCount: member.reportCount ?? 0,
+      }))
+      .sort((a, b) => {
+        const reportDiff = b.reportCount - a.reportCount;
+        if (reportDiff !== 0) return reportDiff;
+        const lastSeenA = a.lastMythicSeenAt ? new Date(a.lastMythicSeenAt).getTime() : 0;
+        const lastSeenB = b.lastMythicSeenAt ? new Date(b.lastMythicSeenAt).getTime() : 0;
+        return lastSeenB - lastSeenA || a.name.localeCompare(b.name);
+      });
+
+    return {
+      account: {
+        id: group._id.toString(),
+        slug: group.slug ?? group._id.toString(),
+        displayName: group.displayName ?? characters[0]?.name ?? "Account",
+        signalVersion: group.signalVersion,
+        generatedAt: group.generatedAt,
+        totalReportCount: group.totalReportCount ?? characters.reduce((total, character) => total + character.reportCount, 0),
+        characterCount: characters.length,
+        edgeCount: group.edgeCount,
+        minScore: group.minScore,
+        maxScore: group.maxScore,
+        avgScore: group.avgScore,
+      },
+      characters,
+    };
+  }
+
   private getProfileRowRole(row: ProfileLeaderboardRow): ProfileRole {
     if (row.role === "dps" || row.role === "healer" || row.role === "tank") {
       return row.role;
@@ -2512,8 +2597,11 @@ class CharacterService {
         account: accountGroup
           ? {
               groupId: accountGroup._id.toString(),
+              slug: accountGroup.slug ?? accountGroup._id.toString(),
+              displayName: accountGroup.displayName ?? accountGroup.members[0]?.name ?? null,
               signalVersion: accountGroup.signalVersion,
               generatedAt: accountGroup.generatedAt,
+              totalReportCount: accountGroup.totalReportCount ?? 0,
               minScore: accountGroup.minScore,
               maxScore: accountGroup.maxScore,
               avgScore: accountGroup.avgScore,
@@ -2526,6 +2614,7 @@ class CharacterService {
                 guildName: member.guildName ?? null,
                 guildRealm: member.guildRealm ?? null,
                 lastMythicSeenAt: member.lastMythicSeenAt ?? null,
+                reportCount: member.reportCount ?? 0,
               })),
             }
           : undefined,

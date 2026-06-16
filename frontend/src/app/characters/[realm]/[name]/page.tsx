@@ -150,6 +150,10 @@ function getCharacterProfileHref(realm: string, name: string, classID: number) {
   return `/characters/${encodeURIComponent(realm)}/${encodeURIComponent(name)}?class=${encodeURIComponent(String(classID))}`;
 }
 
+function getAccountHref(account: NonNullable<CharacterProfileResponse["character"]["account"]>) {
+  return `/accounts/${encodeURIComponent(account.slug || account.groupId)}`;
+}
+
 function getRankingParse(row: CharacterRanking) {
   return row.rankPercent ?? -1;
 }
@@ -291,20 +295,22 @@ function AccountCharactersDropdown({
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="inline-flex min-h-8 items-center gap-2 rounded-md bg-gray-900 px-2.5 text-xs font-semibold text-gray-200 ring-1 ring-gray-700 transition-[background-color,transform] hover:bg-gray-800 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96] md:min-h-9 md:px-3"
+        className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-400 ring-1 ring-gray-800 transition-[background-color,color,transform] hover:bg-gray-900 hover:text-gray-200 focus-visible:outline focus-visible:outline-blue-400 active:scale-[0.96] md:min-h-9 md:px-2.5"
         aria-label="Show inferred same-account characters"
         aria-expanded={isOpen}
       >
-        <span>Same account</span>
-        <span className="rounded bg-cyan-950/70 px-1.5 py-0.5 text-cyan-200 tabular-nums">{account.characters.length}</span>
+        <span>Account</span>
+        <span className="text-gray-500 tabular-nums">{account.characters.length}</span>
         <span className={`text-gray-500 transition-transform ${isOpen ? "rotate-180" : ""}`}>v</span>
       </button>
 
       {isOpen ? (
         <div className="absolute right-0 top-10 z-20 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-gray-950 shadow-[0_18px_55px_rgba(0,0,0,0.45)] ring-1 ring-gray-700">
-          <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2 text-xs text-gray-500">
-            <span>{account.signalVersion}</span>
-            <span className="tabular-nums">{Math.round(account.avgScore)} avg score</span>
+          <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2 text-xs">
+            <span className="font-semibold text-gray-300">{account.displayName || "Account"} characters</span>
+            <Link href={getAccountHref(account)} onClick={() => setIsOpen(false)} className="font-semibold text-blue-300 transition-colors hover:text-blue-200">
+              View account
+            </Link>
           </div>
           <div className="max-h-96 overflow-y-auto py-1">
             {sortedCharacters.map((member) => {
@@ -324,15 +330,17 @@ function AccountCharactersDropdown({
                     <IconImage iconFilename={classInfo.iconUrl} alt={classInfo.name} fill style={{ objectFit: "cover" }} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold" style={{ color: getClassColor(classInfo.name) }}>
-                      {member.name}
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="truncate text-sm font-semibold" style={{ color: getClassColor(classInfo.name) }}>
+                        {member.name}
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-gray-500">{formatRealmName(member.realm)}</span>
                     </span>
-                    <span className="block truncate text-xs text-gray-500">
-                      {formatRealmName(member.realm)}
-                      {member.guildName ? ` · ${member.guildName}` : ""}
+                    <span className="flex min-w-0 items-center justify-between gap-3 text-xs text-gray-500">
+                      <span className="truncate">{member.guildName ?? "No guild"}</span>
+                      <span className="shrink-0 tabular-nums">{formatShortDate(member.lastMythicSeenAt)}</span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-gray-500 tabular-nums">{formatShortDate(member.lastMythicSeenAt)}</span>
                 </Link>
               );
             })}

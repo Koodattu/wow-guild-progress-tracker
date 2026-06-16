@@ -1329,8 +1329,11 @@ export type CharacterProfileResponse = {
     }>;
     account?: {
       groupId: string;
+      slug?: string | null;
+      displayName?: string | null;
       signalVersion: string;
       generatedAt: string;
+      totalReportCount: number;
       minScore: number;
       maxScore: number;
       avgScore: number;
@@ -1343,6 +1346,7 @@ export type CharacterProfileResponse = {
         guildName?: string | null;
         guildRealm?: string | null;
         lastMythicSeenAt?: string | null;
+        reportCount?: number;
       }>;
     };
   };
@@ -1420,6 +1424,33 @@ export type CharacterProfileChoicesResponse = {
 };
 
 export type CharacterProfileLookupResponse = CharacterProfileResponse | CharacterProfileChoicesResponse;
+
+export type CharacterAccountResponse = {
+  account: {
+    id: string;
+    slug: string;
+    displayName: string;
+    signalVersion: string;
+    generatedAt: string;
+    totalReportCount: number;
+    characterCount: number;
+    edgeCount: number;
+    minScore: number;
+    maxScore: number;
+    avgScore: number;
+  };
+  characters: Array<{
+    characterId: string;
+    name: string;
+    realm: string;
+    region: string;
+    classID: number;
+    guildName?: string | null;
+    guildRealm?: string | null;
+    lastMythicSeenAt?: string | null;
+    reportCount: number;
+  }>;
+};
 
 export type CharacterRaidReport = {
   code: string;
