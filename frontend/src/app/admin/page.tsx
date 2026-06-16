@@ -1439,7 +1439,7 @@ export default function AdminPage() {
                       disabled={triggerLoading === "backfill-character-achievements" || triggerCooldowns["backfill-character-achievements"]}
                       className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
                     >
-                      <span>Backfill Character Achievements</span>
+                      <span>Start Achievement Backfill</span>
                       {triggerLoading === "backfill-character-achievements" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["backfill-character-achievements"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
@@ -1448,7 +1448,7 @@ export default function AdminPage() {
                       disabled={triggerLoading === "refresh-character-achievement-candidates" || triggerCooldowns["refresh-character-achievement-candidates"]}
                       className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
                     >
-                      <span>Discover Missing Achievement Fingerprints</span>
+                      <span>Retry Missing Achievement Fingerprints</span>
                       {triggerLoading === "refresh-character-achievement-candidates" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["refresh-character-achievement-candidates"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>

@@ -231,6 +231,24 @@ class CharacterAchievementService {
     return true;
   }
 
+  async resumeInterruptedBackfill(): Promise<boolean> {
+    if (this.isRunning) return false;
+
+    await this.resetInterruptedItems();
+    const pendingItems = await CharacterAchievementFetchQueue.countDocuments({
+      signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
+      status: "pending",
+    });
+
+    if (pendingItems === 0) {
+      this.lastMessage = "No pending character achievement backfill items to resume";
+      return false;
+    }
+
+    logger.info(`[CharacterAchievementBackfill] Resuming ${pendingItems} pending item(s) after startup`);
+    return this.startProcessing();
+  }
+
   async enqueueMissingItems(options: { refreshExistingQueue?: boolean } = {}): Promise<CharacterAchievementBackfillEnqueueResult> {
     const characters = await Character.find({})
       .select("_id wclCanonicalCharacterId name realm region classID")
@@ -401,7 +419,7 @@ class CharacterAchievementService {
       processor: {
         isRunning: this.isRunning,
         isWaitingForRateLimit: this.isWaitingForRateLimit,
-        currentItem: this.currentItem ?? (dbCurrentItem ? summarizeQueueItem(dbCurrentItem) : null),
+        currentItem: this.currentItem ?? (this.isRunning && dbCurrentItem ? summarizeQueueItem(dbCurrentItem) : null),
         lastMessage: this.lastMessage,
         startedAt: this.startedAt,
       },
@@ -1009,7 +1027,7 @@ class CharacterAchievementService {
     }
   }
 
-  private async resetInterruptedItems(): Promise<void> {
+  private async resetInterruptedItems(): Promise<number> {
     const result = await CharacterAchievementFetchQueue.updateMany(
       { signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION, status: "in_progress" },
       {
@@ -1025,6 +1043,8 @@ class CharacterAchievementService {
     if ((result.modifiedCount ?? 0) > 0) {
       logger.warn(`[CharacterAchievementBackfill] Reset ${result.modifiedCount} interrupted in-progress items back to pending`);
     }
+
+    return result.modifiedCount ?? 0;
   }
 
   private async getAccessToken(): Promise<string> {

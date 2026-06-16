@@ -679,6 +679,15 @@ class UpdateScheduler {
     logger.info("    * Hiatus event check: daily at 09:00");
     logger.info("    * Full cache warmup: daily at 11:00");
 
+    characterAchievementService
+      .resumeInterruptedBackfill()
+      .then((started) => {
+        if (started) {
+          logger.info("[CharacterAchievementBackfill] Startup resume started processor");
+        }
+      })
+      .catch((error) => logger.error("[CharacterAchievementBackfill] Startup resume failed:", error));
+
     // Do an initial update based on current time
     if (this.isHotHours()) {
       logger.info("Currently HOT HOURS - starting initial active guild check");
