@@ -2285,15 +2285,29 @@ class CharacterService {
       { $sort: { lastSeenAt: -1, name: 1, realm: 1 } },
     ]).collation(CASE_INSENSITIVE_COLLATION);
 
-    const profileCharacterDoc =
-      profileCanonicalIds.length > 0 && profileClassId
-        ? await Character.findOne({
-            wclCanonicalCharacterId: { $in: profileCanonicalIds },
-            classID: profileClassId,
-          })
-            .select("_id")
-            .lean<{ _id: mongoose.Types.ObjectId }>()
-        : null;
+    let profileCharacterDoc: { _id: mongoose.Types.ObjectId } | null = null;
+    if (profileClassId) {
+      profileCharacterDoc = await Character.findOne({
+        name: character.name,
+        realm: character.realm,
+        region: character.region,
+        classID: profileClassId,
+      })
+        .collation(CASE_INSENSITIVE_COLLATION)
+        .select("_id")
+        .lean<{ _id: mongoose.Types.ObjectId }>();
+
+      if (!profileCharacterDoc && profileCanonicalIds.length > 0) {
+        profileCharacterDoc = await Character.findOne({
+          wclCanonicalCharacterId: { $in: profileCanonicalIds },
+          classID: profileClassId,
+        })
+          .sort({ lastMythicSeenAt: -1 })
+          .select("_id")
+          .lean<{ _id: mongoose.Types.ObjectId }>();
+      }
+    }
+
     const accountGroup = profileCharacterDoc
       ? await CharacterAccountGroup.findOne({
           signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,

@@ -64,7 +64,7 @@ const CharacterAchievementFetchQueueSchema = new Schema<ICharacterAchievementFet
 );
 
 CharacterAchievementFetchQueueSchema.index({ characterId: 1, signalVersion: 1 }, { unique: true });
-CharacterAchievementFetchQueueSchema.index({ status: 1, nextAttemptAt: 1, priority: -1, createdAt: 1 });
+CharacterAchievementFetchQueueSchema.index({ signalVersion: 1, status: 1, nextAttemptAt: 1, priority: 1, createdAt: 1 });
 CharacterAchievementFetchQueueSchema.index({ completedAt: -1 });
 CharacterAchievementFetchQueueSchema.index({ lastErrorAt: -1 });
 

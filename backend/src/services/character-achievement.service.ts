@@ -267,7 +267,8 @@ class CharacterAchievementService {
       const existingQueueItem = queueByCharacterId.get(characterId);
       const snapshotKey = this.buildSnapshotKey(character);
       const snapshotChanged = Boolean(existingQueueItem && existingQueueItem.snapshotKey !== snapshotKey);
-      const shouldResetExisting = options.refreshExistingQueue === true || !existingQueueItem || snapshotChanged;
+      const isActiveQueueItem = existingQueueItem?.status === "in_progress";
+      const shouldResetExisting = !isActiveQueueItem && (options.refreshExistingQueue === true || !existingQueueItem || snapshotChanged);
 
       if (!shouldResetExisting) {
         continue;
@@ -583,17 +584,24 @@ class CharacterAchievementService {
         );
 
         if (!item) {
-          const pendingLater = await CharacterAchievementFetchQueue.countDocuments({
+          const nextPendingItem = await CharacterAchievementFetchQueue.findOne({
             signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
             status: "pending",
-          });
-          if (pendingLater > 0) {
-            this.lastMessage = `No due achievement fetches; ${pendingLater} pending item(s) waiting for retry time`;
-          } else {
-            this.lastMessage = `Character achievement backfill complete; processed ${processedThisRun} items this run`;
-            logger.info(`[CharacterAchievementBackfill] No pending items remain; processed ${processedThisRun} items this run`);
-            await this.rebuildAccountGroups();
+          })
+            .sort({ nextAttemptAt: 1 })
+            .select("nextAttemptAt")
+            .lean<Pick<ICharacterAchievementFetchQueue, "nextAttemptAt">>();
+
+          if (nextPendingItem) {
+            const waitMs = Math.max(1000, Math.min(60000, nextPendingItem.nextAttemptAt.getTime() - Date.now()));
+            this.lastMessage = `No due achievement fetches; next retry is due at ${nextPendingItem.nextAttemptAt.toISOString()}`;
+            await this.sleep(waitMs);
+            continue;
           }
+
+          this.lastMessage = `Character achievement backfill complete; processed ${processedThisRun} items this run`;
+          logger.info(`[CharacterAchievementBackfill] No pending items remain; processed ${processedThisRun} items this run`);
+          await this.rebuildAccountGroups();
           break;
         }
 
@@ -759,7 +767,7 @@ class CharacterAchievementService {
     logger.warn(`[CharacterAchievementBackfill] Error processing ${item.name}-${item.realm}; retrying at ${retryAt.toISOString()}: ${apiError.message}`);
   }
 
-  private async fetchAchievementSummary(region: string, realm: string, name: string): Promise<BlizzardAchievementSummaryResponse> {
+  private async fetchAchievementSummary(region: string, realm: string, name: string, retryUnauthorized = true): Promise<BlizzardAchievementSummaryResponse> {
     const token = await this.getAccessToken();
     const normalizedRegion = region.toLowerCase();
     const baseUrl = this.regionApiUrls[normalizedRegion];
@@ -783,6 +791,12 @@ class CharacterAchievementService {
         Authorization: `Bearer ${token}`,
       },
     });
+
+    if (response.status === 401 && retryUnauthorized) {
+      await AuthToken.deleteOne({ service: "blizzard" }).catch(() => undefined);
+      logger.warn("[CharacterAchievementBackfill] Blizzard token was rejected; refreshing token and retrying request once");
+      return this.fetchAchievementSummary(region, realm, name, false);
+    }
 
     if (!response.ok) {
       throw await this.toBlizzardApiError(response);
@@ -820,22 +834,21 @@ class CharacterAchievementService {
     const oldTokenSet = new Set(oldTokens);
     const newTokenSet = new Set(newTokens);
     const tokensToRemove = [...oldTokenSet].filter((token) => !newTokenSet.has(token));
-    const tokensToAdd = [...newTokenSet].filter((token) => !oldTokenSet.has(token));
+    const affectedTokens = [...new Set([...tokensToRemove, ...newTokenSet])];
 
     const operations: any[] = [];
     for (const token of tokensToRemove) {
       operations.push({
         updateOne: {
-          filter: { signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION, token, characterIds: characterId },
+          filter: { signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION, token },
           update: {
             $pull: { characterIds: characterId },
-            $inc: { characterCount: -1 },
           },
         },
       });
     }
 
-    for (const token of tokensToAdd) {
+    for (const token of newTokenSet) {
       const parsed = this.parseToken(token);
       operations.push({
         updateOne: {
@@ -846,9 +859,9 @@ class CharacterAchievementService {
               token,
               achievementId: parsed.achievementId,
               completedTimestamp: parsed.completedTimestamp,
+              characterCount: 0,
             },
             $addToSet: { characterIds: characterId },
-            $inc: { characterCount: 1 },
           },
           upsert: true,
         },
@@ -859,13 +872,35 @@ class CharacterAchievementService {
       await CharacterAchievementToken.bulkWrite(operations, { ordered: false });
     }
 
-    if (tokensToRemove.length > 0) {
+    if (affectedTokens.length > 0) {
+      await this.repairTokenCounts(affectedTokens);
       await CharacterAchievementToken.deleteMany({
         signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
-        token: { $in: tokensToRemove },
+        token: { $in: affectedTokens },
         characterCount: { $lte: 0 },
       });
     }
+  }
+
+  private async repairTokenCounts(tokens: string[]): Promise<void> {
+    const tokenDocs = await CharacterAchievementToken.find({
+      signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION,
+      token: { $in: tokens },
+    })
+      .select("_id characterIds")
+      .lean<Array<{ _id: mongoose.Types.ObjectId; characterIds: mongoose.Types.ObjectId[] }>>();
+
+    if (tokenDocs.length === 0) return;
+
+    await CharacterAchievementToken.bulkWrite(
+      tokenDocs.map((tokenDoc) => ({
+        updateOne: {
+          filter: { _id: tokenDoc._id },
+          update: { $set: { characterCount: tokenDoc.characterIds.length } },
+        },
+      })),
+      { ordered: false },
+    );
   }
 
   private async updateMatchesForCharacter(characterId: mongoose.Types.ObjectId, signalTokens: string[], signals: ICharacterAchievementSignal[]): Promise<void> {
@@ -1070,6 +1105,10 @@ class CharacterAchievementService {
 
     this.isWaitingForRateLimit = false;
     this.lastBlizzardRequestAt = Date.now();
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private getMaxCallsPerHour(): number {
