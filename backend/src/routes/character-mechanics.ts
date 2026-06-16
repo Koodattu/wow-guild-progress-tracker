@@ -35,6 +35,8 @@ router.get(
       const zoneIdsWithMechanics = await CharacterMechanicsLeaderboard.distinct("zoneId", {
         difficulty: MYTHIC_DIFFICULTY,
         zoneId: { $in: TRACKED_RAIDS },
+        deathDataAvailable: true,
+        survivalScore: { $ne: null },
       });
 
       const sortedZoneIds = (zoneIdsWithMechanics.length > 0 ? zoneIdsWithMechanics : CURRENT_RAID_IDS)

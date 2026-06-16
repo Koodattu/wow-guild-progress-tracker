@@ -342,6 +342,12 @@ function formatScore(value: number | null | undefined) {
   return value.toFixed(1);
 }
 
+function formatMechanicsEarlyDeaths(row: CharacterRankingRow) {
+  const mechanics = row.stats.mechanics;
+  if (!mechanics?.deathDataAvailable || mechanics.pulls <= 0) return "—";
+  return `${mechanics.earlyDeaths}/${mechanics.pulls}`;
+}
+
 function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
   const isMechanics = variant === "mechanics";
   const isShowingDamage = selectedBoss !== null;
@@ -443,43 +449,13 @@ function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageS
   });
 
   if (isMechanics) {
-    columns.push(
-      {
-        id: "parse",
-        header: t("columnParse"),
-        shrink: true,
-        mobileHidden: true,
-        accessor: (row: CharacterRankingRow) => {
-          const value = row.stats.mechanics?.parseScore;
-          return <span style={{ color: getParseColor(Math.round(value ?? 0)), fontWeight: 700 }}>{formatScore(value)}</span>;
-        },
-      },
-      {
-        id: "survival",
-        header: t("columnSurvival"),
-        shrink: true,
-        mobileHidden: true,
-        accessor: (row: CharacterRankingRow) => {
-          const value = row.stats.mechanics?.survivalScore;
-          if (value === null || value === undefined) return <span className="text-gray-600">—</span>;
-          return <span style={{ color: getParseColor(Math.round(value)), fontWeight: 700 }}>{formatScore(value)}</span>;
-        },
-      },
-      {
-        id: "deaths",
-        header: t("columnDeaths"),
-        shrink: true,
-        mobileHidden: true,
-        accessor: (row: CharacterRankingRow) => row.stats.mechanics?.deaths ?? 0,
-      },
-      {
-        id: "pulls",
-        header: t("columnPulls"),
-        shrink: true,
-        mobileHidden: true,
-        accessor: (row: CharacterRankingRow) => row.stats.mechanics?.pulls ?? 0,
-      },
-    );
+    columns.push({
+      id: "earlyDeaths",
+      header: t("columnEarlyDeaths"),
+      shrink: true,
+      mobileHidden: true,
+      accessor: (row: CharacterRankingRow) => <span className="font-semibold tabular-nums text-gray-100">{formatMechanicsEarlyDeaths(row)}</span>,
+    });
   }
 
   // Per-boss rankPercent columns (only in all-bosses AllStars view)
@@ -498,7 +474,7 @@ function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageS
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
           const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
           if (!bossScore || value === undefined || value === null) return <span className="text-gray-600">—</span>;
-          const pct = Math.round(value);
+          const pct = isMechanics ? Math.round(value) : Math.floor(value);
           const showSpecIcon = !selectedSpec && bossScore.specName;
           const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
           return (
@@ -533,7 +509,7 @@ function MobileBossScores({
       {bosses.map((boss) => {
         const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
         const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
-        const pct = value !== undefined && value !== null ? Math.round(value) : null;
+        const pct = value !== undefined && value !== null ? (isMechanics ? Math.round(value) : Math.floor(value)) : null;
         const showSpecIcon = !selectedSpec && bossScore?.specName;
         const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
 

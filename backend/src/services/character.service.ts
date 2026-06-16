@@ -2325,6 +2325,8 @@ class CharacterService {
               wclCanonicalCharacterId: { $in: canonicalIds },
               classID: selectedChoice.classID,
               zoneId: { $in: TRACKED_RAIDS },
+              deathDataAvailable: true,
+              survivalScore: { $ne: null },
             })
               .sort({ zoneId: -1, score: -1 })
               .lean()
@@ -2364,6 +2366,8 @@ class CharacterService {
           wclCanonicalCharacterId: fallbackCharacter.wclCanonicalCharacterId,
           classID: fallbackCharacter.classID,
           zoneId: { $in: TRACKED_RAIDS },
+          deathDataAvailable: true,
+          survivalScore: { $ne: null },
         })
           .sort({ zoneId: -1, score: -1 })
           .lean(),

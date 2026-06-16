@@ -137,6 +137,11 @@ function formatNullableScore(value?: number | null) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+function formatEarlyDeaths(row?: Pick<CharacterMechanic, "deathDataAvailable" | "earlyDeaths" | "pulls">) {
+  if (!row?.deathDataAvailable || row.pulls <= 0) return "-";
+  return `${row.earlyDeaths}/${row.pulls}`;
+}
+
 function getBossKey(zoneId: number, encounterId: number) {
   return `${zoneId}:${encounterId}`;
 }
@@ -198,9 +203,19 @@ function MechanicsScoreCell({ row, compact = false }: { row?: CharacterMechanic;
   if (!row) return <span className="text-gray-600">-</span>;
 
   return (
-    <span className={`inline-flex items-center justify-end gap-1 font-semibold tabular-nums ${compact ? "text-sm" : ""}`} style={{ color: getParseColor(Math.round(row.score)) }}>
+    <span className={`inline-flex items-center justify-end font-semibold tabular-nums ${compact ? "text-sm" : ""}`} style={{ color: getParseColor(Math.round(row.score)) }}>
       {formatNullableScore(row.score)}
-      {row.deathDataAvailable ? <span className="text-[11px] font-medium text-gray-500">{row.deaths}/{row.pulls}</span> : null}
+    </span>
+  );
+}
+
+function MechanicsBossScoreCell({ row, compact = false }: { row?: CharacterMechanic; compact?: boolean }) {
+  if (!row) return <span className="text-gray-600">-</span>;
+
+  return (
+    <span className="inline-flex flex-col items-center gap-0.5 tabular-nums">
+      <MechanicsScoreCell row={row} compact={compact} />
+      <span className="text-[11px] font-medium leading-none text-gray-500">{formatEarlyDeaths(row)}</span>
     </span>
   );
 }
@@ -208,7 +223,7 @@ function MechanicsScoreCell({ row, compact = false }: { row?: CharacterMechanic;
 function RankingsBossParseCell({ row, classId, compact = false }: { row?: CharacterRanking; classId: number; compact?: boolean }) {
   if (!row || row.rankPercent === null) return <span className="text-gray-600">-</span>;
 
-  const parsePercent = Math.round(row.rankPercent);
+  const parsePercent = Math.floor(row.rankPercent);
   const specIcon = row.specName ? getSpecIconUrl(classId, row.specName) : undefined;
 
   return (
@@ -800,6 +815,8 @@ export default function CharacterProfilePage({ params }: PageProps) {
     const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; overall: CharacterMechanic[]; bossMechanics: Map<number, CharacterMechanic[]> }>();
 
     profile.mechanics.forEach((row) => {
+      if (!row.deathDataAvailable || row.survivalScore === null) return;
+
       const group = groups.get(row.zoneId) ?? {
         zoneId: row.zoneId,
         raidName: row.raidName,
@@ -1134,17 +1151,15 @@ export default function CharacterProfilePage({ params }: PageProps) {
         <section className="rounded-lg border border-gray-700 bg-gray-900">
           <div className="border-b border-gray-700 px-4 py-3">
             <h2 className="text-lg font-semibold text-white">Mechanics</h2>
-            <p className="text-sm text-gray-400">Mythic mechanics score from parse rankings and stored death events.</p>
+            <p className="text-sm text-gray-400">Combined Mythic score with early-death context.</p>
           </div>
           {mechanicsRaidGroups.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1280px] border-collapse">
+              <table className="w-full min-w-[1100px] border-collapse">
                 <colgroup>
                   <col className="w-[300px]" />
                   <col className="w-[104px]" />
                   <col className="w-[96px]" />
-                  <col className="w-[96px]" />
-                  <col className="w-[104px]" />
                   <col className="w-[104px]" />
                   <col />
                 </colgroup>
@@ -1153,9 +1168,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                     <th className="px-4 py-2.5">Raid</th>
                     <th className="px-3 py-2.5 text-right">Metric</th>
                     <th className="px-3 py-2.5 text-right">Score</th>
-                    <th className="px-3 py-2.5 text-right">Parse</th>
-                    <th className="px-3 py-2.5 text-right">Survival</th>
-                    <th className="px-3 py-2.5 text-right">Deaths</th>
+                    <th className="px-3 py-2.5 text-right">Early deaths</th>
                     <th className="px-3 py-2.5">Boss scores</th>
                   </tr>
                 </thead>
@@ -1185,16 +1198,10 @@ export default function CharacterProfilePage({ params }: PageProps) {
                           <td className="px-3 py-4 text-right">
                             <MechanicsScoreCell row={group.bestOverall} />
                           </td>
-                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatNullableScore(group.bestOverall.parseScore)}</td>
-                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatNullableScore(group.bestOverall.survivalScore)}</td>
-                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">
-                            {group.bestOverall.deathDataAvailable ? `${group.bestOverall.deaths}/${group.bestOverall.pulls}` : "-"}
-                          </td>
+                          <td className="px-3 py-4 text-right font-semibold tabular-nums text-gray-100">{formatEarlyDeaths(group.bestOverall)}</td>
                         </>
                       ) : (
                         <>
-                          <td className="px-3 py-4 text-right text-gray-600">-</td>
-                          <td className="px-3 py-4 text-right text-gray-600">-</td>
                           <td className="px-3 py-4 text-right text-gray-600">-</td>
                           <td className="px-3 py-4 text-right text-gray-600">-</td>
                           <td className="px-3 py-4 text-right text-gray-600">-</td>
@@ -1216,7 +1223,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
                                 height={28}
                                 className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
                               />
-                              <MechanicsScoreCell row={bossColumn.bestMechanic} compact />
+                              <MechanicsBossScoreCell row={bossColumn.bestMechanic} compact />
                             </div>
                           ))}
                         </div>

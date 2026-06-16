@@ -647,6 +647,7 @@
     "columnParse": "Parse",
     "columnSurvival": "Survival",
     "columnDeaths": "Deaths",
+    "columnEarlyDeaths": "Early deaths",
     "columnPulls": "Pulls"
   }
 }

@@ -10,8 +10,8 @@ import cacheService from "./cache.service";
 import logger from "../utils/logger";
 
 const MYTHIC_DIFFICULTY = 5;
-const PARSE_WEIGHT = 0.65;
-const SURVIVAL_WEIGHT = 0.35;
+const PARSE_WEIGHT = 0.5;
+const SURVIVAL_WEIGHT = 0.5;
 const REPORT_LOOKUP_BATCH_SIZE = 500;
 const REPORT_GROUP_BATCH_SIZE = 200;
 const FIGHT_CURSOR_BATCH_SIZE = 1000;
@@ -128,6 +128,7 @@ class CharacterMechanicsService {
       }
 
       await cacheService.invalidatePattern(/^character-mechanics:/);
+      await cacheService.invalidatePattern(/^characters:profile:/);
 
       const duration = Math.round((Date.now() - startedAt) / 1000);
       logger.info(`[MechanicsLeaderboard] Build completed: ${totalEntries} entries across ${zoneIds.length} raid(s) in ${duration}s`);
@@ -200,49 +201,53 @@ class CharacterMechanicsService {
       guildByCharacter.set(String(character._id), guildName && guildRealm ? { name: guildName, realm: guildRealm } : null);
     }
 
-    const bossEntries = parseRows.map((row) => {
+    const bossEntries = parseRows.flatMap((row) => {
       const survival = survivalByCharacterEncounter.get(this.getCharacterEncounterKey(row.characterId, row.encounterId));
       const survivalSummary = this.summarizeSurvivalStats(survival);
+      if (survivalSummary.survivalScore === null) return [];
+
       const parseScore = this.roundScore(row.rankPercent ?? 0);
       const score = this.combineScores(parseScore, survivalSummary.survivalScore);
       const guild = guildByCharacter.get(String(row.characterId)) ?? null;
 
-      return {
-        zoneId,
-        difficulty: MYTHIC_DIFFICULTY,
-        type: "boss" as const,
-        encounterId: row.encounterId,
-        metric: row.metric ?? "dps",
-        characterId: row.characterId,
-        wclCanonicalCharacterId: row.wclCanonicalCharacterId,
-        name: row.name,
-        realm: row.realm,
-        region: row.region,
-        classID: row.classID,
-        specName: row.specName,
-        bestSpecName: row.bestSpecName ?? "",
-        role: row.role,
-        ilvl: row.ilvl ?? 0,
-        score,
-        parseScore,
-        survivalScore: survivalSummary.survivalScore,
-        encounterName: row.encounterName,
-        rankPercent: row.rankPercent ?? 0,
-        medianPercent: row.medianPercent ?? 0,
-        totalKills: row.totalKills ?? 0,
-        bestAmount: row.bestAmount ?? 0,
-        pulls: survivalSummary.pulls,
-        deaths: survivalSummary.deaths,
-        survivedPulls: survivalSummary.survivedPulls,
-        earlyDeaths: survivalSummary.earlyDeaths,
-        averageDeathPercent: survivalSummary.averageDeathPercent,
-        deathDataAvailable: survivalSummary.pulls > 0,
-        bossScores: [],
-        guildName: guild?.name ?? null,
-        guildRealm: guild?.realm ?? null,
-        sourcePartition: row.partition ?? 0,
-        updatedAt: row.updatedAt ?? new Date(),
-      };
+      return [
+        {
+          zoneId,
+          difficulty: MYTHIC_DIFFICULTY,
+          type: "boss" as const,
+          encounterId: row.encounterId,
+          metric: row.metric ?? "dps",
+          characterId: row.characterId,
+          wclCanonicalCharacterId: row.wclCanonicalCharacterId,
+          name: row.name,
+          realm: row.realm,
+          region: row.region,
+          classID: row.classID,
+          specName: row.specName,
+          bestSpecName: row.bestSpecName ?? "",
+          role: row.role,
+          ilvl: row.ilvl ?? 0,
+          score,
+          parseScore,
+          survivalScore: survivalSummary.survivalScore,
+          encounterName: row.encounterName,
+          rankPercent: row.rankPercent ?? 0,
+          medianPercent: row.medianPercent ?? 0,
+          totalKills: row.totalKills ?? 0,
+          bestAmount: row.bestAmount ?? 0,
+          pulls: survivalSummary.pulls,
+          deaths: survivalSummary.deaths,
+          survivedPulls: survivalSummary.survivedPulls,
+          earlyDeaths: survivalSummary.earlyDeaths,
+          averageDeathPercent: survivalSummary.averageDeathPercent,
+          deathDataAvailable: true,
+          bossScores: [],
+          guildName: guild?.name ?? null,
+          guildRealm: guild?.realm ?? null,
+          sourcePartition: row.partition ?? 0,
+          updatedAt: row.updatedAt ?? new Date(),
+        },
+      ];
     });
 
     const overallEntries = this.buildOverallEntries(bossEntries);
@@ -573,6 +578,8 @@ class CharacterMechanicsService {
       type: isBossType ? "boss" : "overall",
       encounterId: encounterId ?? null,
       metric,
+      deathDataAvailable: true,
+      survivalScore: { $ne: null },
     };
 
     if (classId !== undefined) baseQuery.classID = classId;
@@ -648,11 +655,16 @@ class CharacterMechanicsService {
     const { baseQuery, normalizedSpecName, partialNameRegex, partialGuildNameRegex, page, safeLimit } = options;
     const entries = (await CharacterMechanicsLeaderboard.find({
       ...baseQuery,
-      bossScores: { $elemMatch: { specName: normalizedSpecName } },
+      bossScores: { $elemMatch: { specName: normalizedSpecName, deathDataAvailable: true, survivalScore: { $ne: null } } },
     }).lean()) as any[];
+    const scoredEntries: any[] = [];
 
     for (const entry of entries) {
-      entry.bossScores = (entry.bossScores ?? []).filter((bossScore: IMechanicsBossScore) => bossScore.specName === normalizedSpecName);
+      entry.bossScores = (entry.bossScores ?? []).filter(
+        (bossScore: IMechanicsBossScore) => bossScore.specName === normalizedSpecName && bossScore.deathDataAvailable === true && bossScore.survivalScore !== null,
+      );
+      if (entry.bossScores.length === 0) continue;
+
       const totals = this.summarizeBossScores(entry.bossScores);
       entry.score = totals.score;
       entry.parseScore = totals.parseScore;
@@ -664,18 +676,19 @@ class CharacterMechanicsService {
       entry.averageDeathPercent = totals.averageDeathPercent;
       entry.deathDataAvailable = totals.deathDataAvailable;
       entry.specName = normalizedSpecName;
+      scoredEntries.push(entry);
     }
 
-    entries.sort((a, b) => b.score - a.score || (a.name ?? "").localeCompare(b.name ?? ""));
-    const totalRankedItems = entries.length;
-    let displayEntries = entries;
+    scoredEntries.sort((a, b) => b.score - a.score || (a.name ?? "").localeCompare(b.name ?? ""));
+    const totalRankedItems = scoredEntries.length;
+    let displayEntries = scoredEntries;
     if (partialNameRegex) displayEntries = displayEntries.filter((entry) => partialNameRegex.test(entry.name ?? ""));
     if (partialGuildNameRegex) displayEntries = displayEntries.filter((entry) => partialGuildNameRegex.test(entry.guildName ?? ""));
 
     const effectivePage = Math.max(page, 1);
     const effectiveSkip = (effectivePage - 1) * safeLimit;
     const pageEntries = displayEntries.slice(effectiveSkip, effectiveSkip + safeLimit);
-    const rankMap = new Map(entries.map((entry, index) => [entry, index + 1]));
+    const rankMap = new Map(scoredEntries.map((entry, index) => [entry, index + 1]));
 
     return {
       data: pageEntries.map((entry) => this.toResponseRow(entry, rankMap.get(entry) ?? 0, false)),
@@ -785,6 +798,20 @@ class CharacterMechanicsService {
     averageDeathPercent: number | null;
     deathDataAvailable: boolean;
   } {
+    if (bossScores.length === 0) {
+      return {
+        score: 0,
+        parseScore: 0,
+        survivalScore: null,
+        pulls: 0,
+        deaths: 0,
+        survivedPulls: 0,
+        earlyDeaths: 0,
+        averageDeathPercent: null,
+        deathDataAvailable: false,
+      };
+    }
+
     const score = this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.score, 0) / bossScores.length);
     const parseScore = this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.parseScore, 0) / bossScores.length);
     const survivalScores = bossScores.filter((bossScore) => bossScore.survivalScore !== null);
@@ -809,8 +836,7 @@ class CharacterMechanicsService {
     };
   }
 
-  private combineScores(parseScore: number, survivalScore: number | null): number {
-    if (survivalScore === null) return this.roundScore(parseScore);
+  private combineScores(parseScore: number, survivalScore: number): number {
     return this.roundScore(parseScore * PARSE_WEIGHT + survivalScore * SURVIVAL_WEIGHT);
   }
 

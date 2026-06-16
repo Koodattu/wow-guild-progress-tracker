@@ -647,6 +647,7 @@
     "columnParse": "Parse",
     "columnSurvival": "Selviytyminen",
     "columnDeaths": "Kuolemat",
+    "columnEarlyDeaths": "Varhaiset kuolemat",
     "columnPulls": "Pullit"
   }
 }
