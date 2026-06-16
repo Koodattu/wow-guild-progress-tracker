@@ -1621,6 +1621,7 @@ export interface GuildNetworkTier {
 
 export type GuildNetworkGuildTuple = [name: string, realmIdx: number];
 export type GuildNetworkCharacterTuple = [name: string, realmIdx: number, classID: number, memberships: number[], aliases?: string[]];
+export type GuildNetworkAccountTuple = [displayName: string, slug: string | null, characterIndexes: number[]];
 
 export interface GuildNetworkUniverse {
   schemaVersion: number;
@@ -1631,6 +1632,7 @@ export interface GuildNetworkUniverse {
   realms: string[];
   guilds: GuildNetworkGuildTuple[];
   characters: GuildNetworkCharacterTuple[];
+  accounts?: GuildNetworkAccountTuple[];
 }
 
 export interface GuildNetworkMeta {

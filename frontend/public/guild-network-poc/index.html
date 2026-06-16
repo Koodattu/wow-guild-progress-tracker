@@ -100,6 +100,19 @@
         padding: 0 4px;
       }
 
+      .identity-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+
+      .identity-row .button {
+        font-size: 0.72rem;
+        padding: 0 4px;
+      }
+
       .glink {
         cursor: pointer;
       }
@@ -131,6 +144,11 @@
       .button.active {
         border-color: color-mix(in srgb, var(--blue-strong) 70%, white);
         background: var(--blue-strong);
+      }
+
+      .button:disabled {
+        cursor: not-allowed;
+        opacity: 0.46;
       }
 
       .field {
@@ -659,6 +677,14 @@
         text-underline-offset: 2px;
       }
 
+      .char-ref.static {
+        cursor: default;
+      }
+
+      .char-ref.static:hover .char-ref-name {
+        text-decoration: none;
+      }
+
       .class-icon {
         width: 16px;
         height: 16px;
@@ -762,6 +788,10 @@
             <button class="button" id="modeAll" type="button">All raids</button>
             <button class="button" id="modeFlow" type="button">Lineages</button>
           </div>
+          <div class="identity-row">
+            <button class="button active" id="identityCharacter" type="button">Character</button>
+            <button class="button" id="identityAccount" type="button">Accounts</button>
+          </div>
         </div>
 
         <div class="side-section filters-island">
@@ -790,7 +820,7 @@
 
         <div class="side-section search-island">
           <h3>Search</h3>
-          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters or guilds…" />
+          <input id="search" type="text" autocomplete="off" spellcheck="false" placeholder="Search characters, accounts, or guilds…" />
           <div class="search-results" id="searchResults"></div>
         </div>
       </aside>
@@ -826,7 +856,7 @@
       <aside class="inspector" id="inspectorPanel">
         <div class="inspector-header">
           <h2 id="insTitle">Inspector</h2>
-          <p id="insSub">Click a character dot or a guild cluster.</p>
+          <p id="insSub">Click a character dot, account dot, or guild cluster.</p>
         </div>
         <div class="inspector-body" id="insBody"></div>
       </aside>
@@ -875,10 +905,11 @@
 
       /* ============================== state ============================== */
 
-      const M = { tiers: [], realms: [], guilds: [], chars: [] }; // loaded model
+      const M = { tiers: [], realms: [], guilds: [], baseChars: [], chars: [], accountGroups: [], accountChars: null }; // loaded model
       const F = {}; // filtered + derived model, rebuilt by rebuild()
       const view = {
         mode: "galaxy",
+        identity: "character",
         tier: 0,
         minReports: 2,
         classFilter: new Set(),
@@ -904,7 +935,7 @@
       const els = Object.fromEntries(
         ["titleMain", "titleSub", "stats", "timeline", "tierCells", "playBtn", "loading", "loadingText",
          "errorBox", "errorText", "insTitle", "insSub", "insBody", "search", "searchResults", "classGrid",
-         "modeGalaxy", "modeAll", "modeFlow", "minReports", "tglFlows", "tglTrails", "tglFibers",
+         "modeGalaxy", "modeAll", "modeFlow", "identityCharacter", "identityAccount", "minReports", "tglFlows", "tglTrails", "tglFibers",
          "tglLabels", "resetView", "clearSel", "inspectorPanel"]
           .map((id) => [id, document.getElementById(id)]),
       );
@@ -1004,10 +1035,63 @@
         return guild.name;
       }
 
-      function characterLabel(c, options = {}) {
+      function isAccountMode() {
+        return view.identity === "account";
+      }
+
+      function entitySingular() {
+        return isAccountMode() ? "account" : "character";
+      }
+
+      function entityPlural() {
+        return isAccountMode() ? "accounts" : "characters";
+      }
+
+      function entityPluralTitle() {
+        return isAccountMode() ? "Accounts" : "Characters";
+      }
+
+      function computeDuplicateNames(chars) {
+        const counts = new Map();
+        for (const ch of chars) counts.set(ch.nameKey, (counts.get(ch.nameKey) || 0) + 1);
+        for (const ch of chars) ch.duplicateName = (counts.get(ch.nameKey) || 0) > 1;
+      }
+
+      function tierPersona(c, tier = null) {
         const ch = M.chars[c];
-        if (options.full) return `${ch.name}-${realmLabel(ch.realm)}`;
-        return ch.name;
+        if (tier === null || !ch || !ch.tierPersona) return null;
+        return ch.tierPersona[tier] || null;
+      }
+
+      function classIDForEntity(c, tier = null) {
+        const ch = M.chars[c];
+        const persona = tierPersona(c, tier);
+        return CLASS_NAMES[persona?.classID] ? persona.classID : CLASS_NAMES[ch?.classID] ? ch.classID : 0;
+      }
+
+      function entityName(c, tier = null) {
+        const ch = M.chars[c];
+        const persona = tierPersona(c, tier);
+        return persona?.name || ch?.name || "Unknown";
+      }
+
+      function entityRealm(c, tier = null) {
+        const ch = M.chars[c];
+        const persona = tierPersona(c, tier);
+        return persona?.realm || ch?.realm || "Unknown";
+      }
+
+      function slotClassID(src, s) {
+        return src.classID ? src.classID[s] : classIDForEntity(src.c[s], src.tierIndex ?? null);
+      }
+
+      function slotLabel(src, s) {
+        return characterLabel(src.c[s], {}, src.tierIndex ?? null);
+      }
+
+      function characterLabel(c, options = {}, tier = null) {
+        if (options.full) return `${entityName(c, tier)}-${realmLabel(entityRealm(c, tier))}`;
+        return entityName(c, tier);
       }
 
       function realmInline(realm) {
@@ -1023,10 +1107,11 @@
       }
 
       function characterIdentityHtml(c, options = {}) {
+        const tier = options.tier ?? null;
         const ch = M.chars[c];
         const style = options.color ? ` style="color:${options.color}"` : "";
         const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
-        return `<span class="identity-line"${style}><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>`;
+        return `<span class="identity-line"${style}><span class="name">${esc(entityName(c, tier))}</span>${showRealm ? realmInline(entityRealm(c, tier)) : ""}</span>`;
       }
 
       function classIconHtml(classID) {
@@ -1036,13 +1121,27 @@
       }
 
       function characterRefHtml(c, options = {}) {
+        const tier = options.tier ?? null;
         const ch = M.chars[c];
-        const color = CLASS_COLORS[ch.classID] || CLASS_COLORS[0];
+        const classID = classIDForEntity(c, tier);
+        const color = CLASS_COLORS[classID] || CLASS_COLORS[0];
         const showRealm = options.showRealm || (options.realmIfDuplicate && ch.duplicateName);
         const suffix = options.suffix ? `<span class="char-ref-meta">${esc(options.suffix)}</span>` : "";
-        return `<span class="char-ref" data-sel-char="${c}" title="${esc(CLASS_NAMES[ch.classID] || "Unknown")}">
+        return `<span class="char-ref" data-sel-char="${c}" title="${esc(CLASS_NAMES[classID] || "Unknown")}">
+          ${classIconHtml(classID)}
+          <span class="char-ref-name" style="color:${color}"><span class="name">${esc(entityName(c, tier))}</span>${showRealm ? realmInline(entityRealm(c, tier)) : ""}</span>
+          ${suffix}
+        </span>`;
+      }
+
+      function baseCharacterRefHtml(c, options = {}) {
+        const ch = M.baseChars[c];
+        if (!ch) return "";
+        const color = CLASS_COLORS[ch.classID] || CLASS_COLORS[0];
+        const suffix = options.suffix ? `<span class="char-ref-meta">${esc(options.suffix)}</span>` : "";
+        return `<span class="char-ref static" title="${esc(CLASS_NAMES[ch.classID] || "Unknown")}">
           ${classIconHtml(ch.classID)}
-          <span class="char-ref-name" style="color:${color}"><span class="name">${esc(ch.name)}</span>${showRealm ? realmInline(ch.realm) : ""}</span>
+          <span class="char-ref-name" style="color:${color}"><span class="name">${esc(ch.name)}</span>${realmInline(ch.realm)}</span>
           ${suffix}
         </span>`;
       }
@@ -1070,6 +1169,102 @@
 
       /* ============================== data load ============================== */
 
+      function buildAccountEntities() {
+        if (M.accountChars) return M.accountChars;
+
+        const groupedMembers = new Set();
+        const accounts = [];
+        for (const group of M.accountGroups) {
+          const members = group.members.filter((c) => M.baseChars[c]);
+          if (members.length < 2) continue;
+          for (const c of members) groupedMembers.add(c);
+
+          const memTotals = new Map();
+          const tierMemberReports = Array.from({ length: M.tiers.length }, () => new Map());
+          const classTotals = new Map();
+          const aliasParts = new Set([group.name, group.slug || ""]);
+          let total = 0;
+
+          for (const c of members) {
+            const ch = M.baseChars[c];
+            aliasParts.add(ch.name);
+            aliasParts.add(ch.realm);
+            for (const alias of ch.aliases || []) aliasParts.add(alias);
+            for (let i = 0; i < ch.mem.length; i += 3) {
+              const t = ch.mem[i];
+              const g = ch.mem[i + 1];
+              const r = ch.mem[i + 2];
+              const key = t * 100000 + g;
+              memTotals.set(key, (memTotals.get(key) || 0) + r);
+              tierMemberReports[t].set(c, (tierMemberReports[t].get(c) || 0) + r);
+              classTotals.set(ch.classID, (classTotals.get(ch.classID) || 0) + r);
+              total += r;
+            }
+          }
+
+          const tierPersona = {};
+          let primaryIndex = members[0];
+          let primaryReports = -1;
+          for (let t = 0; t < tierMemberReports.length; t += 1) {
+            let best = -1;
+            let bestReports = -1;
+            for (const [c, reports] of tierMemberReports[t]) {
+              const ch = M.baseChars[c];
+              if (reports > bestReports || (reports === bestReports && ch.total > (M.baseChars[best]?.total || 0))) {
+                best = c;
+                bestReports = reports;
+              }
+            }
+            if (best >= 0) {
+              const ch = M.baseChars[best];
+              tierPersona[t] = { name: ch.name, realm: ch.realm, classID: ch.classID, charIndex: best, reports: bestReports };
+              if (bestReports >= primaryReports) {
+                primaryIndex = best;
+                primaryReports = bestReports;
+              }
+            }
+          }
+
+          const primary = M.baseChars[primaryIndex] || M.baseChars[members[0]];
+          const classID = Array.from(classTotals.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || primary.classID || 0;
+          const keys = Array.from(memTotals.keys()).sort((a, b) => a - b);
+          const mem = [];
+          for (const key of keys) mem.push(Math.floor(key / 100000), key % 100000, memTotals.get(key) || 0);
+
+          accounts.push({
+            name: group.name || primary.name,
+            realm: primary.realm,
+            classID: CLASS_NAMES[classID] ? classID : 0,
+            mem,
+            aliases: Array.from(aliasParts).filter(Boolean),
+            searchKey: normalizeSearch(Array.from(aliasParts).join(" ")),
+            nameKey: normalizeSearch(group.name || primary.name),
+            duplicateName: false,
+            total,
+            isAccount: true,
+            accountSlug: group.slug,
+            memberIndexes: members,
+            tierPersona,
+          });
+        }
+
+        for (let c = 0; c < M.baseChars.length; c += 1) {
+          if (groupedMembers.has(c)) continue;
+          const ch = M.baseChars[c];
+          accounts.push({
+            ...ch,
+            isAccount: false,
+            memberIndexes: [c],
+            sourceChar: c,
+            tierPersona: {},
+          });
+        }
+
+        computeDuplicateNames(accounts);
+        M.accountChars = accounts;
+        return accounts;
+      }
+
       async function boot() {
         try {
           els.loadingText.textContent = "Fetching every character × guild × tier…";
@@ -1093,7 +1288,7 @@
           for (const guild of M.guilds) guildNameCounts.set(guild.nameKey, (guildNameCounts.get(guild.nameKey) || 0) + 1);
           for (const guild of M.guilds) guild.duplicateName = (guildNameCounts.get(guild.nameKey) || 0) > 1;
 
-          M.chars = data.characters.map(([name, realmIdx, classID, mem, aliases]) => {
+          M.baseChars = data.characters.map(([name, realmIdx, classID, mem, aliases]) => {
             const realm = M.realms[realmIdx] || "Unknown";
             const aliasText = Array.isArray(aliases) ? aliases.join(" ") : "";
             return {
@@ -1101,17 +1296,26 @@
               realm,
               classID: CLASS_NAMES[classID] ? classID : 0,
               mem, // flat [t, g, reports, ...]
+              aliases: Array.isArray(aliases) ? aliases : [],
               searchKey: normalizeSearch(`${name} ${realm} ${aliasText}`),
               nameKey: normalizeSearch(name),
               duplicateName: false,
               total: (() => { let s = 0; for (let i = 2; i < mem.length; i += 3) s += mem[i]; return s; })(),
             };
           });
-          const charNameCounts = new Map();
-          for (const ch of M.chars) charNameCounts.set(ch.nameKey, (charNameCounts.get(ch.nameKey) || 0) + 1);
-          for (const ch of M.chars) ch.duplicateName = (charNameCounts.get(ch.nameKey) || 0) > 1;
+          computeDuplicateNames(M.baseChars);
+          M.accountGroups = (Array.isArray(data.accounts) ? data.accounts : [])
+            .map(([name, slug, members]) => ({
+              name: name || "Account",
+              slug: slug || null,
+              members: Array.isArray(members) ? members.filter((c) => Number.isInteger(c) && c >= 0 && c < M.baseChars.length) : [],
+            }))
+            .filter((group) => group.members.length >= 2);
+          M.accountChars = null;
+          M.chars = M.baseChars;
+          updateIdentityButtons();
 
-          els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} characters across ${M.tiers.length} tiers…`;
+          els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} ${entityPlural()} across ${M.tiers.length} tiers…`;
           await new Promise((r) => setTimeout(r, 30)); // let the text paint
 
           view.tier = M.tiers.length - 1;
@@ -1274,10 +1478,12 @@
           const count = arr.length / 3;
           const members = new Map(); // g -> slot indices
           const td = {
+            tierIndex: t,
             count,
             c: new Int32Array(count),
             g: new Int32Array(count),
             r: new Int32Array(count),
+            classID: new Int16Array(count),
             x: new Float32Array(count),
             y: new Float32Array(count),
             slotOf: new Map(),
@@ -1290,6 +1496,7 @@
             td.c[s] = arr[i];
             td.g[s] = arr[i + 1];
             td.r[s] = arr[i + 2];
+            td.classID[s] = classIDForEntity(arr[i], t);
             td.slotOf.set(arr[i], s);
             let list = members.get(arr[i + 1]);
             if (!list) members.set(arr[i + 1], (list = []));
@@ -1658,6 +1865,7 @@
           g: new Int32Array(count),
           rep: new Int32Array(count),
           guildN: new Int32Array(count),
+          classID: new Int16Array(count),
           x: new Float32Array(count),
           y: new Float32Array(count),
           gx: new Float32Array(M.guilds.length),
@@ -1692,6 +1900,7 @@
             at.g[s] = g;
             at.rep[s] = list[k][1];
             at.guildN[s] = 1;
+            at.classID[s] = classIDForEntity(list[k][0]);
             at.x[s] = at.gx[g] + phX[k];
             at.y[s] = at.gy[g] + phY[k];
             at.slotOf.set(list[k][0], s);
@@ -1715,6 +1924,7 @@
           at.g[s] = best;
           at.rep[s] = repSum;
           at.guildN[s] = totals.size;
+          at.classID[s] = classIDForEntity(c);
           at.x[s] = x / wsum + Math.cos(h % 6283 / 1000) * rad;
           at.y[s] = y / wsum + Math.sin(h % 6283 / 1000) * rad;
           at.slotOf.set(c, s);
@@ -1755,7 +1965,7 @@
           for (let s = 0; s < td.count; s += 1) {
             const ps = prev.slotOf.get(td.c[s]);
             if (ps !== undefined && prev.g[ps] !== td.g[s]) {
-              out.push([prev.x[ps], prev.y[ps], td.x[s], td.y[s], td.c[s]]);
+              out.push([prev.x[ps], prev.y[ps], td.x[s], td.y[s], td.c[s], td.classID[s]]);
             }
           }
         }
@@ -1833,13 +2043,13 @@
               prevX[s] = from.x[slot];
               prevY[s] = from.y[slot];
               if (from.g[slot] !== to.g[s] && trails.length < 4000) {
-                trails.push([from.x[slot], from.y[slot], to.x[s], to.y[s], to.c[s]]);
+                trails.push([from.x[slot], from.y[slot], to.x[s], to.y[s], to.c[s], to.classID[s]]);
               }
             }
           }
           const leavers = [];
           for (let s = 0; s < from.count && leavers.length < 6000; s += 1) {
-            if (!to.slotOf.has(from.c[s])) leavers.push([from.x[s], from.y[s], from.c[s]]);
+            if (!to.slotOf.has(from.c[s])) leavers.push([from.x[s], from.y[s], from.c[s], from.classID[s]]);
           }
           view.trans = { start: performance.now(), prevX, prevY, trails, leavers };
         } else {
@@ -1879,10 +2089,10 @@
           const first = M.tiers[0];
           const last = M.tiers[M.tiers.length - 1];
           els.titleMain.textContent = "All raids combined";
-          els.titleSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · multi-guild raiders float between every guild of their career`;
+          els.titleSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · multi-guild ${entityPlural()} float between every guild of their career`;
         } else {
           els.titleMain.textContent = "Guild lineages";
-          els.titleSub.textContent = "Each band is a guild's roster flowing through time. Ribbons are raiders who stayed or moved.";
+          els.titleSub.textContent = `Each band is a guild's roster flowing through time. Ribbons are ${entityPlural()} who stayed or moved.`;
         }
         renderStats();
         renderTimeline();
@@ -1893,7 +2103,7 @@
         if (view.mode === "galaxy") {
           const st = F.stats[view.tier];
           items = [
-            ["Raiders", st.present],
+            [entityPluralTitle(), st.present],
             ["Guilds", st.guilds],
             ["Stayed", st.stayed],
             ["Switched", st.switched],
@@ -1905,7 +2115,7 @@
         } else if (view.mode === "all") {
           const at = buildAllTime();
           items = [
-            ["Characters", at.count],
+            [entityPluralTitle(), at.count],
             ["Guilds", at.roster.size],
             ["Loyalists", at.count - at.multiCount],
             ["Multi-guild", at.multiCount],
@@ -1921,7 +2131,7 @@
           items = [
             ["Tiers", M.tiers.length],
             ["Guilds", F.active.length],
-            ["Characters", M.chars.reduce((s, ch, c) => s + ((F.charTiers[c] || []).length ? 1 : 0), 0)],
+            [entityPluralTitle(), M.chars.reduce((s, ch, c) => s + ((F.charTiers[c] || []).length ? 1 : 0), 0)],
             ["Guild switches", migrations],
           ];
         }
@@ -1994,7 +2204,7 @@
         const tier = M.tiers[t];
         const td = F.tiers[t];
         els.insTitle.textContent = "Raid summary";
-        els.insSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · ${fmt(td.count)} raiders in ${fmt(td.roster.size)} guilds`;
+        els.insSub.textContent = `${tier.expansion} · ${monthYear(tier.start)} · ${fmt(td.count)} ${entityPlural()} in ${fmt(td.roster.size)} guilds`;
 
         const top = Array.from(td.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
         const moves = [];
@@ -2020,7 +2230,7 @@
           <section class="panel">
             <h3>Biggest moves vs previous tier</h3>
             <div class="list">
-              ${moves.length === 0 ? `<div class="card"><div class="row-sub">${t === 0 ? "First tracked tier — no previous tier." : "No multi-raider moves under this filter."}</div></div>` : ""}
+              ${moves.length === 0 ? `<div class="card"><div class="row-sub">${t === 0 ? "First tracked tier — no previous tier." : `No multi-${entitySingular()} moves under this filter.`}</div></div>` : ""}
               ${moves.slice(0, 10).map(([a, b, flow]) => `
                 <div class="card">
                   <div class="row-main">
@@ -2039,7 +2249,7 @@
         const first = M.tiers[0];
         const last = M.tiers[M.tiers.length - 1];
         els.insTitle.textContent = "All raids combined";
-        els.insSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · ${fmt(at.count)} characters, ${fmt(at.multiCount)} of them in 2+ guilds`;
+        els.insSub.textContent = `${monthYear(first.start)} → ${monthYear(last.start)} · ${fmt(at.count)} ${entityPlural()}, ${fmt(at.multiCount)} of them in 2+ guilds`;
 
         const top = Array.from(at.roster.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
         els.insBody.innerHTML = `
@@ -2061,7 +2271,7 @@
                     ${characterRefHtml(c, { realmIfDuplicate: true })}
                     <span>${fmt(n)} guilds</span>
                   </div>
-                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(M.chars[c].realm))}</span> · ${esc(CLASS_NAMES[M.chars[c].classID] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
+                  <div class="row-sub"><span class="realm-muted">${esc(realmLabel(entityRealm(c)))}</span> · ${esc(CLASS_NAMES[classIDForEntity(c)] || "Unknown")} · ${fmt(M.chars[c].total)} report appearances</div>
                 </button>`).join("")}
             </div>
           </section>`;
@@ -2149,7 +2359,7 @@
 
         els.insTitle.textContent = guild.name;
         els.insSub.textContent = allMode
-          ? `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(at.roster.get(g) || 0)} distinct members ever`
+          ? `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(at.roster.get(g) || 0)} distinct ${entityPlural()} ever`
           : `${realmLabel(guild.realm)} · ${fmt(activeTiers.length)} tiers active · peak roster ${fmt(peak)} · ${fmt(rosterNow)} this tier`;
 
         els.insBody.innerHTML = `
@@ -2158,7 +2368,7 @@
             <div class="card">
               <div class="roster-bars">
                 ${history.map((h) => `
-                  <button type="button" data-go-tier="${h.i}" title="${esc(M.tiers[h.i].name)}: ${fmt(h.n)} raiders"
+                  <button type="button" data-go-tier="${h.i}" title="${esc(M.tiers[h.i].name)}: ${fmt(h.n)} ${entityPlural()}"
                     class="${!allMode && h.i === t ? "on" : ""}"
                     style="height:${Math.max(2, (h.n / peak) * 44)}px;background:hsl(${guild.hue} 65% 58%)"></button>`).join("")}
               </div>
@@ -2204,14 +2414,27 @@
         for (const t of tiersAttended) {
           const td = F.tiers[t];
           const s = td.slotOf.get(c);
-          career.push({ t, g: td.g[s], r: td.r[s] });
+          career.push({ t, g: td.g[s], r: td.r[s], name: entityName(c, t), realm: entityRealm(c, t), classID: td.classID[s] });
           guildsSeen.add(td.g[s]);
         }
         const first = career.length ? M.tiers[career[0].t] : null;
         const last = career.length ? M.tiers[career[career.length - 1].t] : null;
 
+        const memberCount = ch.memberIndexes?.length || 1;
+        const classID = classIDForEntity(c);
         els.insTitle.textContent = ch.name;
-        els.insSub.textContent = `${realmLabel(ch.realm)} · ${CLASS_NAMES[ch.classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
+        els.insSub.textContent = isAccountMode()
+          ? `${fmt(memberCount)} linked ${memberCount === 1 ? "character" : "characters"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`
+          : `${realmLabel(ch.realm)} · ${CLASS_NAMES[classID] || "Unknown"} · ${fmt(tiersAttended.length)} tiers · ${fmt(guildsSeen.size)} guilds · ${fmt(ch.total)} report appearances`;
+
+        const linkedCharacters = isAccountMode() && memberCount > 1
+          ? `<section class="panel">
+              <h3>Linked characters</h3>
+              <div class="char-refs">
+                ${ch.memberIndexes.map((member) => baseCharacterRefHtml(member)).join("")}
+              </div>
+            </section>`
+          : "";
 
         els.insBody.innerHTML = `
           <section class="panel">
@@ -2223,10 +2446,11 @@
                     ${guildIdentityHtml(step.g, { realmIfDuplicate: true })}
                     <span style="color:${expColor(M.tiers[step.t].expansion)}">${tierAbbr(M.tiers[step.t].name)}</span>
                   </div>
-                  <div class="row-sub">${esc(M.tiers[step.t].name)} · ${fmt(step.r)} reports</div>
+                  <div class="row-sub">${esc(M.tiers[step.t].name)} · ${fmt(step.r)} reports${isAccountMode() ? ` · as ${esc(step.name)}-${esc(realmLabel(step.realm))} · ${esc(CLASS_NAMES[step.classID] || "Unknown")}` : ""}</div>
                 </button>`).join("")}
             </div>
           </section>
+          ${linkedCharacters}
           <section class="panel">
             <h3>Guilds</h3>
             <div class="chips">
@@ -2355,13 +2579,15 @@
             }
             const c = hit.id;
             const ch = M.chars[c];
+            const classID = classIDForEntity(c);
+            const memberCount = ch.memberIndexes?.length || 1;
             return `
               <button class="search-result" type="button" data-search-kind="char" data-search-id="${c}">
                 <div class="row-main">
-                  ${characterIdentityHtml(c, { color: CLASS_COLORS[ch.classID] })}
-                  <span class="search-kind">Character</span>
+                  ${characterIdentityHtml(c, { color: CLASS_COLORS[classID] })}
+                  <span class="search-kind">${isAccountMode() ? "Account" : "Character"}</span>
                 </div>
-                <div class="row-sub"><span class="realm-muted">${esc(realmLabel(ch.realm))}</span> · ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports</div>
+                <div class="row-sub"><span class="realm-muted">${esc(realmLabel(entityRealm(c)))}</span> · ${esc(CLASS_NAMES[classID] || "Unknown")} · ${hit.tiersAttended} tiers · ${fmt(ch.total)} reports${isAccountMode() ? ` · ${fmt(memberCount)} linked ${memberCount === 1 ? "character" : "characters"}` : ""}</div>
               </button>`;
           })
           .join("");
@@ -2387,18 +2613,18 @@
         canvas.style.height = `${rect.height}px`;
       }
 
-      function dotAlpha(c, g) {
+      function dotAlpha(c, g, classID) {
         let a = 0.92;
-        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.1;
+        if (view.classFilter.size && !view.classFilter.has(classID)) a *= 0.1;
         if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.22;
         if (view.selChar >= 0) a *= c === view.selChar ? 1 : 0.1;
         return a;
       }
 
-      function previousDotAlpha(c, g, current) {
+      function previousDotAlpha(c, g, current, classID) {
         const currentSlot = current.slotOf.get(c);
         let a = currentSlot === undefined ? 0.26 : current.g[currentSlot] === g ? 0.1 : 0.22;
-        if (view.classFilter.size && !view.classFilter.has(M.chars[c].classID)) a *= 0.12;
+        if (view.classFilter.size && !view.classFilter.has(classID)) a *= 0.12;
         if (view.selGuild >= 0 && g !== view.selGuild) a *= 0.18;
         if (view.selChar >= 0) a *= c === view.selChar ? 2.5 : 0.1;
         return Math.min(0.65, a);
@@ -2475,7 +2701,7 @@
 
         const buckets = new Map();
         for (let s = 0; s < prev.count; s += 1) {
-          const alpha = previousDotAlpha(prev.c[s], prev.g[s], current);
+          const alpha = previousDotAlpha(prev.c[s], prev.g[s], current, prev.classID[s]);
           if (alpha < 0.02) continue;
           const bucket = Math.min(13, Math.max(1, Math.round(alpha * 20)));
           let path = buckets.get(bucket);
@@ -2592,8 +2818,8 @@
           const lines = tierTrails(view.tier);
           if (lines.length) {
             const paths = new Map();
-            for (const [x0, y0, x1, y1, c] of lines) {
-              const cls = M.chars[c].classID;
+            for (const [x0, y0, x1, y1, c, classID] of lines) {
+              const cls = classID;
               let path = paths.get(cls);
               if (!path) paths.set(cls, (path = new Path2D()));
               path.moveTo(x0, y0);
@@ -2606,9 +2832,9 @@
               ctx.stroke(path);
             }
             ctx.globalAlpha = 0.42;
-            for (const [x0, y0, x1, y1, c] of lines) {
+            for (const [x0, y0, x1, y1, c, classID] of lines) {
               const len = Math.hypot(x1 - x0, y1 - y0);
-              drawLineArrowheads(x0, y0, x1, y1, clamp(Math.floor(len / 42), 2, 6), 3.7 / Math.sqrt(t.k), CLASS_COLORS[M.chars[c].classID]);
+              drawLineArrowheads(x0, y0, x1, y1, clamp(Math.floor(len / 42), 2, 6), 3.7 / Math.sqrt(t.k), CLASS_COLORS[classID]);
             }
             ctx.globalAlpha = 1;
           }
@@ -2619,8 +2845,8 @@
           const alpha = (1 - pe) * 0.5;
           if (alpha > 0.02) {
             const paths = new Map();
-            for (const [x, y, c] of view.trans.leavers) {
-              const cls = M.chars[c].classID;
+            for (const [x, y, c, classID] of view.trans.leavers) {
+              const cls = classID;
               let path = paths.get(cls);
               if (!path) paths.set(cls, (path = new Path2D()));
               path.moveTo(x + 1.8, y);
@@ -2638,15 +2864,15 @@
         // migration trails
         if (view.trans && view.trans.trails.length) {
           ctx.lineWidth = 1 / t.k;
-          for (const [x0, y0, x1, y1, c] of view.trans.trails) {
+          for (const [x0, y0, x1, y1, c, classID] of view.trans.trails) {
             const cx = x0 + (x1 - x0) * pe;
             const cy = y0 + (y1 - y0) * pe;
             ctx.beginPath();
             ctx.moveTo(x0, y0);
             ctx.lineTo(cx, cy);
-            ctx.strokeStyle = CLASS_COLORS[M.chars[c].classID] + "55";
+            ctx.strokeStyle = CLASS_COLORS[classID] + "55";
             ctx.stroke();
-            drawLineArrowheads(x0, y0, cx, cy, clamp(Math.floor(Math.hypot(cx - x0, cy - y0) / 38), 1, 5), 3.5 / Math.sqrt(t.k), CLASS_COLORS[M.chars[c].classID] + "66");
+            drawLineArrowheads(x0, y0, cx, cy, clamp(Math.floor(Math.hypot(cx - x0, cy - y0) / 38), 1, 5), 3.5 / Math.sqrt(t.k), CLASS_COLORS[classID] + "66");
           }
         }
 
@@ -2656,7 +2882,7 @@
         for (let s = 0; s < td.count; s += 1) {
           let x = td.x[s];
           let y = td.y[s];
-          let alpha = dotAlpha(td.c[s], td.g[s]);
+          let alpha = dotAlpha(td.c[s], td.g[s], td.classID[s]);
           if (trans) {
             const px = trans.prevX[s];
             if (Number.isNaN(px)) {
@@ -2667,7 +2893,7 @@
             }
           }
           if (alpha < 0.02) continue;
-          const bucket = M.chars[td.c[s]].classID * 16 + Math.min(15, Math.round(alpha * 10));
+          const bucket = td.classID[s] * 16 + Math.min(15, Math.round(alpha * 10));
           let path = buckets.get(bucket);
           if (!path) buckets.set(bucket, (path = new Path2D()));
           const r = 1.7 + Math.min(2.4, Math.sqrt(td.r[s]) * 0.45);
@@ -2762,12 +2988,11 @@
           const x = src.x[s];
           const y = src.y[s];
           if (x < wx0 || x > wx1 || y < wy0 || y > wy1) continue;
-          const ch = M.chars[src.c[s]];
-          const label = characterLabel(src.c[s]);
+          const label = slotLabel(src, s);
           ctx.lineWidth = 2.6 / t.k;
           ctx.strokeStyle = "rgba(5, 7, 17, 0.88)";
           ctx.strokeText(label, x, y + 3.4);
-          ctx.fillStyle = CLASS_COLORS[ch.classID];
+          ctx.fillStyle = CLASS_COLORS[slotClassID(src, s)];
           ctx.fillText(label, x, y + 3.4);
         }
       }
@@ -2880,7 +3105,7 @@
         // dots
         const buckets = new Map();
         for (let s = 0; s < at.count; s += 1) {
-          const cls = M.chars[at.c[s]].classID;
+          const cls = at.classID[s];
           let alpha = 0.92;
           if (view.classFilter.size && !view.classFilter.has(cls)) alpha *= 0.1;
           if (mask && !mask[s]) alpha *= 0.22;
@@ -3233,40 +3458,43 @@
           const tiersAttended = (F.charTiers[hit.c] || []).length;
           if (view.mode === "all") {
             const at = F.allTime;
-            return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
-              ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · main guild ${esc(guildLabel(hit.g))}<br>
+            const classID = at.classID[hit.s];
+            return `<b style="color:${CLASS_COLORS[classID]}">${esc(characterLabel(hit.c))}</b><br>
+              ${esc(CLASS_NAMES[classID] || "Unknown")} · main guild ${esc(guildLabel(hit.g))}<br>
               ${fmt(at.rep[hit.s])} reports across ${fmt(at.guildN[hit.s])} ${at.guildN[hit.s] === 1 ? "guild" : "guilds"} · ${tiersAttended} tiers · click for career`;
           }
           const td = F.tiers[view.tier];
           const reports = td.r[hit.s];
-          return `<b style="color:${CLASS_COLORS[ch.classID]}">${esc(characterLabel(hit.c))}</b><br>
-            ${esc(CLASS_NAMES[ch.classID] || "Unknown")} · ${esc(guildLabel(hit.g))}<br>
+          const classID = td.classID[hit.s];
+          const accountLine = isAccountMode() && ch.isAccount ? `<br>Account ${esc(ch.name)}` : "";
+          return `<b style="color:${CLASS_COLORS[classID]}">${esc(characterLabel(hit.c, {}, view.tier))}</b><br>
+            ${esc(CLASS_NAMES[classID] || "Unknown")} · ${esc(guildLabel(hit.g))}${accountLine}<br>
             ${fmt(reports)} reports this tier · ${tiersAttended} tiers tracked · click for career`;
         }
         if (hit.kind === "guild") {
           if (view.mode === "all") {
             const at = F.allTime;
-            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(at.roster.get(hit.g) || 0)} distinct members all time · click to inspect`;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(at.roster.get(hit.g) || 0)} distinct ${entityPlural()} all time · click to inspect`;
           }
           const n = F.tiers[view.tier].roster.get(hit.g) || 0;
           if (!n && hit.previous && view.tier > 0) {
             const prev = F.tiers[view.tier - 1];
             const prevN = prev.roster.get(hit.g) || 0;
-            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(prevN)} raiders in previous tier · click to inspect`;
+            return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(prevN)} ${entityPlural()} in previous tier · click to inspect`;
           }
-          return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} raiders this tier · click to inspect`;
+          return `<b>${esc(guildLabel(hit.g))}</b><br>${fmt(n)} ${entityPlural()} this tier · click to inspect`;
         }
         if (hit.kind === "node") {
-          return `<b>${esc(guildLabel(hit.node.g))}</b><br>${fmt(hit.node.count)} raiders in ${esc(M.tiers[hit.t].name)}`;
+          return `<b>${esc(guildLabel(hit.node.g))}</b><br>${fmt(hit.node.count)} ${entityPlural()} in ${esc(M.tiers[hit.t].name)}`;
         }
         if (hit.kind === "flow") {
           const f = hit.f;
           const from = M.tiers[hit.t - 1];
           const to = M.tiers[hit.t];
           if (f.a === f.b) {
-            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} raiders stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}${flowNames(f)}`;
+            return `<b>${esc(guildLabel(f.a))}</b><br>${fmt(f.n)} ${entityPlural()} stayed from ${esc(tierAbbr(from.name))} to ${esc(tierAbbr(to.name))}${flowNames(f)}`;
           }
-          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} raiders moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}${flowNames(f)}`;
+          return `<b>${esc(guildLabel(f.a))} → ${esc(guildLabel(f.b))}</b><br>${fmt(f.n)} ${entityPlural()} moved between ${esc(tierAbbr(from.name))} and ${esc(tierAbbr(to.name))}${flowNames(f)}`;
         }
         if (hit.kind === "header") {
           return `<b>${esc(M.tiers[hit.t].name)}</b><br>${esc(M.tiers[hit.t].expansion)} · click to set current tier`;
@@ -3346,6 +3574,43 @@
 
       /* ============================== top-level events ============================== */
 
+      function updateIdentityButtons() {
+        const hasAccounts = M.accountGroups.length > 0;
+        els.identityCharacter.classList.toggle("active", view.identity === "character");
+        els.identityAccount.classList.toggle("active", view.identity === "account");
+        els.identityAccount.disabled = !hasAccounts;
+        els.identityAccount.title = hasAccounts ? "Show linked account groups" : "Rebuild the guild network snapshot to enable account mode";
+        els.search.placeholder = hasAccounts ? "Search characters, accounts, or guilds…" : "Search characters or guilds…";
+        els.insSub.textContent = isAccountMode() ? "Click an account dot or a guild cluster." : "Click a character dot or a guild cluster.";
+      }
+
+      function setIdentity(identity) {
+        if (identity === view.identity) return;
+        if (identity === "account" && !M.accountGroups.length) return;
+        stopPlay();
+        view.identity = identity;
+        view.selChar = -1;
+        view.selGuild = -1;
+        view.hover = null;
+        view.trans = null;
+        M.chars = identity === "account" ? buildAccountEntities() : M.baseChars;
+        view.fitted = { galaxy: false, all: false, flow: false };
+        F.allTime = null;
+        els.loadingText.textContent = `Laying out ${fmt(M.chars.length)} ${entityPlural()} across ${M.tiers.length} tiers…`;
+        els.loading.classList.add("visible");
+        setTimeout(() => {
+          rebuild();
+          if (view.mode === "galaxy") fitGalaxy();
+          else if (view.mode === "all") fitAll();
+          else fitFlow();
+          updateIdentityButtons();
+          updateHud();
+          renderInspector();
+          runSearch();
+          els.loading.classList.remove("visible");
+        }, 30);
+      }
+
       function setMode(mode) {
         view.mode = mode;
         els.modeGalaxy.classList.toggle("active", mode === "galaxy");
@@ -3364,6 +3629,8 @@
       els.modeGalaxy.addEventListener("click", () => setMode("galaxy"));
       els.modeAll.addEventListener("click", () => setMode("all"));
       els.modeFlow.addEventListener("click", () => setMode("flow"));
+      els.identityCharacter.addEventListener("click", () => setIdentity("character"));
+      els.identityAccount.addEventListener("click", () => setIdentity("account"));
 
       els.minReports.addEventListener("change", () => {
         view.minReports = Number(els.minReports.value);
@@ -3380,6 +3647,7 @@
           els.loading.classList.remove("visible");
           updateHud();
           renderInspector();
+          runSearch();
         }, 30);
       });
 

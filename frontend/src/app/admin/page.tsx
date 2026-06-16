@@ -27,6 +27,7 @@ import {
   triggerBackfillCharacterRankings,
   triggerBackfillCharacterAchievements,
   triggerRebuildCharacterAccountGroups,
+  triggerRebuildGuildNetworkSnapshot,
   triggerRebuildCharacterRankingLeaderboards,
   triggerRebuildCharacterMechanicsLeaderboards,
   triggerPruneCharacterRankingsWithoutMythicEvidence,
@@ -1478,6 +1479,15 @@ export default function AdminPage() {
                       <span>Rebuild Character Account Groups</span>
                       {triggerLoading === "rebuild-character-account-groups" && <span className="animate-spin">⏳</span>}
                       {triggerCooldowns["rebuild-character-account-groups"] && <span className="text-xs text-gray-400">⏱️</span>}
+                    </button>
+                    <button
+                      onClick={() => handleTrigger("rebuild-guild-network-snapshot", triggerRebuildGuildNetworkSnapshot)}
+                      disabled={triggerLoading === "rebuild-guild-network-snapshot" || triggerCooldowns["rebuild-guild-network-snapshot"]}
+                      className="w-full min-h-10 px-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600 active:scale-[0.96] disabled:opacity-50 flex items-center justify-between transition-[background-color,transform]"
+                    >
+                      <span>Rebuild Guild Network Snapshot</span>
+                      {triggerLoading === "rebuild-guild-network-snapshot" && <span className="animate-spin">⏳</span>}
+                      {triggerCooldowns["rebuild-guild-network-snapshot"] && <span className="text-xs text-gray-400">⏱️</span>}
                     </button>
                     {characterAchievementBackfillStatus && characterAchievementQueue && (
                       <div className="rounded bg-gray-900/60 border border-gray-700 p-3 text-xs text-gray-300 space-y-2">

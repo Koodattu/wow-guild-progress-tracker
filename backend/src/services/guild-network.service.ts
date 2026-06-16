@@ -1,14 +1,16 @@
 import crypto from "crypto";
 import { Response } from "express";
 import mongoose from "mongoose";
+import { CHARACTER_ACCOUNT_SIGNAL_VERSION } from "../config/achievement-signals";
 import { TRACKED_RAIDS } from "../config/guilds";
+import CharacterAccountGroup from "../models/CharacterAccountGroup";
 import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
 import GuildNetworkSnapshot, { IGuildNetworkSnapshot } from "../models/GuildNetworkSnapshot";
 import GuildNetworkSnapshotChunk from "../models/GuildNetworkSnapshotChunk";
 import Raid from "../models/Raid";
 import logger from "../utils/logger";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const CHUNK_SIZE = 512 * 1024;
 const RETAIN_SNAPSHOTS = 3;
 
@@ -22,6 +24,7 @@ type UniverseTier = {
 };
 
 type CharacterEntry = [string, number, number, number[], string[]?];
+type AccountEntry = [string, string | null, number[]];
 
 type ParticipationRow = {
   characterId?: mongoose.Types.ObjectId | string | null;
@@ -46,6 +49,7 @@ type MutableCharacter = {
   nameSeen: Date | null;
   aliases: Set<string>;
   mem: Map<number, number>;
+  characterIds: Set<string>;
 };
 
 type GuildNetworkMeta = {
@@ -198,13 +202,15 @@ class GuildNetworkService {
     realms: string[];
     guilds: Array<[string, number]>;
     characters: CharacterEntry[];
+    accounts: AccountEntry[];
   }> {
-    const [rows, raids, latestParticipation] = await Promise.all([
+    const [rows, raids, latestParticipation, accountGroups] = await Promise.all([
       CharacterRaidParticipation.find({ zoneId: { $in: TRACKED_RAIDS } })
         .select("characterId wclCanonicalCharacterId zoneId reportGuildId reportGuildName reportGuildRealm characterName characterRealm characterRegion classID firstSeenAt lastSeenAt reportCount -_id")
         .lean<ParticipationRow[]>(),
       Raid.find({ id: { $in: TRACKED_RAIDS } }).select("id name expansion -_id").lean(),
       CharacterRaidParticipation.findOne({ zoneId: { $in: TRACKED_RAIDS } }).sort({ updatedAt: -1 }).select("updatedAt -_id").lean<{ updatedAt?: Date }>(),
+      CharacterAccountGroup.find({ signalVersion: CHARACTER_ACCOUNT_SIGNAL_VERSION }).select("displayName slug characterIds -_id").lean<Array<{ displayName?: string | null; slug?: string | null; characterIds?: Array<mongoose.Types.ObjectId | string> }>>(),
     ]);
 
     const tierAgg = new Map<number, { rows: number; first: Date | null; last: Date | null }>();
@@ -277,8 +283,13 @@ class GuildNetworkService {
           nameSeen: row.lastSeenAt || null,
           aliases: new Set<string>(),
           mem: new Map<number, number>(),
+          characterIds: new Set<string>(),
         };
         chars.set(id, entry);
+      }
+
+      if (row.characterId !== null && row.characterId !== undefined) {
+        entry.characterIds.add(String(row.characterId));
       }
 
       if (row.characterName) entry.aliases.add(row.characterName);
@@ -298,6 +309,7 @@ class GuildNetworkService {
     }
 
     const characters: CharacterEntry[] = [];
+    const characterIndexesById = new Map<string, number[]>();
     for (const entry of chars.values()) {
       const flat: number[] = [];
       const keys = Array.from(entry.mem.keys()).sort((a, b) => a - b);
@@ -307,7 +319,29 @@ class GuildNetworkService {
 
       const currentRealm = realms[entry.realm] || "";
       const aliases = Array.from(entry.aliases).filter((value) => value && value !== entry.name && value !== currentRealm && value !== `${entry.name} ${currentRealm}`);
+      const characterIndex = characters.length;
       characters.push(aliases.length ? [entry.name, entry.realm, entry.classID, flat, aliases] : [entry.name, entry.realm, entry.classID, flat]);
+      for (const characterId of entry.characterIds) {
+        const indexes = characterIndexesById.get(characterId) || [];
+        indexes.push(characterIndex);
+        characterIndexesById.set(characterId, indexes);
+      }
+    }
+
+    const accounts: AccountEntry[] = [];
+    for (const group of accountGroups) {
+      const indexes: number[] = [];
+      const seen = new Set<number>();
+      for (const characterId of group.characterIds || []) {
+        for (const index of characterIndexesById.get(String(characterId)) || []) {
+          if (seen.has(index)) continue;
+          seen.add(index);
+          indexes.push(index);
+        }
+      }
+      if (indexes.length < 2) continue;
+      indexes.sort((a, b) => a - b);
+      accounts.push([group.displayName || "Account", group.slug || null, indexes]);
     }
 
     return {
@@ -319,6 +353,7 @@ class GuildNetworkService {
       realms,
       guilds,
       characters,
+      accounts,
     };
   }
 

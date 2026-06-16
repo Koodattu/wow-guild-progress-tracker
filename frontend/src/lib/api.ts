@@ -1652,6 +1652,15 @@ export async function triggerRebuildCharacterAccountGroups(): Promise<CharacterA
   return response.json();
 }
 
+export async function triggerRebuildGuildNetworkSnapshot(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-guild-network`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger guild network snapshot rebuild");
+  return response.json();
+}
+
 export async function triggerRebuildCharacterRankingLeaderboards(): Promise<CharacterRankingLeaderboardRebuildTriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/rebuild-character-ranking-leaderboards`, {
     method: "POST",
