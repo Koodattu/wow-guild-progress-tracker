@@ -50,6 +50,10 @@ export const queryKeys = {
     options: ["characterRankings", "options"] as const,
     list: (query: string) => ["characterRankings", "list", query] as const,
   },
+  characterMechanics: {
+    options: ["characterMechanics", "options"] as const,
+    list: (query: string) => ["characterMechanics", "list", query] as const,
+  },
   characters: {
     search: (query: string) => ["characters", "search", query] as const,
   },
@@ -259,6 +263,22 @@ export function useCharacterRankings(query: string, enabled: boolean = true) {
   return useQuery({
     queryKey: queryKeys.characterRankings.list(query),
     queryFn: () => api.getCharacterRankings(query),
+    enabled,
+  });
+}
+
+export function useCharacterMechanicsOptions() {
+  return useQuery({
+    queryKey: queryKeys.characterMechanics.options,
+    queryFn: () => api.getCharacterMechanicsOptions(),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useCharacterMechanics(query: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: queryKeys.characterMechanics.list(query),
+    queryFn: () => api.getCharacterMechanics(query),
     enabled,
   });
 }

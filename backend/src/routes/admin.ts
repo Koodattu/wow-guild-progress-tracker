@@ -24,6 +24,7 @@ import logger from "../utils/logger";
 import scheduler from "../services/scheduler.service";
 import guildService from "../services/guild.service";
 import characterService from "../services/character.service";
+import characterMechanicsService from "../services/character-mechanics.service";
 import characterRankingBackfillService from "../services/character-ranking-backfill.service";
 import characterAchievementService from "../services/character-achievement.service";
 import wclService from "../services/warcraftlogs.service";
@@ -2511,6 +2512,29 @@ router.get("/trigger/rebuild-leaderboard", async (req: Request, res: Response) =
   } catch (error) {
     logger.error("Error rebuilding leaderboard:", error);
     res.status(500).json({ error: "Failed to rebuild leaderboard" });
+  }
+});
+
+// Rebuild character mechanics leaderboards from stored rankings and death events (no WCL API calls)
+router.post("/trigger/rebuild-character-mechanics-leaderboards", async (req: Request, res: Response) => {
+  try {
+    const scope: string = req.body?.scope || "current";
+    const { TRACKED_RAIDS, CURRENT_RAID_IDS } = await import("../config/guilds");
+    const zoneIds = scope === "all" ? TRACKED_RAIDS : CURRENT_RAID_IDS;
+
+    characterMechanicsService
+      .buildMechanicsLeaderboards(zoneIds)
+      .then(() => logger.info(`[Admin] Character mechanics leaderboard rebuild completed for scope=${scope}`))
+      .catch((err) => logger.error("[Admin] Character mechanics leaderboard rebuild failed:", err));
+
+    res.json({
+      success: true,
+      message: scope === "all" ? "Character mechanics leaderboard rebuild started for all tracked raids" : "Character mechanics leaderboard rebuild started for current tier",
+      zoneIds,
+    });
+  } catch (error) {
+    logger.error("Error triggering character mechanics leaderboard rebuild:", error);
+    res.status(500).json({ error: "Failed to trigger character mechanics leaderboard rebuild" });
   }
 });
 

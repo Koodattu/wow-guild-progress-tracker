@@ -181,6 +181,7 @@ class GuildService {
   // Configuration for death events fetching
   private fetchDeathEvents: boolean = process.env.FETCH_DEATH_EVENTS === "true";
   private existingGuildStatisticsRecalculationRunning = false;
+  private deathBackfillIndexesCreated = false;
 
   isExistingGuildStatisticsRecalculationRunning(): boolean {
     return this.existingGuildStatisticsRecalculationRunning;
@@ -195,6 +196,18 @@ class GuildService {
 
   private logMemoryUsage(context: string): void {
     logger.info(`[Memory] ${context}: ${this.formatMemoryUsage()}`);
+  }
+
+  private async ensureDeathBackfillIndexes(): Promise<void> {
+    if (this.deathBackfillIndexesCreated) return;
+
+    await Fight.collection.createIndex({ guildId: 1, deathEventsFetchStatus: 1, reportEndTime: 1, reportCode: 1 });
+    await Fight.collection.createIndex(
+      { deathEventsFetchStatus: 1, reportEndTime: 1, guildId: 1 },
+      { name: "death_backfill_queue_lookup" },
+    );
+
+    this.deathBackfillIndexesCreated = true;
   }
 
   private escapeRegex(value: string): string {
@@ -5689,6 +5702,7 @@ class GuildService {
     skipped: number;
   }> {
     logger.info("[RescanDeaths] Queueing all guilds for death events rescan");
+    await this.ensureDeathBackfillIndexes();
 
     const pendingGuildIds = await Fight.distinct("guildId", {
       reportEndTime: { $gt: 0 },

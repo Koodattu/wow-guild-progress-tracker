@@ -5,6 +5,7 @@ import guildService from "./guild.service";
 import twitchService, { StreamStatus } from "./twitch.service";
 import tierListService from "./tierlist.service";
 import characterService from "./character.service";
+import characterMechanicsService from "./character-mechanics.service";
 import raidAnalyticsService from "./raid-analytics.service";
 import guildNetworkService from "./guild-network.service";
 import cacheService from "./cache.service";
@@ -106,6 +107,8 @@ class UpdateScheduler {
   private isUpdatingRefetchRecentReports: boolean = false;
   private isUpdatingTierLists: boolean = false;
   private isUpdatingCharacterRankings: boolean = false;
+  private isUpdatingCharacterMechanics: boolean = false;
+  private characterMechanicsRebuildPending: boolean = false;
   private isQueueingDeathEventBackfill: boolean = false;
   private isQueueingReportCharacterBackfill: boolean = false;
   private isQueueingCharacterAchievementBackfill: boolean = false;
@@ -120,6 +123,7 @@ class UpdateScheduler {
     if (this.isUpdatingCharacterRaidParticipations) return "character raid participation rebuild";
     if (this.isRebuildingGuildNetworkSnapshot) return "guild network snapshot rebuild";
     if (this.isUpdatingCharacterRankings) return "character rankings refresh";
+    if (this.isUpdatingCharacterMechanics) return "character mechanics leaderboard rebuild";
     return null;
   }
 
@@ -566,6 +570,33 @@ class UpdateScheduler {
       },
     );
 
+    // NIGHTLY: Rebuild mechanics leaderboard after death backfill and character rankings are done (at 09:15 Finnish time)
+    cron.schedule(
+      "15 9 * * *",
+      async () => {
+        if (this.isUpdatingCharacterMechanics) {
+          logger.info("[Nightly/CharacterMechanics] Previous rebuild still in progress, skipping...");
+          return;
+        }
+        await this.refreshCharacterMechanicsLeaderboards();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
+    // Retry the mechanics rebuild during off-hours if rankings finished before the death queue.
+    cron.schedule(
+      "*/30 9-15 * * *",
+      async () => {
+        if (!this.characterMechanicsRebuildPending) return;
+        await this.refreshCharacterMechanicsLeaderboards();
+      },
+      {
+        timezone: "Europe/Helsinki",
+      },
+    );
+
     // NIGHTLY: Update all guild crests (at 9:30 AM Finnish time)
     // Guild crests can be changed by guilds or sometimes fail to fetch initially
     // Independent of other data; keep it off the 08:00 maintenance window.
@@ -643,6 +674,8 @@ class UpdateScheduler {
     logger.info("    * Character raid participation rebuild: daily at 08:00");
     logger.info("    * Guild crests update: daily at 09:30");
     logger.info("    * Character rankings refresh + leaderboard rebuild: daily at 08:30");
+    logger.info("    * Character mechanics leaderboard rebuild: daily at 09:15");
+    logger.info("    * Character mechanics pending retry: every 30 minutes from 09:00-15:30");
     logger.info("    * Hiatus event check: daily at 09:00");
     logger.info("    * Full cache warmup: daily at 11:00");
 
@@ -726,6 +759,16 @@ class UpdateScheduler {
     this.refreshCharacterRankings()
       .then(() => logger.info("[Admin] Character rankings refresh completed"))
       .catch((err) => logger.error("[Admin] Character rankings refresh failed:", err));
+    return true;
+  }
+
+  triggerCharacterMechanicsLeaderboardRefresh(): boolean {
+    if (this.isUpdatingCharacterMechanics) {
+      return false;
+    }
+    this.refreshCharacterMechanicsLeaderboards()
+      .then(() => logger.info("[Admin] Character mechanics leaderboard rebuild completed"))
+      .catch((err) => logger.error("[Admin] Character mechanics leaderboard rebuild failed:", err));
     return true;
   }
 
@@ -1375,11 +1418,51 @@ class UpdateScheduler {
       await characterService.checkAndRefreshCharacterRankings();
       await characterService.buildCharacterLeaderboards();
       await taskTracker.complete(taskId);
+      await this.refreshCharacterMechanicsLeaderboards({ invokedAfterRankings: true }).catch((error) => {
+        logger.error("[Nightly/CharacterMechanics] Rebuild after character rankings failed:", error);
+      });
     } catch (error) {
       logger.error("[Nightly/CharacterRankings] Error:", error);
       await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
     } finally {
       this.isUpdatingCharacterRankings = false;
+    }
+  }
+
+  private async refreshCharacterMechanicsLeaderboards(options: { invokedAfterRankings?: boolean } = {}): Promise<void> {
+    if (this.isUpdatingCharacterMechanics) {
+      logger.info("[Nightly/CharacterMechanics] Previous rebuild still in progress, skipping...");
+      this.characterMechanicsRebuildPending = true;
+      return;
+    }
+
+    if (!options.invokedAfterRankings && this.isUpdatingCharacterRankings) {
+      logger.info("[Nightly/CharacterMechanics] Character rankings refresh is still running, skipping...");
+      this.characterMechanicsRebuildPending = true;
+      return;
+    }
+
+    const deathBackfillUnfinished = await characterMechanicsService.hasUnfinishedDeathEventBackfill();
+    if (deathBackfillUnfinished) {
+      logger.info("[Nightly/CharacterMechanics] Death event backfill queue is not finished yet, skipping mechanics rebuild");
+      this.characterMechanicsRebuildPending = true;
+      return;
+    }
+
+    this.isUpdatingCharacterMechanics = true;
+    const taskId = await taskTracker.start("Rebuild Character Mechanics Leaderboard");
+
+    try {
+      const result = await characterMechanicsService.buildCurrentRaidMechanicsLeaderboards();
+      this.characterMechanicsRebuildPending = false;
+      await taskTracker.complete(taskId, result);
+    } catch (error) {
+      logger.error("[Nightly/CharacterMechanics] Error:", error);
+      this.characterMechanicsRebuildPending = true;
+      await taskTracker.fail(taskId, error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      this.isUpdatingCharacterMechanics = false;
     }
   }
 

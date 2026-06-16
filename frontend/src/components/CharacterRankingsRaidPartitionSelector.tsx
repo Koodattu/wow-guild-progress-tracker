@@ -14,6 +14,8 @@ interface CharacterRankingsRaidPartitionSelectorProps {
   raids: CharacterRankingsRaidOption[];
   selected: CharacterRankingsSelection | null;
   onChange: (selection: CharacterRankingsSelection) => void;
+  label?: string;
+  showPartitions?: boolean;
 }
 
 function getExpansionIconPath(expansionName: string): string {
@@ -25,6 +27,8 @@ export default function CharacterRankingsRaidPartitionSelector({
   raids,
   selected,
   onChange,
+  label = "Raid and Patch",
+  showPartitions = true,
 }: CharacterRankingsRaidPartitionSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -57,13 +61,17 @@ export default function CharacterRankingsRaidPartitionSelector({
   const selectedLabel = selectedRaid
     ? selectedPartition
       ? `${selectedRaid.name} - ${selectedPartition.name}`
-      : `${selectedRaid.name} - All Patches`
-    : "Select raid and patch";
+      : showPartitions
+        ? `${selectedRaid.name} - All Patches`
+        : selectedRaid.name
+    : showPartitions
+      ? "Select raid and patch"
+      : "Select raid";
 
   return (
     <div className="relative" ref={dropdownRef}>
       <label htmlFor="character-rankings-raid-partition-select" className="text-xs text-gray-400 mb-1 block">
-        Raid and Patch
+        {label}
       </label>
       <button
         id="character-rankings-raid-partition-select"
@@ -102,10 +110,10 @@ export default function CharacterRankingsRaidPartitionSelector({
                     >
                       <IconImage iconFilename={raid.iconUrl} alt={`${raid.name} icon`} width={22} height={22} className="rounded" />
                       <span className="font-semibold">{raid.name}</span>
-                      <span className="text-xs text-gray-400">(All Patches)</span>
+                      {showPartitions ? <span className="text-xs text-gray-400">(All Patches)</span> : null}
                     </button>
 
-                    {raid.partitions.map((partition) => {
+                    {showPartitions ? raid.partitions.map((partition) => {
                       const isPartitionSelected = selected?.zoneId === raid.id && selected.partition === partition.id;
 
                       return (
@@ -123,7 +131,7 @@ export default function CharacterRankingsRaidPartitionSelector({
                           <span className="text-[11px] text-gray-500">Patch {partition.id}</span>
                         </button>
                       );
-                    })}
+                    }) : null}
                   </div>
                 );
               })}

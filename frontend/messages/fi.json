@@ -630,6 +630,8 @@
   "characterRankingsPage": {
     "titleAllStars": "Pistesijoitukset",
     "titleForBoss": "Vahinkosijoitukset pomolle",
+    "titleMechanics": "Mekaniikkapisteet",
+    "titleMechanicsForBoss": "Mekaniikat pomolle",
     "placeholderAllBosses": "Kaikki pomot",
     "placeholderAllPatches": "Kaikki päivitykset",
     "allClasses": "Kaikki luokat",
@@ -641,6 +643,10 @@
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
     "columnHps": "HPS",
-    "columnScore": "Pisteet"
+    "columnScore": "Pisteet",
+    "columnParse": "Parse",
+    "columnSurvival": "Selviytyminen",
+    "columnDeaths": "Kuolemat",
+    "columnPulls": "Pullit"
   }
 }

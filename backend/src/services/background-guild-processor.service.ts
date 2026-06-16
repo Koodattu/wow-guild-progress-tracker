@@ -107,6 +107,7 @@ class BackgroundGuildProcessor {
   private lastGlobalRankingsUpdate: Date | null = null;
 
   private characterAppearanceIndexesSynced: boolean = false;
+  private deathRescanIndexesCreated: boolean = false;
 
   /**
    * Start the background processor
@@ -126,6 +127,18 @@ class BackgroundGuildProcessor {
 
     // Start the processing loop
     this.scheduleNextCheck(this.config.idleCheckInterval);
+  }
+
+  private async ensureDeathRescanIndexes(): Promise<void> {
+    if (this.deathRescanIndexesCreated) return;
+
+    await Fight.collection.createIndex({ guildId: 1, deathEventsFetchStatus: 1, reportEndTime: 1, reportCode: 1 });
+    await Fight.collection.createIndex(
+      { deathEventsFetchStatus: 1, reportEndTime: 1, guildId: 1 },
+      { name: "death_backfill_queue_lookup" },
+    );
+
+    this.deathRescanIndexesCreated = true;
   }
 
   /**
@@ -630,6 +643,8 @@ class BackgroundGuildProcessor {
         return;
       }
 
+      await this.ensureDeathRescanIndexes();
+
       const jobStartedAt = new Date();
       const pendingFightQuery = {
         guildId: guild._id,
@@ -642,32 +657,23 @@ class BackgroundGuildProcessor {
         ],
       };
 
-      const fightsNeedingDeaths = await Fight.find(pendingFightQuery).select("_id reportCode fightId fightStartTime").lean();
+      const reportCodes = (await Fight.distinct("reportCode", pendingFightQuery)).filter((code): code is string => typeof code === "string" && code.length > 0);
+      const totalReports = reportCodes.length;
 
-      guildLog.info(`[DeathRescan] Found ${fightsNeedingDeaths.length} fights needing death event fetch`);
+      guildLog.info(`[DeathRescan] Found ${totalReports} reports needing death event fetch`);
 
-      if (fightsNeedingDeaths.length === 0) {
+      if (totalReports === 0) {
         await queueItem.markCompleted();
         return;
       }
 
-      // Group fights by reportCode
-      const fightsByReport = new Map<string, typeof fightsNeedingDeaths>();
-      for (const fight of fightsNeedingDeaths) {
-        if (!fightsByReport.has(fight.reportCode)) {
-          fightsByReport.set(fight.reportCode, []);
-        }
-        fightsByReport.get(fight.reportCode)!.push(fight);
-      }
-
-      const totalReports = fightsByReport.size;
       await queueItem.updateProgress(0, 0, 0, totalReports);
 
       let reportsProcessed = 0;
       let fightsUpdated = 0;
       let deathEventsSaved = 0;
 
-      for (const [reportCode, fights] of fightsByReport.entries()) {
+      for (const reportCode of reportCodes) {
         await this.refreshProcessorPauseState();
         await rateLimitService.refreshSharedState();
 
@@ -689,6 +695,20 @@ class BackgroundGuildProcessor {
         }
 
         try {
+          const fights = await Fight.find({
+            ...pendingFightQuery,
+            reportCode,
+          })
+            .select("_id reportCode fightId fightStartTime")
+            .sort({ fightId: 1 })
+            .lean();
+
+          if (fights.length === 0) {
+            reportsProcessed++;
+            await queueItem.updateProgress(reportsProcessed, fightsUpdated, reportsProcessed, totalReports);
+            continue;
+          }
+
           const fightIds = fights.map((f) => f.fightId);
           const deathData = await wclService.getDeathEventsForReport(reportCode, fightIds);
 
@@ -741,7 +761,10 @@ class BackgroundGuildProcessor {
           guildLog.error(`[DeathRescan] Failed to process report ${reportCode}: ${errorMessage}`);
 
           await Fight.updateMany(
-            { _id: { $in: fights.map((fight) => fight._id) } },
+            {
+              ...pendingFightQuery,
+              reportCode,
+            },
             {
               $set: {
                 deathEventsFetchStatus: "failed",

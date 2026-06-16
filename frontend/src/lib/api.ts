@@ -1077,11 +1077,38 @@ export const api = {
     return response.json();
   },
 
+  async getCharacterMechanics(queryString = ""): Promise<{
+    data: CharacterRankingRow[];
+    pagination: {
+      totalItems: number;
+      totalRankedItems: number;
+      totalPages: number;
+      currentPage: number;
+      pageSize: number;
+    };
+  }> {
+    const response = await fetch(`${API_URL}/api/character-mechanics${queryString}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to fetch character mechanics");
+    }
+    return response.json();
+  },
+
   async getCharacterRankingOptions(): Promise<CharacterRankingsFilterOptionsResponse> {
     const response = await fetch(`${API_URL}/api/character-rankings/options`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.error || "Failed to fetch character ranking options");
+    }
+    return response.json();
+  },
+
+  async getCharacterMechanicsOptions(): Promise<CharacterRankingsFilterOptionsResponse> {
+    const response = await fetch(`${API_URL}/api/character-mechanics/options`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Failed to fetch character mechanics options");
     }
     return response.json();
   },

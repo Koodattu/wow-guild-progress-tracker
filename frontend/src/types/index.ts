@@ -1207,7 +1207,7 @@ export type CharacterRankingRow = {
     name: string;
   };
   score: {
-    type: "allStars" | "bestAmount";
+    type: "allStars" | "bestAmount" | "mechanics";
     value: number;
   };
   stats: {
@@ -1217,13 +1217,33 @@ export type CharacterRankingRow = {
     medianPercent?: number;
     lockedIn?: boolean;
     totalKills?: number;
+    mechanics?: {
+      parseScore: number;
+      survivalScore: number | null;
+      pulls: number;
+      deaths: number;
+      survivedPulls: number;
+      earlyDeaths: number;
+      averageDeathPercent: number | null;
+      deathDataAvailable: boolean;
+    };
   };
   updatedAt?: string;
   bossScores?: Array<{
     encounterId: number;
-    points: number;
+    encounterName?: string;
+    points?: number;
     rankPercent: number;
     specName?: string;
+    score?: number;
+    parseScore?: number;
+    survivalScore?: number | null;
+    pulls?: number;
+    deaths?: number;
+    survivedPulls?: number;
+    earlyDeaths?: number;
+    averageDeathPercent?: number | null;
+    deathDataAvailable?: boolean;
   }>;
 };
 

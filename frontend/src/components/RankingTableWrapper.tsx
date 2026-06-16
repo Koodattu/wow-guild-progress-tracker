@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 interface RankingTableWrapperProps {
   data: CharacterRankingRow[];
   bosses: Boss[];
+  variant?: "rankings" | "mechanics";
   partitionOptions?: PatchPartitionOption[];
   showPartitionSelector?: boolean;
   loading?: boolean;
@@ -328,6 +329,7 @@ function ClassSpecSelector({ selectedClass, selectedSpec, selectedRole, allClass
 type BuildRankingColumnsOptions = {
   selectedBoss: Boss | null;
   bosses: Boss[];
+  variant: "rankings" | "mechanics";
   currentPage: number;
   pageSize: number;
   selectedSpec: string | null;
@@ -335,7 +337,13 @@ type BuildRankingColumnsOptions = {
   t: (key: string) => string;
 };
 
-function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+function formatScore(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return value.toFixed(1);
+}
+
+function buildRankingColumns({ selectedBoss, bosses, variant, currentPage, pageSize, selectedSpec, selectedMetric, t }: BuildRankingColumnsOptions): ColumnDef<CharacterRankingRow>[] {
+  const isMechanics = variant === "mechanics";
   const isShowingDamage = selectedBoss !== null;
   const showIlvl = isShowingDamage;
 
@@ -421,14 +429,58 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
 
   columns.push({
     id: "metric",
-    header: isShowingDamage ? (selectedMetric === "hps" ? t("columnHps") : t("columnDps")) : t("columnScore"),
+    header: isMechanics ? t("columnScore") : isShowingDamage ? (selectedMetric === "hps" ? t("columnHps") : t("columnDps")) : t("columnScore"),
     shrink: true,
     accessor: (row: CharacterRankingRow) => {
+      if (isMechanics) {
+        const value = row.score.value;
+        return <span style={{ color: getParseColor(Math.round(value)), fontWeight: 700 }}>{formatScore(value)}</span>;
+      }
       const value = isShowingDamage ? row.stats.bestAmount?.toFixed(1) : row.stats.allStars?.points?.toFixed(1);
       if (!value) return "—";
       return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     },
   });
+
+  if (isMechanics) {
+    columns.push(
+      {
+        id: "parse",
+        header: t("columnParse"),
+        shrink: true,
+        mobileHidden: true,
+        accessor: (row: CharacterRankingRow) => {
+          const value = row.stats.mechanics?.parseScore;
+          return <span style={{ color: getParseColor(Math.round(value ?? 0)), fontWeight: 700 }}>{formatScore(value)}</span>;
+        },
+      },
+      {
+        id: "survival",
+        header: t("columnSurvival"),
+        shrink: true,
+        mobileHidden: true,
+        accessor: (row: CharacterRankingRow) => {
+          const value = row.stats.mechanics?.survivalScore;
+          if (value === null || value === undefined) return <span className="text-gray-600">—</span>;
+          return <span style={{ color: getParseColor(Math.round(value)), fontWeight: 700 }}>{formatScore(value)}</span>;
+        },
+      },
+      {
+        id: "deaths",
+        header: t("columnDeaths"),
+        shrink: true,
+        mobileHidden: true,
+        accessor: (row: CharacterRankingRow) => row.stats.mechanics?.deaths ?? 0,
+      },
+      {
+        id: "pulls",
+        header: t("columnPulls"),
+        shrink: true,
+        mobileHidden: true,
+        accessor: (row: CharacterRankingRow) => row.stats.mechanics?.pulls ?? 0,
+      },
+    );
+  }
 
   // Per-boss rankPercent columns (only in all-bosses AllStars view)
   if (!isShowingDamage && bosses.length > 0) {
@@ -444,13 +496,14 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
         mobileHidden: true,
         accessor: (row: CharacterRankingRow) => {
           const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
-          if (!bossScore || !bossScore.rankPercent) return <span className="text-gray-600">—</span>;
-          const pct = Math.round(bossScore.rankPercent);
+          const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
+          if (!bossScore || value === undefined || value === null) return <span className="text-gray-600">—</span>;
+          const pct = Math.round(value);
           const showSpecIcon = !selectedSpec && bossScore.specName;
           const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
           return (
             <span className="inline-flex items-center gap-1" style={{ color: getParseColor(pct), fontWeight: 700 }}>
-              {pct}
+              {isMechanics ? formatScore(value) : pct}
               {specIcon ? <IconImage iconFilename={specIcon} alt={bossScore.specName!} width={16} height={16} style={{ objectFit: "cover" }} /> : null}
             </span>
           );
@@ -462,12 +515,25 @@ function buildRankingColumns({ selectedBoss, bosses, currentPage, pageSize, sele
   return columns;
 }
 
-function MobileBossScores({ row, bosses, selectedSpec }: { row: CharacterRankingRow; bosses: Boss[]; selectedSpec: string | null }) {
+function MobileBossScores({
+  row,
+  bosses,
+  selectedSpec,
+  variant,
+}: {
+  row: CharacterRankingRow;
+  bosses: Boss[];
+  selectedSpec: string | null;
+  variant: "rankings" | "mechanics";
+}) {
+  const isMechanics = variant === "mechanics";
+
   return (
     <div className="grid grid-cols-2 gap-2">
       {bosses.map((boss) => {
         const bossScore = row.bossScores?.find((b) => b.encounterId === boss.id);
-        const pct = bossScore?.rankPercent ? Math.round(bossScore.rankPercent) : null;
+        const value = isMechanics ? bossScore?.score : bossScore?.rankPercent;
+        const pct = value !== undefined && value !== null ? Math.round(value) : null;
         const showSpecIcon = !selectedSpec && bossScore?.specName;
         const specIcon = showSpecIcon ? getSpecIconUrl(row.character.classID, bossScore.specName!) : null;
 
@@ -477,7 +543,7 @@ function MobileBossScores({ row, bosses, selectedSpec }: { row: CharacterRanking
             <span className="truncate text-xs text-gray-400">{boss.name}</span>
             {pct !== null ? (
               <span className="ml-auto inline-flex items-center gap-1 font-bold text-xs" style={{ color: getParseColor(pct) }}>
-                {pct}
+                {isMechanics ? formatScore(value) : pct}
                 {specIcon ? <IconImage iconFilename={specIcon} alt={bossScore!.specName!} width={14} height={14} style={{ objectFit: "cover" }} /> : null}
               </span>
             ) : (
@@ -526,7 +592,17 @@ function MetricSelector({ selectedMetric, onChange }: MetricSelectorProps) {
   );
 }
 
-export function RankingTableWrapper({ data, bosses, partitionOptions = [], showPartitionSelector = true, loading = false, error = null, pagination, onFiltersChange }: RankingTableWrapperProps) {
+export function RankingTableWrapper({
+  data,
+  bosses,
+  variant = "rankings",
+  partitionOptions = [],
+  showPartitionSelector = true,
+  loading = false,
+  error = null,
+  pagination,
+  onFiltersChange,
+}: RankingTableWrapperProps) {
   const t = useTranslations("characterRankingsPage");
   const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
@@ -678,15 +754,23 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
     return buildRankingColumns({
       selectedBoss,
       bosses,
+      variant,
       currentPage,
       pageSize,
       selectedSpec,
       selectedMetric,
       t,
     });
-  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, selectedSpec, selectedMetric, t]);
+  }, [pagination?.currentPage, pagination?.pageSize, selectedBoss, bosses, variant, selectedSpec, selectedMetric, t]);
 
-  const title = selectedBoss ? `${t("titleForBoss")} ${selectedBoss.name}` : t("titleAllStars");
+  const title =
+    variant === "mechanics"
+      ? selectedBoss
+        ? `${t("titleMechanicsForBoss")} ${selectedBoss.name}`
+        : t("titleMechanics")
+      : selectedBoss
+        ? `${t("titleForBoss")} ${selectedBoss.name}`
+        : t("titleAllStars");
 
   return (
     <div className="space-y-4">
@@ -776,7 +860,9 @@ export function RankingTableWrapper({ data, bosses, partitionOptions = [], showP
         pagination={pagination}
         onPageChange={handlePageChange}
         getRank={(row: CharacterRankingRow) => row.rank}
-        expandedContent={!selectedBoss && bosses.length > 0 ? (row: CharacterRankingRow) => <MobileBossScores row={row} bosses={bosses} selectedSpec={selectedSpec} /> : undefined}
+        expandedContent={
+          !selectedBoss && bosses.length > 0 ? (row: CharacterRankingRow) => <MobileBossScores row={row} bosses={bosses} selectedSpec={selectedSpec} variant={variant} /> : undefined
+        }
       />
     </div>
   );

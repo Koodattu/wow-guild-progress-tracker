@@ -107,5 +107,13 @@ FightSchema.index({ encounterID: 1, difficulty: 1, isKill: 1 });
 FightSchema.index({ guildId: 1, encounterID: 1, difficulty: 1, timestamp: 1 });
 FightSchema.index({ guildId: 1, zoneId: 1, encounterID: 1, difficulty: 1, fightPercentage: 1, timestamp: -1 });
 FightSchema.index({ guildId: 1, deathEventsFetchStatus: 1, reportEndTime: 1, reportCode: 1 });
+FightSchema.index(
+  { deathEventsFetchStatus: 1, reportEndTime: 1, guildId: 1 },
+  { name: "death_backfill_queue_lookup" },
+);
+FightSchema.index(
+  { zoneId: 1, difficulty: 1, deathEventsFetchStatus: 1, reportCode: 1, fightId: 1, encounterID: 1 },
+  { name: "mechanics_death_fights_lookup" },
+);
 
 export default mongoose.model<IFight>("Fight", FightSchema);

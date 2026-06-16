@@ -630,6 +630,8 @@
   "characterRankingsPage": {
     "titleAllStars": "All Star Rankings",
     "titleForBoss": "Rankings for",
+    "titleMechanics": "Mechanics Score",
+    "titleMechanicsForBoss": "Mechanics for",
     "placeholderAllBosses": "All bosses",
     "placeholderAllPatches": "All patches",
     "allClasses": "All classes",
@@ -641,6 +643,10 @@
     "columnIlvl": "Ilvl",
     "columnDps": "DPS",
     "columnHps": "HPS",
-    "columnScore": "Score"
+    "columnScore": "Score",
+    "columnParse": "Parse",
+    "columnSurvival": "Survival",
+    "columnDeaths": "Deaths",
+    "columnPulls": "Pulls"
   }
 }

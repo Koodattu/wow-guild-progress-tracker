@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useCharacterRankingOptions, useBosses, useCharacterRankings, useCharacterSearch } from "@/lib/queries";
+import { useCharacterMechanics, useCharacterMechanicsOptions, useCharacterRankingOptions, useBosses, useCharacterRankings, useCharacterSearch } from "@/lib/queries";
 import { RankingTableWrapper } from "@/components/RankingTableWrapper";
 import CharacterRankingsRaidPartitionSelector, { type CharacterRankingsSelection } from "@/components/CharacterRankingsRaidPartitionSelector";
 import IconImage from "@/components/IconImage";
@@ -21,6 +21,8 @@ type Filters = {
   characterName?: string | null;
   guildName?: string | null;
 };
+
+type CharacterTab = "rankings" | "mechanics";
 
 function buildQuery(filters: Filters) {
   const sp = new URLSearchParams();
@@ -130,6 +132,7 @@ function CharacterSearchCard() {
 }
 
 export default function CharacterRankingsPage() {
+  const [activeTab, setActiveTab] = useState<CharacterTab>("rankings");
   const [selectedRaidPartition, setSelectedRaidPartition] = useState<CharacterRankingsSelection | null>(null);
   const [filters, setFilters] = useState<Filters>({
     limit: 100,
@@ -138,31 +141,43 @@ export default function CharacterRankingsPage() {
 
   // ─── React Query hooks ───────────────────────────────────────────────────────
 
-  const { data: optionsData, isLoading: optionsLoading, error: optionsError } = useCharacterRankingOptions();
+  const { data: rankingOptionsData, isLoading: rankingOptionsLoading, error: rankingOptionsError } = useCharacterRankingOptions();
+  const { data: mechanicsOptionsData, isLoading: mechanicsOptionsLoading, error: mechanicsOptionsError } = useCharacterMechanicsOptions();
+  const optionsData = activeTab === "mechanics" ? (mechanicsOptionsData ?? rankingOptionsData) : rankingOptionsData;
+  const optionsLoading = activeTab === "mechanics" ? mechanicsOptionsLoading && !rankingOptionsData : rankingOptionsLoading;
+  const optionsError = activeTab === "mechanics" ? (mechanicsOptionsError ?? rankingOptionsError) : rankingOptionsError;
   const { data: bosses = [] } = useBosses(selectedRaidPartition?.zoneId ?? null);
 
-  const queryString = useMemo(() => buildQuery(filters), [filters]);
-  const rankingsEnabled = !!filters.zoneId;
+  const queryFilters = useMemo(
+    () => (activeTab === "mechanics" ? { ...filters, partition: undefined } : filters),
+    [activeTab, filters],
+  );
+  const queryString = useMemo(() => buildQuery(queryFilters), [queryFilters]);
+  const rankingsEnabled = activeTab === "rankings" && !!filters.zoneId;
+  const mechanicsEnabled = activeTab === "mechanics" && !!filters.zoneId;
   const { data: rankingsData, isLoading: rankingsLoading, error: rankingsError } = useCharacterRankings(queryString, rankingsEnabled);
+  const { data: mechanicsData, isLoading: mechanicsLoading, error: mechanicsError } = useCharacterMechanics(queryString, mechanicsEnabled);
 
   // ─── Derived state ───────────────────────────────────────────────────────────
 
   const raidOptions = optionsData?.raids ?? [];
-  const rows = rankingsData?.data ?? [];
-  const pagination = rankingsData?.pagination ?? {
+  const activeData = activeTab === "mechanics" ? mechanicsData : rankingsData;
+  const rows = activeData?.data ?? [];
+  const pagination = activeData?.pagination ?? {
     totalItems: 0,
     totalRankedItems: 0,
     totalPages: 0,
     currentPage: 1,
     pageSize: 100,
   };
-  const loading = optionsLoading || rankingsLoading;
-  const error = optionsError?.message ?? rankingsError?.message ?? null;
+  const loading = optionsLoading || (activeTab === "mechanics" ? mechanicsLoading : rankingsLoading);
+  const error = optionsError?.message ?? (activeTab === "mechanics" ? mechanicsError?.message : rankingsError?.message) ?? null;
 
   // ─── Initialize selection from options ────────────────────────────────────────
 
   useEffect(() => {
-    if (!optionsData || selectedRaidPartition) return;
+    if (!optionsData) return;
+    if (selectedRaidPartition && raidOptions.some((raid) => raid.id === selectedRaidPartition.zoneId)) return;
 
     const defaultSelection: CharacterRankingsSelection = {
       zoneId: optionsData.defaultSelection.zoneId,
@@ -173,10 +188,10 @@ export default function CharacterRankingsPage() {
     setFilters((prev) => ({
       ...prev,
       zoneId: defaultSelection.zoneId,
-      partition: defaultSelection.partition,
+      partition: activeTab === "mechanics" ? undefined : defaultSelection.partition,
       page: 1,
     }));
-  }, [optionsData, selectedRaidPartition]);
+  }, [activeTab, optionsData, raidOptions, selectedRaidPartition]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -185,7 +200,18 @@ export default function CharacterRankingsPage() {
     setFilters((prev) => ({
       ...prev,
       zoneId: selection.zoneId,
-      partition: selection.partition,
+      partition: activeTab === "mechanics" ? undefined : selection.partition,
+      encounterId: undefined,
+      page: 1,
+    }));
+  };
+
+  const handleTabChange = (tab: CharacterTab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    setFilters((prev) => ({
+      ...prev,
+      partition: tab === "mechanics" ? undefined : (selectedRaidPartition?.partition ?? null),
       encounterId: undefined,
       page: 1,
     }));
@@ -195,18 +221,42 @@ export default function CharacterRankingsPage() {
     <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[90%] py-6">
       <CharacterSearchCard />
 
+      <div className="mb-4 inline-flex rounded-md bg-gray-900/80 p-1 ring-1 ring-white/10">
+        <button
+          type="button"
+          onClick={() => handleTabChange("rankings")}
+          className={`rounded px-4 py-2 text-sm font-semibold transition-colors ${activeTab === "rankings" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
+        >
+          Rankings
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange("mechanics")}
+          className={`rounded px-4 py-2 text-sm font-semibold transition-colors ${activeTab === "mechanics" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
+        >
+          Mechanics
+        </button>
+      </div>
+
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-white">Character Rankings</h1>
-          <p className="text-gray-500 text-sm">Select a raid or a specific patch partition.</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-white">{activeTab === "mechanics" ? "Mechanics Score" : "Character Rankings"}</h1>
+          <p className="text-gray-500 text-sm">{activeTab === "mechanics" ? "Select a raid." : "Select a raid or a specific patch partition."}</p>
         </div>
-        <CharacterRankingsRaidPartitionSelector raids={raidOptions} selected={selectedRaidPartition} onChange={handleRaidPartitionChange} />
+        <CharacterRankingsRaidPartitionSelector
+          raids={raidOptions}
+          selected={selectedRaidPartition}
+          onChange={handleRaidPartitionChange}
+          label={activeTab === "mechanics" ? "Raid" : undefined}
+          showPartitions={activeTab !== "mechanics"}
+        />
       </div>
 
       <RankingTableWrapper
-        key={`rankings-${selectedRaidPartition?.zoneId ?? "none"}`}
+        key={`${activeTab}-${selectedRaidPartition?.zoneId ?? "none"}`}
         data={rows}
         bosses={bosses}
+        variant={activeTab}
         partitionOptions={[]}
         showPartitionSelector={false}
         loading={loading}
