@@ -598,6 +598,7 @@ export default function AdminPage() {
   const characterAchievementPercent =
     characterAchievementQueue && characterAchievementQueue.total > 0 ? Math.round((characterAchievementQueue.terminal / characterAchievementQueue.total) * 100) : 0;
   const characterRankingPipelineBusy = characterRankingBackfillStatus?.processor.isRunning || characterRankingBackfillStatus?.leaderboardRebuild.isRunning;
+  const queueTotalCount = queueStats ? queueStats.pending + queueStats.inProgress + queueStats.completed + queueStats.failed + queueStats.paused : 0;
 
   const getSelectedStatRaidTarget = () => {
     const raidId = selectedStatRaidId !== "all" && selectedStatRaidId !== "current" ? Number(selectedStatRaidId) : undefined;
@@ -683,6 +684,28 @@ export default function AdminPage() {
     setQueueItems(queueData.items);
     setQueueTotalPages(queueData.pagination.totalPages);
     setErrorItems(errorsData.items);
+  };
+
+  const handleClearProcessingQueue = async () => {
+    if (queueTotalCount === 0) return;
+
+    if (!confirm(`Clear all ${queueTotalCount} guilds from the processing queue? This includes pending, in-progress, completed, failed, and paused guilds.`)) {
+      return;
+    }
+
+    setTriggerLoading("clear-processing-queue");
+    setTriggerMessage(null);
+    try {
+      const result = await api.clearAdminProcessingQueueAll();
+      setTriggerMessage({ type: "success", text: result.message });
+      setTimeout(() => setTriggerMessage(null), 5000);
+      await refreshSystemQueueState();
+    } catch (error) {
+      console.error("Failed to clear processing queue:", error);
+      setTriggerMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to clear processing queue" });
+    } finally {
+      setTriggerLoading(null);
+    }
   };
 
   const handleConnectWclUser = async () => {
@@ -3225,7 +3248,7 @@ export default function AdminPage() {
               )}
 
               {/* Queue Filter */}
-              <div className="flex gap-2 mb-4">
+              <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
                 <select
                   value={queueFilter}
                   onChange={(e) => {
@@ -3241,6 +3264,13 @@ export default function AdminPage() {
                   <option value="failed">Failed</option>
                   <option value="paused">Paused</option>
                 </select>
+                <button
+                  onClick={handleClearProcessingQueue}
+                  disabled={queueTotalCount === 0 || triggerLoading === "clear-processing-queue"}
+                  className="min-h-10 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 transition-[background-color,transform]"
+                >
+                  {triggerLoading === "clear-processing-queue" ? "Clearing..." : `Clear Entire Queue (${queueTotalCount})`}
+                </button>
               </div>
 
               {/* Error Breakdown */}

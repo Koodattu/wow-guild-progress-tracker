@@ -2158,6 +2158,25 @@ router.delete("/processing-queue/clear-completed", async (req: Request, res: Res
   }
 });
 
+// Clear all guilds from the processing queue
+// NOTE: This route MUST be defined before the parameterized /:guildId route
+router.delete("/processing-queue/clear-all", async (req: Request, res: Response) => {
+  try {
+    const result = await GuildProcessingQueue.deleteMany({});
+
+    logger.info(`Cleared ${result.deletedCount} guilds from processing queue`);
+
+    res.json({
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `Cleared ${result.deletedCount} guilds from the queue`,
+    });
+  } catch (error) {
+    logger.error("Error clearing all guilds from processing queue:", error);
+    res.status(500).json({ error: "Failed to clear processing queue" });
+  }
+});
+
 // Clear errors from failed guilds (reset them to pending for retry, or optionally remove them)
 // NOTE: This route MUST be defined before the parameterized /:guildId route
 router.delete("/processing-queue/clear-errors", async (req: Request, res: Response) => {

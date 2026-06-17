@@ -1411,6 +1411,19 @@ export const api = {
     return response.json();
   },
 
+  async clearAdminProcessingQueueAll(): Promise<{
+    success: boolean;
+    deletedCount: number;
+    message: string;
+  }> {
+    const response = await fetch(`${API_URL}/api/admin/processing-queue/clear-all`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Failed to clear processing queue");
+    return response.json();
+  },
+
   async clearAdminProcessingQueueErrors(action: "reset" | "remove" = "reset"): Promise<{
     success: boolean;
     deletedCount?: number;
