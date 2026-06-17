@@ -1479,6 +1479,15 @@ export async function triggerRefreshCharacterRankings(): Promise<TriggerResponse
   return response.json();
 }
 
+export async function triggerSyncRaidsFromWCL(): Promise<TriggerResponse> {
+  const response = await fetch(`${API_URL}/api/admin/trigger/sync-raids-from-wcl`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("Failed to trigger raid sync from WarcraftLogs");
+  return response.json();
+}
+
 export async function triggerCalculateAllStatistics(raidId?: number, scope: "all" | "current" = "current"): Promise<TriggerResponse> {
   const response = await fetch(`${API_URL}/api/admin/trigger/calculate-all-statistics`, {
     method: "POST",

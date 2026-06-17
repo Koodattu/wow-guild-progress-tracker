@@ -33,6 +33,7 @@ import {
   triggerPruneCharacterRankingsWithoutMythicEvidence,
   triggerRebuildCharacterRaidParticipations,
   triggerRefreshCharacterRankings,
+  triggerSyncRaidsFromWCL,
   triggerUpdateRaiderIOGuilds,
   getAdminGuildDetail,
   recalculateGuildStats,
@@ -623,6 +624,10 @@ export default function AdminPage() {
       if (triggerName === "backfill-character-achievements" || triggerName === "refresh-character-achievement-candidates" || triggerName === "rebuild-character-account-groups") {
         const status = await api.getAdminCharacterAchievementBackfillStatus();
         setCharacterAchievementBackfillStatus(status);
+      }
+      if (triggerName === "sync-raids-from-wcl") {
+        const adminRaidsData = await getAdminRaids();
+        setAdminRaids(adminRaidsData.raids);
       }
 
       // Set cooldown for this specific button
@@ -1285,6 +1290,9 @@ export default function AdminPage() {
                     {renderTriggerButton("all-guilds", "Check All Guilds", triggerUpdateAllGuilds)}
                     {renderTriggerButton("update-raiderio", "Update Raider.IO Guilds", triggerUpdateRaiderIOGuilds)}
                     {renderTriggerButton("guild-crests", "Update Guild Crests", triggerUpdateGuildCrests)}
+                  </ManualActionGroup>
+                  <ManualActionGroup title="Raid metadata">
+                    {renderTriggerButton("sync-raids-from-wcl", "Sync Raids from WCL", triggerSyncRaidsFromWCL)}
                   </ManualActionGroup>
                   <ManualActionGroup title="Report queues">
                     {renderTriggerButton("refetch-reports", "Refetch Recent Reports", triggerRefetchRecentReports)}

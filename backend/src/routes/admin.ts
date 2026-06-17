@@ -32,6 +32,7 @@ import wclUserAuthService from "../services/warcraftlogs-user-auth.service";
 import blizzardService from "../services/blizzard.service";
 
 const router = Router();
+let isSyncingRaidsFromWCL = false;
 
 // Apply admin middleware to all routes
 router.use(requireAdmin);
@@ -2284,6 +2285,40 @@ router.get("/raids", async (req: Request, res: Response) => {
 // ============================================================
 // MANUAL TRIGGER ENDPOINTS
 // ============================================================
+
+// Trigger raid metadata sync from WarcraftLogs
+router.post("/trigger/sync-raids-from-wcl", async (_req: Request, res: Response) => {
+  try {
+    if (isSyncingRaidsFromWCL) {
+      res.status(409).json({ error: "Raid sync from WarcraftLogs is already running" });
+      return;
+    }
+
+    isSyncingRaidsFromWCL = true;
+    const taskId = await taskTracker.start("Sync Raids From WarcraftLogs");
+
+    void (async () => {
+      try {
+        await guildService.syncRaidsFromWCL(true);
+        await cacheService.invalidate(cacheService.getRaidsKey());
+        await cacheService.invalidatePattern(/^raid:\d+:/);
+        await taskTracker.complete(taskId);
+        logger.info("Sync raids from WarcraftLogs completed");
+      } catch (err) {
+        logger.error("Sync raids from WarcraftLogs failed:", err);
+        await taskTracker.fail(taskId, err instanceof Error ? err.message : String(err));
+      } finally {
+        isSyncingRaidsFromWCL = false;
+      }
+    })();
+
+    res.json({ success: true, message: "Raid sync from WarcraftLogs started" });
+  } catch (error) {
+    isSyncingRaidsFromWCL = false;
+    logger.error("Error triggering raid sync from WarcraftLogs:", error);
+    res.status(500).json({ error: "Failed to trigger raid sync from WarcraftLogs" });
+  }
+});
 
 // Trigger recalculation of statistics for ALL guilds
 // Body: { raidId?: number, scope?: "all" | "current" }

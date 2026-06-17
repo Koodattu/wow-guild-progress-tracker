@@ -445,7 +445,7 @@ class GuildService {
   }
 
   // Sync raid information from WarcraftLogs to database
-  async syncRaidsFromWCL(): Promise<void> {
+  async syncRaidsFromWCL(forceFullFetch = false): Promise<void> {
     logger.info("Syncing raid data from WarcraftLogs...");
 
     try {
@@ -454,7 +454,7 @@ class GuildService {
       logger.info(`Found ${existingRaidCount} raids in database`);
 
       // If we have existing raids, check if all tracked raids are present
-      let needsFullFetch = existingRaidCount === 0;
+      let needsFullFetch = forceFullFetch || existingRaidCount === 0;
 
       if (!needsFullFetch) {
         // Check if all TRACKED_RAIDS exist in our database
@@ -476,7 +476,7 @@ class GuildService {
           return;
         }
       } else {
-        logger.info("Database is empty, fetching all zones for initial setup");
+        logger.info(forceFullFetch ? "Force raid sync requested, fetching all zones" : "Database is empty, fetching all zones for initial setup");
       }
 
       // Only fetch zones if needed (first time or missing tracked raids)
