@@ -87,6 +87,7 @@ export function useGuilds(raidId?: number, enabled: boolean = true) {
     queryKey: queryKeys.guilds.byRaid(raidId!),
     queryFn: () => api.getGuilds(raidId!),
     enabled: enabled && raidId !== undefined && raidId > 0,
+    refetchInterval: 60 * 1000,
   });
 }
 

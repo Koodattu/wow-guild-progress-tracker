@@ -148,7 +148,7 @@ class CacheService {
    * Example: 5min TTL -> fresh for 5min, stale-but-usable for 5-10min
    */
   private readonly STALE_TTL_MULTIPLIER = 1.0;
-  private readonly HOT_CACHE_STALE_EXTENSION_MS = 60 * 60 * 1000; // 1 hour safety net for request-critical caches
+  private readonly HOME_CACHE_STALE_EXTENSION_MS = 60 * 60 * 1000; // 1 hour safety net for the bundled home payload
 
   // ============================================================================
   // TTL CONSTANTS (milliseconds)
@@ -409,8 +409,7 @@ class CacheService {
       }
 
       const expiresAt = new Date(entry.expiresAt);
-      // Calculate stale expiration if not stored (backward compatibility)
-      const staleExpiresAt = entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : new Date(expiresAt.getTime() + this.getStaleExtensionMs(key, entry.ttlMs));
+      const staleExpiresAt = this.getEffectiveStaleExpiresAt(key, expiresAt, entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : undefined, entry.ttlMs);
 
       // Check if data is fresh
       if (now < expiresAt) {
@@ -503,7 +502,7 @@ class CacheService {
       }
 
       const expiresAt = new Date(entry.expiresAt);
-      const staleExpiresAt = entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : new Date(expiresAt.getTime() + this.getStaleExtensionMs(key, entry.ttlMs));
+      const staleExpiresAt = this.getEffectiveStaleExpiresAt(key, expiresAt, entry.staleExpiresAt ? new Date(entry.staleExpiresAt) : undefined, entry.ttlMs);
 
       // Check if data is fresh
       if (now < expiresAt) {
@@ -601,18 +600,20 @@ class CacheService {
 
   private getStaleExtensionMs(key: string, ttl: number): number {
     if (key === "home:data") {
-      return Math.max(ttl * this.STALE_TTL_MULTIPLIER, this.HOT_CACHE_STALE_EXTENSION_MS);
-    }
-
-    const currentRaidCache = key.match(/^(progress|guilds|compare):raid:(\d+)$/);
-    if (currentRaidCache) {
-      const raidId = Number(currentRaidCache[2]);
-      if (CURRENT_RAID_IDS.includes(raidId)) {
-        return Math.max(ttl * this.STALE_TTL_MULTIPLIER, this.HOT_CACHE_STALE_EXTENSION_MS);
-      }
+      return Math.max(ttl * this.STALE_TTL_MULTIPLIER, this.HOME_CACHE_STALE_EXTENSION_MS);
     }
 
     return ttl * this.STALE_TTL_MULTIPLIER;
+  }
+
+  private getEffectiveStaleExpiresAt(key: string, expiresAt: Date, storedStaleExpiresAt: Date | undefined, ttl: number): Date {
+    const maxStaleExpiresAt = new Date(expiresAt.getTime() + this.getStaleExtensionMs(key, ttl));
+
+    if (!storedStaleExpiresAt || storedStaleExpiresAt > maxStaleExpiresAt) {
+      return maxStaleExpiresAt;
+    }
+
+    return storedStaleExpiresAt;
   }
 
   /**
