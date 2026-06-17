@@ -3,6 +3,7 @@ import Raid from "../models/Raid";
 import RaidAnalytics, { IRaidAnalytics, IBossAnalytics, IRaidOverallAnalytics, IGuildEntry, IDistribution, IWeeklyProgressionEntry } from "../models/RaidAnalytics";
 import { TRACKED_RAIDS } from "../config/guilds";
 import logger from "../utils/logger";
+import { compareRaidIdsByPriority } from "../utils/raidPriority";
 
 interface GuildBossData {
   guildName: string;
@@ -480,9 +481,9 @@ class RaidAnalyticsService {
       lastCalculated: Date;
     }[]
   > {
-    const analytics = await RaidAnalytics.find({}).select("raidId raidName difficulty overall raidStart raidEnd lastCalculated").sort({ raidId: -1 }).lean();
+    const analytics = await RaidAnalytics.find({}).select("raidId raidName difficulty overall raidStart raidEnd lastCalculated").lean();
 
-    return analytics.map((a) => ({
+    return [...analytics].sort((a, b) => compareRaidIdsByPriority(a.raidId, b.raidId)).map((a) => ({
       raidId: a.raidId,
       raidName: a.raidName,
       difficulty: a.difficulty,
@@ -497,11 +498,9 @@ class RaidAnalyticsService {
    * Get list of raids that have analytics available
    */
   async getAvailableRaids(): Promise<{ raidId: number; raidName: string; lastCalculated: Date }[]> {
-    const analytics = await RaidAnalytics.find({}, { raidId: 1, raidName: 1, lastCalculated: 1 }).sort({
-      raidId: -1,
-    });
+    const analytics = await RaidAnalytics.find({}, { raidId: 1, raidName: 1, lastCalculated: 1 }).lean();
 
-    return analytics.map((a) => ({
+    return [...analytics].sort((a, b) => compareRaidIdsByPriority(a.raidId, b.raidId)).map((a) => ({
       raidId: a.raidId,
       raidName: a.raidName,
       lastCalculated: a.lastCalculated,

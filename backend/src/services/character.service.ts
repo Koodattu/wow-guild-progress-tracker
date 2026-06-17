@@ -1,4 +1,5 @@
-import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
+import { CURRENT_RAID_IDS, PRIMARY_RAID_ID, TRACKED_RAIDS } from "../config/guilds";
+import { compareRaidIdsByPriority } from "../utils/raidPriority";
 import { CLASSES } from "../config/classes";
 import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
 import { CHARACTER_ACCOUNT_SIGNAL_VERSION } from "../config/achievement-signals";
@@ -2275,7 +2276,7 @@ class CharacterService {
       }
     }
 
-    return selectedRows.sort((a, b) => b.zoneId - a.zoneId || this.compareProfileLeaderboardRows(a, b));
+    return selectedRows.sort((a, b) => compareRaidIdsByPriority(a.zoneId, b.zoneId) || this.compareProfileLeaderboardRows(a, b));
   }
 
   async getCharacterProfileByRealmName(realm: string, name: string, classId?: number): Promise<CharacterProfileLookupResponse | null> {
@@ -2795,7 +2796,7 @@ class CharacterService {
   async checkAndRefreshCharacterRankings(): Promise<void> {
     logger.info("Starting character ranking check and update...");
 
-    const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
+    const CURRENT_TIER_ID = PRIMARY_RAID_ID;
     const MYTHIC_DIFFICULTY = 5;
     const BATCH_SIZE = 200;
     const MAX_WCL_REQUESTS_PER_RUN = 20000;
@@ -3306,7 +3307,7 @@ class CharacterService {
    * Should be called after nightly rankings refresh completes.
    */
   async buildCharacterLeaderboards(): Promise<void> {
-    const CURRENT_TIER_ID = CURRENT_RAID_IDS[0];
+    const CURRENT_TIER_ID = PRIMARY_RAID_ID;
     const MYTHIC_DIFFICULTY = 5;
     const startTime = Date.now();
 

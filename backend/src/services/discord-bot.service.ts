@@ -9,6 +9,7 @@ import Guild from "../models/Guild";
 import Raid from "../models/Raid";
 import User, { IUser } from "../models/User";
 import logger from "../utils/logger";
+import { compareRaidsByPriority } from "../utils/raidPriority";
 import searchService, { SearchResult } from "./search.service";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -1164,8 +1165,8 @@ class DiscordBotService {
   }
 
   private async getRaidOptions(): Promise<DiscordRaidOption[]> {
-    const raids = await Raid.find().select("id name expansion iconUrl").sort({ id: -1 }).lean();
-    return raids.map((raid) => ({
+    const raids = await Raid.find().select("id name expansion iconUrl").lean();
+    return [...raids].sort(compareRaidsByPriority).map((raid) => ({
       id: raid.id,
       name: raid.name,
       expansion: raid.expansion,

@@ -475,7 +475,7 @@ export default function ComparePage() {
 
   useEffect(() => {
     if (selectedRaidId === null && raids.length > 0) {
-      setSelectedRaidId(raids[0].id);
+      setSelectedRaidId(raids.find((raid) => raid.isPrimary)?.id ?? raids[0].id);
     }
   }, [raids, selectedRaidId]);
 

@@ -1282,6 +1282,7 @@ export const GUILDS_PROD: TrackedGuild[] = [
 
 // Raid zones to track (IDs only - names and encounter info come from DB)
 export const TRACKED_RAIDS = [
+  50, // Sporefall
   46, // Voidspire / Dreamrift / March on Quel'Danas
   44, // Manaforge Omega
   42, // Liberation of Undermine
@@ -1315,6 +1316,7 @@ export const RAIDER_IO_EXPANSION_IDS = [11, 10, 9, 8, 7, 6];
 // WarcraftLogs zone ID -> Raider.IO raid slug.
 // Raider.IO only exposes retail raid static data from Legion onward.
 export const RAID_RIO_SLUG_OVERRIDES: Record<number, string> = {
+  50: "sporefall",
   46: "tier-mn-1",
   44: "manaforge-omega",
   42: "liberation-of-undermine",
@@ -1338,8 +1340,10 @@ export const RAID_RIO_SLUG_OVERRIDES: Record<number, string> = {
 };
 
 // Current raids that are actively being tracked for updates
-// Multiple raids can be current at the same time during expansion transitions
-export const CURRENT_RAID_IDS = [TRACKED_RAIDS[0]];
+// Multiple raids can be current at the same time during expansion transitions.
+// PRIMARY_RAID_ID is the raid used for single-raid defaults and featured views.
+export const PRIMARY_RAID_ID = 46;
+export const CURRENT_RAID_IDS = [46, 50];
 
 export const DIFFICULTIES = {
   MYTHIC: 5,

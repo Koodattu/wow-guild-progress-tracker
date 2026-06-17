@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Guild, RaidProgressSummary, RaidInfo, Boss, RaidSchedule, GuildRaidCharactersResponse } from "@/types";
 import { api } from "@/lib/api";
 import { useGuildSummaryByRealmName, useRaids, useGuildEventsByRealmName } from "@/lib/queries";
+import { buildRaidOrderIndex, compareRaidsByListOrder } from "@/lib/raid-priority";
 import {
   formatTime,
   formatPercent,
@@ -508,6 +509,7 @@ export default function GuildProfilePage({ params }: PageProps) {
     );
 
   // Group progress by expansion and consolidate raid data
+  const raidOrderIndex = buildRaidOrderIndex(raids);
   const progressByExpansion = new Map<
     string,
     {
@@ -543,16 +545,16 @@ export default function GuildProfilePage({ params }: PageProps) {
     }
   });
 
-  // Sort expansions by newest first (based on raid IDs)
+  // Sort expansions by the prioritized raid order
   const sortedExpansions = Array.from(progressByExpansion.entries()).sort((a, b) => {
-    const aMaxRaidId = Math.max(...a[1].map((entry) => entry.raid.id));
-    const bMaxRaidId = Math.max(...b[1].map((entry) => entry.raid.id));
-    return bMaxRaidId - aMaxRaidId;
+    const aBestIndex = Math.min(...a[1].map((entry) => raidOrderIndex.get(entry.raid.id) ?? Number.MAX_SAFE_INTEGER));
+    const bBestIndex = Math.min(...b[1].map((entry) => raidOrderIndex.get(entry.raid.id) ?? Number.MAX_SAFE_INTEGER));
+    return aBestIndex - bBestIndex;
   });
 
-  // Sort raids within each expansion (newest first)
+  // Sort raids within each expansion by priority
   sortedExpansions.forEach(([, raids]) => {
-    raids.sort((a, b) => b.raid.id - a.raid.id);
+    raids.sort((a, b) => compareRaidsByListOrder(a.raid, b.raid, raidOrderIndex));
   });
 
   return (

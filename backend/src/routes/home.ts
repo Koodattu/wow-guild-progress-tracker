@@ -1,12 +1,13 @@
 import { Router, Request, Response } from "express";
 import guildService from "../services/guild.service";
 import logger from "../utils/logger";
-import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
+import { PRIMARY_RAID_ID, TRACKED_RAIDS } from "../config/guilds";
 import Raid from "../models/Raid";
 import Event from "../models/Event";
 import Guild from "../models/Guild";
 import cacheService from "../services/cache.service";
 import { cacheMiddleware } from "../middleware/cache.middleware";
+import { addRaidPriorityFlagsAndSort } from "../utils/raidPriority";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get(
   ),
   async (req: Request, res: Response) => {
     try {
-      const currentRaidId = CURRENT_RAID_IDS[0];
+      const currentRaidId = PRIMARY_RAID_ID;
 
       // Fetch all necessary data in parallel
       const [guilds, events, raid, raidDatesDoc, raids] = await Promise.all([
@@ -30,7 +31,6 @@ router.get(
         Raid.findOne({ id: currentRaidId }).select("starts ends").lean(),
         Raid.find({ id: { $in: TRACKED_RAIDS } })
           .select("id name slug rioSlug expansion iconUrl partitions -_id")
-          .sort({ id: -1 })
           .lean(),
       ]);
 
@@ -70,7 +70,7 @@ router.get(
           expansion: raid.expansion,
           iconUrl: raid.iconUrl,
         },
-        raids,
+        raids: addRaidPriorityFlagsAndSort(raids),
         dates: {
           starts: raidDatesDoc?.starts,
           ends: raidDatesDoc?.ends,

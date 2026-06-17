@@ -213,12 +213,13 @@ export default function RaidAnalyticsPage() {
 
   // Set initial selectedRaidId when raid analytics list loads (only once)
   useEffect(() => {
-    if (!initializedRef.current && raidAnalyticsRaids && raidAnalyticsRaids.length > 0) {
+    if (!initializedRef.current && raidAnalyticsRaids && raidAnalyticsRaids.length > 0 && raids.length > 0) {
       initializedRef.current = true;
-      // Start with null (overall view)
-      setSelectedRaidId(null);
+      const analyticsRaidIds = new Set(raidAnalyticsRaids.map((raid) => raid.raidId));
+      const primaryRaidId = raids.find((raid) => raid.isPrimary && analyticsRaidIds.has(raid.id))?.id;
+      setSelectedRaidId(primaryRaidId ?? raidAnalyticsRaids[0].raidId);
     }
-  }, [raidAnalyticsRaids]);
+  }, [raidAnalyticsRaids, raids]);
 
   // Derive loading and error states
   const loading = raidsLoading || analyticsRaidsLoading;

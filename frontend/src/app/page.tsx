@@ -35,6 +35,7 @@ function HomeContent() {
   const { data: homeData, isLoading: homeLoading, error: homeError } = useHomeData();
   const raids = homeData?.raids ?? [];
   const homeRaidId = homeData?.raid.id ?? null;
+  const primaryRaidId = raids.find((raid) => raid.isPrimary)?.id ?? homeRaidId ?? raids[0]?.id ?? null;
   const { showEvents, showLivestreams, showRaidingToday } = useHomePagePreferences();
   const eventFilters = useEventFiltersFromLocalStorage();
   const { data: eventsData, error: eventsError } = useEventsPaginated(1, 5, eventFilters, showEvents);
@@ -68,8 +69,10 @@ function HomeContent() {
     }
 
     if (!raidToSelect) {
-      raidToSelect = raids[0].id;
+      raidToSelect = primaryRaidId;
     }
+
+    if (!raidToSelect) return;
 
     setSelectedRaidId(raidToSelect);
 
@@ -79,7 +82,7 @@ function HomeContent() {
       params.set("raidid", raidToSelect.toString());
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-  }, [raids, searchParams, pathname, router]);
+  }, [raids, primaryRaidId, searchParams, pathname, router]);
 
   // Helper function to update URL with query parameters
   const updateURL = useCallback(
@@ -189,7 +192,7 @@ function HomeContent() {
       {/* Featured Live Streamers */}
       {showLivestreams && <FeaturedStreamers />}
 
-      <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={raids[0]?.id ?? null} reservedUmaImages={reservedUmaImages} />
+      <HorseRace guilds={guilds} selectedRaidId={selectedRaidId} currentRaidId={primaryRaidId} reservedUmaImages={reservedUmaImages} />
 
       <div className="container mx-auto px-3 md:px-4 max-w-full md:max-w-[95%] lg:max-w-[85%] pb-8">
         {error && <div className="bg-red-900/20 border border-red-700 text-red-300 px-4 rounded-lg mb-8">{error}</div>}

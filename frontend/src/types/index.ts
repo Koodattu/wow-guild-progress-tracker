@@ -424,6 +424,8 @@ export interface RaidInfo {
   expansion: string;
   iconUrl?: string;
   partitions?: RaidPartition[];
+  isCurrent?: boolean;
+  isPrimary?: boolean;
 }
 
 export interface RaidPartition {
@@ -2050,6 +2052,7 @@ export interface AdminRaidOption {
   id: number;
   name: string;
   isCurrent: boolean;
+  isPrimary?: boolean;
   partitions: { id: number; name: string }[];
 }
 

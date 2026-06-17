@@ -4,6 +4,7 @@ import { TRACKED_RAIDS } from "../config/guilds";
 import logger from "../utils/logger";
 import cacheService from "../services/cache.service";
 import { cacheMiddleware } from "../middleware/cache.middleware";
+import { addRaidPriorityFlagsAndSort } from "../utils/raidPriority";
 
 const router = Router();
 
@@ -19,8 +20,8 @@ router.get(
       // Get only the tracked raids from the database, excluding unnecessary fields
       const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
         .select("id name slug rioSlug expansion iconUrl partitions -_id")
-        .sort({ id: -1 });
-      res.json(raids);
+        .lean();
+      res.json(addRaidPriorityFlagsAndSort(raids));
     } catch (error) {
       logger.error("Error fetching raids:", error);
       res.status(500).json({ error: "Failed to fetch raids" });

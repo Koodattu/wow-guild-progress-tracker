@@ -2259,17 +2259,18 @@ router.post("/processing-queue/queue-guild", async (req: Request, res: Response)
 // Get tracked raids list for admin dropdown
 router.get("/raids", async (req: Request, res: Response) => {
   try {
-    const { TRACKED_RAIDS, CURRENT_RAID_IDS } = await import("../config/guilds");
+    const { TRACKED_RAIDS, CURRENT_RAID_IDS, PRIMARY_RAID_ID } = await import("../config/guilds");
+    const { compareRaidsByPriority } = await import("../utils/raidPriority");
     const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
       .select("id name slug expansion partitions")
-      .sort({ id: -1 })
       .lean();
 
     res.json({
-      raids: raids.map((r) => ({
+      raids: [...raids].sort(compareRaidsByPriority).map((r) => ({
         id: r.id,
         name: r.name,
         isCurrent: CURRENT_RAID_IDS.includes(r.id),
+        isPrimary: r.id === PRIMARY_RAID_ID,
         partitions: (r.partitions || []).map((p: { id: number; name: string }) => ({
           id: p.id,
           name: p.name,
@@ -2301,6 +2302,9 @@ router.post("/trigger/sync-raids-from-wcl", async (_req: Request, res: Response)
       try {
         await guildService.syncRaidsFromWCL(true);
         await cacheService.invalidate(cacheService.getRaidsKey());
+        await cacheService.invalidate(cacheService.getHomeKey());
+        await cacheService.invalidate(cacheService.getCharacterRankingsOptionsKey());
+        await cacheService.invalidate("character-mechanics:options:v1");
         await cacheService.invalidatePattern(/^raid:\d+:/);
         await taskTracker.complete(taskId);
         logger.info("Sync raids from WarcraftLogs completed");

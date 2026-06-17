@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Boss, CharacterProfileChoice, CharacterProfileLookupResponse, CharacterProfileResponse, CharacterRaidReportsResponse, RaidInfo } from "@/types";
 import { useRaids } from "@/lib/queries";
+import { buildRaidOrderIndex, compareRaidIdsByListOrder } from "@/lib/raid-priority";
 import { formatRealmName, formatSpecName, formatTime, getClassInfoById, getGuildProfileUrl, getParseColor, getSpecIconUrl } from "@/lib/utils";
 import IconImage from "@/components/IconImage";
 
@@ -292,6 +293,7 @@ function buildMechanicsRaidGroups(rows: CharacterMechanic[] | undefined, raids: 
   if (!rows?.length) return [];
 
   const raidById = new Map(raids.map((raid) => [raid.id, raid]));
+  const raidOrderIndex = buildRaidOrderIndex(raids);
   const compareMechanics = compareMechanicsRows(scoreKind);
   const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; overall: CharacterMechanic[]; bossMechanics: Map<number, CharacterMechanic[]> }>();
 
@@ -318,7 +320,7 @@ function buildMechanicsRaidGroups(rows: CharacterMechanic[] | undefined, raids: 
   });
 
   return Array.from(groups.values())
-    .sort((a, b) => b.zoneId - a.zoneId)
+    .sort((a, b) => compareRaidIdsByListOrder(a.zoneId, b.zoneId, raidOrderIndex))
     .map((group) => {
       const bosses = bossesByRaid.get(group.zoneId) ?? [];
       const bossEntries =
@@ -825,10 +827,11 @@ export default function CharacterProfilePage({ params }: PageProps) {
     if (!profile) return [];
 
     const raidById = new Map(raids.map((raid) => [raid.id, raid]));
+    const raidOrderIndex = buildRaidOrderIndex(raids);
     const trackedTimelineRows = profile.raidTimeline
       .filter((row) => raidById.has(row.zoneId))
       .sort((a, b) => {
-        if (a.zoneId !== b.zoneId) return b.zoneId - a.zoneId;
+        if (a.zoneId !== b.zoneId) return compareRaidIdsByListOrder(a.zoneId, b.zoneId, raidOrderIndex);
         return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime();
       });
 
@@ -866,6 +869,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
     if (!profile?.rankings.length) return [];
 
     const raidById = new Map(raids.map((raid) => [raid.id, raid]));
+    const raidOrderIndex = buildRaidOrderIndex(raids);
     const groups = new Map<number, { zoneId: number; raidName: string; raid?: RaidInfo; allStars: CharacterRanking[]; bossRankings: Map<number, CharacterRanking[]> }>();
 
     profile.rankings.forEach((row) => {
@@ -889,7 +893,7 @@ export default function CharacterProfilePage({ params }: PageProps) {
     });
 
     return Array.from(groups.values())
-      .sort((a, b) => b.zoneId - a.zoneId)
+      .sort((a, b) => compareRaidIdsByListOrder(a.zoneId, b.zoneId, raidOrderIndex))
       .map((group) => {
         const bosses = bossesByRaid.get(group.zoneId) ?? [];
         const bossEntries =

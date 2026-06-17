@@ -15,7 +15,7 @@ import raiderIOService from "./raiderio.service";
 import type { RaiderIORaidDifficultyRankings } from "./raiderio.service";
 import cacheService from "./cache.service";
 import backgroundGuildProcessor from "./background-guild-processor.service";
-import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES, RAID_RIO_SLUG_OVERRIDES } from "../config/guilds";
+import { GUILDS_DEV, TRACKED_RAIDS, CURRENT_RAID_IDS, PRIMARY_RAID_ID, DIFFICULTIES, GUILDS_PROD, MANUAL_RAID_DATES, RAID_RIO_SLUG_OVERRIDES } from "../config/guilds";
 import { filterUniqueGuilds } from "../utils/filterUniqueGuilds";
 import mongoose from "mongoose";
 import logger, { getGuildLogger, releaseGuildLogger } from "../utils/logger";
@@ -1234,8 +1234,8 @@ class GuildService {
     const guildLog = getGuildLogger(guild.name, guild.realm);
     guildLog.info(`\n========== FETCHING ZONE RANKINGS ==========`);
 
-    // If no zoneId specified, use the first current raid
-    const targetZoneId = zoneId || CURRENT_RAID_IDS[0];
+    // If no zoneId specified, use the primary current raid
+    const targetZoneId = zoneId || PRIMARY_RAID_ID;
 
     try {
       // Get raid info
@@ -2935,8 +2935,7 @@ class GuildService {
     // This ensures schedules are always updated but only for the current tier
     const isCurrentRaid = raidId !== null && CURRENT_RAID_IDS.includes(raidId);
     if (recalculateSchedule && (raidId === null || isCurrentRaid)) {
-      // Calculate schedule for the first current raid (most recent)
-      await this.calculateRaidingSchedule(guild, CURRENT_RAID_IDS[0]);
+      await this.calculateRaidingSchedule(guild, PRIMARY_RAID_ID);
     }
   }
 
@@ -4268,7 +4267,7 @@ class GuildService {
   // Get all guilds with only their raid schedules (for calendar/timetable view)
   // Only includes guilds that have progress in the current raid tier
   async getAllGuildSchedules(): Promise<any[]> {
-    const currentRaidId = CURRENT_RAID_IDS[0];
+    const currentRaidId = PRIMARY_RAID_ID;
 
     const guilds = await Guild.find({
       "raidSchedule.days.0": { $exists: true },
@@ -4301,7 +4300,7 @@ class GuildService {
 
   // Get guilds scheduled to raid on the given weekday, using precomputed current-tier schedules.
   async getGuildsRaidingOnDay(dayName: string): Promise<GuildRaidingTodayItem[]> {
-    const currentRaidId = CURRENT_RAID_IDS[0];
+    const currentRaidId = PRIMARY_RAID_ID;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const guilds = await Guild.find({
@@ -5589,7 +5588,7 @@ class GuildService {
 
         if (liveStreamsForGuild.length > 0) {
           // Get current raid mythic progress for this guild
-          const currentRaidId = CURRENT_RAID_IDS[0];
+          const currentRaidId = PRIMARY_RAID_ID;
           const mythicProgress = guild.progress.find((p) => p.raidId === currentRaidId && p.difficulty === "mythic");
 
           // Find current boss (first unkilled boss) to get best pull info

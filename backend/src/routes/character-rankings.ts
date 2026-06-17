@@ -1,10 +1,11 @@
 import { Router, Request, Response } from "express";
 import characterService from "../services/character.service";
-import { CURRENT_RAID_IDS, TRACKED_RAIDS } from "../config/guilds";
+import { PRIMARY_RAID_ID, TRACKED_RAIDS } from "../config/guilds";
 import CharacterLeaderboard from "../models/CharacterLeaderboard";
 import Raid from "../models/Raid";
 import { cacheMiddleware } from "../middleware/cache.middleware";
 import cacheService from "../services/cache.service";
+import { compareRaidIdsByPriority } from "../utils/raidPriority";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get(
       zoneId: { $in: TRACKED_RAIDS },
     });
 
-    const sortedZoneIds = zoneIdsWithRankings.filter((id): id is number => typeof id === "number").sort((a, b) => b - a);
+    const sortedZoneIds = zoneIdsWithRankings.filter((id): id is number => typeof id === "number").sort(compareRaidIdsByPriority);
 
     const partitionRows = await CharacterLeaderboard.aggregate<{
       _id: { zoneId: number; partition: number };
@@ -94,7 +95,7 @@ router.get(
       };
     });
 
-    const defaultZoneId = raidOptions.some((raid) => raid.id === CURRENT_RAID_IDS[0]) ? CURRENT_RAID_IDS[0] : (raidOptions[0]?.id ?? CURRENT_RAID_IDS[0]);
+    const defaultZoneId = raidOptions.some((raid) => raid.id === PRIMARY_RAID_ID) ? PRIMARY_RAID_ID : (raidOptions[0]?.id ?? PRIMARY_RAID_ID);
 
     res.json({
       raids: raidOptions,
@@ -116,7 +117,7 @@ router.get("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid zoneId" });
     }
 
-    const zoneId = zoneIdFromQuery ?? CURRENT_RAID_IDS[0];
+    const zoneId = zoneIdFromQuery ?? PRIMARY_RAID_ID;
     if (!Number.isFinite(zoneId)) {
       return res.status(400).json({ error: "Invalid zone ID" });
     }

@@ -250,7 +250,7 @@ export default function TierListsPage() {
   useEffect(() => {
     if (!initialized && allRaids && tierListRaidsData) {
       if (raids.length > 0) {
-        setSelectedRaidId(raids[0].id);
+        setSelectedRaidId(raids.find((raid) => raid.isPrimary)?.id ?? raids[0].id);
       }
       setInitialized(true);
     }

@@ -1314,7 +1314,7 @@ export default function AdminPage() {
                       {adminRaids.map((raid) => (
                         <option key={raid.id} value={String(raid.id)}>
                           {raid.name}
-                          {raid.isCurrent ? " (current)" : ""}
+                          {raid.isPrimary ? " (primary)" : raid.isCurrent ? " (current)" : ""}
                         </option>
                       ))}
                     </select>
@@ -1852,7 +1852,7 @@ export default function AdminPage() {
                     <option value="">Select raid...</option>
                     {adminRaids.map((raid) => (
                       <option key={raid.id} value={raid.id}>
-                        {raid.name} {raid.isCurrent ? "(Current)" : ""}
+                        {raid.name} {raid.isPrimary ? "(Primary)" : raid.isCurrent ? "(Current)" : ""}
                       </option>
                     ))}
                   </select>
@@ -4045,7 +4045,11 @@ export default function AdminPage() {
                             <div key={raid.id} className="flex items-center justify-between bg-gray-700 rounded p-2">
                               <span className={`text-sm ${isExcluded ? "text-red-400" : "text-white"}`}>
                                 {raid.name}
-                                {raid.isCurrent && <span className="ml-1 text-amber-400 text-xs">(current)</span>}
+                                {raid.isPrimary ? (
+                                  <span className="ml-1 text-blue-300 text-xs">(primary)</span>
+                                ) : (
+                                  raid.isCurrent && <span className="ml-1 text-amber-400 text-xs">(current)</span>
+                                )}
                               </span>
                               <button
                                 onClick={async () => {

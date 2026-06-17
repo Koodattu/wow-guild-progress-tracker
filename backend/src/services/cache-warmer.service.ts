@@ -3,11 +3,12 @@ import guildService from "./guild.service";
 import compareService from "./compare.service";
 import tierListService from "./tierlist.service";
 import raidAnalyticsService from "./raid-analytics.service";
-import { TRACKED_RAIDS, CURRENT_RAID_IDS } from "../config/guilds";
+import { TRACKED_RAIDS, CURRENT_RAID_IDS, PRIMARY_RAID_ID } from "../config/guilds";
 import logger from "../utils/logger";
 import Raid from "../models/Raid";
 import Event from "../models/Event";
 import Guild from "../models/Guild";
+import { addRaidPriorityFlagsAndSort } from "../utils/raidPriority";
 
 /**
  * Cache Warming Service
@@ -48,10 +49,10 @@ class CacheWarmerService {
   }
 
   private async getTrackedRaids(): Promise<any[]> {
-    return Raid.find({ id: { $in: TRACKED_RAIDS } })
+    const raids = await Raid.find({ id: { $in: TRACKED_RAIDS } })
       .select("id name slug rioSlug expansion iconUrl partitions -_id")
-      .sort({ id: -1 })
       .lean();
+    return addRaidPriorityFlagsAndSort(raids);
   }
 
   private async getRaidDates(raidId: number): Promise<{ starts: unknown; ends: unknown } | null> {
@@ -76,7 +77,7 @@ class CacheWarmerService {
   }
 
   private async buildHomeCacheData(): Promise<any> {
-    const currentRaidId = CURRENT_RAID_IDS[0];
+    const currentRaidId = PRIMARY_RAID_ID;
 
     // Fetch all data needed for home page
     const [guilds, events, raid, raidDatesDoc, raids] = await Promise.all([
