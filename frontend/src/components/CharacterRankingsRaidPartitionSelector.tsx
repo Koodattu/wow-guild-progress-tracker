@@ -69,14 +69,14 @@ export default function CharacterRankingsRaidPartitionSelector({
       : "Select raid";
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative w-full sm:w-auto" ref={dropdownRef}>
       <label htmlFor="character-rankings-raid-partition-select" className="text-xs text-gray-400 mb-1 block">
         {label}
       </label>
       <button
         id="character-rankings-raid-partition-select"
         onClick={() => setIsOpen((open) => !open)}
-        className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-[380px] justify-between hover:bg-gray-750 transition-colors"
+        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-white transition-colors hover:bg-gray-750 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-w-[380px]"
       >
         <div className="flex items-center gap-2 min-w-0">
           {selectedRaid?.iconUrl && <IconImage iconFilename={selectedRaid.iconUrl} alt={`${selectedRaid.name} icon`} width={24} height={24} className="rounded" />}

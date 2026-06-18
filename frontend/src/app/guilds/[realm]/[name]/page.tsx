@@ -647,12 +647,12 @@ export default function GuildProfilePage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Desktop: Original layout */}
+          {/* Desktop layout */}
           <div className="hidden md:block">
             <div className="flex flex-row items-start gap-3 mb-3">
               {renderGuildProfileImage(128, "shrink-0 w-32 h-32")}
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <div className="flex min-w-0 items-start justify-between gap-4">
+              <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
+                <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="text-2xl md:text-5xl font-bold text-white">
                       {guildSummary.name}
@@ -680,39 +680,13 @@ export default function GuildProfilePage({ params }: PageProps) {
                     </a>
                     {guildSummary.isCurrentlyRaiding && <span className="text-xs md:text-sm px-2 md:px-3 py-1 rounded font-semibold bg-green-900/50 text-green-300">Raiding</span>}
                   </div>
-                  {guildSummary.lastFetched && <div className="shrink-0 text-xs leading-none text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
-                </div>
-
-                <div className="flex min-w-0 items-center justify-between gap-4">
                   <div className="text-xl md:text-3xl text-gray-400">{guildSummary.realm}</div>
-                  {guildSummary.tierScores && guildSummary.tierScores.overall && (
-                    <div className="flex shrink-0 items-center justify-end gap-2 text-xs">
-                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Overall</span>
-                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
-                          {getTierLetter(guildSummary.tierScores.overall.overallScore)}
-                        </span>
-                      </div>
-                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Speed</span>
-                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
-                          {getTierLetter(guildSummary.tierScores.overall.speedScore)}
-                        </span>
-                      </div>
-                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
-                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Efficiency</span>
-                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
-                          {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  {guildSummary.lastFetched && <div className="mt-0.5 text-xs leading-none text-gray-500">Last Updated: {new Date(guildSummary.lastFetched).toLocaleString("fi-FI")}</div>}
                 </div>
 
-                <div className="flex min-w-0 items-center justify-between gap-4">
-                  <RaidScheduleBadges raidSchedule={guildSummary.raidSchedule} variant="desktop" className="min-w-0" />
+                <div className="flex shrink-0 flex-col items-end gap-2 pt-2">
                   {guildSummary.streamers && guildSummary.streamers.length > 0 && (
-                    <div className="flex max-w-full shrink-0 flex-wrap justify-end gap-2">
+                    <div className="flex max-w-full flex-wrap justify-end gap-2">
                       {guildSummary.streamers.map((streamer) => (
                         <a
                           key={streamer.channelName}
@@ -735,6 +709,29 @@ export default function GuildProfilePage({ params }: PageProps) {
                       ))}
                     </div>
                   )}
+                  {guildSummary.tierScores && guildSummary.tierScores.overall && (
+                    <div className="flex items-center justify-end gap-2 text-xs">
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Overall</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.overallScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.overallScore)}
+                        </span>
+                      </div>
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Speed</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.speedScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.speedScore)}
+                        </span>
+                      </div>
+                      <div className="flex items-center border border-gray-600 rounded overflow-hidden">
+                        <span className="bg-gray-700 px-2 py-1 text-gray-300 font-medium">Efficiency</span>
+                        <span className={`px-2 py-1 font-bold text-gray-900 ${getTierBgColor(getTierLetter(guildSummary.tierScores.overall.efficiencyScore))}`}>
+                          {getTierLetter(guildSummary.tierScores.overall.efficiencyScore)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <RaidScheduleBadges raidSchedule={guildSummary.raidSchedule} variant="desktop" className="justify-end" />
                 </div>
               </div>
             </div>

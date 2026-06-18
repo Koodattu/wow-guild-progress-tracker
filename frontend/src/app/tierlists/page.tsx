@@ -177,22 +177,30 @@ function TierListDisplay({ title, guilds, scoreKey, onGuildClick }: TierListDisp
 interface GuildScoresTableProps {
   guilds: GuildTierScore[];
   onGuildClick: (realm: string, name: string) => void;
+  calculatedAt: string | null;
   t: ReturnType<typeof useTranslations<"tierListsPage">>;
 }
 
-function GuildScoresTable({ guilds, onGuildClick, t }: GuildScoresTableProps) {
+function GuildScoresTable({ guilds, onGuildClick, calculatedAt, t }: GuildScoresTableProps) {
   const [expanded, setExpanded] = useState(false);
 
   const sortedGuilds = useMemo(() => [...guilds].sort((a, b) => b.overallScore - a.overallScore), [guilds]);
 
   return (
     <div className="mt-4">
-      <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
-        <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        {t("guildScores")}
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
+          <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          {t("guildScores")}
+        </button>
+        {calculatedAt && (
+          <p className="text-right text-gray-400 text-xs md:text-sm">
+            {t("lastCalculated")}: {new Date(calculatedAt).toLocaleString()}
+          </p>
+        )}
+      </div>
       {expanded && (
         <div className="mt-2 border border-gray-700 rounded-lg overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -311,11 +319,6 @@ export default function TierListsPage() {
             <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={handleRaidSelect} showOverall={true} />
             {dataLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mb-2"></div>}
           </div>
-          {calculatedAt && (
-            <p className="text-gray-400 text-xs md:text-sm">
-              {t("lastCalculated")}: {new Date(calculatedAt).toLocaleString()}
-            </p>
-          )}
         </div>
       </div>
 
@@ -327,7 +330,7 @@ export default function TierListsPage() {
             <TierListDisplay title={t("speed")} guilds={guilds} scoreKey="speedScore" onGuildClick={handleGuildClick} />
             <TierListDisplay title={t("efficiency")} guilds={guilds} scoreKey="efficiencyScore" onGuildClick={handleGuildClick} />
           </div>
-          <GuildScoresTable guilds={guilds} onGuildClick={handleGuildClick} t={t} />
+          <GuildScoresTable guilds={guilds} onGuildClick={handleGuildClick} calculatedAt={calculatedAt} t={t} />
         </>
       ) : (
         <div className="bg-gray-800 rounded-lg p-8 text-center">

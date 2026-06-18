@@ -498,12 +498,12 @@ export default function ComparePage() {
   return (
     <div className="w-full px-4 md:px-6">
       <div className="flex flex-col gap-4 mb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end lg:min-w-0">
-          <div className="min-w-0">
-            <h1 className="text-2xl lg:text-3xl font-bold text-white">{t("title")}</h1>
-            <p className="text-sm text-gray-500">{t("subtitle")}</p>
-          </div>
-          <div className="flex shrink-0 rounded bg-gray-900 border border-gray-800 p-1">
+        <div className="min-w-0">
+          <h1 className="text-2xl lg:text-3xl font-bold text-white">{t("title")}</h1>
+          <p className="text-sm text-gray-500">{t("subtitle")}</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end lg:shrink-0">
+          <div className="flex shrink-0 self-start rounded bg-gray-900 border border-gray-800 p-1 sm:self-end">
             <button
               onClick={() => setViewMode("table")}
               className={`px-3 py-2 text-sm rounded transition-colors ${viewMode === "table" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"}`}
@@ -517,8 +517,6 @@ export default function ComparePage() {
               {t("visual")}
             </button>
           </div>
-        </div>
-        <div className="lg:shrink-0">
           <RaidSelector raids={raids} selectedRaidId={selectedRaidId} onRaidSelect={setSelectedRaidId} />
         </div>
       </div>
@@ -529,13 +527,6 @@ export default function ComparePage() {
 
       {!loading && compare && (
         <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
-            {compare.raid.iconUrl && <IconImage iconFilename={compare.raid.iconUrl} alt={compare.raid.name} width={32} height={32} className="rounded" />}
-            <span className="font-medium text-gray-300">{compare.raid.name}</span>
-            <span>{t("mythicOnly")}</span>
-            <span>{t("guildCount", { count: compare.guilds.length })}</span>
-          </div>
-
           {compare.guilds.length === 0 ? (
             <div className="rounded border border-gray-800 bg-gray-900/50 py-12 text-center text-gray-500">{t("noGuilds")}</div>
           ) : viewMode === "table" ? (
