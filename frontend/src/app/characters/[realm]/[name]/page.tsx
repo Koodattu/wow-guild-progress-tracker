@@ -113,11 +113,17 @@ const CHARACTER_PERFORMANCE_TABS: Array<{
 function formatShortDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
+  if (Number.isNaN(date.getTime()) || date.getTime() <= 0) return "-";
 
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${day}.${month}.${date.getFullYear()}`;
+}
+
+function getNullableDateTime(value?: string | null) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) || time <= 0 ? 0 : time;
 }
 
 function formatReportDateTime(value?: number | null) {
@@ -385,8 +391,8 @@ function AccountCharactersDropdown({
     const currentA = a.name === current.name && a.realm === current.realm && a.classID === current.classID;
     const currentB = b.name === current.name && b.realm === current.realm && b.classID === current.classID;
     if (currentA !== currentB) return currentA ? -1 : 1;
-    const lastSeenA = a.lastMythicSeenAt ? new Date(a.lastMythicSeenAt).getTime() : 0;
-    const lastSeenB = b.lastMythicSeenAt ? new Date(b.lastMythicSeenAt).getTime() : 0;
+    const lastSeenA = getNullableDateTime(a.lastSeenAt ?? a.lastMythicSeenAt);
+    const lastSeenB = getNullableDateTime(b.lastSeenAt ?? b.lastMythicSeenAt);
     return lastSeenB - lastSeenA || a.name.localeCompare(b.name);
   });
 
@@ -438,7 +444,7 @@ function AccountCharactersDropdown({
                     </span>
                     <span className="flex min-w-0 items-center justify-between gap-3 text-xs text-gray-500">
                       <span className="truncate">{member.guildName ?? "No guild"}</span>
-                      <span className="shrink-0 tabular-nums">{formatShortDate(member.lastMythicSeenAt)}</span>
+                      <span className="shrink-0 tabular-nums">{formatShortDate(member.lastSeenAt ?? member.lastMythicSeenAt)}</span>
                     </span>
                   </span>
                 </Link>

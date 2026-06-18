@@ -253,6 +253,7 @@ export type CharacterProfileResponse = {
         classID: number;
         guildName?: string | null;
         guildRealm?: string | null;
+        lastSeenAt?: Date | null;
         lastMythicSeenAt?: Date | null;
         reportCount?: number;
       }>;
@@ -355,6 +356,7 @@ export type CharacterAccountResponse = {
     classID: number;
     guildName?: string | null;
     guildRealm?: string | null;
+    lastSeenAt?: Date | null;
     lastMythicSeenAt?: Date | null;
     reportCount: number;
   }>;
@@ -455,6 +457,72 @@ type ReportRankingCanonicalMatch = {
 
 class CharacterService {
   private characterIdentityIndexesSynced: boolean = false;
+
+  private normalizeAccountDate(value?: Date | string | null): Date | null {
+    if (!value) return null;
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime()) || date.getTime() <= 0) return null;
+
+    return date;
+  }
+
+  private async buildAccountCharacters(
+    members: Array<{
+      characterId: mongoose.Types.ObjectId;
+      name: string;
+      realm: string;
+      region: string;
+      classID: number;
+      guildName?: string | null;
+      guildRealm?: string | null;
+      lastMythicSeenAt?: Date | null;
+      reportCount?: number;
+    }>,
+  ): Promise<CharacterAccountResponse["characters"]> {
+    const characterIds = members.map((member) => member.characterId);
+    const latestByCharacterId = new Map<string, { lastReportSeenAt?: Date | null; lastMythicSeenAt?: Date | null }>();
+
+    if (characterIds.length > 0) {
+      const latestRows = await Character.find({ _id: { $in: characterIds } })
+        .select("_id lastReportSeenAt lastMythicSeenAt")
+        .lean<Array<{ _id: mongoose.Types.ObjectId; lastReportSeenAt?: Date | null; lastMythicSeenAt?: Date | null }>>();
+
+      latestRows.forEach((row) => {
+        latestByCharacterId.set(row._id.toString(), {
+          lastReportSeenAt: row.lastReportSeenAt,
+          lastMythicSeenAt: row.lastMythicSeenAt,
+        });
+      });
+    }
+
+    return members
+      .map((member) => {
+        const latest = latestByCharacterId.get(member.characterId.toString());
+        const lastMythicSeenAt = this.normalizeAccountDate(latest?.lastMythicSeenAt ?? member.lastMythicSeenAt ?? null);
+        const lastSeenAt = this.normalizeAccountDate(latest?.lastReportSeenAt ?? null) ?? lastMythicSeenAt;
+
+        return {
+          characterId: member.characterId.toString(),
+          name: member.name,
+          realm: member.realm,
+          region: member.region,
+          classID: member.classID,
+          guildName: member.guildName ?? null,
+          guildRealm: member.guildRealm ?? null,
+          lastSeenAt,
+          lastMythicSeenAt,
+          reportCount: member.reportCount ?? 0,
+        };
+      })
+      .sort((a, b) => {
+        const reportDiff = b.reportCount - a.reportCount;
+        if (reportDiff !== 0) return reportDiff;
+        const lastSeenA = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0;
+        const lastSeenB = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0;
+        return lastSeenB - lastSeenA || a.name.localeCompare(b.name);
+      });
+  }
 
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -736,7 +804,7 @@ class CharacterService {
             guildRealm: null,
             guildUpdatedAt: null,
             guildHistory: [],
-            lastMythicSeenAt: new Date(0),
+            lastMythicSeenAt: null,
             rankingsAvailable: null,
             nextEligibleRefreshAt: new Date("2100-01-01T00:00:00.000Z"),
           },
@@ -876,7 +944,7 @@ class CharacterService {
           guildRealm: null,
           guildUpdatedAt: null,
           guildHistory: [],
-          lastMythicSeenAt: new Date(0),
+          lastMythicSeenAt: null,
           rankingsAvailable: null,
           nextEligibleRefreshAt: new Date("2100-01-01T00:00:00.000Z"),
         },
@@ -1279,7 +1347,7 @@ class CharacterService {
           },
           $setOnInsert: {
             wclCanonicalCharacterId: canonicalID,
-            lastMythicSeenAt: new Date(0),
+            lastMythicSeenAt: null,
             rankingsAvailable: null,
             nextEligibleRefreshAt: new Date("2100-01-01T00:00:00.000Z"),
           },
@@ -2128,25 +2196,7 @@ class CharacterService {
 
     if (!group) return null;
 
-    const characters = [...(group.members ?? [])]
-      .map((member) => ({
-        characterId: member.characterId.toString(),
-        name: member.name,
-        realm: member.realm,
-        region: member.region,
-        classID: member.classID,
-        guildName: member.guildName ?? null,
-        guildRealm: member.guildRealm ?? null,
-        lastMythicSeenAt: member.lastMythicSeenAt ?? null,
-        reportCount: member.reportCount ?? 0,
-      }))
-      .sort((a, b) => {
-        const reportDiff = b.reportCount - a.reportCount;
-        if (reportDiff !== 0) return reportDiff;
-        const lastSeenA = a.lastMythicSeenAt ? new Date(a.lastMythicSeenAt).getTime() : 0;
-        const lastSeenB = b.lastMythicSeenAt ? new Date(b.lastMythicSeenAt).getTime() : 0;
-        return lastSeenB - lastSeenA || a.name.localeCompare(b.name);
-      });
+    const characters = await this.buildAccountCharacters([...(group.members ?? [])]);
 
     return {
       account: {
@@ -2577,6 +2627,7 @@ class CharacterService {
           characterIds: profileCharacterDoc._id,
         }).lean()
       : null;
+    const accountCharacters = accountGroup ? await this.buildAccountCharacters([...(accountGroup.members ?? [])]) : [];
 
     return {
       type: "profile",
@@ -2606,17 +2657,7 @@ class CharacterService {
               minScore: accountGroup.minScore,
               maxScore: accountGroup.maxScore,
               avgScore: accountGroup.avgScore,
-              characters: accountGroup.members.map((member) => ({
-                characterId: member.characterId.toString(),
-                name: member.name,
-                realm: member.realm,
-                region: member.region,
-                classID: member.classID,
-                guildName: member.guildName ?? null,
-                guildRealm: member.guildRealm ?? null,
-                lastMythicSeenAt: member.lastMythicSeenAt ?? null,
-                reportCount: member.reportCount ?? 0,
-              })),
+              characters: accountCharacters,
             }
           : undefined,
       },

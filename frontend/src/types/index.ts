@@ -1347,6 +1347,7 @@ export type CharacterProfileResponse = {
         classID: number;
         guildName?: string | null;
         guildRealm?: string | null;
+        lastSeenAt?: string | null;
         lastMythicSeenAt?: string | null;
         reportCount?: number;
       }>;
@@ -1449,6 +1450,7 @@ export type CharacterAccountResponse = {
     classID: number;
     guildName?: string | null;
     guildRealm?: string | null;
+    lastSeenAt?: string | null;
     lastMythicSeenAt?: string | null;
     reportCount: number;
   }>;

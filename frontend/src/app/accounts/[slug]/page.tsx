@@ -34,7 +34,7 @@ function getClassColor(className: string) {
 function formatShortDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
+  if (Number.isNaN(date.getTime()) || date.getTime() <= 0) return "-";
 
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -65,11 +65,11 @@ function AccountCharacterRow({ character }: { character: CharacterAccountRespons
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-2 text-sm text-gray-500">
           <span className="truncate">{character.guildName ?? "No guild"}</span>
-          <span className="shrink-0 tabular-nums md:hidden">{formatShortDate(character.lastMythicSeenAt)}</span>
+          <span className="shrink-0 tabular-nums md:hidden">{formatShortDate(character.lastSeenAt ?? character.lastMythicSeenAt)}</span>
         </span>
       </span>
       <span className="text-right text-sm font-semibold tabular-nums text-gray-300">{character.reportCount}</span>
-      <span className="hidden text-right text-sm tabular-nums text-gray-400 md:block">{formatShortDate(character.lastMythicSeenAt)}</span>
+      <span className="hidden text-right text-sm tabular-nums text-gray-400 md:block">{formatShortDate(character.lastSeenAt ?? character.lastMythicSeenAt)}</span>
     </Link>
   );
 }

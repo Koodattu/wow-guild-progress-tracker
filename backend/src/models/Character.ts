@@ -21,7 +21,7 @@ export interface ICharacter extends Document {
   guildHistory: IGuildHistoryEntry[];
   wclProfileHidden: boolean;
 
-  lastMythicSeenAt: Date;
+  lastMythicSeenAt?: Date | null;
   firstReportSeenAt?: Date;
   lastReportSeenAt?: Date;
   rankingsAvailable: boolean | null;
@@ -54,7 +54,7 @@ const CharacterSchema: Schema = new Schema(
     guildHistory: { type: [GuildHistoryEntrySchema], default: [] },
     wclProfileHidden: { type: Boolean, required: true, default: false },
 
-    lastMythicSeenAt: { type: Date, required: true },
+    lastMythicSeenAt: { type: Date, required: false, default: null },
     firstReportSeenAt: { type: Date },
     lastReportSeenAt: { type: Date },
     rankingsAvailable: { type: Boolean, required: false, default: null },
