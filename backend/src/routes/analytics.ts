@@ -16,6 +16,152 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+type StatsMap<T> = Map<string, T> | Record<string, T> | null | undefined;
+
+type DailyEndpointAggregate = {
+  endpoint?: string;
+  count?: number;
+  totalResponseTime?: number;
+  totalSize?: number;
+  errorCount?: number;
+  methods?: string[];
+  lastCalled?: Date | string;
+  lastErrorAt?: Date | string;
+  statusCodes?: StatsMap<number>;
+};
+
+type DailyStatsDocument = {
+  date: Date | string;
+  totalRequests?: number;
+  totalResponseTime?: number;
+  totalDataTransferred?: number;
+  uniqueVisitors?: number;
+  statusCodeSummary?: StatsMap<number>;
+  endpointStats?: StatsMap<DailyEndpointAggregate>;
+};
+
+type EndpointAggregate = {
+  endpoint: string;
+  count: number;
+  totalResponseTime: number;
+  totalSize: number;
+  errorCount: number;
+  methods: Set<string>;
+  lastCalled?: Date;
+  lastErrorAt?: Date;
+  statusCodes: Map<string, number>;
+};
+
+const mapEntries = <T>(value: StatsMap<T>): [string, T][] => {
+  if (!value) return [];
+  if (value instanceof Map) return Array.from(value.entries());
+  return Object.entries(value);
+};
+
+const toDateKey = (date: Date | string): string => new Date(date).toISOString().slice(0, 10);
+
+const toValidDate = (date?: Date | string): Date | undefined => {
+  if (!date) return undefined;
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const getStartDate = (days: number): Date => {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0, 0, 0, 0);
+  return startDate;
+};
+
+const getErrorCountFromStatusCodes = (statusCodes: StatsMap<number>): number =>
+  mapEntries(statusCodes).reduce((total, [statusCode, count]) => total + (parseInt(statusCode, 10) >= 400 ? count || 0 : 0), 0);
+
+const aggregateEndpointsFromDailyStats = async (startDate: Date, limit: number): Promise<EndpointAggregate[]> => {
+  const dailyDocs = (await DailyStats.find({ date: { $gte: startDate } }).select("endpointStats").lean()) as DailyStatsDocument[];
+  const byEndpoint = new Map<string, EndpointAggregate>();
+
+  for (const day of dailyDocs) {
+    for (const [key, stat] of mapEntries(day.endpointStats)) {
+      const endpoint = stat.endpoint || key;
+      const existing =
+        byEndpoint.get(endpoint) ||
+        ({
+          endpoint,
+          count: 0,
+          totalResponseTime: 0,
+          totalSize: 0,
+          errorCount: 0,
+          methods: new Set<string>(),
+          statusCodes: new Map<string, number>(),
+        } satisfies EndpointAggregate);
+
+      existing.count += stat.count || 0;
+      existing.totalResponseTime += stat.totalResponseTime || 0;
+      existing.totalSize += stat.totalSize || 0;
+      existing.errorCount += typeof stat.errorCount === "number" ? stat.errorCount : getErrorCountFromStatusCodes(stat.statusCodes);
+
+      for (const method of stat.methods || []) {
+        existing.methods.add(method);
+      }
+
+      for (const [statusCode, count] of mapEntries(stat.statusCodes)) {
+        existing.statusCodes.set(statusCode, (existing.statusCodes.get(statusCode) || 0) + (count || 0));
+      }
+
+      const lastCalled = toValidDate(stat.lastCalled);
+      if (lastCalled && (!existing.lastCalled || lastCalled > existing.lastCalled)) {
+        existing.lastCalled = lastCalled;
+      }
+
+      const lastErrorAt = toValidDate(stat.lastErrorAt);
+      if (lastErrorAt && (!existing.lastErrorAt || lastErrorAt > existing.lastErrorAt)) {
+        existing.lastErrorAt = lastErrorAt;
+      }
+
+      byEndpoint.set(endpoint, existing);
+    }
+  }
+
+  return Array.from(byEndpoint.values())
+    .filter((stat) => stat.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+};
+
+const aggregateStatusCodesFromDailyStats = async (startDate: Date): Promise<Array<{ statusCode: number; count: number }>> => {
+  const dailyDocs = (await DailyStats.find({ date: { $gte: startDate } }).select("statusCodeSummary").lean()) as DailyStatsDocument[];
+  const statusCounts = new Map<string, number>();
+
+  for (const day of dailyDocs) {
+    for (const [statusCode, count] of mapEntries(day.statusCodeSummary)) {
+      statusCounts.set(statusCode, (statusCounts.get(statusCode) || 0) + (count || 0));
+    }
+  }
+
+  return Array.from(statusCounts.entries())
+    .map(([statusCode, count]) => ({ statusCode: parseInt(statusCode, 10), count }))
+    .filter((stat) => Number.isFinite(stat.statusCode))
+    .sort((a, b) => a.statusCode - b.statusCode);
+};
+
+const aggregateErrorsFromDailyStats = async (startDate: Date, limit: number) => {
+  const endpoints = await aggregateEndpointsFromDailyStats(startDate, Number.MAX_SAFE_INTEGER);
+  const details = endpoints.flatMap((endpoint) => {
+    const lastOccurred = endpoint.lastErrorAt || endpoint.lastCalled || new Date();
+
+    return Array.from(endpoint.statusCodes.entries())
+      .filter(([statusCode, count]) => parseInt(statusCode, 10) >= 400 && count > 0)
+      .map(([statusCode, count]) => ({
+        endpoint: endpoint.endpoint,
+        statusCode: parseInt(statusCode, 10),
+        count,
+        lastOccurred,
+      }));
+  });
+
+  return details.sort((a, b) => b.count - a.count).slice(0, limit);
+};
+
 // Get overview stats (last 24 hours, 7 days, 30 days)
 router.get("/overview", async (req: Request, res: Response) => {
   try {
@@ -131,63 +277,105 @@ router.get("/hourly", async (req: Request, res: Response) => {
 router.get("/daily", async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 30;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    startDate.setHours(0, 0, 0, 0);
+    const startDate = getStartDate(days);
 
     // Aggregate hourly stats into daily
-    const dailyStats = await HourlyStats.aggregate([
-      { $match: { hour: { $gte: startDate } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$hour" },
+    const [dailyStats, persistedDailyStats, dailyUniqueVisitors] = await Promise.all([
+      HourlyStats.aggregate([
+        { $match: { hour: { $gte: startDate } } },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$hour" },
+            },
+            totalRequests: { $sum: "$totalRequests" },
+            totalResponseTime: { $sum: "$totalResponseTime" },
+            totalDataTransferred: { $sum: "$totalDataTransferred" },
           },
-          totalRequests: { $sum: "$totalRequests" },
-          totalResponseTime: { $sum: "$totalResponseTime" },
-          totalDataTransferred: { $sum: "$totalDataTransferred" },
         },
-      },
-      { $sort: { _id: 1 } },
+        { $sort: { _id: 1 } },
+      ]),
+      DailyStats.find({ date: { $gte: startDate } }).select("date totalRequests totalResponseTime totalDataTransferred uniqueVisitors").sort({ date: 1 }).lean(),
+      RequestLog.aggregate([
+        {
+          $match: {
+            timestamp: { $gte: startDate },
+            visitorHash: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$timestamp" },
+            },
+            uniqueVisitors: { $addToSet: "$visitorHash" },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            uniqueVisitors: { $size: "$uniqueVisitors" },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
     ]);
 
-    const dailyUniqueVisitors = await RequestLog.aggregate([
+    const rowsByDate = new Map<
+      string,
       {
-        $match: {
-          timestamp: { $gte: startDate },
-          visitorHash: { $exists: true, $ne: null },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$timestamp" },
-          },
-          uniqueVisitors: { $addToSet: "$visitorHash" },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          uniqueVisitors: { $size: "$uniqueVisitors" },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
+        date: string;
+        requests: number;
+        totalResponseTime: number;
+        dataTransferred: number;
+        uniqueVisitors: number;
+      }
+    >();
 
-    const uniqueVisitorsByDate = new Map<string, number>();
-    for (const day of dailyUniqueVisitors) {
-      uniqueVisitorsByDate.set(day._id as string, day.uniqueVisitors as number);
+    for (const stat of dailyStats) {
+      rowsByDate.set(stat._id as string, {
+        date: stat._id as string,
+        requests: stat.totalRequests || 0,
+        totalResponseTime: stat.totalResponseTime || 0,
+        dataTransferred: stat.totalDataTransferred || 0,
+        uniqueVisitors: 0,
+      });
     }
 
-    const formatted = dailyStats.map((stat) => ({
-      date: stat._id,
-      requests: stat.totalRequests,
-      avgResponseTime: stat.totalRequests > 0 ? Math.round(stat.totalResponseTime / stat.totalRequests) : 0,
-      dataTransferred: stat.totalDataTransferred,
-      formattedData: formatBytes(stat.totalDataTransferred),
-      uniqueVisitors: uniqueVisitorsByDate.get(stat._id as string) || 0,
-    }));
+    for (const stat of persistedDailyStats as DailyStatsDocument[]) {
+      const date = toDateKey(stat.date);
+      const existing = rowsByDate.get(date);
+
+      if (existing) {
+        existing.uniqueVisitors = stat.uniqueVisitors || 0;
+      } else {
+        rowsByDate.set(date, {
+          date,
+          requests: stat.totalRequests || 0,
+          totalResponseTime: stat.totalResponseTime || 0,
+          dataTransferred: stat.totalDataTransferred || 0,
+          uniqueVisitors: stat.uniqueVisitors || 0,
+        });
+      }
+    }
+
+    for (const day of dailyUniqueVisitors) {
+      const existing = rowsByDate.get(day._id as string);
+      if (existing && existing.uniqueVisitors === 0) {
+        existing.uniqueVisitors = day.uniqueVisitors as number;
+      }
+    }
+
+    const formatted = Array.from(rowsByDate.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((stat) => ({
+        date: stat.date,
+        requests: stat.requests,
+        avgResponseTime: stat.requests > 0 ? Math.round(stat.totalResponseTime / stat.requests) : 0,
+        dataTransferred: stat.dataTransferred,
+        formattedData: formatBytes(stat.dataTransferred),
+        uniqueVisitors: stat.uniqueVisitors,
+      }));
 
     res.json(formatted);
   } catch (error) {
@@ -201,8 +389,25 @@ router.get("/endpoints", async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
     const limit = parseInt(req.query.limit as string) || 100; // Default to 100, allow fetching all
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const startDate = getStartDate(days);
+
+    const dailyEndpointStats = await aggregateEndpointsFromDailyStats(startDate, limit);
+
+    if (days > 30 && dailyEndpointStats.length > 0) {
+      const formatted = dailyEndpointStats.map((stat) => ({
+        endpoint: stat.endpoint,
+        count: stat.count,
+        avgResponseTime: stat.count > 0 ? Math.round(stat.totalResponseTime / stat.count) : 0,
+        totalSize: stat.totalSize,
+        formattedSize: formatBytes(stat.totalSize),
+        successRate: stat.count > 0 ? Math.round(((stat.count - stat.errorCount) / stat.count) * 100) : 0,
+        errorCount: stat.errorCount,
+        methods: Array.from(stat.methods),
+        lastCalled: stat.lastCalled,
+      }));
+
+      return res.json(formatted);
+    }
 
     const endpointStats = await RequestLog.aggregate([
       { $match: { timestamp: { $gte: startDate } } },
@@ -238,6 +443,22 @@ router.get("/endpoints", async (req: Request, res: Response) => {
       lastCalled: stat.lastCalled,
     }));
 
+    if (formatted.length === 0 && dailyEndpointStats.length > 0) {
+      return res.json(
+        dailyEndpointStats.map((stat) => ({
+          endpoint: stat.endpoint,
+          count: stat.count,
+          avgResponseTime: stat.count > 0 ? Math.round(stat.totalResponseTime / stat.count) : 0,
+          totalSize: stat.totalSize,
+          formattedSize: formatBytes(stat.totalSize),
+          successRate: stat.count > 0 ? Math.round(((stat.count - stat.errorCount) / stat.count) * 100) : 0,
+          errorCount: stat.errorCount,
+          methods: Array.from(stat.methods),
+          lastCalled: stat.lastCalled,
+        })),
+      );
+    }
+
     res.json(formatted);
   } catch (error) {
     logger.error("Error fetching endpoint analytics:", error);
@@ -249,8 +470,13 @@ router.get("/endpoints", async (req: Request, res: Response) => {
 router.get("/status-codes", async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const startDate = getStartDate(days);
+
+    const dailyStatusStats = await aggregateStatusCodesFromDailyStats(startDate);
+
+    if (days > 30 && dailyStatusStats.length > 0) {
+      return res.json(dailyStatusStats);
+    }
 
     const statusStats = await RequestLog.aggregate([
       { $match: { timestamp: { $gte: startDate } } },
@@ -267,6 +493,10 @@ router.get("/status-codes", async (req: Request, res: Response) => {
       statusCode: stat._id,
       count: stat.count,
     }));
+
+    if (formatted.length === 0 && dailyStatusStats.length > 0) {
+      return res.json(dailyStatusStats);
+    }
 
     res.json(formatted);
   } catch (error) {
@@ -511,28 +741,35 @@ router.get("/slow-endpoints", async (req: Request, res: Response) => {
 router.get("/errors", async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const startDate = getStartDate(days);
 
-    const errorStats = await RequestLog.aggregate([
-      { $match: { timestamp: { $gte: startDate }, statusCode: { $gte: 400 } } },
-      {
-        $group: {
-          _id: { endpoint: "$endpoint", statusCode: "$statusCode" },
-          count: { $sum: 1 },
-          lastOccurred: { $max: "$timestamp" },
+    let formatted = days > 30 ? await aggregateErrorsFromDailyStats(startDate, 50) : [];
+
+    if (formatted.length === 0) {
+      const errorStats = await RequestLog.aggregate([
+        { $match: { timestamp: { $gte: startDate }, statusCode: { $gte: 400 } } },
+        {
+          $group: {
+            _id: { endpoint: "$endpoint", statusCode: "$statusCode" },
+            count: { $sum: 1 },
+            lastOccurred: { $max: "$timestamp" },
+          },
         },
-      },
-      { $sort: { count: -1 } },
-      { $limit: 50 },
-    ]);
+        { $sort: { count: -1 } },
+        { $limit: 50 },
+      ]);
 
-    const formatted = errorStats.map((stat) => ({
-      endpoint: stat._id.endpoint,
-      statusCode: stat._id.statusCode,
-      count: stat.count,
-      lastOccurred: stat.lastOccurred,
-    }));
+      formatted = errorStats.map((stat) => ({
+        endpoint: stat._id.endpoint,
+        statusCode: stat._id.statusCode,
+        count: stat.count,
+        lastOccurred: stat.lastOccurred,
+      }));
+    }
+
+    if (formatted.length === 0 && days <= 30) {
+      formatted = await aggregateErrorsFromDailyStats(startDate, 50);
+    }
 
     // Group by endpoint for summary
     const byEndpoint = new Map<string, { total: number; codes: Record<number, number> }>();

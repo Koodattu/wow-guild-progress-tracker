@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { RequestLog, HourlyStats } from "../models/Analytics";
+import { RequestLog, HourlyStats, DailyStats, DailyUniqueVisitor } from "../models/Analytics";
 import logger from "../utils/logger";
 
 // In-memory buffer to batch writes (reduces database load)
@@ -19,6 +19,22 @@ interface LogEntry {
 const logBuffer: LogEntry[] = [];
 const BUFFER_SIZE = 50; // Flush every 50 requests
 const FLUSH_INTERVAL = 30000; // Or every 30 seconds
+
+const getHourStart = (date: Date): Date => {
+  const hour = new Date(date);
+  hour.setMinutes(0, 0, 0);
+  return hour;
+};
+
+const getDayStart = (date: Date): Date => {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+};
+
+const getEndpointStorageKey = (endpoint: string): string => crypto.createHash("sha1").update(endpoint).digest("hex");
+
+const sanitizeMapKey = (key: string): string => key.replace(/[.$]/g, "_");
 
 // Normalize endpoint paths to group dynamic parameters
 // e.g., /api/guilds/draenor/some-guild -> /api/guilds/:realm/:name
@@ -79,7 +95,11 @@ const flushBuffer = async () => {
   try {
     // Insert request logs
     await RequestLog.insertMany(logsToFlush, { ordered: false });
+  } catch (error) {
+    logger.error("Failed to write detailed analytics logs:", error);
+  }
 
+  try {
     // Update hourly stats
     const hourlyUpdates = new Map<
       string,
@@ -93,8 +113,7 @@ const flushBuffer = async () => {
     >();
 
     for (const log of logsToFlush) {
-      const hourKey = new Date(log.timestamp);
-      hourKey.setMinutes(0, 0, 0);
+      const hourKey = getHourStart(log.timestamp);
       const hourKeyStr = hourKey.toISOString();
 
       if (!hourlyUpdates.has(hourKeyStr)) {
@@ -131,49 +150,203 @@ const flushBuffer = async () => {
     for (const [hourStr, data] of hourlyUpdates) {
       const hour = new Date(hourStr);
 
-      // Convert Maps to objects for MongoDB
-      const endpointsObj: Record<string, { count: number; totalResponseTime: number; totalSize: number; statusCodes: Record<string, number> }> = {};
+      const increment: Record<string, number> = {
+        totalRequests: data.totalRequests,
+        totalResponseTime: data.totalResponseTime,
+        totalDataTransferred: data.totalDataTransferred,
+      };
+
+      for (const [statusCode, count] of data.statusCodes) {
+        increment[`statusCodes.${statusCode}`] = count;
+      }
+
       for (const [endpoint, stats] of data.endpoints) {
-        const sanitizedEndpoint = endpoint.replace(/\./g, "_"); // MongoDB doesn't like dots in keys
-        endpointsObj[sanitizedEndpoint] = {
-          count: stats.count,
-          totalResponseTime: stats.totalResponseTime,
-          totalSize: stats.totalSize,
-          statusCodes: Object.fromEntries(stats.statusCodes),
-        };
+        const endpointKey = sanitizeMapKey(endpoint);
+        increment[`endpoints.${endpointKey}.count`] = stats.count;
+        increment[`endpoints.${endpointKey}.totalResponseTime`] = stats.totalResponseTime;
+        increment[`endpoints.${endpointKey}.totalSize`] = stats.totalSize;
+
+        for (const [statusCode, count] of stats.statusCodes) {
+          increment[`endpoints.${endpointKey}.statusCodes.${statusCode}`] = count;
+        }
       }
 
       await HourlyStats.findOneAndUpdate(
         { hour },
         {
-          $inc: {
-            totalRequests: data.totalRequests,
-            totalResponseTime: data.totalResponseTime,
-            totalDataTransferred: data.totalDataTransferred,
-          },
-          $set: {
-            [`endpoints`]: endpointsObj,
-            [`statusCodes`]: Object.fromEntries(data.statusCodes),
-          },
+          $inc: increment,
         },
         { upsert: true },
-      ).catch(() => {
-        // If update fails, try with $inc for all fields
-        return HourlyStats.findOneAndUpdate(
-          { hour },
-          {
-            $inc: {
-              totalRequests: data.totalRequests,
-              totalResponseTime: data.totalResponseTime,
-              totalDataTransferred: data.totalDataTransferred,
-            },
-          },
-          { upsert: true },
-        );
-      });
+      );
     }
   } catch (error) {
-    logger.error("Failed to flush analytics buffer:", error);
+    logger.error("Failed to update hourly analytics stats:", error);
+  }
+
+  try {
+    const dailyUpdates = new Map<
+      string,
+      {
+        totalRequests: number;
+        totalResponseTime: number;
+        totalDataTransferred: number;
+        endpoints: Map<
+          string,
+          {
+            endpoint: string;
+            count: number;
+            totalResponseTime: number;
+            totalSize: number;
+            errorCount: number;
+            methods: Set<string>;
+            statusCodes: Map<string, number>;
+            lastCalled: Date;
+            lastErrorAt?: Date;
+          }
+        >;
+        statusCodes: Map<string, number>;
+        uniqueVisitors: Map<string, Date>;
+      }
+    >();
+
+    for (const log of logsToFlush) {
+      const dayKey = getDayStart(log.timestamp);
+      const dayKeyStr = dayKey.toISOString();
+
+      if (!dailyUpdates.has(dayKeyStr)) {
+        dailyUpdates.set(dayKeyStr, {
+          totalRequests: 0,
+          totalResponseTime: 0,
+          totalDataTransferred: 0,
+          endpoints: new Map(),
+          statusCodes: new Map(),
+          uniqueVisitors: new Map(),
+        });
+      }
+
+      const dayData = dailyUpdates.get(dayKeyStr)!;
+      dayData.totalRequests++;
+      dayData.totalResponseTime += log.responseTime;
+      dayData.totalDataTransferred += log.responseSize;
+
+      if (log.visitorHash && !dayData.uniqueVisitors.has(log.visitorHash)) {
+        dayData.uniqueVisitors.set(log.visitorHash, log.timestamp);
+      }
+
+      const statusKey = log.statusCode.toString();
+      dayData.statusCodes.set(statusKey, (dayData.statusCodes.get(statusKey) || 0) + 1);
+
+      const endpointKey = getEndpointStorageKey(log.endpoint);
+      if (!dayData.endpoints.has(endpointKey)) {
+        dayData.endpoints.set(endpointKey, {
+          endpoint: log.endpoint,
+          count: 0,
+          totalResponseTime: 0,
+          totalSize: 0,
+          errorCount: 0,
+          methods: new Set(),
+          statusCodes: new Map(),
+          lastCalled: log.timestamp,
+        });
+      }
+
+      const endpointData = dayData.endpoints.get(endpointKey)!;
+      endpointData.count++;
+      endpointData.totalResponseTime += log.responseTime;
+      endpointData.totalSize += log.responseSize;
+      endpointData.methods.add(log.method);
+      endpointData.statusCodes.set(statusKey, (endpointData.statusCodes.get(statusKey) || 0) + 1);
+
+      if (log.timestamp > endpointData.lastCalled) {
+        endpointData.lastCalled = log.timestamp;
+      }
+
+      if (log.statusCode >= 400) {
+        endpointData.errorCount++;
+        if (!endpointData.lastErrorAt || log.timestamp > endpointData.lastErrorAt) {
+          endpointData.lastErrorAt = log.timestamp;
+        }
+      }
+    }
+
+    const uniqueVisitorIncrements = new Map<string, number>();
+
+    for (const [dayStr, data] of dailyUpdates) {
+      const visitors = Array.from(data.uniqueVisitors.entries());
+      if (visitors.length === 0) {
+        uniqueVisitorIncrements.set(dayStr, 0);
+        continue;
+      }
+
+      const date = new Date(dayStr);
+      const result = await DailyUniqueVisitor.bulkWrite(
+        visitors.map(([visitorHash, seenAt]) => ({
+          updateOne: {
+            filter: { date, visitorHash },
+            update: {
+              $setOnInsert: { date, visitorHash, firstSeenAt: seenAt },
+              $set: { lastSeenAt: seenAt },
+            },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+
+      uniqueVisitorIncrements.set(dayStr, result.upsertedCount || 0);
+    }
+
+    for (const [dayStr, data] of dailyUpdates) {
+      const date = new Date(dayStr);
+      const increment: Record<string, number> = {
+        totalRequests: data.totalRequests,
+        totalResponseTime: data.totalResponseTime,
+        totalDataTransferred: data.totalDataTransferred,
+      };
+
+      const uniqueVisitorIncrement = uniqueVisitorIncrements.get(dayStr) || 0;
+      if (uniqueVisitorIncrement > 0) {
+        increment.uniqueVisitors = uniqueVisitorIncrement;
+      }
+
+      for (const [statusCode, count] of data.statusCodes) {
+        increment[`statusCodeSummary.${statusCode}`] = count;
+      }
+
+      const setFields: Record<string, unknown> = {};
+      const addToSet: Record<string, { $each: string[] }> = {};
+
+      for (const [endpointKey, stats] of data.endpoints) {
+        const path = `endpointStats.${endpointKey}`;
+        increment[`${path}.count`] = stats.count;
+        increment[`${path}.totalResponseTime`] = stats.totalResponseTime;
+        increment[`${path}.totalSize`] = stats.totalSize;
+        increment[`${path}.errorCount`] = stats.errorCount;
+        setFields[`${path}.endpoint`] = stats.endpoint;
+        setFields[`${path}.lastCalled`] = stats.lastCalled;
+
+        if (stats.lastErrorAt) {
+          setFields[`${path}.lastErrorAt`] = stats.lastErrorAt;
+        }
+
+        const methods = Array.from(stats.methods);
+        if (methods.length > 0) {
+          addToSet[`${path}.methods`] = { $each: methods };
+        }
+
+        for (const [statusCode, count] of stats.statusCodes) {
+          increment[`${path}.statusCodes.${statusCode}`] = count;
+        }
+      }
+
+      const update: Record<string, unknown> = { $inc: increment };
+      if (Object.keys(setFields).length > 0) update.$set = setFields;
+      if (Object.keys(addToSet).length > 0) update.$addToSet = addToSet;
+
+      await DailyStats.findOneAndUpdate({ date }, update, { upsert: true });
+    }
+  } catch (error) {
+    logger.error("Failed to update daily analytics stats:", error);
   }
 };
 
@@ -183,7 +356,7 @@ setInterval(flushBuffer, FLUSH_INTERVAL);
 // Middleware function
 export const analyticsMiddleware = (req: Request, res: Response, next: NextFunction) => {
   // Skip tracking for analytics endpoints to avoid recursion
-  if (req.path.startsWith("/api/analytics")) {
+  if (req.path.startsWith("/api/analytics") || req.path.startsWith("/api/admin/analytics")) {
     return next();
   }
 

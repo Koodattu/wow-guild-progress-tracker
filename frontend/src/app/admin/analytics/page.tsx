@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import {
@@ -17,6 +18,70 @@ import {
 } from "@/types";
 
 type TabType = "overview" | "endpoints" | "performance" | "errors";
+
+type DailyChartPoint = AnalyticsDaily & {
+  timestamp: number;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function formatChartDate(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatFullChartDate(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function DailyTrafficChart({ data }: { data: DailyChartPoint[] }) {
+  if (data.length === 0) {
+    return <div className="flex h-72 items-center justify-center text-sm text-slate-500">No daily traffic data yet</div>;
+  }
+
+  const onlyPoint = data.length === 1;
+  const timestamp = data[0]?.timestamp || Date.now();
+  const xDomain = onlyPoint ? ([timestamp - DAY_MS, timestamp + DAY_MS] as [number, number]) : (["dataMin", "dataMax"] as const);
+
+  return (
+    <div className="h-72 w-full px-1 py-1 [&_*:focus-visible]:outline-none [&_*:focus]:outline-none [&_.recharts-surface]:outline-none">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.7} />
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            domain={xDomain}
+            tickFormatter={formatChartDate}
+            tick={{ fill: "#9CA3AF", fontSize: 11 }}
+            stroke="#4B5563"
+            tickLine={false}
+          />
+          <YAxis tick={{ fill: "#9CA3AF", fontSize: 11 }} stroke="#4B5563" width={48} tickFormatter={(value: number) => value.toLocaleString()} />
+          <Tooltip
+            contentStyle={{ backgroundColor: "#1F2937", border: "1px solid #374151", borderRadius: "0.5rem" }}
+            labelStyle={{ color: "#9CA3AF" }}
+            labelFormatter={(value: string | number) => formatFullChartDate(Number(value))}
+            formatter={(value: string | number | undefined, name: string | number | undefined) => {
+              const label = name === "requests" ? "Requests" : "Unique visitors";
+              const numericValue = typeof value === "number" ? value : Number(value || 0);
+              return [numericValue.toLocaleString(), label];
+            }}
+          />
+          <Line type="linear" dataKey="requests" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#F59E0B" }} activeDot={{ r: 5 }} name="requests" />
+          <Line type="linear" dataKey="uniqueVisitors" stroke="#34D399" strokeWidth={2} dot={{ r: 3, fill: "#34D399" }} activeDot={{ r: 5 }} name="uniqueVisitors" />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
@@ -122,6 +187,31 @@ export default function AdminAnalyticsPage() {
     return filtered;
   }, [endpoints, endpointFilter, endpointSortBy, endpointSortOrder]);
 
+  const dailyChartData = useMemo(
+    () =>
+      daily
+        .map((day) => ({
+          ...day,
+          timestamp: new Date(day.date).getTime(),
+        }))
+        .filter((day) => Number.isFinite(day.timestamp))
+        .sort((a, b) => a.timestamp - b.timestamp),
+    [daily],
+  );
+
+  const dailyTotals = useMemo(
+    () =>
+      daily.reduce(
+        (totals, day) => ({
+          requests: totals.requests + day.requests,
+          uniqueVisitors: totals.uniqueVisitors + day.uniqueVisitors,
+          dataTransferred: totals.dataTransferred + day.dataTransferred,
+        }),
+        { requests: 0, uniqueVisitors: 0, dataTransferred: 0 },
+      ),
+    [daily],
+  );
+
   // Show loading state while checking auth
   if (authLoading) {
     return (
@@ -196,7 +286,7 @@ export default function AdminAnalyticsPage() {
             </a>
           </div>
           <h1 className="text-3xl font-bold text-amber-400 mb-2">📊 Site Analytics</h1>
-          <p className="text-slate-400">Usage statistics and performance metrics (Admin Only)</p>
+          <p className="text-slate-400 text-pretty">Usage statistics, endpoint counts, and durable daily aggregates (Admin Only)</p>
         </div>
 
         {/* Controls Row */}
@@ -218,11 +308,11 @@ export default function AdminAnalyticsPage() {
 
           {/* Time Range */}
           <div className="flex gap-2">
-            {[7, 14, 30].map((days) => (
+            {[7, 14, 30, 90, 365].map((days) => (
               <button
                 key={days}
                 onClick={() => setSelectedDays(days)}
-                className={`px-3 py-1.5 rounded-lg transition-colors text-sm ${
+                className={`min-h-10 px-3 py-1.5 rounded-lg transition-[background-color,color,transform] text-sm active:scale-[0.96] ${
                   selectedDays === days ? "bg-blue-600 text-white font-semibold" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                 }`}
               >
@@ -242,27 +332,27 @@ export default function AdminAnalyticsPage() {
               </div>
               <div className="flex gap-8">
                 <div className="text-center">
-                  <div className="text-xl font-bold text-white">{realtime.requestsPerMinute}</div>
+                  <div className="text-xl font-bold tabular-nums text-white">{realtime.requestsPerMinute}</div>
                   <div className="text-xs text-slate-400">req/min</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-white">{realtime.currentHour.requests}</div>
+                  <div className="text-xl font-bold tabular-nums text-white">{realtime.currentHour.requests}</div>
                   <div className="text-xs text-slate-400">this hour</div>
                 </div>
                 <div className="text-center">
-                  <div className={`text-xl font-bold ${getResponseTimeColor(realtime.currentHour.avgResponseTime)}`}>{realtime.currentHour.avgResponseTime}ms</div>
+                  <div className={`text-xl font-bold tabular-nums ${getResponseTimeColor(realtime.currentHour.avgResponseTime)}`}>{realtime.currentHour.avgResponseTime}ms</div>
                   <div className="text-xs text-slate-400">avg response</div>
                 </div>
                 {trends && (
                   <>
                     <div className="text-center">
-                      <div className={`text-xl font-bold ${getTrendColor(trends.dayOverDay.change)}`}>
+                      <div className={`text-xl font-bold tabular-nums ${getTrendColor(trends.dayOverDay.change)}`}>
                         {getTrendIcon(trends.dayOverDay.change)} {Math.abs(trends.dayOverDay.change)}%
                       </div>
                       <div className="text-xs text-slate-400">vs yesterday</div>
                     </div>
                     <div className="text-center">
-                      <div className={`text-xl font-bold ${getTrendColor(trends.weekOverWeek.change)}`}>
+                      <div className={`text-xl font-bold tabular-nums ${getTrendColor(trends.weekOverWeek.change)}`}>
                         {getTrendIcon(trends.weekOverWeek.change)} {Math.abs(trends.weekOverWeek.change)}%
                       </div>
                       <div className="text-xs text-slate-400">vs last week</div>
@@ -290,19 +380,19 @@ export default function AdminAnalyticsPage() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-slate-300">Requests</span>
-                        <span className="text-xl font-bold text-white">{data.totalRequests.toLocaleString()}</span>
+                        <span className="text-xl font-bold tabular-nums text-white">{data.totalRequests.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-slate-300">Avg Response</span>
-                        <span className={`font-semibold ${getResponseTimeColor(data.avgResponseTime)}`}>{data.avgResponseTime}ms</span>
+                        <span className={`font-semibold tabular-nums ${getResponseTimeColor(data.avgResponseTime)}`}>{data.avgResponseTime}ms</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-slate-300">Data Transferred</span>
-                        <span className="font-semibold text-blue-400">{data.formattedData}</span>
+                        <span className="font-semibold tabular-nums text-blue-400">{data.formattedData}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-slate-300">Unique Visitors</span>
-                        <span className="font-semibold text-emerald-400">{data.uniqueVisitors.toLocaleString()}</span>
+                        <span className="font-semibold tabular-nums text-emerald-400">{data.uniqueVisitors.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -314,36 +404,29 @@ export default function AdminAnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Daily Stats */}
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                <h2 className="text-lg font-semibold text-amber-400 mb-4">📅 Daily Activity</h2>
-                <div className="overflow-x-auto max-h-80">
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-slate-800">
-                      <tr className="text-slate-400 text-sm border-b border-slate-700">
-                        <th className="text-left py-2 px-2">Date</th>
-                        <th className="text-right py-2 px-2">Requests</th>
-                        <th className="text-right py-2 px-2">Unique</th>
-                        <th className="text-right py-2 px-2">Avg ms</th>
-                        <th className="text-right py-2 px-2">Data</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {daily
-                        .slice(-14)
-                        .reverse()
-                        .map((day) => (
-                          <tr key={day.date} className="border-b border-slate-700/50 hover:bg-slate-700/20">
-                            <td className="py-2 px-2 text-slate-300 text-sm">
-                              {new Date(day.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono text-white">{day.requests.toLocaleString()}</td>
-                            <td className="py-2 px-2 text-right font-mono text-emerald-400">{day.uniqueVisitors.toLocaleString()}</td>
-                            <td className={`py-2 px-2 text-right font-mono ${getResponseTimeColor(day.avgResponseTime)}`}>{day.avgResponseTime}</td>
-                            <td className="py-2 px-2 text-right text-blue-400 text-sm">{day.formattedData}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-amber-400 text-balance">Daily Traffic</h2>
+                    <p className="text-sm text-slate-500 text-pretty">Requests and unique visitors per day for the selected range.</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-right text-xs">
+                    <div>
+                      <div className="text-slate-500">Requests</div>
+                      <div className="text-base font-bold tabular-nums text-white">{dailyTotals.requests.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Avg Unique</div>
+                      <div className="text-base font-bold tabular-nums text-emerald-400">
+                        {daily.length > 0 ? Math.round(dailyTotals.uniqueVisitors / daily.length).toLocaleString() : "0"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Data</div>
+                      <div className="text-base font-bold tabular-nums text-blue-400">{formatBytes(dailyTotals.dataTransferred)}</div>
+                    </div>
+                  </div>
                 </div>
+                <DailyTrafficChart data={dailyChartData} />
               </div>
 
               {/* Peak Hours */}
@@ -626,7 +709,7 @@ export default function AdminAnalyticsPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-slate-500 text-sm">
-          <p>Data auto-expires after 30 days • Live stats update every 30 seconds</p>
+          <p>Detailed request logs auto-expire after 30 days • Daily aggregate counts are retained indefinitely • Live stats update every 30 seconds</p>
         </div>
       </div>
     </div>

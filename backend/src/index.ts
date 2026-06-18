@@ -119,13 +119,6 @@ app.use(
     credentials: true,
   }),
 );
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      (req as Request & { rawBody?: string }).rawBody = buf.toString("utf8");
-    },
-  }),
-);
 
 // Session configuration with MongoDB store
 const sessionConfig: any = {
@@ -156,6 +149,14 @@ app.use(session(sessionConfig));
 
 // Analytics middleware - tracks all requests automatically
 app.use(analyticsMiddleware);
+
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: string }).rawBody = buf.toString("utf8");
+    },
+  }),
+);
 
 // Serve runtime-downloaded icons first, then bundled icons copied into the image.
 const bundledIconsDir = path.join(__dirname, "../public/icons");
@@ -541,8 +542,9 @@ const startServer = async () => {
           credentials: true,
         }),
       );
-      workerApp.use(express.json());
       workerApp.use(session(sessionConfig));
+      workerApp.use(analyticsMiddleware);
+      workerApp.use(express.json());
       workerApp.use("/api/admin", adminRouter);
       workerApp.get("/health", (_req: Request, res: Response) => {
         res.json({ status: "ok", mode: "worker" });
@@ -588,9 +590,7 @@ process.on("SIGINT", async () => {
     backgroundGuildProcessor.stop();
     discordBotService.stopEventPublisher();
   }
-  if (isApiProcess) {
-    await flushAnalytics();
-  }
+  await flushAnalytics();
   process.exit(0);
 });
 
@@ -601,9 +601,7 @@ process.on("SIGTERM", async () => {
     backgroundGuildProcessor.stop();
     discordBotService.stopEventPublisher();
   }
-  if (isApiProcess) {
-    await flushAnalytics();
-  }
+  await flushAnalytics();
   process.exit(0);
 });
 

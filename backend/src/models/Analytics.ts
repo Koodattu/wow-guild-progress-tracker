@@ -55,6 +55,33 @@ export interface IHourlyStats extends Document {
   statusCodes: Map<string, number>;
 }
 
+interface EndpointStats {
+  endpoint: string;
+  count: number;
+  totalResponseTime: number;
+  totalSize: number;
+  errorCount: number;
+  methods: string[];
+  lastCalled?: Date;
+  lastErrorAt?: Date;
+  statusCodes: Map<string, number>;
+}
+
+const EndpointStatsSchema = new Schema(
+  {
+    endpoint: { type: String, required: true },
+    count: { type: Number, default: 0 },
+    totalResponseTime: { type: Number, default: 0 },
+    totalSize: { type: Number, default: 0 },
+    errorCount: { type: Number, default: 0 },
+    methods: [{ type: String }],
+    lastCalled: { type: Date },
+    lastErrorAt: { type: Date },
+    statusCodes: { type: Map, of: Number, default: {} },
+  },
+  { _id: false },
+);
+
 const HourlyStatsSchema: Schema = new Schema(
   {
     hour: { type: Date, required: true, unique: true },
@@ -86,7 +113,9 @@ export interface IDailyStats extends Document {
   totalRequests: number;
   totalResponseTime: number;
   totalDataTransferred: number;
+  uniqueVisitors: number;
   uniqueEndpoints: number;
+  endpointStats: Map<string, EndpointStats>;
   topEndpoints: Array<{
     endpoint: string;
     count: number;
@@ -105,7 +134,9 @@ const DailyStatsSchema: Schema = new Schema(
     totalRequests: { type: Number, required: true, default: 0 },
     totalResponseTime: { type: Number, required: true, default: 0 },
     totalDataTransferred: { type: Number, required: true, default: 0 },
+    uniqueVisitors: { type: Number, required: true, default: 0 },
     uniqueEndpoints: { type: Number, default: 0 },
+    endpointStats: { type: Map, of: EndpointStatsSchema, default: {} },
     topEndpoints: [
       {
         endpoint: { type: String },
@@ -128,6 +159,30 @@ const DailyStatsSchema: Schema = new Schema(
 
 DailyStatsSchema.index({ date: -1 });
 
+export interface IDailyUniqueVisitor extends Document {
+  date: Date;
+  visitorHash: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+}
+
+const DailyUniqueVisitorSchema: Schema = new Schema(
+  {
+    date: { type: Date, required: true },
+    visitorHash: { type: String, required: true },
+    firstSeenAt: { type: Date, required: true },
+    lastSeenAt: { type: Date, required: true },
+  },
+  {
+    timestamps: false,
+  },
+);
+
+DailyUniqueVisitorSchema.index({ date: 1, visitorHash: 1 }, { unique: true });
+// Only needed while the day can still receive more requests. DailyStats keeps the final count forever.
+DailyUniqueVisitorSchema.index({ date: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 });
+
 export const RequestLog = mongoose.model<IRequestLog>("RequestLog", RequestLogSchema);
 export const HourlyStats = mongoose.model<IHourlyStats>("HourlyStats", HourlyStatsSchema);
 export const DailyStats = mongoose.model<IDailyStats>("DailyStats", DailyStatsSchema);
+export const DailyUniqueVisitor = mongoose.model<IDailyUniqueVisitor>("DailyUniqueVisitor", DailyUniqueVisitorSchema);
