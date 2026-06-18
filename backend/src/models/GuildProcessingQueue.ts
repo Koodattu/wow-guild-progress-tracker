@@ -139,6 +139,11 @@ GuildProcessingQueueSchema.index({ status: 1, priority: 1, createdAt: 1 });
 // Ensure one queue entry per guild
 GuildProcessingQueueSchema.index({ guildId: 1, jobType: 1 }, { unique: true });
 
+async function updateQueueDocument(queueItem: IGuildProcessingQueue, update: mongoose.UpdateQuery<IGuildProcessingQueue>): Promise<void> {
+  const model = queueItem.constructor as mongoose.Model<IGuildProcessingQueue>;
+  await model.updateOne({ _id: queueItem._id }, update);
+}
+
 /**
  * Static method to get next item to process
  */
@@ -192,85 +197,142 @@ GuildProcessingQueueSchema.statics.getQueueStats = async function () {
  * Instance method to update progress
  */
 GuildProcessingQueueSchema.methods.updateProgress = async function (reportsFetched: number, fightsSaved: number, currentPage: number, totalEstimate?: number) {
+  const lastActivityAt = new Date();
   this.progress.reportsFetched = reportsFetched;
   this.progress.fightsSaved = fightsSaved;
   this.progress.currentPage = currentPage;
-  this.lastActivityAt = new Date();
+  this.lastActivityAt = lastActivityAt;
+
+  const progressUpdate: Record<string, number | Date> = {
+    "progress.reportsFetched": reportsFetched,
+    "progress.fightsSaved": fightsSaved,
+    "progress.currentPage": currentPage,
+    lastActivityAt,
+  };
 
   if (totalEstimate !== undefined && totalEstimate > 0) {
     this.progress.totalReportsEstimate = totalEstimate;
+    progressUpdate["progress.totalReportsEstimate"] = totalEstimate;
   }
 
   // Calculate percent complete
   if (this.progress.totalReportsEstimate > 0) {
     this.progress.percentComplete = Math.min(100, Math.round((reportsFetched / this.progress.totalReportsEstimate) * 100));
+    progressUpdate["progress.percentComplete"] = this.progress.percentComplete;
   }
 
-  await this.save();
+  await updateQueueDocument(this as IGuildProcessingQueue, { $set: progressUpdate });
 };
 
 /**
  * Instance method to mark as completed
  */
 GuildProcessingQueueSchema.methods.markCompleted = async function () {
+  const completedAt = new Date();
   this.status = "completed";
-  this.completedAt = new Date();
-  this.lastActivityAt = new Date();
+  this.completedAt = completedAt;
+  this.lastActivityAt = completedAt;
   this.progress.percentComplete = 100;
-  await this.save();
+
+  await updateQueueDocument(this as IGuildProcessingQueue, {
+    $set: {
+      status: this.status,
+      completedAt,
+      lastActivityAt: completedAt,
+      "progress.percentComplete": this.progress.percentComplete,
+    },
+  });
 };
 
 /**
  * Instance method to mark as failed
  */
 GuildProcessingQueueSchema.methods.markFailed = async function (error: string, errorType?: string, isPermanent?: boolean, failureReason?: string) {
+  const lastErrorAt = new Date();
   this.errorCount += 1;
   this.lastError = error;
-  this.lastErrorAt = new Date();
-  this.lastActivityAt = new Date();
+  this.lastErrorAt = lastErrorAt;
+  this.lastActivityAt = lastErrorAt;
+
+  const setUpdate: Record<string, string | boolean | Date> = {
+    lastError: error,
+    lastErrorAt,
+    lastActivityAt: lastErrorAt,
+  };
+
+  const incUpdate: Record<string, number> = {
+    errorCount: 1,
+  };
 
   // Set error classification fields if provided
   if (errorType) {
     this.errorType = errorType;
+    setUpdate.errorType = errorType;
   }
   if (failureReason) {
     this.failureReason = failureReason;
+    setUpdate.failureReason = failureReason;
   }
 
   // Handle permanent errors - fail immediately without retry
   if (isPermanent) {
     this.isPermanentError = true;
     this.status = "failed";
+    setUpdate.isPermanentError = true;
   } else if (this.retryCount < this.maxRetries) {
     // Queue for retry
     this.status = "pending";
     this.retryCount += 1;
+    incUpdate.retryCount = 1;
   } else {
     // Max retries exceeded
     this.status = "failed";
   }
 
-  await this.save();
+  setUpdate.status = this.status;
+
+  await updateQueueDocument(this as IGuildProcessingQueue, {
+    $set: setUpdate,
+    $inc: incUpdate,
+  });
 };
 
 /**
  * Instance method to pause processing
  */
 GuildProcessingQueueSchema.methods.pause = async function () {
+  const pausedAt = new Date();
   this.status = "paused";
-  this.pausedAt = new Date();
-  this.lastActivityAt = new Date();
-  await this.save();
+  this.pausedAt = pausedAt;
+  this.lastActivityAt = pausedAt;
+
+  await updateQueueDocument(this as IGuildProcessingQueue, {
+    $set: {
+      status: this.status,
+      pausedAt,
+      lastActivityAt: pausedAt,
+    },
+  });
 };
 
 /**
  * Instance method to resume processing
  */
 GuildProcessingQueueSchema.methods.resume = async function () {
+  const lastActivityAt = new Date();
   this.status = "pending";
   this.pausedAt = undefined;
-  this.lastActivityAt = new Date();
-  await this.save();
+  this.lastActivityAt = lastActivityAt;
+
+  await updateQueueDocument(this as IGuildProcessingQueue, {
+    $set: {
+      status: this.status,
+      lastActivityAt,
+    },
+    $unset: {
+      pausedAt: 1,
+    },
+  });
 };
 
 // Type for the model with statics

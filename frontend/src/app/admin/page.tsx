@@ -728,7 +728,7 @@ export default function AdminPage() {
     setTriggerMessage(null);
     try {
       const result = await api.verifyAdminWarcraftLogsUserAuth();
-      setWclUserAuthStatus(result.status);
+      await refreshWclUserAuthStatus();
       setTriggerMessage({ type: "success", text: `Warcraft Logs user verified: ${result.user.name}` });
       setTimeout(() => setTriggerMessage(null), 5000);
     } catch (error) {

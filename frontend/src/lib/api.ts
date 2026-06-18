@@ -1237,7 +1237,7 @@ export const api = {
     return data;
   },
 
-  async verifyAdminWarcraftLogsUserAuth(): Promise<{ success: boolean; user: { id: number; name: string }; status: WarcraftLogsUserAuthStatus }> {
+  async verifyAdminWarcraftLogsUserAuth(): Promise<{ success: boolean; user: { id: number; name: string }; status?: Partial<WarcraftLogsUserAuthStatus> }> {
     const response = await fetch(`${API_URL}/api/admin/wcl-user/verify`, {
       method: "POST",
       credentials: "include",

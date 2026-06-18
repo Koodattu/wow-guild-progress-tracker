@@ -145,6 +145,11 @@ class BackgroundGuildProcessor {
     return errorMessage.includes("This report has been archived") && errorMessage.includes("/user API endpoint");
   }
 
+  private async isQueueItemStillPresent(queueItem: IGuildProcessingQueue): Promise<boolean> {
+    const existing = await GuildProcessingQueue.exists({ _id: queueItem._id });
+    return existing !== null;
+  }
+
   /**
    * Stop the background processor
    */
@@ -680,6 +685,11 @@ class BackgroundGuildProcessor {
       let deathEventsSaved = 0;
 
       for (const reportCode of reportCodes) {
+        if (!(await this.isQueueItemStillPresent(queueItem))) {
+          guildLog.info("[DeathRescan] Queue entry removed, stopping rescan");
+          return;
+        }
+
         await this.refreshProcessorPauseState();
         await rateLimitService.refreshSharedState();
 
