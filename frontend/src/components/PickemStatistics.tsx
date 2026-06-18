@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { LeaderboardEntry, PickemType } from "@/types";
 
 interface PickemStatisticsProps {
@@ -220,8 +220,6 @@ function PositionPieChart({ distribution, colorMap }: { distribution: PositionDi
 }
 
 export function PickemStatistics({ leaderboard, guildCount, type }: PickemStatisticsProps) {
-  const [expanded, setExpanded] = useState(false);
-
   const guildColorMap = useMemo(() => buildGuildColorMap(leaderboard), [leaderboard]);
 
   const combinations = useMemo(() => buildCombinations(leaderboard, guildCount), [leaderboard, guildCount]);
@@ -236,53 +234,48 @@ export function PickemStatistics({ leaderboard, guildCount, type }: PickemStatis
 
   return (
     <div>
-      <button type="button" onClick={() => setExpanded((prev) => !prev)} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors px-2 py-1">
-        <svg className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+      <div className="flex items-center gap-2 text-sm text-gray-300 px-2 py-1">
         📊 Prediction Statistics
         <span className="text-xs text-gray-500">({leaderboard.length} participants)</span>
-      </button>
+      </div>
 
-      {expanded && (
-        <div className="mt-2 bg-gray-800/50 rounded-lg p-5 border border-gray-700">
-          {combinations.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Most Popular Combinations</h4>
-              <div className="flex flex-col sm:flex-row gap-3">
-                {combinations.map((combo, index) => (
-                  <div key={combo.key} className="flex-1 bg-gray-700/40 rounded-lg p-3 border border-gray-600/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-bold text-white">#{index + 1}</span>
-                      <span className="text-xs text-gray-400">
-                        {combo.count} user{combo.count !== 1 ? "s" : ""} ({combo.percentage.toFixed(0)}%)
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      {combo.guilds.map((guild, pos) => (
-                        <div key={pos} className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-500 w-4 text-right shrink-0">{pos + 1}.</span>
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: guildColorMap.get(guild) || OTHERS_COLOR }} />
-                          <span className="text-gray-200 truncate">{guild}</span>
-                        </div>
-                      ))}
-                    </div>
+      <div className="mt-2 bg-gray-800/50 rounded-lg p-5 border border-gray-700">
+        {combinations.length > 0 && (
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Most Popular Combinations</h4>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {combinations.map((combo, index) => (
+                <div key={combo.key} className="flex-1 bg-gray-700/40 rounded-lg p-3 border border-gray-600/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold text-white">#{index + 1}</span>
+                    <span className="text-xs text-gray-400">
+                      {combo.count} user{combo.count !== 1 ? "s" : ""} ({combo.percentage.toFixed(0)}%)
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Pick Distribution by Position</h4>
-            <div className={`grid gap-3 ${gridCols}`}>
-              {positionDistributions.map((dist) => (
-                <PositionPieChart key={dist.position} distribution={dist} colorMap={guildColorMap} />
+                  <div className="space-y-1">
+                    {combo.guilds.map((guild, pos) => (
+                      <div key={pos} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 w-4 text-right shrink-0">{pos + 1}.</span>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: guildColorMap.get(guild) || OTHERS_COLOR }} />
+                        <span className="text-gray-200 truncate">{guild}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
+        )}
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Pick Distribution by Position</h4>
+          <div className={`grid gap-3 ${gridCols}`}>
+            {positionDistributions.map((dist) => (
+              <PositionPieChart key={dist.position} distribution={dist} colorMap={guildColorMap} />
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

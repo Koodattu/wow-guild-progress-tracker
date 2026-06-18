@@ -154,13 +154,6 @@ export default function CharacterRankingsPage() {
           <p className="text-gray-500 text-sm">{activeTabConfig.description}</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end lg:ml-auto">
-          <CharacterRankingsRaidPartitionSelector
-            raids={raidOptions}
-            selected={selectedRaidPartition}
-            onChange={handleRaidPartitionChange}
-            label={isMechanicsBackedTab ? "Raid" : undefined}
-            showPartitions={!isMechanicsBackedTab}
-          />
           <div className="inline-flex self-start rounded-md bg-gray-900/80 p-1 ring-1 ring-white/10 sm:self-auto">
             {CHARACTER_TABS.map((tab) => (
               <button
@@ -175,6 +168,13 @@ export default function CharacterRankingsPage() {
               </button>
             ))}
           </div>
+          <CharacterRankingsRaidPartitionSelector
+            raids={raidOptions}
+            selected={selectedRaidPartition}
+            onChange={handleRaidPartitionChange}
+            label={isMechanicsBackedTab ? "Raid" : undefined}
+            showPartitions={!isMechanicsBackedTab}
+          />
         </div>
       </div>
 
