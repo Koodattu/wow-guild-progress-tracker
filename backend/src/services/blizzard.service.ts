@@ -493,6 +493,14 @@ export class BlizzardApiClient {
   };
 
   /**
+   * Hardcoded raid name -> local icon filename overrides for raids without
+   * achievement media.
+   */
+  private static readonly RAID_ICON_FILENAME_OVERRIDES: Record<string, string> = {
+    Sporefall: "inv_achievement_raid_fungarian.jpg",
+  };
+
+  /**
    * Find achievement by raid name match (looks for raid achievements)
    */
   public async findAchievementByRaidName(raidName: string): Promise<{ id: number; name: string } | null> {
@@ -687,6 +695,24 @@ export class BlizzardApiClient {
    */
   private async _fetchRaidIconUrl(raidName: string): Promise<string | null> {
     try {
+      const iconFilenameOverride = BlizzardApiClient.RAID_ICON_FILENAME_OVERRIDES[raidName];
+      if (iconFilenameOverride) {
+        await RaidIcon.findOneAndUpdate(
+          { raidName },
+          {
+            raidName,
+            blizzardIconUrl: `manual:${iconFilenameOverride}`,
+            iconUrl: iconFilenameOverride,
+            achievementId: 0,
+            lastUpdated: new Date(),
+          },
+          { upsert: true, new: true },
+        );
+
+        logger.info(`✅ Found manual icon override for raid: ${raidName} -> ${iconFilenameOverride}`);
+        return iconFilenameOverride;
+      }
+
       // Check if we already have the icon cached
       const cachedIcon = await RaidIcon.findOne({ raidName });
       if (cachedIcon) {
