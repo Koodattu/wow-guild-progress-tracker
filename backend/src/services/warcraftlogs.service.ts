@@ -168,9 +168,12 @@ class WarcraftLogsService {
     return result.data as T;
   }
 
-  private isArchivedReportError(error: unknown): boolean {
+  private shouldRetryReportWithUserEndpoint(error: unknown): boolean {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return errorMessage.includes("This report has been archived") && errorMessage.includes("/user API endpoint");
+    return (
+      (errorMessage.includes("This report has been archived") && errorMessage.includes("/user API endpoint")) ||
+      errorMessage.includes("You do not have permission to view this report")
+    );
   }
 
   // Get guild reports without zone filter to see all available reports
@@ -1133,7 +1136,7 @@ class WarcraftLogsService {
       logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/client (report: ${reportCode}, ${fightIds.length} fights)`);
       return await this.query<any>(query, variables);
     } catch (error) {
-      if (!this.isArchivedReportError(error)) {
+      if (!this.shouldRetryReportWithUserEndpoint(error)) {
         throw error;
       }
 
@@ -1142,7 +1145,7 @@ class WarcraftLogsService {
       }
 
       try {
-        logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/user (archived retry, report: ${reportCode}, ${fightIds.length} fights)`);
+        logger.info(`[API REQUEST] WarcraftLogsService.getDeathEventsForReport - POST https://www.warcraftlogs.com/api/v2/user (user-auth retry, report: ${reportCode}, ${fightIds.length} fights)`);
         return await this.queryUser<any>(query, variables);
       } catch (userError) {
         const originalMessage = error instanceof Error ? error.message : String(error);
