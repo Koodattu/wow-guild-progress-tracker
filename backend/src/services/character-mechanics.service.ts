@@ -15,6 +15,8 @@ const SURVIVAL_WEIGHT = 0.5;
 const REPORT_LOOKUP_BATCH_SIZE = 500;
 const REPORT_GROUP_BATCH_SIZE = 200;
 const FIGHT_CURSOR_BATCH_SIZE = 1000;
+const DEATH_TIMING_EXPONENT = 1.15;
+const MIN_MECHANICS_LEADERBOARD_PULLS = 50;
 
 type Metric = "dps" | "hps";
 type Role = "dps" | "healer" | "tank";
@@ -49,6 +51,7 @@ type SurvivalStats = {
   earlyDeaths: number;
   scoreTotal: number;
   deathPercentTotal: number;
+  earlyDeathSeverityTotal: number;
 };
 
 type AppearanceIdentity = {
@@ -90,6 +93,11 @@ type MechanicsFight = {
   encounterName: string;
   duration: number;
   deaths?: IPlayerDeath[];
+};
+
+type DeathRecord = {
+  order: number;
+  deathPercent: number;
 };
 
 class CharacterMechanicsService {
@@ -314,6 +322,7 @@ class CharacterMechanicsService {
     encounterIds: number[],
   ): Promise<{ stats: Map<string, SurvivalStats>; fights: number; reports: number; appearances: number }> {
     const survivalByCharacterEncounter = new Map<string, SurvivalStats>();
+    const expectedKillDurationByEncounter = await this.getExpectedKillDurationsByEncounter(zoneId, encounterIds);
     const fightGroups = new Map<string, MechanicsFight[]>();
     const seenReports = new Set<string>();
     let fightCount = 0;
@@ -337,7 +346,7 @@ class CharacterMechanicsService {
       const reportCodes = Array.from(fightGroups.keys());
       const appearances = await this.findReportAppearances(reportCodes);
       appearanceLookupRows += appearances.length;
-      this.addSurvivalStats(Array.from(fightGroups.values()).flat(), appearances, survivalByCharacterEncounter);
+      this.addSurvivalStats(Array.from(fightGroups.values()).flat(), appearances, survivalByCharacterEncounter, expectedKillDurationByEncounter);
       fightGroups.clear();
     };
 
@@ -366,6 +375,38 @@ class CharacterMechanicsService {
       reports: seenReports.size,
       appearances: appearanceLookupRows,
     };
+  }
+
+  private async getExpectedKillDurationsByEncounter(zoneId: number, encounterIds: number[]): Promise<Map<number, number>> {
+    if (encounterIds.length === 0) return new Map();
+
+    const rows = (await Fight.aggregate([
+      {
+        $match: {
+          zoneId,
+          difficulty: MYTHIC_DIFFICULTY,
+          encounterID: { $in: encounterIds },
+          isKill: true,
+          duration: { $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: "$encounterID",
+          durations: { $push: "$duration" },
+        },
+      },
+    ]).allowDiskUse(true)) as Array<{ _id: number; durations: number[] }>;
+
+    const expectedDurations = new Map<number, number>();
+    for (const row of rows) {
+      const medianDuration = this.median(row.durations);
+      if (medianDuration !== null) {
+        expectedDurations.set(row._id, medianDuration);
+      }
+    }
+
+    return expectedDurations;
   }
 
   private async findReportAppearances(reportCodes: string[]): Promise<Array<AppearanceIdentity & { reportCode: string }>> {
@@ -404,6 +445,7 @@ class CharacterMechanicsService {
     fights: Array<{ reportCode: string; fightId: number; encounterID: number; duration: number; deaths?: IPlayerDeath[] }>,
     appearances: Array<AppearanceIdentity & { reportCode: string }>,
     survivalByCharacterEncounter: Map<string, SurvivalStats>,
+    expectedKillDurationByEncounter: Map<number, number>,
   ): void {
     const appearancesByReport = new Map<string, Map<string, AppearanceIdentity & { reportCode: string }>>();
     const appearancesByReportFight = new Map<string, Map<string, AppearanceIdentity & { reportCode: string }>>();
@@ -439,13 +481,14 @@ class CharacterMechanicsService {
       const reportParticipants = appearancesByReport.get(fight.reportCode);
       if (!reportParticipants?.size || !fight.duration || fight.duration <= 0) continue;
 
-      const deathsByCharacter = new Map<string, { death: IPlayerDeath; order: number }>();
+      const deathsByCharacter = new Map<string, DeathRecord[]>();
       const deaths = [...(fight.deaths ?? [])].sort((a, b) => (a.deathTime ?? a.timestamp ?? 0) - (b.deathTime ?? b.timestamp ?? 0));
       const exactMap = exactIdentityByReport.get(fight.reportCode) ?? new Map();
       const nameMap = nameIdentityByReport.get(fight.reportCode) ?? new Map();
       const exactFightParticipants = appearancesByReportFight.get(this.getReportFightKey(fight.reportCode, fight.fightId));
       const fallbackParticipants = reportsWithFightParticipants.has(fight.reportCode) ? undefined : reportParticipants;
       const participants = new Map(exactFightParticipants?.size ? exactFightParticipants : fallbackParticipants);
+      const expectedDuration = expectedKillDurationByEncounter.get(fight.encounterID) ?? fight.duration;
 
       let matchedDeathOrder = 0;
       for (const death of deaths) {
@@ -456,8 +499,13 @@ class CharacterMechanicsService {
         matchedDeathOrder += 1;
         const characterKey = this.getCharacterKey(appearance.characterId);
         if (!deathsByCharacter.has(characterKey)) {
-          deathsByCharacter.set(characterKey, { death, order: matchedDeathOrder });
+          deathsByCharacter.set(characterKey, []);
         }
+        const deathTime = Number.isFinite(death.deathTime) ? death.deathTime : 0;
+        deathsByCharacter.get(characterKey)!.push({
+          order: matchedDeathOrder,
+          deathPercent: this.clamp(deathTime / expectedDuration, 0, 1),
+        });
         participants.set(characterKey, appearance);
       }
 
@@ -470,18 +518,22 @@ class CharacterMechanicsService {
           earlyDeaths: 0,
           scoreTotal: 0,
           deathPercentTotal: 0,
+          earlyDeathSeverityTotal: 0,
         };
 
-        const deathRecord = deathsByCharacter.get(this.getCharacterKey(participant.characterId));
+        const deathRecords = deathsByCharacter.get(this.getCharacterKey(participant.characterId)) ?? [];
         stats.pulls += 1;
 
-        if (deathRecord) {
-          const deathTime = Number.isFinite(deathRecord.death.deathTime) ? deathRecord.death.deathTime : 0;
-          const deathPercent = this.clamp(deathTime / fight.duration, 0, 1);
-          stats.deaths += 1;
-          stats.deathPercentTotal += deathPercent;
-          if (deathRecord.order <= 3) stats.earlyDeaths += 1;
-          stats.scoreTotal += this.scoreDeath(deathPercent, deathRecord.order);
+        if (deathRecords.length > 0) {
+          for (const deathRecord of deathRecords) {
+            stats.deaths += 1;
+            stats.deathPercentTotal += deathRecord.deathPercent;
+            if (deathRecord.order <= 3) {
+              stats.earlyDeaths += 1;
+              stats.earlyDeathSeverityTotal += 1 - deathRecord.deathPercent;
+            }
+          }
+          stats.scoreTotal += this.scorePullDeaths(deathRecords);
         } else {
           stats.survivedPulls += 1;
           stats.scoreTotal += 100;
@@ -583,6 +635,7 @@ class CharacterMechanicsService {
       metric,
       deathDataAvailable: true,
       survivalScore: { $ne: null },
+      pulls: { $gte: MIN_MECHANICS_LEADERBOARD_PULLS },
     };
 
     if (classId !== undefined) baseQuery.classID = classId;
@@ -684,6 +737,7 @@ class CharacterMechanicsService {
       entry.earlyDeaths = totals.earlyDeaths;
       entry.averageDeathPercent = totals.averageDeathPercent;
       entry.deathDataAvailable = totals.deathDataAvailable;
+      if (entry.pulls < MIN_MECHANICS_LEADERBOARD_PULLS) continue;
       entry.specName = normalizedSpecName;
       scoredEntries.push(entry);
     }
@@ -799,7 +853,7 @@ class CharacterMechanicsService {
     }
 
     return {
-      survivalScore: this.roundScore(stats.scoreTotal / stats.pulls),
+      survivalScore: this.capSurvivalScore(stats.scoreTotal / stats.pulls, stats),
       pulls: stats.pulls,
       deaths: stats.deaths,
       survivedPulls: stats.survivedPulls,
@@ -833,11 +887,12 @@ class CharacterMechanicsService {
       };
     }
 
-    const score = this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.score, 0) / bossScores.length);
     const parseScore = this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.parseScore, 0) / bossScores.length);
     const survivalScores = bossScores.filter((bossScore) => bossScore.survivalScore !== null);
+    const survivalPulls = survivalScores.reduce((sum, bossScore) => sum + bossScore.pulls, 0);
     const survivalScore =
-      survivalScores.length > 0 ? this.roundScore(survivalScores.reduce((sum, bossScore) => sum + (bossScore.survivalScore ?? 0), 0) / survivalScores.length) : null;
+      survivalPulls > 0 ? this.roundScore(survivalScores.reduce((sum, bossScore) => sum + (bossScore.survivalScore ?? 0) * bossScore.pulls, 0) / survivalPulls) : null;
+    const score = survivalScore !== null ? this.combineScores(parseScore, survivalScore) : this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.score, 0) / bossScores.length);
     const pulls = bossScores.reduce((sum, bossScore) => sum + bossScore.pulls, 0);
     const deaths = bossScores.reduce((sum, bossScore) => sum + bossScore.deaths, 0);
     const survivedPulls = bossScores.reduce((sum, bossScore) => sum + bossScore.survivedPulls, 0);
@@ -862,9 +917,49 @@ class CharacterMechanicsService {
   }
 
   private scoreDeath(deathPercent: number, deathOrder: number): number {
-    const orderWeight = deathOrder <= 1 ? 1 : deathOrder === 2 ? 0.85 : deathOrder === 3 ? 0.7 : 0.45;
-    const penalty = 100 * Math.pow(1 - deathPercent, 1.6) * orderWeight;
+    const orderWeight = deathOrder <= 1 ? 1 : deathOrder === 2 ? 0.9 : deathOrder === 3 ? 0.8 : 0.65;
+    const floorPenalty = deathOrder <= 1 ? 10 : deathOrder === 2 ? 8 : deathOrder === 3 ? 6 : 4;
+    const penalty = floorPenalty + (100 - floorPenalty) * Math.pow(1 - deathPercent, DEATH_TIMING_EXPONENT) * orderWeight;
     return this.roundScore(this.clamp(100 - penalty, 0, 100));
+  }
+
+  private scorePullDeaths(deathRecords: DeathRecord[]): number {
+    if (deathRecords.length === 0) return 100;
+
+    const [firstDeath, ...repeatDeaths] = deathRecords;
+    let score = this.scoreDeath(firstDeath.deathPercent, firstDeath.order);
+
+    for (let index = 0; index < repeatDeaths.length; index += 1) {
+      score -= this.scoreRepeatDeathPenalty(repeatDeaths[index].deathPercent, index + 1);
+    }
+
+    return this.roundScore(this.clamp(score, 0, 100));
+  }
+
+  private scoreRepeatDeathPenalty(deathPercent: number, repeatIndex: number): number {
+    const repeatWeight = Math.min(1.75, 1 + repeatIndex * 0.25);
+    return this.roundScore((8 + 20 * Math.pow(1 - deathPercent, 0.8)) * repeatWeight);
+  }
+
+  private capSurvivalScore(rawScore: number, stats: SurvivalStats): number {
+    const deathEventRate = stats.deaths / stats.pulls;
+    const deathPullRate = (stats.pulls - stats.survivedPulls) / stats.pulls;
+    const earlyDeathSeverityRate = stats.earlyDeathSeverityTotal / stats.pulls;
+    const deathEventCap = 100 - 35 * Math.min(deathEventRate, 1) - 25 * Math.max(0, deathEventRate - 1);
+    const deathPullCap = 100 - 25 * Math.pow(Math.min(deathPullRate, 1), 0.85);
+    const earlyDeathCap = 100 - 90 * Math.min(earlyDeathSeverityRate, 1);
+
+    return this.roundScore(this.clamp(Math.min(rawScore, deathEventCap, deathPullCap, earlyDeathCap), 0, 100));
+  }
+
+  private median(values: number[]): number | null {
+    const sorted = values.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+    if (sorted.length === 0) return null;
+
+    const middle = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 1) return sorted[middle];
+
+    return (sorted[middle - 1] + sorted[middle]) / 2;
   }
 
   private toUniqueFilter(entry: any): Record<string, unknown> {
