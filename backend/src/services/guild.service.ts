@@ -1941,6 +1941,13 @@ class GuildService {
 
     // Sort all guilds together in a single unified ranking.
     // Mythic guilds always rank above heroic-only guilds.
+    const isComplete = (entry: RankEntry) => entry.progress.totalBosses > 0 && entry.effectiveKills >= entry.progress.totalBosses;
+    const getClearTime = (entry: RankEntry): number => {
+      const lastKilledBoss = this.getLastKilledBossForSummary(entry.progress.bosses);
+      const clearTime = lastKilledBoss?.firstKillTime ? new Date(lastKilledBoss.firstKillTime).getTime() : Infinity;
+      return Number.isFinite(clearTime) ? clearTime : Infinity;
+    };
+
     const sortedEntries = rankEntries.sort((a, b) => {
       // Rule 0: Mythic always beats heroic-only
       if (a.difficulty !== b.difficulty) {
@@ -1952,7 +1959,20 @@ class GuildService {
         return b.effectiveKills - a.effectiveKills; // Higher is better
       }
 
-      // Rule 2: Best pull progress on current (next unkilled) boss
+      // Rule 2: Fully cleared guilds with the same kills are ordered by clear time.
+      // Completed raids do not have a current boss, so without this fallback they
+      // can collapse to alphabetical order when historical world ranks are missing.
+      const aIsComplete = isComplete(a);
+      const bIsComplete = isComplete(b);
+      if (aIsComplete && bIsComplete) {
+        const aClearTime = getClearTime(a);
+        const bClearTime = getClearTime(b);
+        if (aClearTime !== bClearTime) {
+          return aClearTime - bClearTime; // Earlier clear is better
+        }
+      }
+
+      // Rule 3: Best pull progress on current (next unkilled) boss
       // This takes priority over world rank because world rank reflects the rank
       // at the time of the LAST kill, not current progression on the next boss.
       // Use effectiveKills to find the current boss — when RaiderIO shows more kills
@@ -1986,7 +2006,7 @@ class GuildService {
         return aHasPullData ? -1 : 1;
       }
 
-      // Rule 3: World rank (from WCL API or Raider.IO fallback)
+      // Rule 4: World rank (from WCL API or Raider.IO fallback)
       const aWorldRank = a.progress.worldRank ?? Infinity;
       const bWorldRank = b.progress.worldRank ?? Infinity;
       if (aWorldRank !== bWorldRank) {
