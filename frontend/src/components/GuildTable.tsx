@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useState, memo, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
-import { FaTwitch } from "react-icons/fa";
+import { FaRegQuestionCircle, FaTwitch } from "react-icons/fa";
 
 type BestVodLink = NonNullable<GuildListItem["bestVodLinks"]>[number];
 type VodPhaseLink = {
@@ -274,6 +274,29 @@ function MobileStat({ label, children, className = "text-gray-300" }: { label: s
       <div className={`truncate text-xs font-bold leading-tight ${className}`}>{children}</div>
       <div className="mt-0.5 truncate text-[9px] font-medium uppercase leading-none text-gray-500">{label}</div>
     </div>
+  );
+}
+
+function HeaderWithTooltip({ label, tooltip, tooltipId }: { label: ReactNode; tooltip: string; tooltipId: string }) {
+  return (
+    <span className="inline-flex items-center justify-center gap-1.5">
+      {label}
+      <button
+        type="button"
+        className="group relative inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-500 transition-colors hover:text-gray-300 focus:outline-none focus-visible:text-gray-300 focus-visible:ring-2 focus-visible:ring-gray-500/60"
+        aria-label={tooltip}
+        aria-describedby={tooltipId}
+      >
+        <FaRegQuestionCircle className="h-3.5 w-3.5" aria-hidden="true" />
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 translate-y-1 rounded bg-gray-950 px-3 py-2 text-left text-xs font-normal leading-snug text-gray-200 opacity-0 shadow-xl ring-1 ring-white/10 transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+        >
+          {tooltip}
+        </span>
+      </button>
+    </span>
   );
 }
 
@@ -620,8 +643,12 @@ export default function GuildTable({ guilds, onGuildClick, onRaidProgressClick, 
               <th className="px-4 py-3 text-center text-sm font-semibold text-purple-500">{t("heroic")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("pulls")}</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">%</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("progress")}</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">{t("total")}</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">
+                <HeaderWithTooltip label={t("progress")} tooltip={t("progressTooltip")} tooltipId="guild-progress-tooltip" />
+              </th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-300">
+                <HeaderWithTooltip label={t("total")} tooltip={t("totalTooltip")} tooltipId="guild-total-tooltip" />
+              </th>
               <th className="px-3 py-3 text-center text-sm font-semibold text-gray-300">VOD</th>
             </tr>
           </thead>

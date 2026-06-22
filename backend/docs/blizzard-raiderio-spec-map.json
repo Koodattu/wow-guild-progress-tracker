@@ -1,0 +1,798 @@
+{
+  "generatedAt": "2026-06-22T19:30:25.680Z",
+  "source": {
+    "region": "us",
+    "namespace": "static-us",
+    "locale": "en_US",
+    "playableClassIndexUrl": "https://us.api.blizzard.com/data/wow/playable-class/index?namespace=static-us&locale=en_US"
+  },
+  "mappingRule": "Raider.IO spec_N fields are the zero-based slots for the Blizzard playable class specialization order; spec_0 maps to Blizzard specialization position 1, spec_1 to position 2, and so on.",
+  "notes": [
+    "The Blizzard class IDs in this document come from the Blizzard Playable Class API and are not interchangeable with WarcraftLogs/internal class IDs.",
+    "Unused Raider.IO fields are represented as null in the JSON artifact and as unused rows in the Markdown table."
+  ],
+  "classes": [
+    {
+      "blizzardClassId": 1,
+      "className": "Warrior",
+      "classSlug": "warrior",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/1?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 71,
+          "specName": "Arms",
+          "specSlug": "arms"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 72,
+          "specName": "Fury",
+          "specSlug": "fury"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 73,
+          "specName": "Protection",
+          "specSlug": "protection"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 71,
+          "specName": "Arms",
+          "specSlug": "arms"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 72,
+          "specName": "Fury",
+          "specSlug": "fury"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 73,
+          "specName": "Protection",
+          "specSlug": "protection"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 2,
+      "className": "Paladin",
+      "classSlug": "paladin",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/2?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 65,
+          "specName": "Holy",
+          "specSlug": "holy"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 66,
+          "specName": "Protection",
+          "specSlug": "protection"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 70,
+          "specName": "Retribution",
+          "specSlug": "retribution"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 65,
+          "specName": "Holy",
+          "specSlug": "holy"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 66,
+          "specName": "Protection",
+          "specSlug": "protection"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 70,
+          "specName": "Retribution",
+          "specSlug": "retribution"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 3,
+      "className": "Hunter",
+      "classSlug": "hunter",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/3?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 253,
+          "specName": "Beast Mastery",
+          "specSlug": "beast-mastery"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 254,
+          "specName": "Marksmanship",
+          "specSlug": "marksmanship"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 255,
+          "specName": "Survival",
+          "specSlug": "survival"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 253,
+          "specName": "Beast Mastery",
+          "specSlug": "beast-mastery"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 254,
+          "specName": "Marksmanship",
+          "specSlug": "marksmanship"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 255,
+          "specName": "Survival",
+          "specSlug": "survival"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 4,
+      "className": "Rogue",
+      "classSlug": "rogue",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/4?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 259,
+          "specName": "Assassination",
+          "specSlug": "assassination"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 260,
+          "specName": "Outlaw",
+          "specSlug": "outlaw"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 261,
+          "specName": "Subtlety",
+          "specSlug": "subtlety"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 259,
+          "specName": "Assassination",
+          "specSlug": "assassination"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 260,
+          "specName": "Outlaw",
+          "specSlug": "outlaw"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 261,
+          "specName": "Subtlety",
+          "specSlug": "subtlety"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 5,
+      "className": "Priest",
+      "classSlug": "priest",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/5?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 256,
+          "specName": "Discipline",
+          "specSlug": "discipline"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 257,
+          "specName": "Holy",
+          "specSlug": "holy"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 258,
+          "specName": "Shadow",
+          "specSlug": "shadow"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 256,
+          "specName": "Discipline",
+          "specSlug": "discipline"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 257,
+          "specName": "Holy",
+          "specSlug": "holy"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 258,
+          "specName": "Shadow",
+          "specSlug": "shadow"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 6,
+      "className": "Death Knight",
+      "classSlug": "death-knight",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/6?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 250,
+          "specName": "Blood",
+          "specSlug": "blood"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 251,
+          "specName": "Frost",
+          "specSlug": "frost"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 252,
+          "specName": "Unholy",
+          "specSlug": "unholy"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 250,
+          "specName": "Blood",
+          "specSlug": "blood"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 251,
+          "specName": "Frost",
+          "specSlug": "frost"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 252,
+          "specName": "Unholy",
+          "specSlug": "unholy"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 7,
+      "className": "Shaman",
+      "classSlug": "shaman",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/7?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 262,
+          "specName": "Elemental",
+          "specSlug": "elemental"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 263,
+          "specName": "Enhancement",
+          "specSlug": "enhancement"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 264,
+          "specName": "Restoration",
+          "specSlug": "restoration"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 262,
+          "specName": "Elemental",
+          "specSlug": "elemental"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 263,
+          "specName": "Enhancement",
+          "specSlug": "enhancement"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 264,
+          "specName": "Restoration",
+          "specSlug": "restoration"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 8,
+      "className": "Mage",
+      "classSlug": "mage",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/8?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 62,
+          "specName": "Arcane",
+          "specSlug": "arcane"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 63,
+          "specName": "Fire",
+          "specSlug": "fire"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 64,
+          "specName": "Frost",
+          "specSlug": "frost"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 62,
+          "specName": "Arcane",
+          "specSlug": "arcane"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 63,
+          "specName": "Fire",
+          "specSlug": "fire"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 64,
+          "specName": "Frost",
+          "specSlug": "frost"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 9,
+      "className": "Warlock",
+      "classSlug": "warlock",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/9?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 265,
+          "specName": "Affliction",
+          "specSlug": "affliction"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 266,
+          "specName": "Demonology",
+          "specSlug": "demonology"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 267,
+          "specName": "Destruction",
+          "specSlug": "destruction"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 265,
+          "specName": "Affliction",
+          "specSlug": "affliction"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 266,
+          "specName": "Demonology",
+          "specSlug": "demonology"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 267,
+          "specName": "Destruction",
+          "specSlug": "destruction"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 10,
+      "className": "Monk",
+      "classSlug": "monk",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/10?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 268,
+          "specName": "Brewmaster",
+          "specSlug": "brewmaster"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 269,
+          "specName": "Windwalker",
+          "specSlug": "windwalker"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 270,
+          "specName": "Mistweaver",
+          "specSlug": "mistweaver"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 268,
+          "specName": "Brewmaster",
+          "specSlug": "brewmaster"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 269,
+          "specName": "Windwalker",
+          "specSlug": "windwalker"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 270,
+          "specName": "Mistweaver",
+          "specSlug": "mistweaver"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 11,
+      "className": "Druid",
+      "classSlug": "druid",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/11?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 102,
+          "specName": "Balance",
+          "specSlug": "balance"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 103,
+          "specName": "Feral",
+          "specSlug": "feral"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 104,
+          "specName": "Guardian",
+          "specSlug": "guardian"
+        },
+        {
+          "raiderIoField": "spec_3",
+          "raiderIoSpecIndex": 3,
+          "blizzardSpecIndex": 4,
+          "blizzardSpecId": 105,
+          "specName": "Restoration",
+          "specSlug": "restoration"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 102,
+          "specName": "Balance",
+          "specSlug": "balance"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 103,
+          "specName": "Feral",
+          "specSlug": "feral"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 104,
+          "specName": "Guardian",
+          "specSlug": "guardian"
+        },
+        "spec_3": {
+          "raiderIoField": "spec_3",
+          "raiderIoSpecIndex": 3,
+          "blizzardSpecIndex": 4,
+          "blizzardSpecId": 105,
+          "specName": "Restoration",
+          "specSlug": "restoration"
+        }
+      }
+    },
+    {
+      "blizzardClassId": 12,
+      "className": "Demon Hunter",
+      "classSlug": "demon-hunter",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/12?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 577,
+          "specName": "Havoc",
+          "specSlug": "havoc"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 581,
+          "specName": "Vengeance",
+          "specSlug": "vengeance"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 1480,
+          "specName": "Devourer",
+          "specSlug": "devourer"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 577,
+          "specName": "Havoc",
+          "specSlug": "havoc"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 581,
+          "specName": "Vengeance",
+          "specSlug": "vengeance"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 1480,
+          "specName": "Devourer",
+          "specSlug": "devourer"
+        },
+        "spec_3": null
+      }
+    },
+    {
+      "blizzardClassId": 13,
+      "className": "Evoker",
+      "classSlug": "evoker",
+      "sourceUrl": "https://us.api.blizzard.com/data/wow/playable-class/13?namespace=static-us&locale=en_US",
+      "specializations": [
+        {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 1467,
+          "specName": "Devastation",
+          "specSlug": "devastation"
+        },
+        {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 1468,
+          "specName": "Preservation",
+          "specSlug": "preservation"
+        },
+        {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 1473,
+          "specName": "Augmentation",
+          "specSlug": "augmentation"
+        }
+      ],
+      "raiderIoSlots": {
+        "spec_0": {
+          "raiderIoField": "spec_0",
+          "raiderIoSpecIndex": 0,
+          "blizzardSpecIndex": 1,
+          "blizzardSpecId": 1467,
+          "specName": "Devastation",
+          "specSlug": "devastation"
+        },
+        "spec_1": {
+          "raiderIoField": "spec_1",
+          "raiderIoSpecIndex": 1,
+          "blizzardSpecIndex": 2,
+          "blizzardSpecId": 1468,
+          "specName": "Preservation",
+          "specSlug": "preservation"
+        },
+        "spec_2": {
+          "raiderIoField": "spec_2",
+          "raiderIoSpecIndex": 2,
+          "blizzardSpecIndex": 3,
+          "blizzardSpecId": 1473,
+          "specName": "Augmentation",
+          "specSlug": "augmentation"
+        },
+        "spec_3": null
+      }
+    }
+  ]
+}
