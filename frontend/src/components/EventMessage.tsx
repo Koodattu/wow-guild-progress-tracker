@@ -10,12 +10,12 @@ import IconImage from "@/components/IconImage";
 // Inline guild name with optional crest, linked to guild profile
 function GuildName({ event }: { event: Event }) {
   const inner = (
-    <span className="inline-flex items-center gap-1 align-middle">
-      <span className="w-5 h-5 shrink-0 inline-block">
-        <GuildCrest crest={event.guildCrest} size={128} className="scale-[0.156] origin-top-left" drawFactionCircle={false} />
+    <>
+      <span className="mr-1 inline-block h-4 w-4 overflow-hidden align-[-3px]">
+        <GuildCrest crest={event.guildCrest} size={128} className="scale-[0.125] origin-top-left" drawFactionCircle={false} />
       </span>
       <span className="font-semibold">{event.guildName}</span>
-    </span>
+    </>
   );
 
   if (event.guildRealm) {
@@ -39,8 +39,10 @@ function BossName({ event }: { event: Event }) {
   const bossIconUrl = event.bossIconUrl ?? (bosses.find((boss) => boss.id === event.bossId) ?? bosses.find((boss) => boss.name === event.bossName))?.iconUrl;
 
   return (
-    <span className="align-middle">
-      {bossIconUrl && <IconImage iconFilename={bossIconUrl} alt={event.bossName} width={18} height={18} className="mr-1 inline-block rounded align-[-4px]" />}
+    <span>
+      {bossIconUrl && (
+        <IconImage iconFilename={bossIconUrl} alt={event.bossName} width={16} height={16} className="mr-1 inline-block h-4 w-4 rounded align-[-3px] object-cover" />
+      )}
       <span className="break-words font-semibold">{event.bossName}</span>
     </span>
   );
