@@ -102,6 +102,11 @@ interface GuildProgressUpdateResult {
   isInitialFetch: boolean;
 }
 
+interface CalculateGuildStatisticsOptions {
+  recalculateSchedule?: boolean;
+  createEvents?: boolean;
+}
+
 type LatestReportDifficulty = "mythic" | "heroic" | "normal" | "lfr" | "unknown";
 
 interface LatestReportBossSummary {
@@ -1051,11 +1056,11 @@ class GuildService {
           const targetRaidIds = raidIds || (currentTierOnly ? CURRENT_RAID_IDS : null);
           if (targetRaidIds) {
             for (const raidId of targetRaidIds) {
-              await this.calculateGuildStatistics(guild, raidId);
+              await this.calculateGuildStatistics(guild, raidId, { createEvents: false });
             }
           } else {
             // Recalculate for all tracked raids
-            await this.calculateGuildStatistics(guild, null);
+            await this.calculateGuildStatistics(guild, null, { createEvents: false });
           }
 
           // Save the guild with updated statistics
@@ -2054,7 +2059,7 @@ class GuildService {
       hasNewData = await this.performInitialFetch(guild);
 
       // Calculate statistics from database fights for ALL tracked raids (initial setup)
-      await this.calculateGuildStatistics(guild, null);
+      await this.calculateGuildStatistics(guild, null, { createEvents: false });
     } else {
       // Update: Only check the current raids for new reports
       getGuildLogger(guild.name, guild.realm).info(`UPDATE - checking only current raids (IDs: ${CURRENT_RAID_IDS.join(", ")})`);
@@ -2503,7 +2508,7 @@ class GuildService {
     // Always recalculate statistics to ensure accuracy, even if no new fights were found
     guildLog.info("Recalculating statistics for all current raids...");
     for (const raidId of CURRENT_RAID_IDS) {
-      await this.calculateGuildStatistics(guild, raidId);
+      await this.calculateGuildStatistics(guild, raidId, { createEvents: totalNewFights > 0 });
     }
     guildLog.info("Statistics recalculated");
 
@@ -2915,8 +2920,9 @@ class GuildService {
   // Calculate guild statistics from database fights
   // If raidId is provided, only calculate for that raid (used during updates)
   // If raidId is null, calculate for all tracked raids (used during initial fetch)
-  async calculateGuildStatistics(guild: IGuild, raidId: number | null, options: { recalculateSchedule?: boolean } = {}): Promise<void> {
+  async calculateGuildStatistics(guild: IGuild, raidId: number | null, options: CalculateGuildStatisticsOptions = {}): Promise<void> {
     const recalculateSchedule = options.recalculateSchedule ?? true;
+    const createEvents = options.createEvents ?? true;
     const guildLog = getGuildLogger(guild.name, guild.realm);
     if (raidId !== null) {
       guildLog.info(`Calculating statistics for current raid only (ID: ${raidId})`);
@@ -2928,8 +2934,8 @@ class GuildService {
       }
 
       // Calculate for both difficulties
-      await this.calculateRaidStatistics(guild, raidData, "mythic");
-      await this.calculateRaidStatistics(guild, raidData, "heroic");
+      await this.calculateRaidStatistics(guild, raidData, "mythic", createEvents);
+      await this.calculateRaidStatistics(guild, raidData, "heroic", createEvents);
     } else {
       guildLog.info("Calculating statistics from database fights for all tracked raids");
 
@@ -2942,8 +2948,8 @@ class GuildService {
         }
 
         // Calculate for both difficulties
-        await this.calculateRaidStatistics(guild, raidData, "mythic");
-        await this.calculateRaidStatistics(guild, raidData, "heroic");
+        await this.calculateRaidStatistics(guild, raidData, "mythic", createEvents);
+        await this.calculateRaidStatistics(guild, raidData, "heroic", createEvents);
       }
     }
 
@@ -3284,7 +3290,7 @@ class GuildService {
   // Calculate statistics for a specific raid and difficulty from database fights
   // IMPORTANT: This method now properly filters fights by the raid's boss encounter IDs
   // to prevent unrelated bosses from being included in the statistics
-  private async calculateRaidStatistics(guild: IGuild, raidData: IRaid, difficulty: "mythic" | "heroic"): Promise<void> {
+  private async calculateRaidStatistics(guild: IGuild, raidData: IRaid, difficulty: "mythic" | "heroic", createEvents: boolean): Promise<void> {
     const guildLog = getGuildLogger(guild.name, guild.realm);
     const difficultyId = difficulty === "mythic" ? DIFFICULTIES.MYTHIC : DIFFICULTIES.HEROIC;
 
@@ -3715,13 +3721,18 @@ class GuildService {
 
       if (bossProgress) {
         // Check if we should create events
-        await this.checkAndCreateEvents(guild, raidProgress, bossProgress, bossData);
+        if (createEvents) {
+          await this.checkAndCreateEvents(guild, raidProgress, bossProgress, bossData);
+        }
 
         // Update existing boss progress
         Object.assign(bossProgress, bossData);
       } else {
         // New boss progress
         guildLog.info(`Adding new boss to ${difficulty} progress: ${bossData.bossName} (${bossData.kills} kills, ${bossData.pullCount} pulls)`);
+        if (createEvents) {
+          await this.checkAndCreateEvents(guild, raidProgress, this.createUnstartedBossProgress(bossData), bossData);
+        }
         raidProgress.bosses.push(bossData);
       }
     }
@@ -3895,6 +3906,35 @@ class GuildService {
     return phaseLinks;
   }
 
+  private createUnstartedBossProgress(boss: IBossProgress): IBossProgress {
+    return {
+      bossId: boss.bossId,
+      bossName: boss.bossName,
+      kills: 0,
+      bestPercent: 100,
+      pullCount: 0,
+      timeSpent: 0,
+      pullHistory: [],
+      lastUpdated: boss.lastUpdated,
+    };
+  }
+
+  private async getBestPullEventTimestamp(boss: IBossProgress): Promise<Date> {
+    if (boss.bestPullReportCode && boss.bestPullFightId) {
+      const bestPullFight = await Fight.findOne({ reportCode: boss.bestPullReportCode, fightId: boss.bestPullFightId }, { timestamp: 1 });
+      if (bestPullFight?.timestamp) {
+        return bestPullFight.timestamp;
+      }
+    }
+
+    const firstPullTimestamp = boss.pullHistory?.[0]?.timestamp;
+    if (firstPullTimestamp) {
+      return firstPullTimestamp instanceof Date ? firstPullTimestamp : new Date(firstPullTimestamp);
+    }
+
+    return new Date();
+  }
+
   private async checkAndCreateEvents(guild: IGuild, raidProgress: IRaidProgress, oldBoss: IBossProgress, newBoss: IBossProgress): Promise<void> {
     let eventCreated = false;
 
@@ -3963,27 +4003,27 @@ class GuildService {
       }
     }
 
-    // Check for new best pull (improvement of at least 5% lower health)
-    if (oldBoss.bestPercent - newBoss.bestPercent >= 5 && newBoss.kills === 0) {
-      // Deduplicate: check if a best_pull event already exists at or below this percent
-      const existingPullEvent = await Event.findOne({
+    // Check for new best pull. The threshold is measured from the best emitted event,
+    // not the last stored boss progress, so sub-5% improvements can accumulate.
+    if (newBoss.kills === 0 && newBoss.pullCount > 0 && Number.isFinite(newBoss.bestPercent)) {
+      const bestPullEvent = await Event.findOne({
         type: "best_pull",
         guildId: guild._id,
         bossId: newBoss.bossId,
         difficulty: raidProgress.difficulty,
         raidId: raidProgress.raidId,
-        "data.bestPercent": { $lte: newBoss.bestPercent },
-      });
+        "data.bestPercent": { $exists: true },
+      })
+        .sort({ "data.bestPercent": 1 })
+        .select("data.bestPercent");
 
-      if (!existingPullEvent) {
-        // Use actual fight timestamp for correct chronological ordering vs boss_kill events
-        let bestPullTimestamp = new Date();
-        if (newBoss.bestPullReportCode && newBoss.bestPullFightId) {
-          const bestPullFight = await Fight.findOne({ reportCode: newBoss.bestPullReportCode, fightId: newBoss.bestPullFightId }, { timestamp: 1 });
-          if (bestPullFight?.timestamp) {
-            bestPullTimestamp = bestPullFight.timestamp;
-          }
-        }
+      const bestPullEventPercent = typeof bestPullEvent?.data?.bestPercent === "number" ? bestPullEvent.data.bestPercent : undefined;
+      const hasEventAtOrBelowCurrent = bestPullEventPercent !== undefined && bestPullEventPercent <= newBoss.bestPercent;
+      const isFirstBestPullEvent = bestPullEventPercent === undefined;
+      const improvedSinceLastEvent = bestPullEventPercent !== undefined && bestPullEventPercent - newBoss.bestPercent >= 5;
+
+      if (!hasEventAtOrBelowCurrent && (isFirstBestPullEvent || improvedSinceLastEvent)) {
+        const bestPullTimestamp = await this.getBestPullEventTimestamp(newBoss);
 
         await Event.create({
           type: "best_pull",
@@ -4013,7 +4053,7 @@ class GuildService {
           await this.updateCurrentRaidsWorldRanking((guild._id as mongoose.Types.ObjectId).toString());
           await this.calculateGuildRankingsForRaid(raidProgress.raidId);
         }
-      } else {
+      } else if (hasEventAtOrBelowCurrent) {
         getGuildLogger(guild.name, guild.realm).info(`Skipping duplicate best_pull event for ${newBoss.bossName} (${raidProgress.difficulty}, ${newBoss.bestPercent.toFixed(1)}%)`);
       }
     }

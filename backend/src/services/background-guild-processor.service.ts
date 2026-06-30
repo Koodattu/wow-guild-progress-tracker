@@ -430,7 +430,7 @@ class BackgroundGuildProcessor {
       // Trigger statistics calculation for the newly fetched guild
       guildLog.info("Triggering statistics recalculation for newly fetched guild");
       try {
-        await guildService.calculateGuildStatistics(guild, null); // null = all raids
+        await guildService.calculateGuildStatistics(guild, null, { createEvents: false }); // null = all raids
         await guild.save();
         guildLog.info("Statistics recalculation complete");
       } catch (statsError) {
@@ -1140,7 +1140,7 @@ class BackgroundGuildProcessor {
       guildLog.info("[StatsRecalc] Starting statistics recalculation");
       await queueItem.updateProgress(0, 0, 0, 1);
 
-      await guildService.calculateGuildStatistics(guild, null);
+      await guildService.calculateGuildStatistics(guild, null, { createEvents: false });
       await guild.save();
 
       guildLog.info("[StatsRecalc] Statistics recalculated, warming caches");
