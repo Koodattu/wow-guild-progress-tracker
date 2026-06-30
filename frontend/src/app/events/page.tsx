@@ -15,6 +15,7 @@ export default function EventsPage() {
     selectedDifficulties,
     selectedGuild,
     filters,
+    hasLoadedPreferences,
     setEventTypes,
     setDifficulties,
     setSelectedGuild,
@@ -22,7 +23,7 @@ export default function EventsPage() {
   const selectedEventTypeSet = useMemo(() => new Set(selectedEventTypes), [selectedEventTypes]);
   const selectedDifficultySet = useMemo(() => new Set(selectedDifficulties), [selectedDifficulties]);
 
-  const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage, filters);
+  const { data: eventsData, isLoading, error } = useEventsPaginated(currentPage, eventsPerPage, filters, hasLoadedPreferences);
   const { data: guildList } = useGuildList();
 
   // Reset to page 1 when filters change
@@ -81,7 +82,7 @@ export default function EventsPage() {
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
   }, [guildList]);
 
-  if (isLoading) {
+  if (!hasLoadedPreferences || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

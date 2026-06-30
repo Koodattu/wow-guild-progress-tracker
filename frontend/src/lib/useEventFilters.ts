@@ -85,9 +85,11 @@ function writeEventFilterPreferences(preferences: EventFilterPreferences) {
 
 export function useEventFilterPreferences() {
   const [preferences, setPreferencesState] = useState<EventFilterPreferences>(DEFAULT_EVENT_FILTER_PREFERENCES);
+  const [hasLoadedPreferences, setHasLoadedPreferences] = useState(false);
 
   useEffect(() => {
     setPreferencesState(readEventFilterPreferences());
+    setHasLoadedPreferences(true);
 
     const handlePreferencesChange = (event: Event) => {
       setPreferencesState((event as CustomEvent<EventFilterPreferences>).detail);
@@ -127,7 +129,7 @@ export function useEventFilterPreferences() {
 
   const filters = useMemo(() => buildEventFilters(preferences), [preferences]);
 
-  return { ...preferences, filters, setEventTypes, setDifficulties, setSelectedGuild };
+  return { ...preferences, filters, hasLoadedPreferences, setEventTypes, setDifficulties, setSelectedGuild };
 }
 
 export function useEventFiltersFromLocalStorage(): EventFilters {

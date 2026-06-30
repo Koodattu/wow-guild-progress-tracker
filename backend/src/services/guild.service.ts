@@ -4200,73 +4200,85 @@ class GuildService {
 
     logger.info("[Hiatus] Checking for hiatus events across all guilds...");
 
+    const raidDataById = new Map<number, IRaid>();
     for (const raidId of CURRENT_RAID_IDS) {
       const raidData = await this.getRaidData(raidId);
-      if (!raidData) continue;
+      if (raidData) raidDataById.set(raidId, raidData);
+    }
 
-      // Find guilds that have current tier progress (heroic or mythic)
-      // and have a lastLogEndTime set (meaning they have raided before)
-      const guilds = await Guild.find({
-        lastLogEndTime: { $exists: true },
-        wclStatus: { $ne: "not_found" },
-        $or: [
-          { "progress.raidId": raidId, "progress.difficulty": "heroic", "progress.bossesDefeated": { $gt: 0 } },
-          { "progress.raidId": raidId, "progress.difficulty": "mythic", "progress.bossesDefeated": { $gt: 0 } },
-        ],
-      });
+    if (raidDataById.size === 0) {
+      logger.info("[Hiatus] No current raid data found, skipping hiatus check");
+      return;
+    }
 
-      if (guilds.length === 0) continue;
+    // Find guilds that have current tier progress (heroic or mythic)
+    // and have a lastLogEndTime set (meaning they have raided before).
+    const currentRaidProgressClauses = CURRENT_RAID_IDS.flatMap((raidId) => [
+      { progress: { $elemMatch: { raidId, difficulty: "heroic", bossesDefeated: { $gt: 0 } } } },
+      { progress: { $elemMatch: { raidId, difficulty: "mythic", bossesDefeated: { $gt: 0 } } } },
+    ]);
+    const guilds = await Guild.find({
+      lastLogEndTime: { $exists: true },
+      wclStatus: { $ne: "not_found" },
+      $or: currentRaidProgressClauses,
+    });
 
-      logger.info(`[Hiatus] Checking ${guilds.length} guilds for raid ${raidData.name}`);
+    logger.info(`[Hiatus] Checking ${guilds.length} guilds across current raids (${CURRENT_RAID_IDS.join(", ")})`);
 
-      for (const guild of guilds) {
-        if (!guild.lastLogEndTime) continue;
+    for (const guild of guilds) {
+      if (!guild.lastLogEndTime) continue;
 
-        const daysSinceLastLog = (Date.now() - guild.lastLogEndTime.getTime()) / (1000 * 60 * 60 * 24);
+      const daysSinceLastLog = (Date.now() - guild.lastLogEndTime.getTime()) / (1000 * 60 * 60 * 24);
 
-        // Determine highest difficulty with WCL-backed progress for this guild/raid.
-        // Synthetic RaiderIO-only entries have an empty bosses array — skip those,
-        // since hiatus only makes sense for guilds that actually have WarcraftLogs data.
+      // Determine highest WCL-backed progress per current raid.
+      // Synthetic RaiderIO-only entries have an empty bosses array — skip those,
+      // since hiatus only makes sense for guilds that actually have WarcraftLogs data.
+      const eligibleProgress = CURRENT_RAID_IDS.flatMap((raidId) => {
         const mythicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "mythic" && p.bossesDefeated > 0 && p.bosses.length > 0);
         const heroicProgress = guild.progress.find((p) => p.raidId === raidId && p.difficulty === "heroic" && p.bossesDefeated > 0 && p.bosses.length > 0);
-        const highestDifficulty = mythicProgress ? "mythic" : heroicProgress ? "heroic" : null;
+        const progress = mythicProgress || heroicProgress;
+        return progress ? [{ raidId, raidName: progress.raidName, difficulty: progress.difficulty }] : [];
+      });
 
-        if (!highestDifficulty) continue;
+      if (eligibleProgress.length === 0) continue;
 
-        // Check each threshold (highest first so we only create the most relevant)
-        for (const threshold of HIATUS_THRESHOLDS) {
-          if (daysSinceLastLog < threshold.days) continue;
+      const primaryProgress = eligibleProgress.find((progress) => progress.raidId === PRIMARY_RAID_ID);
+      const eventProgress = primaryProgress || eligibleProgress[0];
+      const raidData = raidDataById.get(eventProgress.raidId);
 
-          // Check if this hiatus event already exists for this guild/raid/threshold
-          const existingEvent = await Event.findOne({
-            type: "hiatus",
-            guildId: guild._id,
-            raidId: raidId,
-            "data.hiatusDays": threshold.days,
-          });
+      // Check each threshold, highest first.
+      for (const threshold of HIATUS_THRESHOLDS) {
+        if (daysSinceLastLog < threshold.days) continue;
 
-          if (existingEvent) continue;
+        // Hiatus is a guild-level event in the feed, so dedupe across current raids.
+        const existingEvent = await Event.findOne({
+          type: "hiatus",
+          guildId: guild._id,
+          raidId: { $in: CURRENT_RAID_IDS },
+          "data.hiatusDays": threshold.days,
+        });
 
-          const guildLog = getGuildLogger(guild.name, guild.realm);
-          guildLog.info(`Creating hiatus event: ${threshold.days} days since last raid (last log: ${guild.lastLogEndTime.toISOString()})`);
+        if (existingEvent) continue;
 
-          await Event.create({
-            type: "hiatus",
-            guildId: guild._id,
-            guildName: guild.name,
-            guildRealm: guild.realm,
-            guildCrest: guild.crest,
-            raidId: raidId,
-            raidName: raidData.name,
-            difficulty: highestDifficulty,
-            data: {
-              hiatusDays: threshold.days,
-            },
-            timestamp: new Date(),
-          });
+        const guildLog = getGuildLogger(guild.name, guild.realm);
+        guildLog.info(`Creating hiatus event: ${threshold.days} days since last raid (last log: ${guild.lastLogEndTime.toISOString()})`);
 
-          await cacheService.invalidateEventCaches();
-        }
+        await Event.create({
+          type: "hiatus",
+          guildId: guild._id,
+          guildName: guild.name,
+          guildRealm: guild.realm,
+          guildCrest: guild.crest,
+          raidId: eventProgress.raidId,
+          raidName: raidData?.name || eventProgress.raidName,
+          difficulty: eventProgress.difficulty,
+          data: {
+            hiatusDays: threshold.days,
+          },
+          timestamp: new Date(),
+        });
+
+        await cacheService.invalidateEventCaches();
       }
     }
 
