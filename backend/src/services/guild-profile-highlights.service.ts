@@ -4,6 +4,8 @@ import { TRACKED_RAIDS } from "../config/guilds";
 import CharacterAccountGroup from "../models/CharacterAccountGroup";
 import CharacterMechanicsLeaderboard from "../models/CharacterMechanicsLeaderboard";
 import CharacterRaidParticipation from "../models/CharacterRaidParticipation";
+import CharacterReportAppearance, { ICharacterReportAppearance } from "../models/CharacterReportAppearance";
+import Fight, { IFight } from "../models/Fight";
 import Guild from "../models/Guild";
 import GuildProfileHighlight, {
   IGuildProfileHighlightMainstay,
@@ -13,10 +15,15 @@ import GuildProfileHighlight, {
 import Raid from "../models/Raid";
 import cacheService from "./cache.service";
 import logger from "../utils/logger";
+import { createRealmIdentityKey } from "../utils/realm";
 
 const MYTHIC_DIFFICULTY = 5;
 const HIGHLIGHT_LIMIT = 6;
-const TOP_PERFORMER_MIN_PULLS = 100;
+const TOP_PERFORMER_MIN_GUILD_RAID_PULLS = 40;
+const PULL_LOOKUP_REPORT_BATCH_SIZE = 100;
+
+type PullAppearance = Pick<ICharacterReportAppearance, "reportCode" | "reportGuildId" | "characterId" | "characterName" | "characterRealm">;
+type PullFight = Pick<IFight, "reportCode" | "guildId" | "zoneId" | "combatants">;
 
 type GuildRow = {
   _id: mongoose.Types.ObjectId;
@@ -428,6 +435,7 @@ class GuildProfileHighlightsService {
     mechanicsRows: MechanicsRow[],
     participationsByCharacterZone: Map<string, ParticipationTarget[]>,
     raidNameById: Map<number, string>,
+    guildRaidPulls: Map<string, number>,
   ): Map<string, IGuildProfileHighlightTopPerformer[]> {
     const bestMechanicsByCharacterZone = new Map<string, MechanicsRow>();
 
@@ -449,6 +457,7 @@ class GuildProfileHighlightsService {
       const participationTargets = participationsByCharacterZone.get(`${characterId}:${row.zoneId}`) ?? [];
 
       for (const target of participationTargets) {
+        if ((guildRaidPulls.get(`${target.guildId}:${characterId}:${row.zoneId}`) ?? 0) < TOP_PERFORMER_MIN_GUILD_RAID_PULLS) continue;
         const identityKey = `character:${characterId}`;
 
         let guildTopAggregates = topAggregatesByGuild.get(target.guildId);
@@ -472,7 +481,6 @@ class GuildProfileHighlightsService {
     for (const [guildId, guildTopAggregates] of topAggregatesByGuild.entries()) {
       const topPerformers = Array.from(guildTopAggregates.values())
         .map((member) => this.toTopPerformer(member, raidNameById))
-        .filter((member) => member.pulls >= TOP_PERFORMER_MIN_PULLS)
         .sort((a, b) => {
           const scoreDiff = b.score - a.score;
           if (scoreDiff !== 0) return scoreDiff;
@@ -488,6 +496,65 @@ class GuildProfileHighlightsService {
     }
 
     return result;
+  }
+
+  private addGuildRaidPulls(fight: PullFight, appearances: PullAppearance[], counts: Map<string, number>): void {
+    const participants = new Set<string>();
+    for (const combatant of fight.combatants ?? []) {
+      const matches = appearances.filter((appearance) =>
+        appearance.characterId &&
+        appearance.reportCode === fight.reportCode &&
+        appearance.reportGuildId.toString() === fight.guildId.toString() &&
+        this.normalize(appearance.characterName) === this.normalize(combatant.name) &&
+        createRealmIdentityKey(combatant.server).length > 0 &&
+        createRealmIdentityKey(appearance.characterRealm) === createRealmIdentityKey(combatant.server),
+      );
+      const characterIds = new Set(matches.map((appearance) => appearance.characterId!.toString()));
+      if (characterIds.size === 1) participants.add(characterIds.values().next().value!);
+    }
+
+    for (const characterId of participants) {
+      const key = `${fight.guildId}:${characterId}:${fight.zoneId}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+
+  private async loadGuildRaidPulls(characterIds: mongoose.Types.ObjectId[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (characterIds.length === 0) return counts;
+
+    const appearancesByReport = new Map<string, PullAppearance[]>();
+    const flushReports = async () => {
+      if (appearancesByReport.size === 0) return;
+      const fights = Fight.find({
+        reportCode: { $in: Array.from(appearancesByReport.keys()) },
+        zoneId: { $in: TRACKED_RAIDS },
+        difficulty: MYTHIC_DIFFICULTY,
+        encounterID: { $gt: 0 },
+        duration: { $gt: 0 },
+        "combatants.0": { $exists: true },
+      }).select("reportCode guildId zoneId combatants -_id").lean().cursor({ batchSize: 500 });
+      for await (const fight of fights) {
+        this.addGuildRaidPulls(fight, appearancesByReport.get(fight.reportCode) ?? [], counts);
+      }
+      appearancesByReport.clear();
+    };
+
+    const appearances = CharacterReportAppearance.find({
+      characterId: { $in: characterIds },
+      reportZoneId: { $in: TRACKED_RAIDS },
+      hidden: false,
+    }).select("reportCode reportGuildId characterId characterName characterRealm -_id").sort({ reportCode: 1 }).lean().cursor({ batchSize: 500 });
+    for await (const appearance of appearances) {
+      if (!appearancesByReport.has(appearance.reportCode) && appearancesByReport.size >= PULL_LOOKUP_REPORT_BATCH_SIZE) {
+        await flushReports();
+      }
+      const reportAppearances = appearancesByReport.get(appearance.reportCode) ?? [];
+      reportAppearances.push(appearance);
+      appearancesByReport.set(appearance.reportCode, reportAppearances);
+    }
+    await flushReports();
+    return counts;
   }
 
   async rebuildHighlights(): Promise<{ guilds: number; mainstays: number; topPerformers: number; generatedAt: Date }> {
@@ -566,7 +633,9 @@ class GuildProfileHighlightsService {
       }
     }
 
-    const topPerformersByGuild = this.buildTopPerformersByGuild(mechanicsRows, participationsByCharacterZone, raidNameById);
+    const characterIds = Array.from(new Map(mechanicsRows.map((row) => [row.characterId.toString(), row.characterId])).values());
+    const guildRaidPulls = await this.loadGuildRaidPulls(characterIds);
+    const topPerformersByGuild = this.buildTopPerformersByGuild(mechanicsRows, participationsByCharacterZone, raidNameById, guildRaidPulls);
 
     const sourceUpdatedAt =
       this.maxDate([latestParticipation?.updatedAt, latestMechanics?.updatedAt, latestAccountGroup?.updatedAt, latestAccountGroup?.generatedAt]) ?? generatedAt;

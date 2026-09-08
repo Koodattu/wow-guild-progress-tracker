@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import mongoose from "mongoose";
+import CharacterReportAppearance from "../src/models/CharacterReportAppearance";
+import Fight from "../src/models/Fight";
 import guildProfileHighlightsService from "../src/services/guild-profile-highlights.service";
 
 const participation = (name: string, firstSeenAt: string, raidCount: number) => ({
@@ -180,6 +182,10 @@ test("top performers keep qualifying characters separate", () => {
       [`${demonHunterId}:44`, [{ guildId }]],
     ]),
     new Map([[44, "Manaforge Omega"]]),
+    new Map([
+      [`${guildId}:${druidId}:44`, 40],
+      [`${guildId}:${demonHunterId}:44`, 40],
+    ]),
   );
   const performers = performersByGuild.get(guildId);
 
@@ -195,4 +201,139 @@ test("top performers keep qualifying characters separate", () => {
       { name: "Platud", classID: 12, kind: "character" },
     ],
   );
+});
+
+test("top performers require 40 pulls with the specific guild and raid before selecting their best score", () => {
+  const characterId = new mongoose.Types.ObjectId();
+  const guildId = new mongoose.Types.ObjectId().toString();
+  const otherGuildId = new mongoose.Types.ObjectId().toString();
+  const row = {
+    characterId,
+    wclCanonicalCharacterId: 1,
+    zoneId: 42,
+    name: "Raider",
+    realm: "kazzak",
+    region: "eu",
+    classID: 1,
+    role: "dps",
+    metric: "dps",
+    score: 80,
+    parseScore: 80,
+    survivalScore: 80,
+    pulls: 40,
+    deaths: 2,
+    earlyDeaths: 1,
+  };
+  const targets = new Map([
+    [`${characterId}:42`, [{ guildId }, { guildId: otherGuildId }]],
+    [`${characterId}:44`, [{ guildId }, { guildId: otherGuildId }]],
+  ]);
+  const raidNames = new Map([[42, "Liberation of Undermine"], [44, "Manaforge Omega"]]);
+  const rows = [row, { ...row, zoneId: 44, score: 99, pulls: 200 }];
+  const counts = new Map([
+    [`${guildId}:${characterId}:42`, 40],
+    [`${guildId}:${characterId}:44`, 39],
+    [`${otherGuildId}:${characterId}:44`, 161],
+  ]);
+
+  const result = (guildProfileHighlightsService as any).buildTopPerformersByGuild(rows, targets, raidNames, counts);
+  const performer = result.get(guildId)[0];
+  assert.equal(performer.score, 80);
+  assert.equal(performer.zoneId, 42);
+  assert.equal(performer.performanceRaidCount, 1);
+  assert.equal(performer.pulls, 40);
+  assert.equal(result.get(otherGuildId)[0].zoneId, 44);
+
+  counts.set(`${guildId}:${characterId}:42`, 39);
+  const belowThreshold = (guildProfileHighlightsService as any).buildTopPerformersByGuild(rows, targets, raidNames, counts);
+  assert.equal(belowThreshold.has(guildId), false);
+
+  const missingCounts = (guildProfileHighlightsService as any).buildTopPerformersByGuild(rows, targets, raidNames, new Map());
+  assert.equal(missingCounts.size, 0);
+});
+
+test("guild raid pulls count roster participants once per fight and keep guilds and raids separate", () => {
+  const characterId = new mongoose.Types.ObjectId();
+  const benchedId = new mongoose.Types.ObjectId();
+  const guildId = new mongoose.Types.ObjectId();
+  const otherGuildId = new mongoose.Types.ObjectId();
+  const appearance = {
+    characterId,
+    reportCode: "report",
+    reportGuildId: guildId,
+    characterName: "Raider",
+    characterRealm: "twisting-nether",
+  };
+  const appearances = [appearance, { ...appearance }, { ...appearance, characterId: benchedId, characterName: "Benched" }];
+  const fight = {
+    reportCode: "report",
+    guildId,
+    zoneId: 42,
+    combatants: [{ name: "RAIDER", server: "Twisting Nether" }, { name: "Raider", server: "twisting-nether" }],
+  };
+  const counts = new Map<string, number>();
+  const addPull = (value: typeof fight, roster = appearances) => (guildProfileHighlightsService as any).addGuildRaidPulls(value, roster, counts);
+
+  addPull(fight);
+  addPull(fight);
+  addPull({ ...fight, zoneId: 44 });
+  addPull({ ...fight, guildId: otherGuildId }, [{ ...appearance, reportGuildId: otherGuildId }]);
+  addPull({ ...fight, guildId: otherGuildId });
+  addPull({ ...fight, reportCode: "different-report" });
+  addPull({ ...fight, combatants: [{ name: "Raider", server: "kazzak" }] });
+  addPull({ ...fight, combatants: [] });
+
+  assert.deepEqual(Array.from(counts), [
+    [`${guildId}:${characterId}:42`, 2],
+    [`${guildId}:${characterId}:44`, 1],
+    [`${otherGuildId}:${characterId}:42`, 1],
+  ]);
+
+  addPull({ ...fight, combatants: [{ name: "Raider", server: "" }] }, [
+    appearance,
+    { ...appearance, characterId: benchedId, characterRealm: "kazzak" },
+  ]);
+  assert.equal(counts.get(`${guildId}:${characterId}:42`), 2);
+});
+
+test("guild raid pull lookup batches whole reports without losing or duplicating participants", async (t) => {
+  const characterId = new mongoose.Types.ObjectId();
+  const secondCharacterId = new mongoose.Types.ObjectId();
+  const guildId = new mongoose.Types.ObjectId();
+  const reports = Array.from({ length: 101 }, (_, index) => `report-${String(index).padStart(3, "0")}`);
+  const appearanceRows = reports.flatMap((reportCode) => [
+    { reportCode, reportGuildId: guildId, characterId, characterName: "First", characterRealm: "kazzak" },
+    { reportCode, reportGuildId: guildId, characterId: secondCharacterId, characterName: "Second", characterRealm: "kazzak" },
+  ]);
+  const cursorQuery = (rows: unknown[]) => ({
+    select() { return this; },
+    sort() { return this; },
+    lean() { return this; },
+    async *cursor() { yield* rows; },
+  });
+  t.mock.method(CharacterReportAppearance, "find", (query: any) => {
+    assert.equal(query.hidden, false);
+    assert.deepEqual(query.characterId.$in, [characterId, secondCharacterId]);
+    return cursorQuery(appearanceRows);
+  });
+  const batches: string[][] = [];
+  t.mock.method(Fight, "find", (query: any) => {
+    assert.equal(query.difficulty, 5);
+    assert.deepEqual(query.encounterID, { $gt: 0 });
+    assert.deepEqual(query.duration, { $gt: 0 });
+    assert.equal(query.zoneId.$in.includes(44), true);
+    batches.push(query.reportCode.$in);
+    return cursorQuery(query.reportCode.$in.map((reportCode: string) => ({
+      reportCode,
+      guildId,
+      zoneId: 44,
+      combatants: [{ name: "First", server: "kazzak" }, { name: "Second", server: "kazzak" }],
+    })));
+  });
+
+  const counts = await (guildProfileHighlightsService as any).loadGuildRaidPulls([characterId, secondCharacterId]);
+  assert.deepEqual(batches.map((batch) => batch.length), [100, 1]);
+  assert.deepEqual(batches.flat(), reports);
+  assert.equal(counts.get(`${guildId}:${characterId}:44`), 101);
+  assert.equal(counts.get(`${guildId}:${secondCharacterId}:44`), 101);
 });
