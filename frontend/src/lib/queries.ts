@@ -589,7 +589,8 @@ export function useCcgFeaturedCard(setSlug: string, enabled = true) {
     queryKey: queryKeys.ccg.featured(setSlug),
     queryFn: () => api.getCcgFeaturedCard(setSlug),
     enabled: enabled && Boolean(setSlug),
-    staleTime: 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 }
 

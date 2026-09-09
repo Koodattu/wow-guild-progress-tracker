@@ -1882,8 +1882,8 @@ class CcgService {
     const cardIds = pool?.buckets.find((bucket) => bucket.grade === "S")?.cardIds ?? [];
     if (cardIds.length === 0) return { sets: [this.serializeSet(set)], card: null };
 
-    const hourlyIndex = Math.floor(Date.now() / (60 * 60 * 1000)) % cardIds.length;
-    const card = await CcgCard.findById(cardIds[hourlyIndex]).lean();
+    const rotationIndex = Math.floor(Date.now() / (5 * 60 * 1000)) % cardIds.length;
+    const card = await CcgCard.findById(cardIds[rotationIndex]).lean();
     if (!card) return { sets: [this.serializeSet(set)], card: null };
     const [seriesOwnership, ownership, alternativeByCollector, unlockedAlternativeSeries] = await Promise.all([
       CcgSeriesOwnership.findOne({
