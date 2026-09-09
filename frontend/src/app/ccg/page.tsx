@@ -237,13 +237,6 @@ export default function CcgLandingPage() {
                   ) : (
                     <>
                       <VaultPackShortcut
-                        href="/ccg/open"
-                        theme={getPackTheme(undefined, true)}
-                        label={t("landing.openAllRaids")}
-                        title={t("open.allRaids")}
-                        cardsLabel={t("landing.cards")}
-                      />
-                      <VaultPackShortcut
                         href={current ? `/ccg/open?set=${encodeURIComponent(current.id)}` : "/ccg/open"}
                         theme={getPackTheme(current)}
                         label={t("landing.openCurrent")}
@@ -260,6 +253,13 @@ export default function CcgLandingPage() {
                           cardsLabel={t("landing.cards")}
                         />
                       ))}
+                      <VaultPackShortcut
+                        href="/ccg/open"
+                        theme={getPackTheme(undefined, true)}
+                        label={t("landing.openAllRaids")}
+                        title={t("open.allRaids")}
+                        cardsLabel={t("landing.cards")}
+                      />
                     </>
                   )}
                 </div>
