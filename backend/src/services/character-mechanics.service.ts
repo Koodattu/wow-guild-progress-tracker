@@ -10,7 +10,8 @@ import Report from "../models/Report";
 import cacheService from "./cache.service";
 import { getPrimaryCharacterRaidGuilds } from "./character-raid-guild.service";
 import logger from "../utils/logger";
-import { slugifySpecName } from "../utils/spec";
+import { resolveSpecByBlizzardSpecId, slugifySpecName, tryResolveRole } from "../utils/spec";
+import { ROLE_BY_CLASS_AND_SPEC } from "../config/specs";
 import { resolveCharacterRaidIdentity, type RaidIdentityParseEvidence, type RaidIdentityResolution } from "../utils/character-raid-identity";
 
 const MYTHIC_DIFFICULTY = 5;
@@ -117,6 +118,19 @@ type DeathRecord = {
   deathTime: number;
 };
 
+type SurvivalBuild = {
+  stats: Map<string, SurvivalStats>;
+  characters: Map<string, AppearanceIdentity>;
+  encounters: Map<number, string>;
+  specPullsByCharacter: Map<string, Map<string, number>>;
+  unknownSpecPullsByCharacter: Map<string, number>;
+  fights: number;
+  eligibleFights: number;
+  coverage: number;
+  reports: number;
+  appearances: number;
+};
+
 class CharacterMechanicsService {
   private isBuilding = false;
   private mechanicsIndexesCreated = false;
@@ -198,14 +212,7 @@ class CharacterMechanicsService {
       },
     ]).allowDiskUse(true)) as ParseRow[];
 
-    if (parseRows.length === 0) {
-      await CharacterMechanicsLeaderboard.deleteMany({ zoneId });
-      logger.info(`[MechanicsLeaderboard] Raid ${zoneId}: no parse rows found, cleared existing mechanics entries`);
-      return { zoneId, entries: 0, fights: 0, reports: 0, appearances: 0, status: "built", eligibleFights: 0, evaluatedFights: 0, coverage: 1 };
-    }
-
-    const encounterIds = Array.from(new Set(parseRows.map((row) => row.encounterId).filter((id): id is number => typeof id === "number")));
-    const survivalBuild = await this.buildSurvivalStatsFromFetchedFights(zoneId, encounterIds);
+    const survivalBuild = await this.buildSurvivalStatsFromFetchedFights(zoneId);
     if (survivalBuild.coverage < MIN_RAID_FIGHT_COVERAGE) {
       const reason = `Fight-detail coverage ${(survivalBuild.coverage * 100).toFixed(1)}% is below the ${(MIN_RAID_FIGHT_COVERAGE * 100).toFixed(0)}% rebuild threshold`;
       logger.warn(`[MechanicsLeaderboard] Raid ${zoneId}: skipped without replacing existing entries. ${reason}`);
@@ -223,79 +230,15 @@ class CharacterMechanicsService {
       };
     }
 
-    const identityByCharacter = this.resolveRaidIdentities(parseRows, survivalBuild.specPullsByCharacter, survivalBuild.unknownSpecPullsByCharacter);
-    const selectedParseRows = parseRows.filter((row) => {
-      const identity = identityByCharacter.get(this.getCharacterKey(row.characterId));
-      return Boolean(identity && slugifySpecName(row.specName) === identity.specName && row.metric === identity.metric);
-    });
-
     const guildByCharacter = await getPrimaryCharacterRaidGuilds(
       zoneId,
-      selectedParseRows.map((row) => row.characterId),
+      Array.from(survivalBuild.characters.values(), (character) => character.characterId),
     );
-
-    const bossEntries = selectedParseRows.flatMap((row) => {
-      const identity = identityByCharacter.get(this.getCharacterKey(row.characterId))!;
-      const { specName, role } = identity;
-      const survival = survivalBuild.stats.get(this.getCharacterEncounterKey(row.characterId, row.encounterId));
-      const survivalSummary = this.summarizeSurvivalStats(survival);
-      if (survivalSummary.survivalScore === null) return [];
-
-      const parseScore = this.roundScore(row.rankPercent ?? 0);
-      const score = this.combineScores(parseScore, survivalSummary.survivalScore);
-      const guild = guildByCharacter.get(String(row.characterId)) ?? null;
-
-      return [
-        {
-          zoneId,
-          difficulty: MYTHIC_DIFFICULTY,
-          type: "boss" as const,
-          encounterId: row.encounterId,
-          metric: role === "healer" ? "hps" : "dps",
-          characterId: row.characterId,
-          wclCanonicalCharacterId: row.wclCanonicalCharacterId,
-          name: row.name,
-          realm: row.realm,
-          region: row.region,
-          classID: row.classID,
-          specName,
-          bestSpecName: specName,
-          role,
-          identityMethod: identity.method,
-          identityConfidence: identity.confidence,
-          ilvl: row.ilvl ?? 0,
-          score,
-          parseScore,
-          survivalScore: survivalSummary.survivalScore,
-          survivalPercentile: null,
-          encounterName: row.encounterName,
-          rankPercent: row.rankPercent ?? 0,
-          medianPercent: row.medianPercent ?? 0,
-          totalKills: row.totalKills ?? 0,
-          bestAmount: row.bestAmount ?? 0,
-          pulls: survivalSummary.pulls,
-          evaluatedPulls: survivalSummary.evaluatedPulls,
-          deaths: survivalSummary.deaths,
-          survivedPulls: survivalSummary.survivedPulls,
-          earlyDeaths: survivalSummary.earlyDeaths,
-          averageDeathPercent: survivalSummary.averageDeathPercent,
-          deathDataAvailable: true,
-          bossScores: [],
-          scoreVersion: CHARACTER_MECHANICS_SCORE_VERSION,
-          raidFightCoverage: survivalBuild.coverage,
-          eligibleFightCount: survivalBuild.eligibleFights,
-          evaluatedFightCount: survivalBuild.fights,
-          guildName: guild?.name ?? null,
-          guildRealm: guild?.realm ?? null,
-          sourcePartition: row.partition ?? 0,
-          updatedAt: row.updatedAt ?? new Date(),
-        },
-      ];
-    });
+    const { bossEntries, identities } = this.buildBossEntries(zoneId, parseRows, survivalBuild, guildByCharacter);
 
     this.normalizeBossSurvivalScores(bossEntries);
 
-    const overallEntries = this.buildOverallEntries(bossEntries);
+    const overallEntries = this.buildOverallEntries(bossEntries, identities);
     const entries = [...bossEntries, ...overallEntries];
 
     await CharacterMechanicsLeaderboard.deleteMany({ zoneId });
@@ -319,7 +262,7 @@ class CharacterMechanicsService {
 
     const duration = Math.round((Date.now() - startedAt) / 1000);
     logger.info(
-      `[MechanicsLeaderboard] Raid ${zoneId}: built ${entries.length} entries from ${selectedParseRows.length}/${parseRows.length} identity-matched parse rows, ${survivalBuild.fights}/${survivalBuild.eligibleFights} evaluated fight(s), ${survivalBuild.appearances} appearance lookup row(s) in ${duration}s`,
+      `[MechanicsLeaderboard] Raid ${zoneId}: built ${entries.length} entries from ${parseRows.length} parse rows, ${survivalBuild.fights}/${survivalBuild.eligibleFights} evaluated fight(s), ${survivalBuild.appearances} appearance lookup row(s) in ${duration}s`,
     );
 
     return {
@@ -360,18 +303,10 @@ class CharacterMechanicsService {
 
   private async buildSurvivalStatsFromFetchedFights(
     zoneId: number,
-    encounterIds: number[],
-  ): Promise<{
-    stats: Map<string, SurvivalStats>;
-    specPullsByCharacter: Map<string, Map<string, number>>;
-    unknownSpecPullsByCharacter: Map<string, number>;
-    fights: number;
-    eligibleFights: number;
-    coverage: number;
-    reports: number;
-    appearances: number;
-  }> {
+  ): Promise<SurvivalBuild> {
     const survivalByCharacterEncounter = new Map<string, SurvivalStats>();
+    const characters = new Map<string, AppearanceIdentity>();
+    const encounters = new Map<number, string>();
     const specPullsByCharacter = new Map<string, Map<string, number>>();
     const unknownSpecPullsByCharacter = new Map<string, number>();
     const fightGroups = new Map<string, MechanicsFight[]>();
@@ -382,7 +317,7 @@ class CharacterMechanicsService {
     const eligibleFightQuery = {
       zoneId,
       difficulty: MYTHIC_DIFFICULTY,
-      encounterID: { $in: encounterIds },
+      encounterID: { $gt: 0 },
       reportEndTime: { $gt: 0 },
       duration: { $gt: 0 },
     };
@@ -419,6 +354,7 @@ class CharacterMechanicsService {
         survivalByCharacterEncounter,
         specPullsByCharacter,
         unknownSpecPullsByCharacter,
+        characters,
       );
       fightGroups.clear();
     };
@@ -432,6 +368,7 @@ class CharacterMechanicsService {
 
       currentReportCode = fight.reportCode;
       fightCount += 1;
+      encounters.set(fight.encounterID, fight.encounterName);
       seenReports.add(fight.reportCode);
 
       if (!fightGroups.has(fight.reportCode)) {
@@ -444,6 +381,8 @@ class CharacterMechanicsService {
 
     return {
       stats: survivalByCharacterEncounter,
+      characters,
+      encounters,
       specPullsByCharacter,
       unknownSpecPullsByCharacter,
       fights: fightCount,
@@ -556,6 +495,7 @@ class CharacterMechanicsService {
     survivalByCharacterEncounter: Map<string, SurvivalStats>,
     specPullsByCharacter: Map<string, Map<string, number>>,
     unknownSpecPullsByCharacter: Map<string, number>,
+    characters: Map<string, AppearanceIdentity> = new Map(),
   ): void {
     const exactIdentityByReport = new Map<string, Map<string, AppearanceIdentity & { reportCode: string }>>();
     const nameIdentityByReport = new Map<string, Map<string, (AppearanceIdentity & { reportCode: string }) | null>>();
@@ -603,7 +543,7 @@ class CharacterMechanicsService {
       const exactMap = exactIdentityByReport.get(fight.reportCode) ?? new Map();
       const nameMap = nameIdentityByReport.get(fight.reportCode) ?? new Map();
       const reportRegion = reportRegions.get(fight.reportCode) ?? "";
-      const participants = new Map<string, { appearance: AppearanceIdentity; specName: string | null }>();
+      const participants = new Map<string, { appearance: AppearanceIdentity; specName: string | null; role: Role | null }>();
       const raidWideDeathStart = this.detectRaidWideDeathStart(fight, deaths);
       const neutralPull = this.isLikelyReset(fight, deaths);
 
@@ -616,7 +556,13 @@ class CharacterMechanicsService {
         if (!appearance) continue;
 
         const characterKey = this.getCharacterKey(appearance.characterId);
-        participants.set(characterKey, { appearance, specName: combatant.specName ? slugifySpecName(combatant.specName) : null });
+        const specName = combatant.specName
+          ? slugifySpecName(combatant.specName)
+          : combatant.specID ? resolveSpecByBlizzardSpecId(combatant.specID)?.specName ?? null : null;
+        const classRoles = new Set(Object.values(ROLE_BY_CLASS_AND_SPEC[appearance.classID] ?? {}));
+        const role = tryResolveRole(appearance.classID, specName) ?? combatant.role
+          ?? (classRoles.size === 1 ? Array.from(classRoles)[0] : null);
+        participants.set(characterKey, { appearance, specName, role });
       }
 
       const meaningfulDeaths = deaths.filter((death) => {
@@ -665,12 +611,13 @@ class CharacterMechanicsService {
         });
       }
 
-      for (const { appearance, specName } of participants.values()) {
+      for (const { appearance, specName, role } of participants.values()) {
         const characterKey = this.getCharacterKey(appearance.characterId);
+        characters.set(characterKey, appearance);
         const deathRecords = deathsByCharacter.get(characterKey) ?? [];
         this.addPullToStats(
           survivalByCharacterEncounter,
-          this.getCharacterEncounterKey(appearance.characterId, fight.encounterID),
+          this.getCharacterEncounterKey(appearance.characterId, fight.encounterID, role),
           deathRecords,
           neutralPull,
         );
@@ -725,10 +672,117 @@ class CharacterMechanicsService {
     statsByKey.set(key, stats);
   }
 
+  private buildBossEntries(
+    zoneId: number,
+    parseRows: ParseRow[],
+    survivalBuild: SurvivalBuild,
+    guildByCharacter: Map<string, { name: string; realm: string }>,
+  ): { bossEntries: any[]; identities: Map<string, RaidIdentityResolution> } {
+    const rolePulls = new Map<string, Map<Role, number>>();
+    const roleEvidence = new Map<string, Set<Role>>();
+    for (const [key, stats] of survivalBuild.stats) {
+      const [characterKey, , role] = key.split("|");
+      if (role === "unknown") continue;
+      const pulls = rolePulls.get(characterKey) ?? new Map<Role, number>();
+      pulls.set(role as Role, (pulls.get(role as Role) ?? 0) + stats.pulls);
+      rolePulls.set(characterKey, pulls);
+      const roles = roleEvidence.get(characterKey) ?? new Set<Role>();
+      roles.add(role as Role);
+      roleEvidence.set(characterKey, roles);
+    }
+    const parseByBossRole = new Map<string, ParseRow>();
+    const representativeParse = new Map<string, ParseRow>();
+    for (const row of parseRows) {
+      const role = tryResolveRole(row.classID, row.specName);
+      if (!role || row.metric !== (role === "healer" ? "hps" : "dps")) continue;
+      const characterKey = this.getCharacterKey(row.characterId);
+      const roles = roleEvidence.get(characterKey) ?? new Set<Role>();
+      roles.add(role);
+      roleEvidence.set(characterKey, roles);
+      const key = this.getCharacterEncounterKey(row.characterId, row.encounterId, role);
+      const current = parseByBossRole.get(key);
+      if (!current || row.rankPercent > current.rankPercent
+        || (row.rankPercent === current.rankPercent && row.bestAmount > current.bestAmount)) {
+        parseByBossRole.set(key, row);
+      }
+      const representativeKey = `${characterKey}|${role}`;
+      const representative = representativeParse.get(representativeKey);
+      if (!representative || row.updatedAt > representative.updatedAt) representativeParse.set(representativeKey, row);
+    }
+    const identities = this.resolveRaidIdentities(
+      parseRows, survivalBuild.specPullsByCharacter, survivalBuild.unknownSpecPullsByCharacter,
+      survivalBuild.characters, rolePulls,
+    );
+    const statsByBossRole = new Map<string, SurvivalStats>();
+    for (const [key, stats] of survivalBuild.stats) {
+      const [characterKey, encounterId, recordedRole] = key.split("|");
+      const identity = identities.get(characterKey);
+      if (!identity) continue;
+      // Older rosters can omit specs. Infer their role only when the raid evidence is unambiguous.
+      const role = recordedRole === "unknown" && roleEvidence.get(characterKey)?.size === 1
+        ? identity.role : recordedRole;
+      if (role !== identity.role) continue;
+      const roleKey = `${characterKey}|${encounterId}|${role}`;
+      const current = statsByBossRole.get(roleKey);
+      if (!current) statsByBossRole.set(roleKey, { ...stats });
+      else for (const field of Object.keys(stats) as Array<keyof SurvivalStats>) current[field] += stats[field];
+    }
+
+    const updatedAt = new Date();
+    const bossEntries = Array.from(statsByBossRole).flatMap(([key, stats]) => {
+      const [characterKey, encounterIdValue] = key.split("|");
+      const character = survivalBuild.characters.get(characterKey)!;
+      const identity = identities.get(characterKey)!;
+      const encounterId = Number(encounterIdValue);
+      const row = parseByBossRole.get(key);
+      const representative = representativeParse.get(`${characterKey}|${identity.role}`);
+      const survival = this.summarizeSurvivalStats(stats);
+      if (survival.survivalScore === null) return [];
+      const guild = guildByCharacter.get(characterKey);
+      const parseScore = row ? this.roundScore(row.rankPercent) : null;
+      return [{
+        ...character,
+        zoneId,
+        difficulty: MYTHIC_DIFFICULTY,
+        type: "boss",
+        encounterId,
+        encounterName: survivalBuild.encounters.get(encounterId) ?? row?.encounterName ?? "",
+        metric: identity.metric,
+        role: identity.role,
+        specName: row?.specName ?? identity.specName,
+        bestSpecName: row?.specName ?? identity.specName,
+        identityMethod: identity.method,
+        identityConfidence: identity.confidence,
+        ilvl: row?.ilvl ?? representative?.ilvl ?? 0,
+        score: parseScore === null ? null : this.combineScores(parseScore, survival.survivalScore),
+        parseScore,
+        ...survival,
+        survivalPercentile: null,
+        rankPercent: row?.rankPercent ?? null,
+        medianPercent: row?.medianPercent ?? 0,
+        totalKills: row?.totalKills ?? 0,
+        bestAmount: row?.bestAmount ?? 0,
+        deathDataAvailable: true,
+        bossScores: [],
+        scoreVersion: CHARACTER_MECHANICS_SCORE_VERSION,
+        raidFightCoverage: survivalBuild.coverage,
+        eligibleFightCount: survivalBuild.eligibleFights,
+        evaluatedFightCount: survivalBuild.fights,
+        guildName: guild?.name ?? null,
+        guildRealm: guild?.realm ?? null,
+        sourcePartition: row?.partition ?? representative?.partition ?? 0,
+        updatedAt,
+      }];
+    });
+    return { bossEntries, identities };
+  }
+
   private resolveRaidIdentities(
     parseRows: ParseRow[],
     specPullsByCharacter: Map<string, Map<string, number>>,
     unknownSpecPullsByCharacter: Map<string, number>,
+    characters: Map<string, AppearanceIdentity>,
+    rolePullsByCharacter: Map<string, Map<Role, number>>,
   ): Map<string, RaidIdentityResolution> {
     const rowsByCharacter = new Map<string, ParseRow[]>();
     for (const row of parseRows) {
@@ -738,7 +792,8 @@ class CharacterMechanicsService {
     }
 
     const identities = new Map<string, RaidIdentityResolution>();
-    for (const [characterKey, rows] of rowsByCharacter) {
+    for (const [characterKey, character] of characters) {
+      const rows = rowsByCharacter.get(characterKey) ?? [];
       const parseEvidence: RaidIdentityParseEvidence[] = rows.map((row) => ({
         specName: row.specName,
         metric: row.metric,
@@ -746,12 +801,23 @@ class CharacterMechanicsService {
         rankPercent: row.rankPercent ?? 0,
         totalKills: row.totalKills ?? 0,
       }));
-      const identity = resolveCharacterRaidIdentity({
-        classID: rows[0].classID,
+      const input = {
+        classID: character.classID,
         specPulls: specPullsByCharacter.get(characterKey),
         unknownSpecPulls: unknownSpecPullsByCharacter.get(characterKey) ?? 0,
         parseEvidence,
-      });
+      };
+      let identity = resolveCharacterRaidIdentity(input);
+      const roles = Array.from(rolePullsByCharacter.get(characterKey) ?? []).sort((left, right) =>
+        right[1] - left[1] || Number(right[0] === identity?.role) - Number(left[0] === identity?.role) || left[0].localeCompare(right[0]));
+      const dominantRole = roles[0]?.[0];
+      if (dominantRole) {
+        identity = resolveCharacterRaidIdentity({
+          ...input,
+          specPulls: new Map(Array.from(input.specPulls ?? []).filter(([spec]) => tryResolveRole(character.classID, spec) === dominantRole)),
+          parseEvidence: parseEvidence.filter((row) => tryResolveRole(character.classID, row.specName) === dominantRole),
+        });
+      }
       if (identity) identities.set(characterKey, identity);
     }
     return identities;
@@ -844,15 +910,15 @@ class CharacterMechanicsService {
           ? 50
           : this.roundScore(this.clamp((averageRank / (sortedReferenceScores.length - 1)) * 100, 0, 100));
         entry.survivalPercentile = percentile;
-        entry.score = this.combineScores(entry.parseScore, percentile);
+        entry.score = entry.parseScore === null ? null : this.combineScores(entry.parseScore, percentile);
       }
     }
   }
 
-  private buildOverallEntries(bossEntries: any[]): any[] {
+  private buildOverallEntries(bossEntries: any[], identities: Map<string, RaidIdentityResolution> = new Map()): any[] {
     const groups = new Map<string, any[]>();
     for (const entry of bossEntries) {
-      const key = `${entry.characterId}|${entry.specName}|${entry.metric}`;
+      const key = `${entry.characterId}|${entry.role}|${entry.metric}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(entry);
     }
@@ -881,10 +947,13 @@ class CharacterMechanicsService {
         .sort((a, b) => a.encounterId - b.encounterId);
 
       const representative = this.getOverallRepresentative(entries);
+      const identity = identities.get(this.getCharacterKey(representative.characterId));
       const totals = this.summarizeBossScores(sortedBossScores);
 
       overallEntries.push({
         ...representative,
+        specName: identity?.specName ?? representative.specName,
+        bestSpecName: identity?.specName ?? representative.bestSpecName,
         type: "overall" as const,
         encounterId: null,
         encounterName: "",
@@ -975,21 +1044,10 @@ class CharacterMechanicsService {
       survivalPercentile: { $ne: null },
       evaluatedPulls: { $gte: MIN_CHARACTER_RAID_PULLS_FOR_RANKING_ELIGIBILITY },
     };
+    if (scoreType === "combined") baseQuery.score = { $ne: null };
 
     if (classId !== undefined) baseQuery.classID = classId;
     if (normalizedRole !== undefined) baseQuery.role = normalizedRole;
-
-    if (!isBossType && normalizedSpecName !== undefined) {
-      return this.getOverallSpecMechanicsRankings({
-        baseQuery,
-        normalizedSpecName,
-        partialNameRegex,
-        partialGuildNameRegex,
-        scoreType,
-        page,
-        safeLimit,
-      });
-    }
 
     if (normalizedSpecName !== undefined) baseQuery.specName = normalizedSpecName;
 
@@ -1043,77 +1101,9 @@ class CharacterMechanicsService {
     };
   }
 
-  private async getOverallSpecMechanicsRankings(options: {
-    baseQuery: any;
-    normalizedSpecName: string;
-    partialNameRegex?: RegExp;
-    partialGuildNameRegex?: RegExp;
-    scoreType: MechanicsScoreType;
-    page: number;
-    safeLimit: number;
-  }): Promise<QueryResponse> {
-    const { baseQuery, normalizedSpecName, partialNameRegex, partialGuildNameRegex, scoreType, page, safeLimit } = options;
-    const entries = (await CharacterMechanicsLeaderboard.find({
-      ...baseQuery,
-      bossScores: { $elemMatch: { specName: normalizedSpecName, deathDataAvailable: true, survivalScore: { $ne: null }, survivalPercentile: { $ne: null } } },
-    }).lean()) as any[];
-    const scoredEntries: any[] = [];
-
-    for (const entry of entries) {
-      entry.bossScores = (entry.bossScores ?? []).filter(
-        (bossScore: IMechanicsBossScore) => bossScore.specName === normalizedSpecName && bossScore.deathDataAvailable === true && bossScore.survivalScore !== null && bossScore.survivalPercentile !== null,
-      );
-      if (entry.bossScores.length === 0) continue;
-
-      const totals = this.summarizeBossScores(entry.bossScores);
-      entry.score = totals.score;
-      entry.parseScore = totals.parseScore;
-      entry.survivalScore = totals.survivalScore;
-      entry.survivalPercentile = totals.survivalPercentile;
-      entry.pulls = totals.pulls;
-      entry.evaluatedPulls = totals.evaluatedPulls;
-      entry.deaths = totals.deaths;
-      entry.survivedPulls = totals.survivedPulls;
-      entry.earlyDeaths = totals.earlyDeaths;
-      entry.averageDeathPercent = totals.averageDeathPercent;
-      entry.deathDataAvailable = totals.deathDataAvailable;
-      if (entry.evaluatedPulls < MIN_CHARACTER_RAID_PULLS_FOR_RANKING_ELIGIBILITY) continue;
-      entry.specName = normalizedSpecName;
-      scoredEntries.push(entry);
-    }
-
-    scoredEntries.sort((a, b) => this.compareMechanicsRankValues(a, b, scoreType));
-    const totalRankedItems = scoredEntries.length;
-    let displayEntries = scoredEntries;
-    if (partialNameRegex) displayEntries = displayEntries.filter((entry) => partialNameRegex.test(entry.name ?? ""));
-    if (partialGuildNameRegex) displayEntries = displayEntries.filter((entry) => partialGuildNameRegex.test(entry.guildName ?? ""));
-
-    const effectivePage = Math.max(page, 1);
-    const effectiveSkip = (effectivePage - 1) * safeLimit;
-    const pageEntries = displayEntries.slice(effectiveSkip, effectiveSkip + safeLimit);
-    const rankMap = new Map(scoredEntries.map((entry, index) => [entry, index + 1]));
-
-    return {
-      data: pageEntries.map((entry) => this.toResponseRow(entry, rankMap.get(entry) ?? 0, false, scoreType)),
-      pagination: {
-        totalItems: displayEntries.length,
-        totalRankedItems,
-        totalPages: Math.ceil(displayEntries.length / safeLimit),
-        currentPage: effectivePage,
-        pageSize: safeLimit,
-      },
-    };
-  }
-
   private getMechanicsRankValue(entry: any, scoreType: MechanicsScoreType): number {
     const value = scoreType === "survival" ? entry.survivalPercentile : entry.score;
     return typeof value === "number" && Number.isFinite(value) ? value : -Infinity;
-  }
-
-  private compareMechanicsRankValues(a: any, b: any, scoreType: MechanicsScoreType): number {
-    const scoreDiff = this.getMechanicsRankValue(b, scoreType) - this.getMechanicsRankValue(a, scoreType);
-    if (scoreDiff !== 0) return scoreDiff;
-    return (a.name ?? "").localeCompare(b.name ?? "");
   }
 
   private toResponseRow(entry: any, rank: number, isBossType: boolean, scoreType: MechanicsScoreType = "combined"): any {
@@ -1214,8 +1204,8 @@ class CharacterMechanicsService {
   }
 
   private summarizeBossScores(bossScores: IMechanicsBossScore[]): {
-    score: number;
-    parseScore: number;
+    score: number | null;
+    parseScore: number | null;
     survivalScore: number | null;
     survivalPercentile: number | null;
     pulls: number;
@@ -1228,8 +1218,8 @@ class CharacterMechanicsService {
   } {
     if (bossScores.length === 0) {
       return {
-        score: 0,
-        parseScore: 0,
+        score: null,
+        parseScore: null,
         survivalScore: null,
         survivalPercentile: null,
         pulls: 0,
@@ -1242,7 +1232,10 @@ class CharacterMechanicsService {
       };
     }
 
-    const parseScore = this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.parseScore, 0) / bossScores.length);
+    const parsedBosses = bossScores.filter((bossScore) => bossScore.parseScore !== null);
+    const parseScore = parsedBosses.length > 0
+      ? this.roundScore(parsedBosses.reduce((sum, bossScore) => sum + bossScore.parseScore!, 0) / parsedBosses.length)
+      : null;
     const survivalScores = bossScores.filter((bossScore) => bossScore.survivalScore !== null);
     const survivalScore = survivalScores.length > 0
       ? this.roundScore(survivalScores.reduce((sum, bossScore) => sum + (bossScore.survivalScore ?? 0), 0) / survivalScores.length)
@@ -1251,7 +1244,7 @@ class CharacterMechanicsService {
     const survivalPercentile = survivalPercentiles.length > 0
       ? this.roundScore(survivalPercentiles.reduce((sum, bossScore) => sum + (bossScore.survivalPercentile ?? 0), 0) / survivalPercentiles.length)
       : null;
-    const score = survivalPercentile !== null ? this.combineScores(parseScore, survivalPercentile) : this.roundScore(bossScores.reduce((sum, bossScore) => sum + bossScore.score, 0) / bossScores.length);
+    const score = parseScore !== null && survivalPercentile !== null ? this.combineScores(parseScore, survivalPercentile) : null;
     const pulls = bossScores.reduce((sum, bossScore) => sum + bossScore.pulls, 0);
     const evaluatedPulls = bossScores.reduce((sum, bossScore) => sum + bossScore.evaluatedPulls, 0);
     const deaths = bossScores.reduce((sum, bossScore) => sum + bossScore.deaths, 0);
@@ -1321,8 +1314,8 @@ class CharacterMechanicsService {
     };
   }
 
-  private getCharacterEncounterKey(characterId: mongoose.Types.ObjectId, encounterId: number): string {
-    return `${this.getCharacterKey(characterId)}|${encounterId}`;
+  private getCharacterEncounterKey(characterId: mongoose.Types.ObjectId, encounterId: number, role: Role | null): string {
+    return `${this.getCharacterKey(characterId)}|${encounterId}|${role ?? "unknown"}`;
   }
 
   private getCharacterKey(characterId: mongoose.Types.ObjectId): string {

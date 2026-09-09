@@ -67,7 +67,7 @@ function bossEntry(overrides: Record<string, unknown>): Record<string, unknown> 
   };
 }
 
-test("overall mechanics rows never combine pulls from different specs", () => {
+test("overall mechanics rows never combine pulls from different roles", () => {
   const service = characterMechanicsService as unknown as TestableCharacterMechanicsService;
   const holy = bossEntry({
     encounterId: 2,
@@ -90,6 +90,20 @@ test("overall mechanics rows never combine pulls from different specs", () => {
   assert.equal(holyOverall?.role, "healer");
   assert.equal(holyOverall?.pulls, 35);
   assert.deepEqual(reordered.map((entry) => entry.specName).sort(), ["holy", "shadow"]);
+});
+
+test("overall mechanics combines boss scores across specs within one role", () => {
+  const service = characterMechanicsService as unknown as TestableCharacterMechanicsService;
+  const entries = [
+    bossEntry({ encounterId: 1, classID: 10, specName: "destruction", pulls: 48, evaluatedPulls: 48 }),
+    bossEntry({ encounterId: 2, classID: 10, specName: "demonology", pulls: 39, evaluatedPulls: 39 }),
+  ];
+  const overall = service.buildOverallEntries(entries);
+  assert.equal(overall.length, 1);
+  assert.equal(overall[0].role, "dps");
+  assert.equal(overall[0].pulls, 87);
+  assert.equal(overall[0].evaluatedPulls, 87);
+  assert.equal(overall[0].bossScores.length, 2);
 });
 
 test("combined score uses role-and-boss survival percentiles after sample shrinkage", () => {
@@ -236,12 +250,12 @@ test("a raid-wide death burst ends individual observation after an earlier death
     new Map(),
   );
 
-  assert.equal(encounterStats.get(`${earlyCharacterId}|999`)?.evaluatedPulls, 1);
-  assert.equal(encounterStats.get(`${earlyCharacterId}|999`)?.deaths, 1);
-  assert.equal(encounterStats.get(`${earlyCharacterId}|999`)?.earlyDeaths, 1);
-  assert.equal(encounterStats.get(`${cascadeCharacterId}|999`)?.pulls, 1);
-  assert.equal(encounterStats.get(`${cascadeCharacterId}|999`)?.evaluatedPulls, 1);
-  assert.equal(encounterStats.get(`${cascadeCharacterId}|999`)?.survivedPulls, 1);
+  assert.equal(encounterStats.get(`${earlyCharacterId}|999|dps`)?.evaluatedPulls, 1);
+  assert.equal(encounterStats.get(`${earlyCharacterId}|999|dps`)?.deaths, 1);
+  assert.equal(encounterStats.get(`${earlyCharacterId}|999|dps`)?.earlyDeaths, 1);
+  assert.equal(encounterStats.get(`${cascadeCharacterId}|999|dps`)?.pulls, 1);
+  assert.equal(encounterStats.get(`${cascadeCharacterId}|999|dps`)?.evaluatedPulls, 1);
+  assert.equal(encounterStats.get(`${cascadeCharacterId}|999|dps`)?.survivedPulls, 1);
 });
 
 test("an isolated death immediately before a raid-wide wipe burst remains an early death", () => {
@@ -284,10 +298,10 @@ test("an isolated death immediately before a raid-wide wipe burst remains an ear
     new Map(),
   );
 
-  assert.equal(encounterStats.get(`${earlyCharacterId}|999`)?.deaths, 1);
-  assert.equal(encounterStats.get(`${earlyCharacterId}|999`)?.earlyDeaths, 1);
-  assert.equal(encounterStats.get(`${cascadeCharacterId}|999`)?.deaths, 0);
-  assert.equal(encounterStats.get(`${cascadeCharacterId}|999`)?.survivedPulls, 1);
+  assert.equal(encounterStats.get(`${earlyCharacterId}|999|dps`)?.deaths, 1);
+  assert.equal(encounterStats.get(`${earlyCharacterId}|999|dps`)?.earlyDeaths, 1);
+  assert.equal(encounterStats.get(`${cascadeCharacterId}|999|dps`)?.deaths, 0);
+  assert.equal(encounterStats.get(`${cascadeCharacterId}|999|dps`)?.survivedPulls, 1);
 });
 
 test("early deaths use the first three unique player deaths even on short pulls", () => {
@@ -331,12 +345,12 @@ test("early deaths use the first three unique player deaths even on short pulls"
     new Map(),
   );
 
-  assert.equal(encounterStats.get(`${characterIds[0]}|999`)?.deaths, 2);
-  assert.equal(encounterStats.get(`${characterIds[0]}|999`)?.earlyDeaths, 1);
-  assert.equal(encounterStats.get(`${characterIds[1]}|999`)?.earlyDeaths, 1);
-  assert.equal(encounterStats.get(`${characterIds[2]}|999`)?.earlyDeaths, 1);
-  assert.equal(encounterStats.get(`${characterIds[3]}|999`)?.earlyDeaths, 0);
-  assert.equal(encounterStats.get(`${characterIds[3]}|999`)?.evaluatedPulls, 1);
+  assert.equal(encounterStats.get(`${characterIds[0]}|999|dps`)?.deaths, 2);
+  assert.equal(encounterStats.get(`${characterIds[0]}|999|dps`)?.earlyDeaths, 1);
+  assert.equal(encounterStats.get(`${characterIds[1]}|999|dps`)?.earlyDeaths, 1);
+  assert.equal(encounterStats.get(`${characterIds[2]}|999|dps`)?.earlyDeaths, 1);
+  assert.equal(encounterStats.get(`${characterIds[3]}|999|dps`)?.earlyDeaths, 0);
+  assert.equal(encounterStats.get(`${characterIds[3]}|999|dps`)?.evaluatedPulls, 1);
 });
 
 test("raid-wide one-second death bursts do not assign individual death blame", () => {
@@ -382,9 +396,9 @@ test("raid-wide one-second death bursts do not assign individual death blame", (
     new Map(),
   );
 
-  assert.equal(encounterStats.get(`${characterIds[0]}|999`)?.deaths, 0);
-  assert.equal(encounterStats.get(`${characterIds[0]}|999`)?.earlyDeaths, 0);
-  assert.equal(encounterStats.get(`${characterIds[0]}|999`)?.survivedPulls, 1);
-  assert.equal(encounterStats.get(`${characterIds[5]}|999`)?.deaths, 0);
-  assert.equal(encounterStats.get(`${characterIds[5]}|999`)?.survivedPulls, 1);
+  assert.equal(encounterStats.get(`${characterIds[0]}|999|dps`)?.deaths, 0);
+  assert.equal(encounterStats.get(`${characterIds[0]}|999|dps`)?.earlyDeaths, 0);
+  assert.equal(encounterStats.get(`${characterIds[0]}|999|dps`)?.survivedPulls, 1);
+  assert.equal(encounterStats.get(`${characterIds[5]}|999|dps`)?.deaths, 0);
+  assert.equal(encounterStats.get(`${characterIds[5]}|999|dps`)?.survivedPulls, 1);
 });

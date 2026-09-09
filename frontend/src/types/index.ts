@@ -688,8 +688,8 @@ export interface CharacterTierListRaidInfo {
 export interface CharacterTierListBossScore {
   encounterId: number;
   encounterName: string;
-  score: number;
-  parseScore: number;
+  score: number | null;
+  parseScore: number | null;
   survivalScore: number | null;
   survivalPercentile: number | null;
   pulls: number;
@@ -700,7 +700,7 @@ export interface CharacterTierListBossScore {
   averageDeathPercent: number | null;
   deathDataAvailable: boolean;
   specName: string;
-  rankPercent: number;
+  rankPercent: number | null;
 }
 
 export interface CharacterTierListCharacter {
@@ -1802,12 +1802,12 @@ export type CharacterRankingRow = {
   stats: {
     allStars?: { points: number; possiblePoints: number };
     bestAmount?: number;
-    rankPercent?: number;
+    rankPercent?: number | null;
     medianPercent?: number;
     lockedIn?: boolean;
     totalKills?: number;
     mechanics?: {
-      parseScore: number;
+      parseScore: number | null;
       survivalScore: number | null;
       survivalPercentile: number | null;
       pulls: number;
@@ -1828,10 +1828,10 @@ export type CharacterRankingRow = {
     encounterId: number;
     encounterName?: string;
     points?: number;
-    rankPercent: number;
+    rankPercent: number | null;
     specName?: string;
-    score?: number;
-    parseScore?: number;
+    score?: number | null;
+    parseScore?: number | null;
     survivalScore?: number | null;
     survivalPercentile?: number | null;
     pulls?: number;

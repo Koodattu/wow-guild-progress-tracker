@@ -107,7 +107,7 @@ function evaluate(
 
   return {
     stats(player: number): SurvivalStats {
-      const stats = encounterStats.get(`${characterIds[player - 1]}|${ENCOUNTER_ID}`);
+      const stats = encounterStats.get(`${characterIds[player - 1]}|${ENCOUNTER_ID}|dps`);
       assert.ok(stats, `expected survival stats for P${player}`);
       return stats;
     },

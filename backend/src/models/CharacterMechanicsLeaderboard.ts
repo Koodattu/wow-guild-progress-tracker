@@ -1,13 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
 import type { RaidIdentityConfidence, RaidIdentityMethod } from "../utils/character-raid-identity";
 
-export const CHARACTER_MECHANICS_SCORE_VERSION = 4;
+export const CHARACTER_MECHANICS_SCORE_VERSION = 5;
 
 export interface IMechanicsBossScore {
   encounterId: number;
   encounterName: string;
-  score: number;
-  parseScore: number;
+  score: number | null;
+  parseScore: number | null;
   survivalScore: number | null;
   survivalPercentile: number | null;
   pulls: number;
@@ -18,7 +18,7 @@ export interface IMechanicsBossScore {
   averageDeathPercent: number | null;
   deathDataAvailable: boolean;
   specName: string;
-  rankPercent: number;
+  rankPercent: number | null;
 }
 
 export interface ICharacterMechanicsLeaderboard extends Document {
@@ -42,13 +42,13 @@ export interface ICharacterMechanicsLeaderboard extends Document {
   identityConfidence: RaidIdentityConfidence;
   ilvl: number;
 
-  score: number;
-  parseScore: number;
+  score: number | null;
+  parseScore: number | null;
   survivalScore: number | null;
   survivalPercentile: number | null;
 
   encounterName: string;
-  rankPercent: number;
+  rankPercent: number | null;
   medianPercent: number;
   totalKills: number;
   bestAmount: number;
@@ -77,8 +77,8 @@ const MechanicsBossScoreSchema = new Schema<IMechanicsBossScore>(
   {
     encounterId: { type: Number, required: true },
     encounterName: { type: String, required: true },
-    score: { type: Number, required: true },
-    parseScore: { type: Number, required: true },
+    score: { type: Number, default: null },
+    parseScore: { type: Number, default: null },
     survivalScore: { type: Number, default: null },
     survivalPercentile: { type: Number, default: null },
     pulls: { type: Number, default: 0 },
@@ -89,7 +89,7 @@ const MechanicsBossScoreSchema = new Schema<IMechanicsBossScore>(
     averageDeathPercent: { type: Number, default: null },
     deathDataAvailable: { type: Boolean, default: false },
     specName: { type: String, required: true },
-    rankPercent: { type: Number, required: true },
+    rankPercent: { type: Number, default: null },
   },
   { _id: false },
 );
@@ -116,13 +116,13 @@ const CharacterMechanicsLeaderboardSchema = new Schema<ICharacterMechanicsLeader
     identityConfidence: { type: String, enum: ["exact", "inferred"], required: true },
     ilvl: { type: Number, default: 0 },
 
-    score: { type: Number, required: true },
-    parseScore: { type: Number, required: true },
+    score: { type: Number, default: null },
+    parseScore: { type: Number, default: null },
     survivalScore: { type: Number, default: null },
     survivalPercentile: { type: Number, default: null },
 
     encounterName: { type: String, default: "" },
-    rankPercent: { type: Number, default: 0 },
+    rankPercent: { type: Number, default: null },
     medianPercent: { type: Number, default: 0 },
     totalKills: { type: Number, default: 0 },
     bestAmount: { type: Number, default: 0 },

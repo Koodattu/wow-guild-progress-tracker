@@ -64,8 +64,8 @@ const MechanicsBossScoreSchema = new Schema<IMechanicsBossScore>(
   {
     encounterId: { type: Number, required: true },
     encounterName: { type: String, required: true },
-    score: { type: Number, required: true },
-    parseScore: { type: Number, required: true },
+    score: { type: Number, default: null },
+    parseScore: { type: Number, default: null },
     survivalScore: { type: Number, default: null },
     survivalPercentile: { type: Number, default: null },
     pulls: { type: Number, default: 0 },
@@ -76,7 +76,7 @@ const MechanicsBossScoreSchema = new Schema<IMechanicsBossScore>(
     averageDeathPercent: { type: Number, default: null },
     deathDataAvailable: { type: Boolean, default: false },
     specName: { type: String, required: true },
-    rankPercent: { type: Number, required: true },
+    rankPercent: { type: Number, default: null },
   },
   { _id: false },
 );
