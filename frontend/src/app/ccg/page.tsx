@@ -99,7 +99,7 @@ function FeaturedCard({ card, onSelect }: { card: CcgCard; onSelect: (event: Rea
         />
         <CollectibleCard
           card={card}
-          finish="holographic"
+          finish={card.set.customFinish?.key ?? "holographic"}
           compact
           className={ready ? "" : styles.collectionCardAssetLoading}
           onReady={markReady}
@@ -357,7 +357,7 @@ export default function CcgLandingPage() {
       {viewerCard ? (
         <CardViewer
           card={viewerCard}
-          initialFinish="holographic"
+          initialFinish={viewerCard.set.customFinish?.key ?? "holographic"}
           originElement={viewerOriginElement}
           originBounds={viewerOriginBounds}
           sharedTransition={viewerSharedTransition}
