@@ -10,6 +10,7 @@ export const CCG_QUALITY_SOUND_FILES: Partial<Record<CcgFinish, string>> = {
   prismatic: "4-prismatic.mp3",
   holographic: "5-holographic.mp3",
   void: "7-void.mp3",
+  toxic: "8-toxic.mp3",
   negative: "6-negative.mp3",
   astral: "9-astral.mp3",
 };
